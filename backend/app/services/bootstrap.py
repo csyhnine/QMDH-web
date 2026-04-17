@@ -1,0 +1,171 @@
+from sqlalchemy import inspect, select, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
+
+from app.models import Asset, AssetType, DataClassification, Project, User, Workflow
+
+
+def ensure_schema(engine: Engine) -> None:
+    inspector = inspect(engine)
+    asset_columns = {column["name"] for column in inspector.get_columns("assets")} if inspector.has_table("assets") else set()
+
+    statements: list[str] = []
+    if "prompt_text" not in asset_columns:
+        statements.append("ALTER TABLE assets ADD COLUMN prompt_text TEXT")
+    if "like_count" not in asset_columns:
+        statements.append("ALTER TABLE assets ADD COLUMN like_count INTEGER DEFAULT 0 NOT NULL")
+    if "share_count" not in asset_columns:
+        statements.append("ALTER TABLE assets ADD COLUMN share_count INTEGER DEFAULT 0 NOT NULL")
+
+    if not statements:
+        return
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def seed_initial_data(db: Session) -> None:
+    users = [("reviewer", "reviewer"), ("designer.lead", "lead_designer")]
+    for name, role in users:
+        existing = db.scalar(select(User).where(User.name == name))
+        if not existing:
+            db.add(User(name=name, role=role))
+
+    projects = [
+        ("QMDH 示范项目", "QMDH-001", DataClassification.b),
+        ("涉密改造项目", "QMDH-SEC", DataClassification.a),
+    ]
+    for name, code, classification in projects:
+        existing = db.scalar(select(Project).where(Project.code == code))
+        if not existing:
+            db.add(Project(name=name, code=code, classification=classification))
+
+    workflows = [
+        (
+            "image-generate",
+            "图像生成",
+            "统一调用图像模型，生成建筑、景观或展示画面的效果图方案。",
+            "image",
+            "P1",
+            "image.generate",
+            {"demo_fields": ["reference_image", "style", "prompt_supplement"]},
+        ),
+        (
+            "image-edit",
+            "局部重绘",
+            "针对已有图片进行局部改图、材质替换与方案微调。",
+            "image",
+            "P1",
+            "image.edit",
+            {"demo_fields": ["source_image", "mask", "edit_prompt"]},
+        ),
+        (
+            "video-generate",
+            "视频生成",
+            "将图像素材和镜头说明转成漫游视频或演示短片任务。",
+            "video",
+            "P1",
+            "video.generate",
+            {"demo_fields": ["storyboard", "source_images", "motion_prompt"]},
+        ),
+        (
+            "report-generate",
+            "前期报告生成",
+            "基于项目地点与关键字生成结构化前期分析报告。",
+            "document",
+            "P1",
+            "document.generate",
+            {"demo_fields": ["location", "project_type", "keywords"]},
+        ),
+        (
+            "ppt-generate",
+            "汇报页生成",
+            "把效果图与项目说明组合成汇报页草稿，便于快速整理材料。",
+            "document",
+            "P1",
+            "document.generate",
+            {"demo_fields": ["project_info", "images", "highlights"]},
+        ),
+        (
+            "prompt-reverse",
+            "提示词反推",
+            "从优质图片中反推可复用的提示词、镜头语言和标签。",
+            "prompt",
+            "P1",
+            "text.generate",
+            {"demo_fields": ["image"]},
+        ),
+    ]
+    for key, name, description, category, priority, capability, config in workflows:
+        existing = db.scalar(select(Workflow).where(Workflow.key == key))
+        if not existing:
+            db.add(
+                Workflow(
+                    key=key,
+                    name=name,
+                    description=description,
+                    category=category,
+                    priority=priority,
+                    provider_capability=capability,
+                    config=config,
+                )
+            )
+
+    project = db.scalar(select(Project).where(Project.code == "QMDH-001"))
+    demo_assets = [
+        (
+            "滨水更新效果图",
+            AssetType.image,
+            "nas://gallery/qmdh-001/waterfront-render-01.png",
+            "现代城市界面，滨水步道，轻雾天气，玻璃与石材立面，清晨漫反射，建筑摄影视角。",
+            18,
+            7,
+            ["滨水", "城市更新", "效果图"],
+        ),
+        (
+            "街角商业夜景图",
+            AssetType.image,
+            "nas://gallery/qmdh-001/night-commercial-01.png",
+            "街角商业综合体，夜景灯光克制，橱窗暖光，湿润路面反射，真实摄影质感。",
+            32,
+            11,
+            ["夜景", "商业", "灯光"],
+        ),
+        (
+            "山地酒店概念图",
+            AssetType.image,
+            "nas://gallery/qmdh-001/mountain-hotel-01.png",
+            "山地酒店，深色石材与木格栅，薄雾山谷背景，低饱和和自然光，建筑竞赛视觉。",
+            25,
+            9,
+            ["酒店", "山地", "概念"],
+        ),
+        (
+            "示范漫游视频封面",
+            AssetType.video,
+            "nas://gallery/qmdh-001/video-cover-01.mp4",
+            "建筑漫游视频，慢速推进镜头，入口广场到中庭空间转换，展陈级叙事节奏。",
+            10,
+            4,
+            ["视频", "漫游", "封面"],
+        ),
+    ]
+
+    for name, asset_type, storage_path, prompt_text, like_count, share_count, tags in demo_assets:
+        existing = db.scalar(select(Asset).where(Asset.name == name))
+        if not existing:
+            db.add(
+                Asset(
+                    name=name,
+                    asset_type=asset_type,
+                    project_id=project.id if project else None,
+                    storage_path=storage_path,
+                    prompt_text=prompt_text,
+                    like_count=like_count,
+                    share_count=share_count,
+                    tags=tags,
+                )
+            )
+
+    db.commit()

@@ -1,0 +1,41 @@
+{
+  "project_code": "QMDH-001",
+  "milestones": [
+    {
+      "id": "phase-0",
+      "name": "Phase 0",
+      "title": "规划收敛",
+      "status": "completed",
+      "owner": "reviewer",
+      "target_date": "2026-04-15",
+      "notes": "已完成项目定位收敛与模块边界确认。"
+    },
+    {
+      "id": "phase-1",
+      "name": "Phase 1",
+      "title": "底座上线",
+      "status": "in_progress",
+      "owner": "codex",
+      "target_date": "2026-04-25",
+      "notes": "正在推进前台模块化页面、图库交互和基础接口联调。"
+    },
+    {
+      "id": "phase-2",
+      "name": "Phase 2",
+      "title": "业务验证",
+      "status": "planned",
+      "owner": "reviewer",
+      "target_date": "2026-05-15",
+      "notes": "待真实模型接入后进入验证。"
+    },
+    {
+      "id": "phase-3",
+      "name": "Phase 3",
+      "title": "扩展与沉淀",
+      "status": "planned",
+      "owner": "reviewer",
+      "target_date": "2026-06-15",
+      "notes": "计划扩展图库复用与项目沉淀能力。"
+    }
+  ]
+}

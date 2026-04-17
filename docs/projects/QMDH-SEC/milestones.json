@@ -1,0 +1,23 @@
+{
+  "project_code": "QMDH-SEC",
+  "milestones": [
+    {
+      "id": "phase-0",
+      "name": "Phase 0",
+      "title": "安全边界确认",
+      "status": "in_progress",
+      "owner": "reviewer",
+      "target_date": "2026-04-30",
+      "notes": "正在确认项目数据能否出域以及供应商选择范围。"
+    },
+    {
+      "id": "phase-1",
+      "name": "Phase 1",
+      "title": "执行策略确认",
+      "status": "planned",
+      "owner": "reviewer",
+      "target_date": "2026-05-10",
+      "notes": "待安全边界确认后决定是否进入开发。"
+    }
+  ]
+}

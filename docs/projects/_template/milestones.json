@@ -1,0 +1,32 @@
+{
+  "project_code": "TEMPLATE",
+  "milestones": [
+    {
+      "id": "phase-0",
+      "name": "Phase 0",
+      "title": "范围确认",
+      "status": "planned",
+      "owner": "",
+      "target_date": "",
+      "notes": ""
+    },
+    {
+      "id": "phase-1",
+      "name": "Phase 1",
+      "title": "底座上线",
+      "status": "planned",
+      "owner": "",
+      "target_date": "",
+      "notes": ""
+    },
+    {
+      "id": "phase-2",
+      "name": "Phase 2",
+      "title": "业务验证",
+      "status": "planned",
+      "owner": "",
+      "target_date": "",
+      "notes": ""
+    }
+  ]
+}

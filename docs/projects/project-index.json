@@ -1,0 +1,18 @@
+{
+  "projects": [
+    {
+      "code": "QMDH-001",
+      "name": "QMDH 示范项目",
+      "current_phase": "Phase 1",
+      "status_file": "docs/projects/QMDH-001/status.md",
+      "milestones_file": "docs/projects/QMDH-001/milestones.json"
+    },
+    {
+      "code": "QMDH-SEC",
+      "name": "涉密改造项目",
+      "current_phase": "Phase 0",
+      "status_file": "docs/projects/QMDH-SEC/status.md",
+      "milestones_file": "docs/projects/QMDH-SEC/milestones.json"
+    }
+  ]
+}

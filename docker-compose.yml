@@ -1,0 +1,98 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: qmdh
+      POSTGRES_USER: qmdh
+      POSTGRES_PASSWORD: qmdh_change_me
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qmdh -d qmdh"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      QMDH_DATABASE_URL: postgresql+psycopg://qmdh:qmdh_change_me@postgres:5432/qmdh
+      QMDH_FRONTEND_ORIGIN: http://localhost
+      QMDH_MEDIA_ROOT: /app/storage/assets
+      QMDH_MEDIA_URL_PREFIX: /media
+      QMDH_TASK_EXECUTION_MODE: redis
+      QMDH_REDIS_URL: redis://redis:6379/0
+      QMDH_REDIS_QUEUE_NAME: qmdh:tasks
+      QMDH_OPENAI_IMAGE_API_KEY: ${QMDH_OPENAI_IMAGE_API_KEY:-}
+      QMDH_OPENAI_IMAGE_BASE_URL: ${QMDH_OPENAI_IMAGE_BASE_URL:-https://api.openai.com/v1}
+      QMDH_OPENAI_IMAGE_MODEL: ${QMDH_OPENAI_IMAGE_MODEL:-gpt-image-1}
+      QMDH_OPENAI_IMAGE_TIMEOUT_SECONDS: ${QMDH_OPENAI_IMAGE_TIMEOUT_SECONDS:-90}
+      QMDH_OPENAI_IMAGE_QUALITY: ${QMDH_OPENAI_IMAGE_QUALITY:-medium}
+      QMDH_OPENAI_IMAGE_OUTPUT_FORMAT: ${QMDH_OPENAI_IMAGE_OUTPUT_FORMAT:-png}
+      QMDH_IMAGE_PROVIDER_PROFILES_JSON: ${QMDH_IMAGE_PROVIDER_PROFILES_JSON:-[]}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_media:/app/storage/assets
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/api/v1/health').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build:
+      context: ./backend
+    command: ["python", "-m", "app.worker"]
+    environment:
+      QMDH_DATABASE_URL: postgresql+psycopg://qmdh:qmdh_change_me@postgres:5432/qmdh
+      QMDH_MEDIA_ROOT: /app/storage/assets
+      QMDH_MEDIA_URL_PREFIX: /media
+      QMDH_TASK_EXECUTION_MODE: redis
+      QMDH_REDIS_URL: redis://redis:6379/0
+      QMDH_REDIS_QUEUE_NAME: qmdh:tasks
+      QMDH_OPENAI_IMAGE_API_KEY: ${QMDH_OPENAI_IMAGE_API_KEY:-}
+      QMDH_OPENAI_IMAGE_BASE_URL: ${QMDH_OPENAI_IMAGE_BASE_URL:-https://api.openai.com/v1}
+      QMDH_OPENAI_IMAGE_MODEL: ${QMDH_OPENAI_IMAGE_MODEL:-gpt-image-1}
+      QMDH_OPENAI_IMAGE_TIMEOUT_SECONDS: ${QMDH_OPENAI_IMAGE_TIMEOUT_SECONDS:-90}
+      QMDH_OPENAI_IMAGE_QUALITY: ${QMDH_OPENAI_IMAGE_QUALITY:-medium}
+      QMDH_OPENAI_IMAGE_OUTPUT_FORMAT: ${QMDH_OPENAI_IMAGE_OUTPUT_FORMAT:-png}
+      QMDH_IMAGE_PROVIDER_PROFILES_JSON: ${QMDH_IMAGE_PROVIDER_PROFILES_JSON:-[]}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    volumes:
+      - backend_media:/app/storage/assets
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_media:

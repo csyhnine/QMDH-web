@@ -3,6 +3,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.models import Asset, AssetType, DataClassification, Project, User, Workflow
+from app.services.media_storage import write_preview_svg
 
 
 def ensure_schema(engine: Engine) -> None:
@@ -16,6 +17,8 @@ def ensure_schema(engine: Engine) -> None:
         statements.append("ALTER TABLE assets ADD COLUMN like_count INTEGER DEFAULT 0 NOT NULL")
     if "share_count" not in asset_columns:
         statements.append("ALTER TABLE assets ADD COLUMN share_count INTEGER DEFAULT 0 NOT NULL")
+    if "source_task_id" not in asset_columns:
+        statements.append("ALTER TABLE assets ADD COLUMN source_task_id INTEGER")
 
     if not statements:
         return
@@ -113,11 +116,32 @@ def seed_initial_data(db: Session) -> None:
             )
 
     project = db.scalar(select(Project).where(Project.code == "QMDH-001"))
+    waterfront_preview = write_preview_svg(
+        "seed/waterfront-render-01.svg",
+        title="滨水更新效果图",
+        eyebrow="gallery seed",
+        detail="现代城市界面 / 滨水步道 / 玻璃与石材立面 / 清晨漫反射",
+        accent_seed="waterfront-render-01",
+    )
+    night_preview = write_preview_svg(
+        "seed/night-commercial-01.svg",
+        title="街角商业夜景图",
+        eyebrow="gallery seed",
+        detail="夜景灯光克制 / 橱窗暖光 / 湿润路面反射 / 真实摄影质感",
+        accent_seed="night-commercial-01",
+    )
+    hotel_preview = write_preview_svg(
+        "seed/mountain-hotel-01.svg",
+        title="山地酒店概念图",
+        eyebrow="gallery seed",
+        detail="深色石材与木格栅 / 薄雾山谷背景 / 低饱和自然光",
+        accent_seed="mountain-hotel-01",
+    )
     demo_assets = [
         (
             "滨水更新效果图",
             AssetType.image,
-            "nas://gallery/qmdh-001/waterfront-render-01.png",
+            waterfront_preview,
             "现代城市界面，滨水步道，轻雾天气，玻璃与石材立面，清晨漫反射，建筑摄影视角。",
             18,
             7,
@@ -126,7 +150,7 @@ def seed_initial_data(db: Session) -> None:
         (
             "街角商业夜景图",
             AssetType.image,
-            "nas://gallery/qmdh-001/night-commercial-01.png",
+            night_preview,
             "街角商业综合体，夜景灯光克制，橱窗暖光，湿润路面反射，真实摄影质感。",
             32,
             11,
@@ -135,7 +159,7 @@ def seed_initial_data(db: Session) -> None:
         (
             "山地酒店概念图",
             AssetType.image,
-            "nas://gallery/qmdh-001/mountain-hotel-01.png",
+            hotel_preview,
             "山地酒店，深色石材与木格栅，薄雾山谷背景，低饱和和自然光，建筑竞赛视觉。",
             25,
             9,
@@ -167,5 +191,7 @@ def seed_initial_data(db: Session) -> None:
                     tags=tags,
                 )
             )
+        elif existing.asset_type == AssetType.image and existing.source_task_id is None and existing.storage_path.startswith("nas://"):
+            existing.storage_path = storage_path
 
     db.commit()

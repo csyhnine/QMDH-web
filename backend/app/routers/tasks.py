@@ -8,7 +8,7 @@ from app.core.config import settings
 from app.database import get_db
 from app.models import AuditLog, Project, Task, TaskStatus, User, Workflow
 from app.schemas import TaskCreate, TaskOut
-from app.services.model_registry import PROVIDERS
+from app.services.model_registry import get_provider_definition, get_provider_map
 from app.services.task_executor import enqueue_task, execute_task
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -57,10 +57,12 @@ def create_task(
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
-    if payload.requested_provider not in PROVIDERS:
+    provider_map = get_provider_map()
+    if payload.requested_provider not in provider_map:
         raise HTTPException(status_code=404, detail="Provider not found")
 
-    if workflow.provider_capability not in PROVIDERS[payload.requested_provider].capabilities:
+    provider = get_provider_definition(payload.requested_provider)
+    if workflow.provider_capability not in provider.capabilities:
         raise HTTPException(status_code=400, detail="Provider does not support workflow capability")
 
     project = db.scalar(select(Project).where(Project.code == payload.project_code))

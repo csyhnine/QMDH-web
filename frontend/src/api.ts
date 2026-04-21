@@ -31,6 +31,7 @@ export type Asset = {
   id: number;
   name: string;
   asset_type: string;
+  source_task_id: number | null;
   storage_path: string;
   prompt_text: string | null;
   like_count: number;
@@ -95,12 +96,25 @@ export type TaskCreatePayload = {
   payload: Record<string, unknown>;
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8000/api/v1";
+const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api/v1").replace(/\/$/, "");
+
+async function buildError(response: Response): Promise<Error> {
+  try {
+    const payload = (await response.json()) as { detail?: string };
+    if (payload.detail) {
+      return new Error(`请求失败（${response.status}）：${payload.detail}`);
+    }
+  } catch {
+    // Ignore JSON parse failures and fall back to the status code only.
+  }
+
+  return new Error(`请求失败（${response.status}）`);
+}
 
 async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`);
   if (!response.ok) {
-    throw new Error(`请求失败：${response.status}`);
+    throw await buildError(response);
   }
   return response.json() as Promise<T>;
 }
@@ -114,7 +128,7 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
     body: body ? JSON.stringify(body) : undefined
   });
   if (!response.ok) {
-    throw new Error(`请求失败：${response.status}`);
+    throw await buildError(response);
   }
   return response.json() as Promise<T>;
 }

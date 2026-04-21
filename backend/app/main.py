@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.database import Base, SessionLocal, engine
 from app.routers import assets, dashboard, health, projects, providers, tasks, workflows
 from app.services.bootstrap import ensure_schema, seed_initial_data
+from app.services.media_storage import media_root_path
 
 app = FastAPI(title=settings.app_name)
 
@@ -21,8 +23,12 @@ app.add_middleware(
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
     ensure_schema(engine)
+    media_root_path()
     with SessionLocal() as db:
         seed_initial_data(db)
+
+
+app.mount(settings.media_url_prefix, StaticFiles(directory=media_root_path()), name="media")
 
 
 app.include_router(health.router, prefix=settings.api_prefix)

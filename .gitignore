@@ -6,4 +6,8 @@ node_modules/
 dist/
 .env
 backend/app.db
+backend/*.db
+backend/storage/
+*-dev.out.log
+*-dev.err.log
 

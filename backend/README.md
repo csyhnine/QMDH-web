@@ -16,6 +16,9 @@ uvicorn app.main:app --reload
 - Default frontend origin is `http://localhost:5180`
 - `QMDH_TASK_EXECUTION_MODE` supports `sync`, `background`, `redis`
 - API base path: `/api/v1`
+- Media previews are served from `QMDH_MEDIA_ROOT` under `QMDH_MEDIA_URL_PREFIX`
+- To enable a real image provider, fill either `backend/.env` or the repo-root `.env` and set `QMDH_OPENAI_IMAGE_API_KEY`
+- To add more real image providers later, fill `QMDH_IMAGE_PROVIDER_PROFILES_JSON` with additional OpenAI-compatible provider profiles
 
 ## Redis Worker
 

@@ -53,6 +53,7 @@ class AssetOut(BaseModel):
     id: int
     name: str
     asset_type: AssetType
+    source_task_id: int | None = None
     storage_path: str
     prompt_text: str | None
     like_count: int

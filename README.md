@@ -53,6 +53,18 @@ cd backend
 python -m app.worker
 ```
 
+## 服务器部署
+
+MVP 1.0 已补充单机服务器部署基线，见 [DEPLOYMENT.md](E:\projects\QMDH-web\DEPLOYMENT.md)。
+
+当前推荐部署结构：
+
+- `frontend`：Nginx 托管前端并代理 `/api`、`/media`
+- `backend`：FastAPI API
+- `worker`：Redis 异步任务执行
+- `postgres`：业务数据库
+- `redis`：队列
+
 ## 后续建议
 
 1. 把模拟供应商调用替换成真实适配器

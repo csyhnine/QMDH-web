@@ -121,3 +121,46 @@ class ProjectStatusOut(BaseModel):
     status_file: str
     milestones_file: str
     milestones: list[ProjectMilestoneOut] = Field(default_factory=list)
+
+
+class PromptTemplateBase(BaseModel):
+    label: str = Field(min_length=1, max_length=100)
+    title: str = Field(min_length=1, max_length=150)
+    prompt: str = Field(min_length=1)
+    style: str = "modern"
+    aspect_ratio: str = "16:9"
+    resolution: str = "2k"
+    deliverable: str = ""
+    notes: str = ""
+
+
+class PromptTemplateCreate(PromptTemplateBase):
+    user_name: str = Field(min_length=1, max_length=100)
+
+
+class PromptTemplateUpdate(BaseModel):
+    label: str | None = Field(default=None, min_length=1, max_length=100)
+    title: str | None = Field(default=None, min_length=1, max_length=150)
+    prompt: str | None = Field(default=None, min_length=1)
+    style: str | None = None
+    aspect_ratio: str | None = None
+    resolution: str | None = None
+    deliverable: str | None = None
+    notes: str | None = None
+
+
+class PromptTemplateOut(PromptTemplateBase):
+    id: int
+    user_name: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReferenceUploadIn(BaseModel):
+    file_name: str = Field(min_length=1, max_length=255)
+    data_url: str = Field(min_length=20)
+
+
+class ReferenceUploadOut(BaseModel):
+    file_name: str
+    storage_path: str

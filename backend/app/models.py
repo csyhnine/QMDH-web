@@ -38,6 +38,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     tasks: Mapped[list["Task"]] = relationship(back_populates="user")
+    prompt_templates: Mapped[list["PromptTemplate"]] = relationship(back_populates="user")
 
 
 class Project(Base):
@@ -141,3 +142,22 @@ class AuditLog(Base):
     classification: Mapped[DataClassification] = mapped_column(SqlEnum(DataClassification))
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PromptTemplate(Base):
+    __tablename__ = "prompt_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    label: Mapped[str] = mapped_column(String(100))
+    title: Mapped[str] = mapped_column(String(150))
+    prompt: Mapped[str] = mapped_column(Text)
+    style: Mapped[str] = mapped_column(String(50), default="modern")
+    aspect_ratio: Mapped[str] = mapped_column(String(20), default="16:9")
+    resolution: Mapped[str] = mapped_column(String(20), default="2k")
+    deliverable: Mapped[str] = mapped_column(String(100), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user: Mapped[User] = relationship(back_populates="prompt_templates")

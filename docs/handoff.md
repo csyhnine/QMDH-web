@@ -3,12 +3,123 @@
 ## Usage Rules
 - 本文件只保留最近 3 次交接记录
 - 更早记录迁移到 `docs/archive/`
-- 交接必须面向陌生新 agent 书写
+- 交接必须面向陌生 agent 书写
 - 如果当前状态不可直接接手，必须明确标记 `WIP`
 
 ---
 
 ## Latest Handoffs
+
+### [2026-04-23 16:20] Session Handoff
+- 执行角色：Feature / Integration
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：No
+  - 是否有未提交改动：Yes
+  - 是否已 push：No
+- 本次完成：
+  - 推进并完成 `task-002`：参考图现在可以进入真实生成链路
+  - 为动态图片 provider 增加 `reference_mode`、`reference_caption_model`、`reference_caption_prompt` 配置
+  - ModelScope provider 默认启用 `reference_mode=caption_prompt`
+  - 有参考图时，后端会先用视觉语言模型读取参考图，再把参考说明拼入真实文生图 prompt
+  - 兼容 ModelScope 同步返回 `images / output_images / image_urls` 与异步轮询返回格式
+  - 修复本地开发 404：常见端口容易被 Codex Desktop 或其他项目占用，已将 Vite 代理默认改到 `127.0.0.1:18010`
+  - 已重启本地后端到 `18010`、前端到 `18080`，并验证前端代理能访问项目 API
+  - 通过 ModelScope `/v1/models` 探测到当前 token 可返回模型列表；默认参考图读图模型改为 `Qwen/Qwen3-VL-8B-Instruct`
+  - 修复参考图读图失败时整次任务失败的问题：读图不可用时会降级为文字生图并写入 warning
+  - 已重新提交一次失败任务，任务 `#12` 完成并返回真实 ModelScope 图片
+  - 更新 `backend/.env.example` 与 `docs/deployment.md`，说明参考图模式和 ModelScope 配置方式
+  - 更新 `docs/tasks.md`、`docs/projects/QMDH-001/status.md`、`docs/projects/QMDH-001/milestones.json`
+  - 完成验证：
+    - `python -m unittest discover -s tests` 通过
+    - `npm run build` 通过
+- 修改文件：
+  - `backend/.env.example`
+  - `backend/app/core/config.py`
+  - `backend/app/services/task_executor.py`
+  - `backend/tests/test_model_registry_profiles.py`
+  - `backend/tests/test_task_executor_openai.py`
+  - `docs/deployment.md`
+  - `docs/handoff.md`
+  - `docs/tasks.md`
+  - `docs/projects/QMDH-001/status.md`
+  - `docs/projects/QMDH-001/milestones.json`
+  - `frontend/vite.config.ts`
+- 当前任务状态：
+  - `task-001`: IN_PROGRESS
+  - `task-002`: DONE
+  - `task-004`: TODO
+  - `task-006`: DONE
+  - `task-sec-001`: BLOCKED
+- 风险与注意事项：
+  - 当前参考图方案是“语义参考”：读图生成说明后辅助文生图，不是直接 `img2img / image.edit`
+  - 使用参考图会多一次视觉语言模型调用，会消耗 ModelScope 额度并增加延迟；当前 ModelScope VL 对公网图片 URL 可用，对本地 data URL 返回异常，后续如需稳定参考图能力应接对象存储或公网媒体 URL
+  - 本地开发请用后端 `18010`，不要直接访问 `8000`
+  - `frontend/src/App.tsx` 仍建议继续清理拆分
+  - 当前工作区仍有前序未提交改动，建议下一步先审查后提交稳定边界
+- 下一位 agent 的第一步：
+  - 先检查 `git status`
+  - 如果准备收口，请先提交当前 MVP 生图边界
+  - 如果继续开发，优先做 `task-001` 前端清理，之后再做 `task-004` 最小认证
+- 是否可直接接手：Yes
+
+### [2026-04-22 10:10] Session Handoff
+- 执行角色：Feature / Integration / Handoff
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：No
+  - 是否有未提交改动：Yes
+  - 是否已 push：No
+- 本次完成：
+  - 修复了生图历史流“最新记录自动定位”逻辑，不再受“最近优先 / 最早优先”排序影响
+  - 新增提示词模板后端持久化能力，支持列表、创建、更新、删除
+  - 修复模板接口的用户归属边界：更新和删除必须匹配 `user_name`
+  - 参考图上传已从前端占位改为真实上传到后端媒体目录，并返回 `/media/...` 可访问地址
+  - 补充部署文档 `docs/deployment.md`
+  - 对齐现有 `docker-compose.yml`，为后端增加 `8000:8000` 端口暴露，保留 `frontend + backend + worker + postgres + redis` 结构
+  - 更新 `backend/.env.example`，增加 ModelScope provider 配置示例
+  - 完成验证：
+    - `npm run build` 通过
+    - `docker compose -f docker-compose.yml config -q` 通过
+    - `POST /api/v1/assets/reference-upload` 返回真实媒体路径
+    - 模板越权删除返回 `404`
+- 修改文件：
+  - `backend/.env.example`
+  - `backend/app/main.py`
+  - `backend/app/models.py`
+  - `backend/app/routers/__init__.py`
+  - `backend/app/routers/assets.py`
+  - `backend/app/routers/prompt_templates.py`
+  - `backend/app/schemas.py`
+  - `docker-compose.yml`
+  - `frontend/src/App.tsx`
+  - `frontend/src/api.ts`
+  - `frontend/src/styles.css`
+  - `docs/deployment.md`
+  - `docs/handoff.md`
+  - `docs/tasks.md`
+  - `docs/projects/QMDH-001/status.md`
+  - `docs/projects/QMDH-001/milestones.json`
+- 当前任务状态：
+  - `task-001`: IN_PROGRESS
+  - `task-002`: IN_PROGRESS
+  - `task-004`: TODO
+  - `task-006`: DONE
+  - `task-sec-001`: BLOCKED
+- 风险与注意事项：
+  - 当前真实可用的图像 provider 仍以 `modelscope_free_image` 为主
+  - 参考图已上传并能进入任务 payload，但模型侧还没有真正做 `image.edit / img2img` 能力闭环
+  - `frontend/src/App.tsx` 仍有历史迭代留下的冗余逻辑和少量中文字符串异常，后续建议做一次代码清理
+  - 当前工作区尚未提交，切号后如果要继续开发，建议先审查并提交一轮稳定边界
+- 未完成内容：
+  - 收敛 `App.tsx` 中的冗余状态与旧兜底逻辑
+  - 推进参考图参与真实生成，而不是只做上传绑定
+  - 继续完善服务器部署说明与生产环境配置
+- 下一位 agent 的第一步：
+  - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
+  - 然后检查当前未提交改动，确认是直接提交当前阶段，还是继续完成 `task-002` 再一起提交
+  - 如果继续做生图能力，优先从“参考图真正参与生成”开始，不要先扩散到更多 UI 微调
+- 是否可直接接手：Yes
 
 ### [2026-04-21 18:25] Session Handoff
 - 执行角色：Feature / Integration
@@ -18,429 +129,10 @@
   - 是否有未提交改动：Yes
   - 是否已 push：No
 - 本次完成：
-  - 生图链路已切换到可配置的真实 provider profile，并已接通 `modelscope_free_image / MAILAND/majicflus_v1`
-  - 后端真实生图执行器已支持 ModelScope 异步出图轮询，不再停留在测试图或同步调用失败状态
-  - 生图任务现支持 `image_count`，默认 1 张，最大 4 张；单次任务可真实落多张素材
-  - 历史记录流已修正为“旧任务在上，新任务在下”，并按 `source_task_id` 正确归组同一任务的多张图片
-  - 前端生图工作台已收敛为“左侧项目区 + 中间历史流 + 底部创作栏”的简洁布局，模型、比例、分辨率、张数等收进下拉菜单
-  - 已完成后端单测、前端 build 验证，并实测真实 ModelScope 冒烟任务成功返回 2 张图片、生成 2 条资产记录
-- 修改文件：
-  - `backend/app/core/config.py`
-  - `backend/app/main.py`
-  - `backend/app/routers/tasks.py`
-  - `backend/app/schemas.py`
-  - `backend/app/services/bootstrap.py`
-  - `backend/app/services/media_storage.py`
-  - `backend/app/services/model_registry.py`
-  - `backend/app/services/task_executor.py`
-  - `backend/tests/test_model_registry_profiles.py`
-  - `backend/tests/test_task_executor_openai.py`
-  - `frontend/src/App.tsx`
-  - `frontend/src/api.ts`
-  - `frontend/src/styles.css`
-  - `frontend/vite.config.ts`
-  - `docker-compose.yml`
-  - `DEPLOYMENT.md`
-  - `.env.example`
-  - `backend/.env.example`
-  - `backend/Dockerfile`
-  - `frontend/Dockerfile`
-  - `frontend/nginx.conf`
-  - `docs/tasks.md`
-  - `docs/handoff.md`
-- 当前任务状态：
-  - `task-000`: DONE
-  - `task-001`: IN_PROGRESS
-  - `task-002`: IN_PROGRESS
-  - `task-003`: DONE
-  - `task-004`: TODO
-  - `task-005`: DONE
-  - `task-006`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - 当前真正可用的图片生成 provider 只有 `modelscope_free_image`；`jimeng`、`nano_banana` 仍是模拟 provider
-  - 真实 provider 目前只覆盖 `image.generate`，尚未补 `image.edit`
-  - 根目录 `.env` 含真实令牌，只能本地保留，绝不能入库
-  - 仓库里新增了较多部署与协作文档，提交时需要排除本地 dev 日志
-- 未完成内容：
-  - 提交并 push 当前工作区改动
-  - 评估是否在 1.0 前补最小认证和项目级访问控制
-  - 后续如需扩展，再接第二个真实生图 provider 或补图像编辑
-- 下一位 agent 的第一步：
-  - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
-  - 然后确认本轮提交是否已经推到 GitHub；如果已推送，先从 `task-004` 或第二真实 provider 扩展开始
-  - 若继续生图模块，优先保持“按任务归组历史流 + 多图生成”这条交互主线，不要回退到大表单式页面
-- 是否可直接接手：Yes
-
-### [2026-04-20 15:05] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes
-  - 是否已 push：No
-- 本次完成：
-  - 后端真实生图 provider 从“单一 `openai_image` 特判”重构为“静态 mock provider + 动态真实 provider profile”组合
-  - 新增 `QMDH_IMAGE_PROVIDER_PROFILES_JSON`，后续可通过配置直接挂载更多 OpenAI-compatible 生图平台，而不必继续修改主执行链路
-  - `task_executor.py` 已改为按 provider profile 动态取 API key、base URL、model、质量和输出格式，并沿用现有 `/media/...` 资产落盘逻辑
-  - 补充了 registry/profile 单测，后端 `python -m unittest discover -s tests` 已通过
-- 修改文件：
-  - `backend/app/core/config.py`
-  - `backend/app/services/model_registry.py`
-  - `backend/app/services/task_executor.py`
-  - `backend/app/routers/tasks.py`
-  - `backend/tests/test_task_executor_openai.py`
-  - `backend/tests/test_model_registry_profiles.py`
-  - `.env.example`
-  - `backend/.env.example`
-  - `backend/README.md`
-  - `docs/tasks.md`
-  - `docs/handoff.md`
-- 当前任务状态：
-  - `task-001`: IN_PROGRESS
-  - `task-002`: IN_PROGRESS
-  - `task-006`: DONE
-- 风险与注意事项：
-  - 新增的多 provider 能力目前假设目标平台提供 OpenAI-compatible 图片生成接口；遇到非兼容厂商时仍需单独写 adapter
-  - 真实外网出图验证仍然缺少实际 key，当前只是把扩展骨架和测试能力搭好
-- 未完成内容：
-  - 用真实 key 做至少一次实网生图验证
-  - 若决定接入非 OpenAI-compatible 平台，再补第二类 adapter
-- 下一位 agent 的第一步：
-  - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
-  - 若继续做 provider，优先从真实 key 验证开始，而不是继续扩展更多空壳 provider 名称
-- 是否可直接接手：Yes
-
-### [2026-04-20 14:10] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes
-  - 是否已 push：No
-- 本次完成：
-  - 生图模块继续按参考产品的交互逻辑收口，页面从“展示大量可见配置”改为“项目区 + 结果流 + 底部极简创作条”
-  - 底部创作区现在只保留核心提示词输入，快捷模板、创作类型、模型、比例/清晰度、更多设置已折叠进下拉菜单或浮层菜单
-  - 保留了现有任务创建、结果回流、项目切换、再次生成、点赞/分享的数据链路，没有改后端接口
-  - 已完成前端生产构建验证
-- 修改文件：
-  - `frontend/src/App.tsx`
-  - `frontend/src/styles.css`
-  - `docs/tasks.md`
-  - `docs/handoff.md`
-- 当前任务状态：
-  - `task-001`: IN_PROGRESS
-  - `task-002`: IN_PROGRESS
-  - `task-006`: DONE
-- 风险与注意事项：
-  - 当前版本重点是把交互逻辑收简，不是做最终视觉定稿；如果继续打磨，优先做菜单细节、留白和结果卡层级
-  - 新布局仍然依赖集中式 `imageForm` 状态；后续拆组件时不要把同一份生图输入状态拆散
-- 未完成内容：
-  - 真实 OpenAI key 实网验证
-  - 1.0 上线前的最小认证与服务器环境收口评估
-- 下一位 agent 的第一步：
-  - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
-  - 如果继续做前端，优先在这版极简逻辑上继续微调，不要退回大面积可见表单
-- 是否可直接接手：Yes
-
-### [2026-04-20 13:05] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes
-  - 是否已 push：No
-- 本次完成：
-  - 生图模块前端已从“单页表单 + 多段内容区”重排为“左侧导航 + 项目工作区 + 中间结果流 + 底部创作条”的逻辑布局
-  - 项目列表现在承担默认创作命名语义，当前工作区会直接显示项目名，不再固定显示“默认创作”
-  - 结果流会直接复用任务与资产关联关系展示任务卡片、预览图与再次生成入口
-  - 已完成前端生产构建验证
-- 修改文件：
-  - `frontend/src/App.tsx`
-  - `frontend/src/styles.css`
-  - `docs/tasks.md`
-  - `docs/handoff.md`
-- 当前任务状态：
-  - `task-001`: IN_PROGRESS
-  - `task-002`: IN_PROGRESS
-  - `task-006`: DONE
-- 风险与注意事项：
-  - 当前布局是 1.0 逻辑重排版本，视觉已接近创作台，但尚未做像素级精修
-  - 前端继续依赖现有集中拉数和轮询机制，后续拆组件时要避免把 `imageForm` 状态拆散
-- 未完成内容：
-  - 真实 OpenAI key 实网验证
-  - 评估是否在 1.0 前补最小认证
-- 下一位 agent 的第一步：
-  - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
-  - 若继续做前端，优先在新布局上做细节打磨，不要退回旧的单页 section 结构
-- 是否可直接接手：Yes
-
-### [2026-04-20 12:32] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes
-  - 是否已 push：No
-- 本次完成：
-  - 实际执行 `docker compose up -d`，确认 `frontend + backend + worker + postgres + redis` 可在本机正常协同启动
-  - 通过 `http://localhost/api/v1/health` 与 `http://localhost/api/v1/providers` 验证前端反代到后端链路正常
-  - 实际从容器入口创建了一条 mock 生图任务，确认任务会被 worker 消费、资产会落库、`/media/...` 预览可访问
-  - 已在验证完成后执行 `docker compose down`，避免长期占用本机资源
-- 修改文件：
-  - `docs/tasks.md`
-  - `docs/handoff.md`
-- 当前任务状态：
-  - `task-000`: DONE
-  - `task-001`: IN_PROGRESS
-  - `task-002`: IN_PROGRESS
-  - `task-003`: DONE
-  - `task-004`: TODO
-  - `task-005`: DONE
-  - `task-006`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - 当前根目录无实际 `.env`，因此尚未配置真实 `QMDH_OPENAI_IMAGE_API_KEY`
-  - 容器级联调已通过，但真实 OpenAI 外网生图仍未实网验证
-  - 当前部署仍是 MVP 单机基线，不含 HTTPS 自动化、正式 migration、认证与对象存储
-- 未完成内容：
-  - 填写真实 `.env` 并做一次 `openai_image` 实网验证
-  - 评估是否在 1.0 前补最小认证
-  - 视需要补图像编辑真实 provider
-- 下一位 agent 的第一步：
-  - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
-  - 优先检查是否已获得真实 OpenAI key；若有，直接执行 1.0 最后的实网生图验证
-  - 若仍无 key，则以“mock 可部署内测版”作为当前可交付边界
-- 是否可直接接手：Yes
-
-### [2026-04-20 12:05] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes
-  - 是否已 push：No
-- 本次完成：
-  - 为 MVP 1.0 新增单机服务器部署基线，补齐前后端 Dockerfile、Nginx 反代配置和 `docker-compose.yml`
-  - 部署结构采用 `frontend + backend + worker + postgres + redis`
-  - 新增根目录 `.env.example` 和 `DEPLOYMENT.md`，明确服务器启动方式与环境变量
-  - 后端依赖补充 PostgreSQL 驱动，为容器化部署做准备
-- 修改文件：
-  - `docker-compose.yml`
-  - `DEPLOYMENT.md`
-  - `.env.example`
-  - `backend/Dockerfile`
-  - `backend/.dockerignore`
-  - `backend/requirements.txt`
-  - `frontend/Dockerfile`
-  - `frontend/.dockerignore`
-  - `frontend/nginx.conf`
-  - `README.md`
-  - `docs/tasks.md`
-  - `docs/handoff.md`
-  - `docs/architecture.md`
-  - `docs/decisions.md`
-- 当前任务状态：
-  - `task-000`: DONE
-  - `task-001`: IN_PROGRESS
-  - `task-002`: IN_PROGRESS
-  - `task-003`: DONE
-  - `task-004`: TODO
-  - `task-005`: DONE
-  - `task-006`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - 这套部署基线面向单机服务器 MVP，不包含 HTTPS 自动化、监控、对象存储和正式 migration 体系
-  - 真实 OpenAI 外网调用仍需用真实 key 做一次实网验证
-  - 当前尚未实际在本机执行 `docker compose up` 验证，部署文件已落地但还缺容器级联调
-  - 工作区仍包含未提交的前端、后端和文档改动
-- 未完成内容：
-  - 用真实 key 做一次 `openai_image` 实网验证
-  - 做一次容器级联调验证
-  - 补最小认证和项目级访问控制
-- 下一位 agent 的第一步：
-  - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
-  - 然后优先决定是否先做 `docker compose` 联调验证，还是先提交当前 MVP 1.0 基线
-  - 若继续开发，优先完成真实 key 验证与容器联调
-- 是否可直接接手：Yes
-
-### [2026-04-20 11:36] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes
-  - 是否已 push：No
-- 本次完成：
-  - 新增 `openai_image` 真实 provider，不再把真实执行混入既有 mock provider 名称
-  - 后端新增 OpenAI Images API 最小适配，可把返回图片落到本地媒体目录并写回 `/media/...` 供前端预览
-  - 前端默认 provider 调整为优先选择真实 provider，未配置时自动回退到 mock provider
-  - 增加 `.env.example`、backend README 配置说明和一条单元测试
-  - 完成 API 级冒烟验证，确认 `openai_image` 在配置 key 的情况下可走通“创建任务 -> 完成任务 -> 资产入库 -> 预览访问”
-- 修改文件：
-  - `backend/app/core/config.py`
-  - `backend/app/services/model_registry.py`
-  - `backend/app/services/task_executor.py`
-  - `backend/app/services/media_storage.py`
-  - `backend/tests/test_task_executor_openai.py`
-  - `backend/.env.example`
-  - `backend/README.md`
-  - `docs/tasks.md`
-  - `docs/handoff.md`
-  - `docs/architecture.md`
-  - `docs/decisions.md`
-- 当前任务状态：
-  - `task-000`: DONE
-  - `task-001`: IN_PROGRESS
-  - `task-002`: IN_PROGRESS
-  - `task-003`: DONE
-  - `task-004`: TODO
-  - `task-005`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - `openai_image` 目前只支持 `image.generate`，还没有覆盖 `image.edit`
-  - 真正的外网调用尚未用真实 OpenAI 凭据验证；当前验证基于 mock 响应和本地冒烟链路
-  - 虽然前端会优先尝试真实 provider，但不配置 key 时仍会自动回退到 mock 路径
-  - 工作区仍包含未提交的前端、后端与文档改动
-- 未完成内容：
-  - 用真实 key 做一次 `openai_image` 实网验证
-  - 决定是否把前端默认 provider 调整为真实 provider
-  - 补最小认证和项目级访问控制
-- 下一位 agent 的第一步：
-  - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
-  - 然后确认本轮是否先以“工作台 + 预览闭环 + 首个真实 provider 代码接入”作为提交边界
-  - 若继续开发，则优先做真实 key 验证或前端默认 provider 切换
-- 是否可直接接手：Yes
-
-### [2026-04-20 11:20] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes
-  - 是否已 push：No
-- 本次完成：
-  - 生图工作台前端增加基于 `storage_path` 的预览能力，Hero 区、任务卡、图库卡的信息层级更清晰
-  - 模拟图像任务现在会落地本地 SVG 预览文件，并通过 `/media/...` 静态路径直接提供给前端
-  - 种子图库的图像样例已改为本地可访问预览，打开页面即可看到真实预览而非纯占位渐变
-  - 完成前端 build 验证与后端冒烟验证，确认“创建任务 -> 生成资产 -> 访问预览”链路可用
-- 修改文件：
-  - `backend/app/core/config.py`
-  - `backend/app/main.py`
-  - `backend/app/services/bootstrap.py`
-  - `backend/app/services/task_executor.py`
-  - `backend/app/services/media_storage.py`
-  - `frontend/src/App.tsx`
-  - `frontend/src/styles.css`
-  - `docs/tasks.md`
-  - `docs/handoff.md`
-- 当前任务状态：
-  - `task-000`: DONE
-  - `task-001`: IN_PROGRESS
-  - `task-002`: TODO
-  - `task-003`: DONE
-  - `task-004`: TODO
-  - `task-005`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - 当前“真实预览”仍属于模拟产物，本质是本地 SVG 占位，不是外部图像 provider 的真实返回文件
-  - 历史上遗留的 `nas://` / `generated://` 资产若未被新数据覆盖，前端仍会退回 fallback 预览
-  - 工作区仍包含未提交的文档、前端和后端改动，尚未形成 commit/push 边界
-  - `docs/ai-agent-project-docs/` 仍是未纳管模板目录，后续需决定保留、归档或删除
-- 未完成内容：
-  - 评审并定稿当前生图工作台改动，决定提交边界
-  - 接入真实图像 provider
-  - 补最小认证和项目级访问控制
-- 下一位 agent 的第一步：
-  - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
-  - 然后确认是否以“工作台 + 资产预览闭环”作为一次提交边界
-  - 若先不提交，则直接转入 `task-002` 做真实 provider 接入设计与选型
-- 是否可直接接手：Yes
-
-### [2026-04-17 16:18] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes
-  - 是否已 push：No
-- 本次完成：
-  - 补齐“任务完成 -> 自动生成资产 -> 前端可见”的最小闭环
-  - 后端为图像/视频任务增加幂等资产落库逻辑
-  - 为旧库补充 `assets.source_task_id` 启动兼容
-  - 前端任务卡增加“已入图库”提示
-  - 完成前端 build 与后端冒烟验证
-- 修改文件：
-  - `backend/app/services/task_executor.py`
-  - `backend/app/services/bootstrap.py`
-  - `backend/app/schemas.py`
-  - `frontend/src/App.tsx`
-  - `frontend/src/api.ts`
-  - `frontend/src/styles.css`
-  - `docs/tasks.md`
-  - `docs/handoff.md`
-- 当前任务状态：
-  - `task-000`: DONE
-  - `task-001`: IN_PROGRESS
-  - `task-002`: TODO
-  - `task-003`: DONE
-  - `task-004`: TODO
-  - `task-005`: TODO
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - 当前自动生成资产仍基于模拟 `storage_path`，真实 provider 接入后需要确认产物路径格式
-  - 前端资产卡仍未真正展示 `storage_path` 对应的预览内容，只做了任务到资产的关系提示
-  - 工作区仍包含未提交的文档与前后端改动
-  - `docs/ai-agent-project-docs/` 仍是未纳管模板目录，后续需决定保留、归档或删除
-- 未完成内容：
-  - 审视并定稿当前生图工作台前端改动
-  - 接入真实图像 provider
-  - 增加真实资产预览体验
-  - 补最小认证和项目级访问控制
-- 下一位 agent 的第一步：
-  - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
-  - 然后优先决定 `task-001` 和 `task-005` 是否一起收敛提交，还是先单独提交当前闭环改动
-- 是否可直接接手：Yes
-
-### [2026-04-17 16:05] Session Handoff
-- 执行角色：Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes
-  - 是否已 push：No
-- 本次完成：
-  - 在 `docs/` 根目录初始化 QMDH-web 正式协作文档
-  - 基于当前代码和项目状态写入第一版 `protocol / plan / architecture / decisions / tasks / handoff / review`
-  - 明确 `docs/ai-agent-project-docs/` 是模板来源，不是正式事实源
-- 修改文件：
-  - `docs/protocol.md`
-  - `docs/plan.md`
-  - `docs/architecture.md`
-  - `docs/decisions.md`
-  - `docs/tasks.md`
-  - `docs/handoff.md`
-  - `docs/review.md`
-- 当前任务状态：
-  - `task-000`: DONE
-  - `task-001`: IN_PROGRESS
-  - `task-002`: TODO
-  - `task-003`: TODO
-  - `task-004`: TODO
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - 工作区当前除了文档外，还有未提交的前端改动：
-    - `frontend/src/App.tsx`
-    - `frontend/src/api.ts`
-    - `frontend/src/styles.css`
-  - 这些改动对应生图工作台重构，但尚未形成提交边界
-  - `docs/ai-agent-project-docs/` 当前仍是未纳管模板目录，后续需决定保留、归档或删除
-- 未完成内容：
-  - 评审并整理生图工作台前端改动
-  - 接入真实图像 provider
-  - 打通任务结果到图库资产
-  - 增加最小认证和项目级访问控制
-- 下一个 agent 的第一步：
-  - 先阅读 `docs/protocol.md`、`docs/tasks.md` 和本文件
-  - 再检查当前工作区前端改动，决定是直接提交 `task-001`，还是继续做一个小轮次微调
+  - 生图链路已切换到可配置的真实 provider profile，并接通 `modelscope_free_image / MAILAND/majicflus_v1`
+  - 后端真实生图执行器已支持 ModelScope 异步出图轮询
+  - 生图任务支持 `image_count`，默认 1 张，最多 4 张
+  - 历史记录流已改为“旧任务在上，新任务在下”，并按 `source_task_id` 正确归组
+  - 前端工作台改为“左侧项目区 + 中间历史流 + 底部创作栏”的简洁布局
+  - 完成后端单测、前端 build 和真实 ModelScope 冒烟验证
 - 是否可直接接手：Yes

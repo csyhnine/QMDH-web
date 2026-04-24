@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import mimetypes
+from base64 import b64encode
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from pathlib import Path
 from random import randint, uniform
 from time import perf_counter, sleep
 from urllib.error import HTTPError, URLError
@@ -15,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.config import ImageProviderProfile, settings
 from app.database import SessionLocal
 from app.models import Asset, AssetType, Project, ProviderCall, Task, TaskStatus, Workflow
-from app.services.media_storage import write_base64_asset, write_preview_svg
+from app.services.media_storage import media_root_path, write_base64_asset, write_preview_svg
 from app.services.model_registry import ProviderDefinition, get_provider_definition
 
 
@@ -96,9 +99,19 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
             raise ValueError("Image generation payload is missing prompt")
 
         requested_count = _requested_image_count(payload)
+        reference_result: dict[str, object] = {}
+        prompt_for_generation = prompt
+        reference_image = _extract_reference_image(payload)
+        if reference_image:
+            prompt_for_generation, reference_result = _apply_reference_image_to_prompt(
+                profile=self.profile,
+                prompt=prompt,
+                reference_image=reference_image,
+            )
+
         request_body = {
             "model": self.profile.model_name,
-            "prompt": prompt,
+            "prompt": prompt_for_generation,
             "size": _openai_size_for_payload(payload),
             "quality": self.profile.quality,
             "output_format": self.profile.output_format,
@@ -106,7 +119,7 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
 
         detail = payload.get("prompt_supplement")
         if detail:
-            request_body["prompt"] = f"{prompt}\n\nAdditional guidance: {detail}"
+            request_body["prompt"] = f"{prompt_for_generation}\n\nAdditional guidance: {detail}"
 
         headers = {
             "Authorization": f"Bearer {self.profile.api_key}",
@@ -129,9 +142,11 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
             )
 
             if _uses_modelscope_async_mode(self.profile):
-                data = _poll_modelscope_image_result(self.profile, response_payload)
+                data = _extract_image_data(response_payload)
+                if not data:
+                    data = _poll_modelscope_image_result(self.profile, response_payload)
             else:
-                data = response_payload.get("data") or []
+                data = _extract_image_data(response_payload)
 
             if not data:
                 raise ValueError("Image generation returned no image data")
@@ -169,6 +184,7 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
             "usage_records": usage_records,
             "requested_image_count": requested_count,
             "output_count": len(storage_paths),
+            **reference_result,
         }
 
         return ExecutionOutcome(
@@ -197,6 +213,190 @@ def get_provider_adapter(provider_name: str) -> ProviderAdapter:
     if definition.adapter_kind == "openai_compatible":
         return OpenAIImageProviderAdapter(definition, settings.get_image_provider_profile(provider_name))
     return SimulatedProviderAdapter(definition)
+
+
+def _extract_reference_image(payload: dict) -> str:
+    for key in ("reference_image", "source_image", "image"):
+        value = str(payload.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _apply_reference_image_to_prompt(
+    *, profile: ImageProviderProfile, prompt: str, reference_image: str
+) -> tuple[str, dict[str, object]]:
+    reference_mode = profile.reference_mode.strip().lower()
+    if reference_mode in {"", "disabled", "none", "off"}:
+        return prompt, {
+            "reference_image_used": False,
+            "reference_image_mode": "disabled",
+            "reference_image_warning": "Reference image was uploaded but this provider profile has reference_mode disabled.",
+        }
+
+    if reference_mode != "caption_prompt":
+        raise ValueError(
+            f"Unsupported reference_mode for {profile.provider_name}: {profile.reference_mode}. "
+            "Use caption_prompt or disabled."
+        )
+
+    caption_models = _reference_caption_model_candidates(profile)
+    if not caption_models:
+        raise ValueError(
+            f"{profile.provider_name} reference_mode=caption_prompt requires reference_caption_model"
+        )
+
+    reference_caption = ""
+    used_caption_model = ""
+    caption_errors: list[str] = []
+    for caption_model in caption_models:
+        try:
+            reference_caption = _caption_reference_image(
+                profile=profile,
+                model_name=caption_model,
+                reference_image=reference_image,
+                user_prompt=prompt,
+            )
+            used_caption_model = caption_model
+            break
+        except ValueError as exc:
+            caption_errors.append(f"{caption_model}: {exc}")
+
+    if not reference_caption:
+        return prompt, {
+            "reference_image_used": False,
+            "reference_image_mode": "caption_prompt",
+            "reference_image_warning": (
+                "Reference image caption failed, so the task fell back to text-only generation. "
+                + " | ".join(caption_errors)
+            ),
+        }
+
+    enriched_prompt = (
+        f"{prompt}\n\n"
+        "Use the following reference image analysis as visual guidance. "
+        "Keep the user's text prompt as the primary objective, and borrow only relevant visual structure, "
+        "style, material, lighting, and composition cues from the reference.\n"
+        f"Reference image analysis: {reference_caption}"
+    )
+    return enriched_prompt, {
+        "reference_image_used": True,
+        "reference_image_mode": "caption_prompt",
+        "reference_caption_model": used_caption_model,
+        "reference_caption": reference_caption,
+    }
+
+
+def _reference_caption_model_candidates(profile: ImageProviderProfile) -> list[str]:
+    candidates = [
+        profile.reference_caption_model or _default_reference_caption_model(profile),
+        *profile.reference_caption_fallback_models,
+    ]
+    return list(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+
+def _default_reference_caption_model(profile: ImageProviderProfile) -> str:
+    if "modelscope.cn" in profile.base_url:
+        return "Qwen/Qwen3-VL-8B-Instruct"
+    return ""
+
+
+def _caption_reference_image(
+    *, profile: ImageProviderProfile, model_name: str, reference_image: str, user_prompt: str
+) -> str:
+    request_body = {
+        "model": model_name,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"{profile.reference_caption_prompt}\n\n"
+                            f"User image-generation prompt: {user_prompt}"
+                        ),
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": _reference_image_to_model_url(reference_image)},
+                    },
+                ],
+            }
+        ],
+        "max_tokens": 420,
+        "temperature": 0.2,
+    }
+    headers = {
+        "Authorization": f"Bearer {profile.api_key}",
+        "Content-Type": "application/json",
+    }
+    request = Request(
+        url=f"{profile.base_url.rstrip('/')}/chat/completions",
+        data=json.dumps(request_body).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=profile.timeout_seconds) as response:
+            response_payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise ValueError(f"Reference image caption failed with HTTP {exc.code}: {detail}") from exc
+    except URLError as exc:
+        raise ValueError(f"Reference image caption request failed: {exc.reason}") from exc
+
+    caption = _extract_chat_message_content(response_payload)
+    if not caption:
+        raise ValueError(f"Reference image caption returned no text: {response_payload}")
+    return caption
+
+
+def _reference_image_to_model_url(reference_image: str) -> str:
+    normalized = reference_image.strip()
+    if normalized.startswith(("http://", "https://", "data:image/")):
+        return normalized
+
+    media_prefix = settings.media_url_prefix.rstrip("/")
+    if normalized.startswith(f"{media_prefix}/"):
+        relative_path = normalized.removeprefix(f"{media_prefix}/")
+    else:
+        relative_path = normalized.lstrip("/")
+
+    media_root = media_root_path().resolve()
+    file_path = (media_root / Path(relative_path)).resolve()
+    if media_root not in file_path.parents and file_path != media_root:
+        raise ValueError("Reference image path is outside media storage")
+    if not file_path.exists() or not file_path.is_file():
+        raise ValueError(f"Reference image file not found: {reference_image}")
+
+    mime_type = mimetypes.guess_type(file_path.name)[0] or "image/png"
+    encoded = b64encode(file_path.read_bytes()).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
+
+
+def _extract_chat_message_content(response_payload: dict) -> str:
+    choices = response_payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+
+    message = choices[0].get("message") if isinstance(choices[0], dict) else None
+    if not isinstance(message, dict):
+        return ""
+
+    content = message.get("content")
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict) and isinstance(item.get("text"), str):
+                parts.append(item["text"])
+        return "\n".join(part.strip() for part in parts if part.strip())
+    return ""
 
 
 def _openai_size_for_payload(payload: dict) -> str:
@@ -261,6 +461,36 @@ def _uses_modelscope_async_mode(profile: ImageProviderProfile) -> bool:
     return "modelscope.cn" in profile.base_url
 
 
+def _extract_image_data(payload: dict) -> list[dict]:
+    if data := payload.get("data"):
+        return _normalize_image_candidates(data)
+
+    outputs = payload.get("outputs")
+    if isinstance(outputs, dict):
+        for key in ("images", "output_images", "image_urls"):
+            if candidates := outputs.get(key):
+                return _normalize_image_candidates(candidates)
+
+    for key in ("images", "output_images", "image_urls"):
+        if candidates := payload.get(key):
+            return _normalize_image_candidates(candidates)
+
+    return []
+
+
+def _normalize_image_candidates(candidates: object) -> list[dict]:
+    if not isinstance(candidates, list):
+        return []
+
+    normalized: list[dict] = []
+    for item in candidates:
+        if isinstance(item, str):
+            normalized.append({"url": item})
+        elif isinstance(item, dict):
+            normalized.append(item)
+    return normalized
+
+
 def _poll_modelscope_image_result(profile: ImageProviderProfile, submit_payload: dict) -> list[dict]:
     task_id = str(submit_payload.get("task_id") or "").strip()
     if not task_id:
@@ -290,25 +520,7 @@ def _poll_modelscope_image_result(profile: ImageProviderProfile, submit_payload:
 
         task_status = str(last_payload.get("task_status") or "").upper()
         if task_status == "SUCCEED":
-            image_candidates = []
-            outputs = last_payload.get("outputs") or {}
-            if isinstance(outputs, dict):
-                image_candidates = outputs.get("images") or outputs.get("output_images") or outputs.get("image_urls") or []
-            if not image_candidates:
-                image_candidates = (
-                    last_payload.get("output_images")
-                    or last_payload.get("images")
-                    or last_payload.get("image_urls")
-                    or []
-                )
-
-            normalized: list[dict] = []
-            if isinstance(image_candidates, list):
-                for item in image_candidates:
-                    if isinstance(item, str):
-                        normalized.append({"url": item})
-                    elif isinstance(item, dict):
-                        normalized.append(item)
+            normalized = _extract_image_data(last_payload)
             if normalized:
                 return normalized
             raise ValueError(f"ModelScope async task succeeded but returned no image outputs: {last_payload}")

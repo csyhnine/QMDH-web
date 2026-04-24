@@ -198,10 +198,11 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
    - `background`：FastAPI background task
    - `sync`：同步执行
    - `redis`：入队等待 worker
-6. `task_executor.py` 根据 provider 选择真实适配器或模拟适配器，写回任务状态、成本、延迟和结果摘要。
-7. 若为图像任务，执行层会把真实返回图片或模拟预览落到 `media_root`，并将 `/media/...` 写入 `task.result.storage_path`。
-8. 任务成功后，资产物化逻辑会把 `storage_path` 沉淀为 `Asset`，供图库和任务区复用。
-9. 前端定时轮询 `GET /api/v1/tasks`，更新最近任务状态。
+6. `task_executor.py` 根据 provider 选择真实适配器或模拟适配器。
+7. 如果任务 payload 包含参考图，并且 provider profile 使用 `reference_mode=caption_prompt`，执行层会先调用视觉语言模型读取参考图，再把参考说明拼入真实文生图 prompt。
+8. 若为图像任务，执行层会把真实返回图片或模拟预览落到 `media_root`，并将 `/media/...` 写入 `task.result.storage_path`。
+9. 任务成功后，资产物化逻辑会把 `storage_path` 沉淀为 `Asset`，供图库和任务区复用。
+10. 前端定时轮询 `GET /api/v1/tasks`，更新最近任务状态。
 
 ### 辅助链路：项目状态
 1. `GET /api/v1/projects` 调用 `project_status.py`
@@ -230,7 +231,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 
 - 热点模块：`backend/app/services/task_executor.py`
   - 原因：图像/视频/文档执行能力都汇集在这里
-  - 风险：现在已经同时承载模拟适配器和真实 provider 接入，若继续堆叠实现，容易把 provider 逻辑和任务逻辑缠在一起
+  - 风险：现在已经同时承载模拟适配器、真实 provider 接入和参考图语义增强，若继续堆叠实现，容易把 provider 逻辑和任务逻辑缠在一起
 
 - 热点模块：`backend/app/services/bootstrap.py`
   - 原因：启动时直接建表、补列、种子写入

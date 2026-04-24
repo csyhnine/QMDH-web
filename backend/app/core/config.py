@@ -9,6 +9,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 REPO_ROOT_DIR = BACKEND_DIR.parent
+DEFAULT_REFERENCE_CAPTION_PROMPT = (
+    "Describe the reference image for an image-generation model. "
+    "Focus on composition, subject, materials, lighting, style, spatial layout, and constraints. "
+    "Do not invent private or sensitive information."
+)
+DEFAULT_REFERENCE_CAPTION_FALLBACK_MODELS = (
+    "Qwen/Qwen3-VL-8B-Instruct",
+    "OpenGVLab/InternVL3_5-241B-A28B",
+)
 
 
 @dataclass(frozen=True)
@@ -24,6 +33,10 @@ class ImageProviderProfile:
     capabilities: tuple[str, ...] = ("image.generate",)
     configurable: bool = True
     outbound: bool = True
+    reference_mode: str = "disabled"
+    reference_caption_model: str | None = None
+    reference_caption_fallback_models: tuple[str, ...] = DEFAULT_REFERENCE_CAPTION_FALLBACK_MODELS
+    reference_caption_prompt: str = DEFAULT_REFERENCE_CAPTION_PROMPT
 
 
 class Settings(BaseSettings):
@@ -89,6 +102,18 @@ class Settings(BaseSettings):
             if not isinstance(capabilities, list) or not capabilities:
                 raise ValueError(f"Provider {provider_name} capabilities must be a non-empty JSON array")
 
+            reference_mode = str(item.get("reference_mode") or "").strip()
+            if not reference_mode:
+                reference_mode = "caption_prompt" if "modelscope.cn" in base_url else "disabled"
+
+            reference_caption_model = str(item.get("reference_caption_model") or "").strip() or None
+            raw_fallback_models = item.get("reference_caption_fallback_models") or []
+            if isinstance(raw_fallback_models, str):
+                raw_fallback_models = [raw_fallback_models]
+            if not isinstance(raw_fallback_models, list):
+                raise ValueError(f"Provider {provider_name} reference_caption_fallback_models must be a JSON array")
+            reference_caption_prompt = str(item.get("reference_caption_prompt") or "").strip()
+
             profiles[provider_name] = ImageProviderProfile(
                 provider_name=provider_name,
                 api_key=api_key,
@@ -101,6 +126,13 @@ class Settings(BaseSettings):
                 capabilities=tuple(str(value) for value in capabilities if str(value).strip()),
                 configurable=bool(item.get("configurable", True)),
                 outbound=bool(item.get("outbound", True)),
+                reference_mode=reference_mode,
+                reference_caption_model=reference_caption_model,
+                reference_caption_fallback_models=tuple(
+                    str(value).strip() for value in raw_fallback_models if str(value).strip()
+                )
+                or DEFAULT_REFERENCE_CAPTION_FALLBACK_MODELS,
+                reference_caption_prompt=reference_caption_prompt or DEFAULT_REFERENCE_CAPTION_PROMPT,
             )
 
         return profiles

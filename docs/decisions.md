@@ -104,6 +104,22 @@
 - 禁止事项：
   - 不把“本地 `npm run dev` + `uvicorn --reload`”误当成服务器部署方案
 
+### Decision: 参考图 MVP 先采用语义参考模式，不伪装成直接图生图
+- 状态：Accepted
+- 日期：2026-04-23
+- 背景：
+  - 当前 ModelScope 免费文生图链路主要围绕文本 prompt 调用
+  - 项目已经支持参考图真实上传，但直接 `img2img / image.edit` 仍需要后续接入支持该能力的 provider
+- 决策内容：
+  - MVP 1.0 先使用 `reference_mode=caption_prompt`
+  - 有参考图时，后端先调用视觉语言模型读取参考图，再把参考说明拼入真实文生图 prompt
+  - 该能力对用户明确表述为“参考图语义参与生成”，不称为完整图生图
+- 影响：
+  - 使用参考图会多一次视觉语言模型调用，增加延迟并消耗 provider 额度
+  - 后续接入直接图生图 provider 时，应新增专用 adapter 或 provider mode，而不是复用当前语义参考说法
+- 禁止事项：
+  - 不把 `caption_prompt` 模式宣传为直接 `img2img / image.edit`
+
 ### Decision: 任务必须拆到可单次提交完成的粒度
 - 状态：Accepted
 - 日期：2026-04-17

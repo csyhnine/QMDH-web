@@ -71,6 +71,7 @@ button {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 76px 280px minmax(0, 1fr);
+  align-items: start;
 }
 
 .global-rail,
@@ -86,7 +87,8 @@ button {
 .global-rail {
   position: sticky;
   top: 0;
-  min-height: 100vh;
+  align-self: start;
+  height: 100vh;
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 20px;
@@ -164,7 +166,10 @@ button {
 }
 
 .workspace-pane {
-  min-height: 100vh;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
   padding: 24px 18px 24px 20px;
   border-right: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.8);
@@ -172,6 +177,7 @@ button {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   gap: 18px;
+  overflow: auto;
 }
 
 .workspace-header {
@@ -309,6 +315,7 @@ button {
   padding: 24px 24px 150px;
   display: grid;
   gap: 16px;
+  align-content: start;
 }
 
 .canvas-area-empty {
@@ -746,8 +753,52 @@ button {
   font-size: 1.08rem;
 }
 
+.composer-body {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.reference-dropzone {
+  min-height: 120px;
+  border: 1px dashed rgba(15, 23, 42, 0.14);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.92));
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.reference-dropzone:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.24);
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.reference-dropzone-plus {
+  font-size: 2rem;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.reference-dropzone.has-preview {
+  padding: 0;
+}
+
+.reference-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .composer-textarea {
-  display: block;
+  display: grid;
+  gap: 10px;
 }
 
 .composer-textarea textarea,
@@ -763,6 +814,12 @@ button {
   min-height: 80px;
 }
 
+.composer-textarea-hint {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
 .composer-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -771,7 +828,8 @@ button {
 }
 
 .composer-dropdown select,
-.composer-menu summary {
+.composer-menu summary,
+.composer-menu-trigger {
   min-height: 44px;
   padding: 0 14px;
   border: 1px solid var(--line);
@@ -789,9 +847,11 @@ button {
   position: relative;
 }
 
-.composer-menu summary {
+.composer-menu summary,
+.composer-menu-trigger {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   min-width: 140px;
   list-style: none;
   cursor: pointer;
@@ -803,6 +863,11 @@ button {
 }
 
 .composer-menu[open] summary {
+  border-color: rgba(37, 99, 235, 0.22);
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.composer-menu-trigger.is-open {
   border-color: rgba(37, 99, 235, 0.22);
   background: rgba(37, 99, 235, 0.06);
 }
@@ -819,6 +884,107 @@ button {
   box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
   display: grid;
   gap: 12px;
+}
+
+.composer-menu-panel-list {
+  width: min(280px, 82vw);
+}
+
+.composer-menu-panel-display {
+  width: min(360px, 88vw);
+}
+
+.composer-menu-panel-template {
+  width: min(520px, 92vw);
+}
+
+.composer-menu-group {
+  display: grid;
+  gap: 10px;
+}
+
+.composer-menu-title {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.composer-choice-item {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.03);
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.composer-choice-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.16);
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.composer-choice-item strong {
+  font-size: 0.94rem;
+}
+
+.composer-choice-item span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.composer-choice-item.is-active {
+  border-color: rgba(37, 99, 235, 0.2);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.composer-menu-trigger.is-disabled {
+  color: var(--muted);
+  background: rgba(15, 23, 42, 0.04);
+  cursor: not-allowed;
+}
+
+.composer-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.composer-chip-grid-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.composer-chip-button {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.03);
+  color: var(--text);
+  font-size: 0.88rem;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.composer-chip-button:hover {
+  transform: translateY(-1px);
+}
+
+.composer-chip-button.is-active {
+  border-color: rgba(37, 99, 235, 0.2);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--accent-deep);
 }
 
 .composer-menu-wide .composer-menu-panel {
@@ -861,6 +1027,125 @@ button {
 
 .composer-quickmeta {
   margin-left: auto;
+}
+
+.composer-toolbar-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.template-section,
+.template-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.template-section-head {
+  display: grid;
+  gap: 4px;
+}
+
+.template-section-head strong {
+  font-size: 0.96rem;
+}
+
+.template-section-head span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.template-grid,
+.template-list {
+  display: grid;
+  gap: 10px;
+}
+
+.template-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.template-card {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.03);
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.template-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.16);
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.template-card strong {
+  font-size: 0.92rem;
+}
+
+.template-card span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.template-card.is-active {
+  border-color: rgba(37, 99, 235, 0.2);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.template-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.template-card-main {
+  min-height: 100%;
+}
+
+.template-card-actions,
+.template-editor-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.template-action-button {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-strong);
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.template-empty {
+  padding: 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 14px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.template-editor-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .composer-inline-grid {
@@ -957,6 +1242,11 @@ textarea:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .template-grid,
+  .template-editor-row {
+    grid-template-columns: 1fr;
+  }
+
   .featured-panel {
     grid-template-columns: 1fr;
   }
@@ -970,7 +1260,7 @@ textarea:focus-visible {
 
   .global-rail {
     position: static;
-    min-height: auto;
+    height: auto;
     grid-template-columns: auto 1fr auto;
     grid-template-rows: none;
     align-items: center;
@@ -987,7 +1277,8 @@ textarea:focus-visible {
   }
 
   .workspace-pane {
-    min-height: auto;
+    position: static;
+    height: auto;
     border-right: none;
     border-bottom: 1px solid var(--line);
   }
@@ -1005,6 +1296,14 @@ textarea:focus-visible {
     padding-right: 16px;
   }
 
+  .composer-body {
+    grid-template-columns: 1fr;
+  }
+
+  .reference-dropzone {
+    min-height: 96px;
+  }
+
   .toolbar-row,
   .feed-card-actions,
   .composer-toolbar {
@@ -1015,6 +1314,10 @@ textarea:focus-visible {
   .composer-inline-grid,
   .composer-control-grid,
   .feed-gallery {
+    grid-template-columns: 1fr;
+  }
+
+  .template-list-item {
     grid-template-columns: 1fr;
   }
 
@@ -1037,6 +1340,10 @@ textarea:focus-visible {
     margin-top: 10px;
   }
 
+  .composer-menu-panel-template {
+    width: 100%;
+  }
+
   .composer-menu-panel-wide {
     grid-template-columns: 1fr;
   }
@@ -1048,7 +1355,8 @@ textarea:focus-visible {
   .ratio-pill,
   .resolution-pill,
   .composer-dropdown select,
-  .composer-menu summary {
+  .composer-menu summary,
+  .composer-menu-trigger {
     width: 100%;
   }
 }

@@ -1,6 +1,14 @@
-import { type CSSProperties, type FormEvent, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type ChangeEvent, type DragEvent, type FormEvent, type RefObject, useEffect, useRef, useState } from "react";
 
-import { api, type Asset, type Project, type Provider, type Task, type Workflow } from "./api";
+import {
+  api,
+  type Asset,
+  type Project,
+  type PromptTemplateRecord,
+  type Provider,
+  type Task,
+  type Workflow
+} from "./api";
 
 type LoadState = {
   health: string;
@@ -13,7 +21,7 @@ type LoadState = {
   ready: boolean;
 };
 
-type ImageFormState = {
+type StudioFormState = {
   title: string;
   prompt: string;
   workflowKey: string;
@@ -42,11 +50,26 @@ type PromptTemplate = {
   notes: string;
 };
 
+type PromptTemplateFormValue = Pick<
+  PromptTemplate,
+  "label" | "title" | "prompt" | "style" | "aspectRatio" | "resolution" | "deliverable" | "notes"
+>;
+
+type CustomPromptTemplate = Omit<PromptTemplateRecord, "id" | "aspect_ratio" | "updated_at"> & {
+  id: number | string;
+  aspectRatio?: string;
+  aspect_ratio?: string;
+  updatedAt?: string;
+  updated_at?: string;
+};
+
 type FeedFilterState = {
   sort: "latest" | "oldest";
   status: "all" | "running" | "completed";
   provider: string;
 };
+
+type ComposerMenuKey = "template" | "workflow" | "provider" | "display" | "count" | null;
 
 const initialState: LoadState = {
   health: "loading",
@@ -67,17 +90,18 @@ const stylePresets = [
 ];
 
 const aspectRatioOptions = ["智能", "21:9", "16:9", "3:2", "4:3", "1:1", "3:4", "2:3", "9:16"];
+
 const resolutionOptions = [
   { id: "2k", label: "高清 2K" },
   { id: "4k", label: "超清 4K" }
 ];
 
-const promptTemplates: PromptTemplate[] = [
+const hotPromptTemplates: PromptTemplate[] = [
   {
     id: "riverfront",
     label: "滨水更新",
-    title: "滨水更新概念图",
-    prompt: "滨水复合街区，连续骑行步道，首层商业外摆，玻璃与浅色石材立面，清晨柔光，适合方案汇报首页。",
+    title: "滨水更新生图方案",
+    prompt: "滨水复合街区，连续骑行步道，首层商业外摆，玻璃与浅色石材立面，清晨柔光，适合作为方案汇报首页。",
     style: "modern",
     aspectRatio: "16:9",
     resolution: "2k",
@@ -105,24 +129,46 @@ const promptTemplates: PromptTemplate[] = [
     resolution: "4k",
     deliverable: "方案概念图",
     notes: "突出入口仪式感和公共活动场景。"
+  },
+  {
+    id: "commercial-plaza",
+    label: "商业广场",
+    title: "商业广场主入口效果图",
+    prompt: "城市商业广场主入口，层叠雨棚，玻璃幕墙，导视醒目，人流活跃，日间通透光影，适合招商展示。",
+    style: "modern",
+    aspectRatio: "16:9",
+    resolution: "2k",
+    deliverable: "入口主视觉",
+    notes: "强调入口昭示性和商业氛围，但不要过度夸张。"
+  },
+  {
+    id: "landscape-axis",
+    label: "景观轴线",
+    title: "中央景观轴概念图",
+    prompt: "中央景观轴，连续水景与林荫步道，局部休憩平台，低维护植物配置，黄昏柔光，构图简洁。",
+    style: "minimal",
+    aspectRatio: "3:2",
+    resolution: "2k",
+    deliverable: "景观概念图",
+    notes: "控制色彩，突出空间秩序和慢行体验。"
   }
 ];
 
-const defaultImageForm: ImageFormState = {
-  title: promptTemplates[0].title,
-  prompt: promptTemplates[0].prompt,
+const defaultStudioForm: StudioFormState = {
+  title: hotPromptTemplates[0].title,
+  prompt: hotPromptTemplates[0].prompt,
   workflowKey: "image-generate",
   projectCode: "QMDH-001",
   requestedProvider: "modelscope_free_image",
   userName: "reviewer",
   classification: "B",
-  style: promptTemplates[0].style,
-  aspectRatio: promptTemplates[0].aspectRatio,
-  resolution: promptTemplates[0].resolution,
+  style: hotPromptTemplates[0].style,
+  aspectRatio: hotPromptTemplates[0].aspectRatio,
+  resolution: hotPromptTemplates[0].resolution,
   imageCount: 1,
-  deliverable: promptTemplates[0].deliverable,
+  deliverable: hotPromptTemplates[0].deliverable,
   referenceImage: "",
-  notes: promptTemplates[0].notes
+  notes: hotPromptTemplates[0].notes
 };
 
 function formatDate(value: string | null): string {
@@ -154,6 +200,25 @@ function formatStatus(status: string | null): string {
     error: "异常"
   };
   return mapping[status ?? ""] ?? (status ?? "未记录");
+}
+
+function clampImageCount(value: number): number {
+  return Math.max(1, Math.min(4, Math.trunc(value || 1)));
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("Reference image could not be read"));
+    };
+    reader.onerror = () => reject(new Error("Reference image could not be read"));
+    reader.readAsDataURL(file);
+  });
 }
 
 function hashString(value: string): number {
@@ -188,7 +253,7 @@ function summarizeStoragePath(path: string): string {
   return `...${path.slice(-39)}`;
 }
 
-function buildImagePayload(form: ImageFormState): Record<string, unknown> {
+function buildImagePayload(form: StudioFormState): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     prompt: form.prompt,
     style: form.style,
@@ -203,13 +268,26 @@ function buildImagePayload(form: ImageFormState): Record<string, unknown> {
   return Object.fromEntries(Object.entries(payload).filter(([, value]) => Boolean(value)));
 }
 
-function applyTemplateToForm(template: PromptTemplate, current: ImageFormState): ImageFormState {
+function applyTemplateToForm(template: PromptTemplateFormValue, current: StudioFormState): StudioFormState {
   return {
     ...current,
     title: template.title,
     prompt: template.prompt,
     style: template.style,
     aspectRatio: template.aspectRatio,
+    resolution: template.resolution,
+    deliverable: template.deliverable,
+    notes: template.notes
+  };
+}
+
+function toTemplateFormValue(template: CustomPromptTemplate): PromptTemplateFormValue {
+  return {
+    label: template.label,
+    title: template.title,
+    prompt: template.prompt,
+    style: template.style,
+    aspectRatio: template.aspect_ratio ?? template.aspectRatio ?? "16:9",
     resolution: template.resolution,
     deliverable: template.deliverable,
     notes: template.notes
@@ -228,12 +306,8 @@ function inferStyleFromAsset(asset: Asset | undefined, fallback: string): string
   return matched?.id ?? fallback;
 }
 
-function clampImageCount(value: number): number {
-  return Math.max(1, Math.min(4, Math.trunc(value || 1)));
-}
-
 function inferRequestedImageCount(task: Task): number {
-  const requestedCount = Number(task.result.requested_image_count ?? task.result.output_count ?? 1);
+  const requestedCount = Number(task.result["requested_image_count"] ?? task.result["output_count"] ?? 1);
   if (Number.isNaN(requestedCount)) return 1;
   return clampImageCount(requestedCount);
 }
@@ -262,17 +336,18 @@ function FeedCard(props: {
   onReuse: () => void;
   onLike: () => void;
   onShare: () => void;
+  anchorRef?: RefObject<HTMLElement | null>;
 }) {
   const summary =
     props.asset?.prompt_text ??
-    (props.task.result.summary
-      ? String(props.task.result.summary)
-      : props.task.result.error
-        ? String(props.task.result.error)
+    (props.task.result["summary"]
+      ? String(props.task.result["summary"])
+      : props.task.result["error"]
+        ? String(props.task.result["error"])
         : "等待结果返回。");
 
   return (
-    <article className="feed-card">
+    <article className="feed-card" ref={props.anchorRef}>
       <div className="feed-card-head">
         <div className="feed-card-avatar">{props.task.requested_provider.slice(0, 1).toUpperCase()}</div>
         <div className="feed-card-copy">
@@ -301,7 +376,7 @@ function FeedCard(props: {
       ) : (
         <div className="feed-gallery-empty">
           <h3>任务还没有返回预览</h3>
-          <p>Worker 完成执行后，这里会展示本轮生成结果和可复用资产。</p>
+          <p>任务执行完成后，这里会显示本轮生成结果和可复用资产。</p>
         </div>
       )}
 
@@ -325,7 +400,7 @@ function FeedCard(props: {
 
 export default function App() {
   const [state, setState] = useState<LoadState>(initialState);
-  const [imageForm, setImageForm] = useState<ImageFormState>(defaultImageForm);
+  const [studioForm, setStudioForm] = useState<StudioFormState>(defaultStudioForm);
   const [filters, setFilters] = useState<FeedFilterState>({
     sort: "oldest",
     status: "all",
@@ -333,20 +408,33 @@ export default function App() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [activeComposerMenu, setActiveComposerMenu] = useState<ComposerMenuKey>(null);
+  const [referencePreviewUrl, setReferencePreviewUrl] = useState<string | null>(null);
+  const [referenceFileName, setReferenceFileName] = useState("");
+  const [uploadingReference, setUploadingReference] = useState(false);
+  const [customTemplates, setCustomTemplates] = useState<CustomPromptTemplate[]>([]);
+  const [templateDraftLabel, setTemplateDraftLabel] = useState("");
+  const [templateDraftTitle, setTemplateDraftTitle] = useState("");
+  const [editingTemplateId, setEditingTemplateId] = useState<number | string | null>(null);
   const isFetchingRef = useRef(false);
+  const composerToolbarRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const latestTaskRef = useRef<HTMLElement | null>(null);
+  const hasAutoPositionedRef = useRef(false);
 
   async function loadData() {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
 
     try {
-      const [health, projects, providers, workflows, tasks, assets] = await Promise.all([
+      const [health, projects, providers, workflows, tasks, assets, templates] = await Promise.all([
         api.health(),
         api.projects(),
         api.providers(),
         api.workflows(),
         api.tasks(),
-        api.assets()
+        api.assets(),
+        api.promptTemplates(studioForm.userName).catch(() => null)
       ]);
 
       setState({
@@ -359,6 +447,9 @@ export default function App() {
         error: "",
         ready: true
       });
+      if (templates) {
+        setCustomTemplates(templates);
+      }
       setLastSyncedAt(new Date().toISOString());
     } catch (error) {
       setState((current) => ({
@@ -383,14 +474,49 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const imageWorkflows = state.workflows.filter((workflow) => workflow.category === "image");
-  const selectedWorkflow = imageWorkflows.find((workflow) => workflow.key === imageForm.workflowKey) ?? imageWorkflows[0];
-  const imageProviders = state.providers.filter((provider) =>
-    selectedWorkflow ? provider.capabilities.includes(selectedWorkflow.provider_capability) : false
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!composerToolbarRef.current) return;
+      if (!(event.target instanceof Node)) return;
+      if (!composerToolbarRef.current.contains(event.target)) {
+        setActiveComposerMenu(null);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (referencePreviewUrl) {
+        URL.revokeObjectURL(referencePreviewUrl);
+      }
+    };
+  }, [referencePreviewUrl]);
+
+  const studioWorkflows = state.workflows.filter(
+    (workflow) => workflow.key === "image-generate" || workflow.key === "video-generate"
   );
-  const activeProject = state.projects.find((project) => project.code === imageForm.projectCode);
+  const selectedWorkflow = studioWorkflows.find((workflow) => workflow.key === studioForm.workflowKey) ?? studioWorkflows[0];
+  const isVideoWorkflow = selectedWorkflow?.key === "video-generate";
+
+  const availableProviders = !isVideoWorkflow
+    ? state.providers.filter((provider) =>
+        selectedWorkflow ? provider.capabilities.includes(selectedWorkflow.provider_capability) : false
+      )
+    : [];
+
+  const activeProject = state.projects.find((project) => project.code === studioForm.projectCode);
+  const workspaceName = activeProject?.name ?? "默认创作";
+  const selectedProvider = availableProviders.find((provider) => provider.provider_name === studioForm.requestedProvider);
+  const selectedStyle = stylePresets.find((preset) => preset.id === studioForm.style);
+  const selectedResolution = resolutionOptions.find((option) => option.id === studioForm.resolution);
+
   const imageAssets = state.assets.filter((asset) => asset.asset_type === "image");
-  const imageTasks = state.tasks.filter((task) => imageWorkflows.some((workflow) => workflow.key === task.workflow_key));
+  const imageTasks = state.tasks.filter(
+    (task) => task.workflow_key === "image-generate" && task.project_code === studioForm.projectCode
+  );
   const imageAssetsByTaskId = imageAssets.reduce((map, asset) => {
     if (asset.source_task_id === null) return map;
     const current = map.get(asset.source_task_id) ?? [];
@@ -398,10 +524,6 @@ export default function App() {
     map.set(asset.source_task_id, current);
     return map;
   }, new Map<number, Asset[]>());
-  const workspaceName = activeProject?.name ?? "默认创作";
-  const selectedProvider = imageProviders.find((provider) => provider.provider_name === imageForm.requestedProvider);
-  const selectedStyle = stylePresets.find((preset) => preset.id === imageForm.style);
-  const selectedResolution = resolutionOptions.find((option) => option.id === imageForm.resolution);
 
   const filteredTasks = [...imageTasks]
     .filter((task) => {
@@ -419,29 +541,64 @@ export default function App() {
       const rightTime = new Date(right.created_at).getTime();
       return filters.sort === "latest" ? rightTime - leftTime : leftTime - rightTime;
     });
+
+  const latestTask =
+    filteredTasks.length > 0
+      ? filteredTasks.reduce((currentLatest, task) =>
+          new Date(task.created_at).getTime() > new Date(currentLatest.created_at).getTime() ? task : currentLatest
+        )
+      : null;
   const hasHistory = filteredTasks.length > 0;
   const showCenteredComposer = !hasHistory;
+  const activeTemplate =
+    [...hotPromptTemplates, ...customTemplates].find(
+      (template) => template.title === studioForm.title && template.prompt === studioForm.prompt
+    ) ?? null;
 
   useEffect(() => {
-    if (imageProviders.length === 0) return;
-    if (!imageProviders.some((provider) => provider.provider_name === imageForm.requestedProvider)) {
-      const preferredProvider =
-        imageProviders.find((provider) => provider.provider_name === "modelscope_free_image")?.provider_name ??
-        imageProviders[0].provider_name;
+    if (isVideoWorkflow) {
+      setActiveComposerMenu((current) => (current === "provider" ? null : current));
+    }
+  }, [isVideoWorkflow]);
 
-      setImageForm((current) => ({
+  useEffect(() => {
+    if (availableProviders.length === 0) return;
+    if (!availableProviders.some((provider) => provider.provider_name === studioForm.requestedProvider)) {
+      const preferredProvider =
+        availableProviders.find((provider) => provider.provider_name === "modelscope_free_image")?.provider_name ??
+        availableProviders[0].provider_name;
+
+      setStudioForm((current) => ({
         ...current,
         requestedProvider: preferredProvider
       }));
     }
-  }, [imageProviders, imageForm.requestedProvider]);
+  }, [availableProviders, studioForm.requestedProvider]);
+
+  useEffect(() => {
+    hasAutoPositionedRef.current = false;
+  }, [studioForm.projectCode]);
+
+  useEffect(() => {
+    if (!state.ready || !hasHistory || hasAutoPositionedRef.current) return;
+
+    window.requestAnimationFrame(() => {
+      latestTaskRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
+      hasAutoPositionedRef.current = true;
+    });
+  }, [state.ready, hasHistory, latestTask?.id]);
+
+  function syncTemplateDraftWithCurrentForm() {
+    setTemplateDraftLabel(activeTemplate?.label ?? "");
+    setTemplateDraftTitle(studioForm.title);
+  }
 
   function handleProjectSelect(project: Project) {
-    setImageForm((current) => {
+    setStudioForm((current) => {
       const suggestedTitle = `${project.name} 生图方案`;
       const shouldReplaceTitle =
         current.title.trim() === "" ||
-        current.title === defaultImageForm.title ||
+        current.title === defaultStudioForm.title ||
         current.title.endsWith("生图方案") ||
         current.title === `${workspaceName} 生图方案`;
 
@@ -453,18 +610,40 @@ export default function App() {
     });
   }
 
+  function clearReferenceUpload() {
+    if (referencePreviewUrl) {
+      URL.revokeObjectURL(referencePreviewUrl);
+    }
+    setReferencePreviewUrl(null);
+    setReferenceFileName("");
+    setUploadingReference(false);
+    setStudioForm((current) => ({
+      ...current,
+      referenceImage: ""
+    }));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
   function handleResetComposer() {
-    setImageForm((current) => ({
-      ...defaultImageForm,
+    clearReferenceUpload();
+    setActiveComposerMenu(null);
+    setEditingTemplateId(null);
+    setTemplateDraftLabel("");
+    setTemplateDraftTitle("");
+    setStudioForm((current) => ({
+      ...defaultStudioForm,
       projectCode: current.projectCode,
       title: `${workspaceName} 生图方案`
     }));
   }
 
   function handleReuseTask(task: Task, asset?: Asset) {
-    setImageForm((current) => {
+    setActiveComposerMenu(null);
+    setStudioForm((current) => {
       const nextProvider =
-        imageProviders.find((provider) => provider.provider_name === task.requested_provider)?.provider_name ??
+        availableProviders.find((provider) => provider.provider_name === task.requested_provider)?.provider_name ??
         current.requestedProvider;
 
       return {
@@ -481,21 +660,272 @@ export default function App() {
     window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
   }
 
+  function toggleComposerMenu(menu: Exclude<ComposerMenuKey, null>) {
+    setActiveComposerMenu((current) => (current === menu ? null : menu));
+    if (menu === "template") {
+      syncTemplateDraftWithCurrentForm();
+    }
+  }
+
+  async function handleReferenceFile(file: File) {
+    if (!file.type.startsWith("image/")) {
+      setState((current) => ({
+        ...current,
+        error: "请上传图片文件作为参考图"
+      }));
+      return;
+    }
+
+    if (referencePreviewUrl) {
+      URL.revokeObjectURL(referencePreviewUrl);
+    }
+
+    const nextPreviewUrl = URL.createObjectURL(file);
+    setReferencePreviewUrl(nextPreviewUrl);
+    setReferenceFileName(file.name);
+    setUploadingReference(true);
+
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const uploaded = await api.uploadReferenceImage({
+        file_name: file.name,
+        data_url: dataUrl
+      });
+
+      setStudioForm((current) => ({
+        ...current,
+        referenceImage: uploaded.storage_path
+      }));
+      setState((current) => ({
+        ...current,
+        error: ""
+      }));
+    } catch (error) {
+      setStudioForm((current) => ({
+        ...current,
+        referenceImage: ""
+      }));
+      setState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : "参考图上传失败"
+      }));
+    } finally {
+      setUploadingReference(false);
+    }
+  }
+
+  function handleReferenceInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (file) {
+      handleReferenceFile(file);
+    }
+  }
+
+  function handleReferenceDrop(event: DragEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      handleReferenceFile(file);
+    }
+  }
+
+  function openReferencePicker() {
+    fileInputRef.current?.click();
+  }
+
+  function handleApplyTemplate(template: PromptTemplateFormValue | CustomPromptTemplate) {
+    const nextTemplate = "aspect_ratio" in template || "updated_at" in template ? toTemplateFormValue(template) : template;
+    setStudioForm((current) => applyTemplateToForm(nextTemplate, current));
+    setActiveComposerMenu(null);
+  }
+
+  function handleEditCustomTemplate(template: CustomPromptTemplate) {
+    setEditingTemplateId(template.id);
+    setTemplateDraftLabel(template.label);
+    setTemplateDraftTitle(template.title);
+    setStudioForm((current) => applyTemplateToForm(toTemplateFormValue(template), current));
+    setActiveComposerMenu("template");
+  }
+
+  async function handleDeleteCustomTemplate(templateId: number | string) {
+    try {
+      const numericTemplateId = Number(templateId);
+      await api.deletePromptTemplate(numericTemplateId, studioForm.userName);
+      setCustomTemplates((current) => current.filter((template) => Number(template.id) !== numericTemplateId));
+      if (Number(editingTemplateId) === numericTemplateId) {
+        setEditingTemplateId(null);
+        setTemplateDraftLabel("");
+        setTemplateDraftTitle("");
+      }
+      setState((current) => ({
+        ...current,
+        error: ""
+      }));
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : "删除提示词失败"
+      }));
+    }
+  }
+
+  async function handleSaveCustomTemplate() {
+    const label = templateDraftLabel.trim();
+    const title = templateDraftTitle.trim() || studioForm.title.trim();
+    const prompt = studioForm.prompt.trim();
+
+    if (false && !label) {
+      setState((current) => ({
+        ...current,
+        error: "请先填写自定义提示词名称"
+      }));
+      return;
+    }
+
+    if (false && !prompt) {
+      setState((current) => ({
+        ...current,
+        error: "请先填写提示词内容后再保存"
+      }));
+      return;
+    }
+
+    if (!label) {
+      setState((current) => ({
+        ...current,
+        error: "请先填写自定义提示词名称"
+      }));
+      return;
+    }
+
+    if (!prompt) {
+      setState((current) => ({
+        ...current,
+        error: "请先填写提示词内容后再保存"
+      }));
+      return;
+    }
+
+    try {
+      if (editingTemplateId === null) {
+        const createdTemplate = await api.createPromptTemplate({
+          user_name: studioForm.userName,
+          label,
+          title: title || `${workspaceName} 自定义提示词`,
+          prompt,
+          style: studioForm.style,
+          aspect_ratio: studioForm.aspectRatio,
+          resolution: studioForm.resolution,
+          deliverable: studioForm.deliverable,
+          notes: studioForm.notes
+        });
+
+        setCustomTemplates((current) =>
+          [createdTemplate, ...current].sort(
+            (left, right) =>
+              new Date(right.updated_at ?? right.updatedAt ?? 0).getTime() -
+              new Date(left.updated_at ?? left.updatedAt ?? 0).getTime()
+          )
+        );
+        setEditingTemplateId(createdTemplate.id);
+      } else {
+        const templateId = Number(editingTemplateId);
+        const updatedTemplate = await api.updatePromptTemplate(templateId, studioForm.userName, {
+          label,
+          title: title || `${workspaceName} 自定义提示词`,
+          prompt,
+          style: studioForm.style,
+          aspect_ratio: studioForm.aspectRatio,
+          resolution: studioForm.resolution,
+          deliverable: studioForm.deliverable,
+          notes: studioForm.notes
+        });
+
+        setCustomTemplates((current) =>
+          [updatedTemplate, ...current.filter((template) => Number(template.id) !== updatedTemplate.id)].sort(
+            (left, right) =>
+              new Date(right.updated_at ?? right.updatedAt ?? 0).getTime() -
+              new Date(left.updated_at ?? left.updatedAt ?? 0).getTime()
+          )
+        );
+        setEditingTemplateId(updatedTemplate.id);
+      }
+
+      setState((current) => ({
+        ...current,
+        error: ""
+      }));
+      return;
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : "保存提示词失败"
+      }));
+      return;
+    }
+
+    const nextTemplate: CustomPromptTemplate = {
+      id: editingTemplateId ?? `custom-${Date.now()}`,
+      label,
+      title: title || `${workspaceName} 自定义提示词`,
+      prompt,
+      style: studioForm.style,
+      aspectRatio: studioForm.aspectRatio,
+      resolution: studioForm.resolution,
+      deliverable: studioForm.deliverable,
+      notes: studioForm.notes,
+      updatedAt: new Date().toISOString()
+    };
+
+    setCustomTemplates((current) => {
+      const nextTemplates = current.filter((template) => template.id !== nextTemplate.id);
+      return [nextTemplate, ...nextTemplates].sort(
+        (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+      );
+    });
+    setEditingTemplateId(nextTemplate.id);
+    setState((current) => ({
+      ...current,
+      error: ""
+    }));
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setActiveComposerMenu(null);
+
+    if (uploadingReference) {
+      setState((current) => ({
+        ...current,
+        error: "参考图仍在上传，请稍后再提交。"
+      }));
+      return;
+    }
+
+    if (isVideoWorkflow) {
+      setState((current) => ({
+        ...current,
+        error: "视频生成模块待开发，当前版本暂不支持提交。"
+      }));
+      return;
+    }
+
     setSubmitting(true);
 
     try {
       await api.createTask({
-        title: imageForm.title.trim() || `${workspaceName} 生图方案`,
-        workflow_key: imageForm.workflowKey,
-        project_code: imageForm.projectCode,
-        requested_provider: imageForm.requestedProvider,
-        user_name: imageForm.userName,
-        classification: imageForm.classification,
-        payload: buildImagePayload(imageForm)
+        title: studioForm.title.trim() || `${workspaceName} 生图方案`,
+        workflow_key: studioForm.workflowKey,
+        project_code: studioForm.projectCode,
+        requested_provider: studioForm.requestedProvider,
+        user_name: studioForm.userName,
+        classification: studioForm.classification,
+        payload: buildImagePayload(studioForm)
       });
       await loadData();
+      window.requestAnimationFrame(() => {
+        latestTaskRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     } catch (error) {
       setState((current) => ({
         ...current,
@@ -551,7 +981,7 @@ export default function App() {
           <div>
             <p className="workspace-kicker">开启创作</p>
             <h2>{workspaceName}</h2>
-            <p>{activeProject?.summary ?? "从左侧切换创作项目；中间区域只显示这个项目的历史生图记录。"}</p>
+            <p>{activeProject?.summary ?? "从左侧切换项目，中间区域会按时间流展示这个项目的历史生成记录。"}</p>
           </div>
         </div>
 
@@ -564,7 +994,7 @@ export default function App() {
             <button
               key={project.id}
               type="button"
-              className={project.code === imageForm.projectCode ? "workspace-item active" : "workspace-item"}
+              className={project.code === studioForm.projectCode ? "workspace-item active" : "workspace-item"}
               onClick={() => handleProjectSelect(project)}
             >
               <strong>{project.name}</strong>
@@ -579,42 +1009,45 @@ export default function App() {
       <main className={showCenteredComposer ? "canvas-area canvas-area-empty" : "canvas-area"}>
         {hasHistory ? (
           <header className="canvas-topbar canvas-topbar-history">
-          <div className="toolbar-row">
-            <label className="toolbar-field">
-              <span>时间</span>
-              <select value={filters.sort} onChange={(event) => setFilters((current) => ({ ...current, sort: event.target.value as FeedFilterState["sort"] }))}>
-                <option value="latest">最近优先</option>
-                <option value="oldest">最早优先</option>
-              </select>
-            </label>
+            <div className="toolbar-row">
+              <label className="toolbar-field">
+                <span>时间</span>
+                <select
+                  value={filters.sort}
+                  onChange={(event) => setFilters((current) => ({ ...current, sort: event.target.value as FeedFilterState["sort"] }))}
+                >
+                  <option value="latest">最近优先</option>
+                  <option value="oldest">最早优先</option>
+                </select>
+              </label>
 
-            <label className="toolbar-field">
-              <span>生成类型</span>
-              <select
-                value={filters.provider}
-                onChange={(event) => setFilters((current) => ({ ...current, provider: event.target.value }))}
-              >
-                <option value="all">全部模型</option>
-                {imageProviders.map((provider) => (
-                  <option key={provider.provider_name} value={provider.provider_name}>
-                    {provider.provider_name}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <label className="toolbar-field">
+                <span>生成类型</span>
+                <select
+                  value={filters.provider}
+                  onChange={(event) => setFilters((current) => ({ ...current, provider: event.target.value }))}
+                >
+                  <option value="all">全部模型</option>
+                  {availableProviders.map((provider) => (
+                    <option key={provider.provider_name} value={provider.provider_name}>
+                      {provider.provider_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <label className="toolbar-field">
-              <span>操作类型</span>
-              <select
-                value={filters.status}
-                onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value as FeedFilterState["status"] }))}
-              >
-                <option value="all">全部状态</option>
-                <option value="running">运行中</option>
-                <option value="completed">已完成</option>
-              </select>
-            </label>
-          </div>
+              <label className="toolbar-field">
+                <span>操作状态</span>
+                <select
+                  value={filters.status}
+                  onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value as FeedFilterState["status"] }))}
+                >
+                  <option value="all">全部状态</option>
+                  <option value="running">运行中</option>
+                  <option value="completed">已完成</option>
+                </select>
+              </label>
+            </div>
           </header>
         ) : null}
 
@@ -625,6 +1058,7 @@ export default function App() {
             {filteredTasks.map((task) => {
               const galleryAssets = buildGalleryAssets(imageAssetsByTaskId.get(task.id) ?? []);
               const linkedAsset = galleryAssets[0];
+              const isLatestTask = task.id === latestTask?.id;
 
               return (
                 <FeedCard
@@ -635,6 +1069,7 @@ export default function App() {
                   onReuse={() => handleReuseTask(task, linkedAsset ?? galleryAssets[0])}
                   onLike={() => (linkedAsset ? void handleGalleryAction("like", linkedAsset.id) : undefined)}
                   onShare={() => (linkedAsset ? void handleGalleryAction("share", linkedAsset.id) : undefined)}
+                  anchorRef={isLatestTask ? latestTaskRef : undefined}
                 />
               );
             })}
@@ -656,203 +1091,311 @@ export default function App() {
               <strong>{workspaceName}</strong>
             </div>
             <div className="composer-statusline">
-              <span>{selectedWorkflow?.name ?? "图片生成"}</span>
-              <span>{(selectedProvider?.model_name ?? imageForm.requestedProvider) || "等待模型"}</span>
-              <span>{imageForm.aspectRatio} / {selectedResolution?.label ?? imageForm.resolution}</span>
-              <span>{imageForm.imageCount}x</span>
+              <span>{selectedWorkflow?.name ?? "图像生成"}</span>
+              <span>{isVideoWorkflow ? "待开发" : (selectedProvider?.model_name ?? studioForm.requestedProvider)}</span>
+              <span>{studioForm.aspectRatio} / {selectedResolution?.label ?? studioForm.resolution}</span>
+              <span>{studioForm.imageCount} 张</span>
             </div>
           </div>
 
-          <label className="composer-textarea">
-            <textarea
-              rows={3}
-              value={imageForm.prompt}
-              onChange={(event) => setImageForm((current) => ({ ...current, prompt: event.target.value }))}
-              placeholder="输入文字，描述你想生成的图片。先写主体和场景，需要时再从下方菜单补充模型、比例和更多设置。"
-            />
-          </label>
+          <div className="composer-body">
+            <button
+              type="button"
+              className={referencePreviewUrl ? "reference-dropzone has-preview" : "reference-dropzone"}
+              onClick={openReferencePicker}
+              onDrop={handleReferenceDrop}
+              onDragOver={(event) => event.preventDefault()}
+            >
+              {referencePreviewUrl ? (
+                <img src={referencePreviewUrl} alt={referenceFileName || "参考图"} className="reference-preview" />
+              ) : (
+                <span className="reference-dropzone-plus">+</span>
+              )}
+            </button>
 
-          <div className="composer-toolbar">
-            <label className="composer-dropdown">
-              <span>快捷模板</span>
-              <select defaultValue="" onChange={(event) => {
-                const nextTemplate = promptTemplates.find((template) => template.id === event.target.value);
-                if (nextTemplate) {
-                  setImageForm((current) => applyTemplateToForm(nextTemplate, current));
+            <label className="composer-textarea">
+              <textarea
+                rows={4}
+                value={studioForm.prompt}
+                onChange={(event) => setStudioForm((current) => ({ ...current, prompt: event.target.value }))}
+                placeholder={
+                  isVideoWorkflow
+                    ? "输入视频脚本、镜头描述与运动方式。该功能当前待开发。"
+                    : "上传参考图，输入文字或描述主体、场景和想要生成的画面。"
                 }
-              }}>
-                <option value="">选择模板</option>
-                {promptTemplates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.label}
-                  </option>
-                ))}
-              </select>
+              />
+              <span className="composer-textarea-hint">
+                {referenceFileName
+                  ? `已选择参考图：${referenceFileName}`
+                  : "支持拖拽上传参考图，也可以点击左侧加号选择图片。"}
+              </span>
             </label>
+          </div>
 
-            <label className="composer-dropdown">
-              <span>创作类型</span>
-              <select
-                value={imageForm.workflowKey}
-                onChange={(event) => setImageForm((current) => ({ ...current, workflowKey: event.target.value }))}
+          <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handleReferenceInputChange} />
+
+          <div className="composer-toolbar" ref={composerToolbarRef}>
+            <div className="composer-menu">
+              <button
+                type="button"
+                className={activeComposerMenu === "template" ? "composer-menu-trigger is-open" : "composer-menu-trigger"}
+                onClick={() => toggleComposerMenu("template")}
               >
-                {imageWorkflows.map((workflow) => (
-                  <option key={workflow.id} value={workflow.key}>
-                    {workflow.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {activeTemplate?.label ?? "选择模板"}
+              </button>
+              {activeComposerMenu === "template" ? (
+                <div className="composer-menu-panel composer-menu-panel-template">
+                  <div className="template-section">
+                    <div className="template-section-head">
+                      <strong>热门提示词</strong>
+                      <span>快速套用常用创作方向</span>
+                    </div>
+                    <div className="template-grid">
+                      {hotPromptTemplates.map((template) => (
+                        <button
+                          key={template.id}
+                          type="button"
+                          className={activeTemplate?.id === template.id ? "template-card is-active" : "template-card"}
+                          onClick={() => handleApplyTemplate(template)}
+                        >
+                          <strong>{template.label}</strong>
+                          <span>{template.deliverable}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-            <label className="composer-dropdown">
-              <span>模型</span>
-              <select
-                value={imageForm.requestedProvider}
-                onChange={(event) => setImageForm((current) => ({ ...current, requestedProvider: event.target.value }))}
-              >
-                {imageProviders.map((provider) => (
-                  <option key={provider.provider_name} value={provider.provider_name}>
-                    {provider.model_name} / {provider.provider_name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                  <div className="template-section">
+                    <div className="template-section-head">
+                      <strong>我的提示词</strong>
+                      <span>保存、编辑你自己的常用提示词</span>
+                    </div>
+                    {customTemplates.length > 0 ? (
+                      <div className="template-list">
+                        {customTemplates.map((template) => (
+                          <div key={template.id} className="template-list-item">
+                            <button type="button" className="template-card template-card-main" onClick={() => handleApplyTemplate(template)}>
+                              <strong>{template.label}</strong>
+                              <span>{template.title}</span>
+                            </button>
+                            <div className="template-card-actions">
+                              <button type="button" className="template-action-button" onClick={() => handleEditCustomTemplate(template)}>
+                                编辑
+                              </button>
+                              <button type="button" className="template-action-button" onClick={() => handleDeleteCustomTemplate(template.id)}>
+                                删除
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="template-empty">还没有自定义提示词，可以把当前创作内容保存下来。</div>
+                    )}
+                  </div>
 
-            <details className="composer-menu">
-              <summary>{imageForm.aspectRatio} / {selectedResolution?.label ?? imageForm.resolution}</summary>
-              <div className="composer-menu-panel">
-                <label className="composer-menu-field">
-                  <span>比例</span>
-                  <select
-                    value={imageForm.aspectRatio}
-                    onChange={(event) => setImageForm((current) => ({ ...current, aspectRatio: event.target.value }))}
-                  >
-                    {aspectRatioOptions.map((ratio) => (
-                      <option key={ratio} value={ratio}>
-                        {ratio}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="composer-menu-field">
-                  <span>张数</span>
-                  <select
-                    value={imageForm.imageCount}
-                    onChange={(event) =>
-                      setImageForm((current) => ({
-                        ...current,
-                        imageCount: clampImageCount(Number(event.target.value))
-                      }))
-                    }
-                  >
-                    {[1, 2, 3, 4].map((count) => (
-                      <option key={count} value={count}>
-                        {count}x
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="composer-menu-field">
-                  <span>清晰度</span>
-                  <select
-                    value={imageForm.resolution}
-                    onChange={(event) => setImageForm((current) => ({ ...current, resolution: event.target.value }))}
-                  >
-                    {resolutionOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="composer-menu-field">
-                  <span>风格</span>
-                  <select
-                    value={imageForm.style}
-                    onChange={(event) => setImageForm((current) => ({ ...current, style: event.target.value }))}
-                  >
-                    {stylePresets.map((preset) => (
-                      <option key={preset.id} value={preset.id}>
-                        {preset.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </details>
-
-            <details className="composer-menu composer-menu-wide">
-              <summary>更多设置</summary>
-              <div className="composer-menu-panel composer-menu-panel-wide">
-                <label className="composer-menu-field">
-                  <span>项目</span>
-                  <select
-                    value={imageForm.projectCode}
-                    onChange={(event) => {
-                      const nextProject = state.projects.find((project) => project.code === event.target.value);
-                      if (nextProject) {
-                        handleProjectSelect(nextProject);
-                      }
-                    }}
-                  >
-                    {state.projects.map((project) => (
-                      <option key={project.id} value={project.code}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="composer-menu-field">
-                  <span>创作标题</span>
-                  <input
-                    value={imageForm.title}
-                    onChange={(event) => setImageForm((current) => ({ ...current, title: event.target.value }))}
-                    placeholder={`${workspaceName} 生图方案`}
-                  />
-                </label>
-
-                <label className="composer-menu-field">
-                  <span>交付目标</span>
-                  <input
-                    value={imageForm.deliverable}
-                    onChange={(event) => setImageForm((current) => ({ ...current, deliverable: event.target.value }))}
-                    placeholder="例如：方案首页主视觉"
-                  />
-                </label>
-
-                <label className="composer-menu-field">
-                  <span>参考图</span>
-                  <input
-                    value={imageForm.referenceImage}
-                    onChange={(event) => setImageForm((current) => ({ ...current, referenceImage: event.target.value }))}
-                    placeholder="上传前先填路径 / ID"
-                  />
-                </label>
-
-                <label className="composer-menu-field composer-menu-field-full">
-                  <span>补充说明</span>
-                  <textarea
-                    rows={3}
-                    value={imageForm.notes}
-                    onChange={(event) => setImageForm((current) => ({ ...current, notes: event.target.value }))}
-                    placeholder="例如：强调真实尺度、入口识别度和前景人群活动。"
-                  />
-                </label>
-              </div>
-            </details>
-
-            <div className="composer-quickmeta">
-              <span>{selectedStyle?.label ?? imageForm.style}</span>
-              <span>{state.health === "ok" ? "服务在线" : "服务异常"}</span>
+                  <div className="template-editor">
+                    <div className="template-section-head">
+                      <strong>{editingTemplateId ? "编辑自定义提示词" : "保存当前提示词"}</strong>
+                      <span>会保存当前的提示词、比例、分辨率、风格和补充说明</span>
+                    </div>
+                    <div className="template-editor-row">
+                      <label className="composer-menu-field">
+                        <span>名称</span>
+                        <input
+                          value={templateDraftLabel}
+                          onChange={(event) => setTemplateDraftLabel(event.target.value)}
+                          placeholder="例如：夜景招商图"
+                        />
+                      </label>
+                      <label className="composer-menu-field">
+                        <span>标题</span>
+                        <input
+                          value={templateDraftTitle}
+                          onChange={(event) => setTemplateDraftTitle(event.target.value)}
+                          placeholder="例如：商业夜景主视觉"
+                        />
+                      </label>
+                    </div>
+                    <div className="template-editor-actions">
+                      <button type="button" className="ghost-button" onClick={handleSaveCustomTemplate}>
+                        {editingTemplateId ? "更新提示词" : "保存当前提示词"}
+                      </button>
+                      {editingTemplateId ? (
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={() => {
+                            setEditingTemplateId(null);
+                            setTemplateDraftLabel("");
+                            setTemplateDraftTitle("");
+                          }}
+                        >
+                          取消编辑
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
-            <button type="submit" className="submit-button" disabled={submitting || imageProviders.length === 0}>
-              {submitting ? "正在创建..." : "开始生成"}
-            </button>
+            <div className="composer-menu">
+              <button
+                type="button"
+                className={activeComposerMenu === "workflow" ? "composer-menu-trigger is-open" : "composer-menu-trigger"}
+                onClick={() => toggleComposerMenu("workflow")}
+              >
+                {selectedWorkflow?.name ?? "创作类型"}
+              </button>
+              {activeComposerMenu === "workflow" ? (
+                <div className="composer-menu-panel composer-menu-panel-list">
+                  {studioWorkflows.map((workflow) => {
+                    const waiting = workflow.key === "video-generate";
+
+                    return (
+                      <button
+                        key={workflow.id}
+                        type="button"
+                        className={studioForm.workflowKey === workflow.key ? "composer-choice-item is-active" : "composer-choice-item"}
+                        onClick={() => {
+                          setStudioForm((current) => ({ ...current, workflowKey: workflow.key }));
+                          setActiveComposerMenu(null);
+                        }}
+                      >
+                        <strong>{workflow.name}</strong>
+                        <span>{waiting ? "待开发，当前仅展示入口" : workflow.description}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="composer-menu">
+              <button
+                type="button"
+                disabled={isVideoWorkflow}
+                className={
+                  isVideoWorkflow
+                    ? "composer-menu-trigger is-disabled"
+                    : activeComposerMenu === "provider"
+                      ? "composer-menu-trigger is-open"
+                      : "composer-menu-trigger"
+                }
+                onClick={() => toggleComposerMenu("provider")}
+              >
+                {isVideoWorkflow ? "待开发" : (selectedProvider?.model_name ?? "选择模型")}
+              </button>
+              {activeComposerMenu === "provider" && !isVideoWorkflow ? (
+                <div className="composer-menu-panel composer-menu-panel-list">
+                  {availableProviders.map((provider) => (
+                    <button
+                      key={provider.provider_name}
+                      type="button"
+                      className={
+                        studioForm.requestedProvider === provider.provider_name ? "composer-choice-item is-active" : "composer-choice-item"
+                      }
+                      onClick={() => {
+                        setStudioForm((current) => ({ ...current, requestedProvider: provider.provider_name }));
+                        setActiveComposerMenu(null);
+                      }}
+                    >
+                      <strong>{provider.model_name}</strong>
+                      <span>{provider.provider_name}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="composer-menu">
+              <button
+                type="button"
+                className={activeComposerMenu === "display" ? "composer-menu-trigger is-open" : "composer-menu-trigger"}
+                onClick={() => toggleComposerMenu("display")}
+              >
+                {studioForm.aspectRatio} / {selectedResolution?.label ?? studioForm.resolution}
+              </button>
+              {activeComposerMenu === "display" ? (
+                <div className="composer-menu-panel composer-menu-panel-display">
+                  <div className="composer-menu-group">
+                    <span className="composer-menu-title">比例</span>
+                    <div className="composer-chip-grid">
+                      {aspectRatioOptions.map((ratio) => (
+                        <button
+                          key={ratio}
+                          type="button"
+                          className={studioForm.aspectRatio === ratio ? "composer-chip-button is-active" : "composer-chip-button"}
+                          onClick={() => setStudioForm((current) => ({ ...current, aspectRatio: ratio }))}
+                        >
+                          {ratio}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="composer-menu-group">
+                    <span className="composer-menu-title">分辨率</span>
+                    <div className="composer-chip-grid composer-chip-grid-two">
+                      {resolutionOptions.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          className={studioForm.resolution === option.id ? "composer-chip-button is-active" : "composer-chip-button"}
+                          onClick={() => setStudioForm((current) => ({ ...current, resolution: option.id }))}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="composer-menu">
+              <button
+                type="button"
+                className={activeComposerMenu === "count" ? "composer-menu-trigger is-open" : "composer-menu-trigger"}
+                onClick={() => toggleComposerMenu("count")}
+              >
+                {studioForm.imageCount} 张
+              </button>
+              {activeComposerMenu === "count" ? (
+                <div className="composer-menu-panel composer-menu-panel-list">
+                  {[1, 2, 3, 4].map((count) => (
+                    <button
+                      key={count}
+                      type="button"
+                      className={studioForm.imageCount === count ? "composer-choice-item is-active" : "composer-choice-item"}
+                      onClick={() => {
+                        setStudioForm((current) => ({ ...current, imageCount: count }));
+                        setActiveComposerMenu(null);
+                      }}
+                    >
+                      <strong>{count} 张</strong>
+                      <span>{count === 1 ? "默认张数" : `一次生成 ${count} 张`}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="composer-toolbar-actions">
+              <div className="composer-quickmeta">
+                <span>{selectedStyle?.label ?? studioForm.style}</span>
+                <span>{state.health === "ok" ? "服务在线" : "服务异常"}</span>
+              </div>
+
+              <button
+                type="submit"
+                className="submit-button"
+                disabled={submitting || uploadingReference || isVideoWorkflow || availableProviders.length === 0}
+              >
+                {isVideoWorkflow ? "视频生成待开发" : submitting ? "正在创建..." : "开始生成"}
+              </button>
+            </div>
           </div>
         </form>
       </main>

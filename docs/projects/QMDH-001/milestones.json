@@ -8,25 +8,25 @@
       "status": "completed",
       "owner": "reviewer",
       "target_date": "2026-04-15",
-      "notes": "已完成项目定位收敛与模块边界确认。"
+      "notes": "已完成项目定位、模块边界和协作文档初始化。"
     },
     {
       "id": "phase-1",
       "name": "Phase 1",
-      "title": "底座上线",
+      "title": "MVP 1.0 生图闭环",
       "status": "in_progress",
       "owner": "codex",
-      "target_date": "2026-04-25",
-      "notes": "正在推进前台模块化页面、图库交互和基础接口联调。"
+      "target_date": "2026-04-30",
+      "notes": "正在推进图像生成工作台收口、真实 provider、模板持久化、参考图语义参与生成和部署基线。"
     },
     {
       "id": "phase-2",
       "name": "Phase 2",
-      "title": "业务验证",
+      "title": "图生图与可运维化",
       "status": "planned",
       "owner": "reviewer",
       "target_date": "2026-05-15",
-      "notes": "待真实模型接入后进入验证。"
+      "notes": "目标是升级到直接 img2img / image.edit 能力，并完善认证、部署和运维说明。"
     },
     {
       "id": "phase-3",
@@ -35,7 +35,7 @@
       "status": "planned",
       "owner": "reviewer",
       "target_date": "2026-06-15",
-      "notes": "计划扩展图库复用与项目沉淀能力。"
+      "notes": "按需要扩展更多模型、图库复用能力和项目沉淀能力。"
     }
   ]
 }

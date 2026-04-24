@@ -96,51 +96,136 @@ export type TaskCreatePayload = {
   payload: Record<string, unknown>;
 };
 
+export type PromptTemplateRecord = {
+  id: number;
+  user_name: string;
+  label: string;
+  title: string;
+  prompt: string;
+  style: string;
+  aspect_ratio: string;
+  resolution: string;
+  deliverable: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PromptTemplateCreatePayload = {
+  user_name: string;
+  label: string;
+  title: string;
+  prompt: string;
+  style: string;
+  aspect_ratio: string;
+  resolution: string;
+  deliverable: string;
+  notes: string;
+};
+
+export type PromptTemplateUpdatePayload = Partial<Omit<PromptTemplateCreatePayload, "user_name">>;
+
+export type ReferenceUploadPayload = {
+  file_name: string;
+  data_url: string;
+};
+
+export type ReferenceUploadResponse = {
+  file_name: string;
+  storage_path: string;
+};
+
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api/v1").replace(/\/$/, "");
 
 async function buildError(response: Response): Promise<Error> {
-  try {
-    const payload = (await response.json()) as { detail?: string };
-    if (payload.detail) {
-      return new Error(`请求失败（${response.status}）：${payload.detail}`);
+  let detail = "";
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (contentType.includes("application/json")) {
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      detail = payload.detail ?? "";
+    } catch {
+      detail = "";
     }
-  } catch {
-    // Ignore JSON parse failures and fall back to the status code only.
   }
 
-  return new Error(`请求失败（${response.status}）`);
+  if (detail) {
+    return new Error(`请求失败（${response.status}）：${detail}`);
+  }
+
+  if (response.status >= 500) {
+    return new Error(`请求失败（${response.status}）：后端服务暂时不可用，请确认本地 API 已启动。`);
+  }
+
+  return new Error(`请求失败（${response.status}）：${response.statusText || "未知错误"}`);
 }
 
-async function fetchJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`);
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE}${path}`, init);
+  } catch {
+    throw new Error("无法连接到后端服务，请确认本地 API 已启动。");
+  }
+
   if (!response.ok) {
     throw await buildError(response);
   }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
   return response.json() as Promise<T>;
 }
 
 async function postJson<T>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+  return request<T>(path, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
     body: body ? JSON.stringify(body) : undefined
   });
-  if (!response.ok) {
-    throw await buildError(response);
-  }
-  return response.json() as Promise<T>;
+}
+
+async function patchJson<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+}
+
+async function deleteRequest(path: string): Promise<void> {
+  await request<void>(path, { method: "DELETE" });
 }
 
 export const api = {
-  health: () => fetchJson<{ status: string; service: string }>("/health"),
-  projects: () => fetchJson<Project[]>("/projects"),
-  projectStatus: (projectCode: string) => fetchJson<ProjectStatus>(`/projects/${projectCode}/status`),
-  providers: () => fetchJson<Provider[]>("/providers"),
-  workflows: () => fetchJson<Workflow[]>("/workflows"),
-  tasks: () => fetchJson<Task[]>("/tasks"),
-  assets: () => fetchJson<Asset[]>("/assets"),
+  health: () => request<{ status: string; service: string }>("/health"),
+  projects: () => request<Project[]>("/projects"),
+  projectStatus: (projectCode: string) => request<ProjectStatus>(`/projects/${projectCode}/status`),
+  providers: () => request<Provider[]>("/providers"),
+  workflows: () => request<Workflow[]>("/workflows"),
+  tasks: () => request<Task[]>("/tasks"),
+  assets: () => request<Asset[]>("/assets"),
+  promptTemplates: (userName: string) =>
+    request<PromptTemplateRecord[]>(`/prompt-templates?user_name=${encodeURIComponent(userName)}`),
+  createPromptTemplate: (payload: PromptTemplateCreatePayload) =>
+    postJson<PromptTemplateRecord>("/prompt-templates", payload),
+  updatePromptTemplate: (templateId: number, userName: string, payload: PromptTemplateUpdatePayload) =>
+    patchJson<PromptTemplateRecord>(
+      `/prompt-templates/${templateId}?user_name=${encodeURIComponent(userName)}`,
+      payload
+    ),
+  deletePromptTemplate: (templateId: number, userName: string) =>
+    deleteRequest(`/prompt-templates/${templateId}?user_name=${encodeURIComponent(userName)}`),
+  uploadReferenceImage: (payload: ReferenceUploadPayload) =>
+    postJson<ReferenceUploadResponse>("/assets/reference-upload", payload),
   createTask: (payload: TaskCreatePayload) => postJson<Task>("/tasks", payload),
   likeAsset: (assetId: number) => postJson<Asset>(`/assets/${assetId}/like`),
   shareAsset: (assetId: number) => postJson<Asset>(`/assets/${assetId}/share`)

@@ -2,6 +2,7 @@ import json
 import unittest
 from unittest.mock import patch
 
+from app.core.config import settings
 from app.services.model_registry import get_provider_definition, get_provider_map, list_provider_capabilities
 
 
@@ -27,6 +28,25 @@ class ProviderRegistryProfileTests(unittest.TestCase):
         self.assertEqual(provider_map["custom_image_lab"].adapter_kind, "openai_compatible")
         self.assertEqual(provider_map["custom_image_lab"].model_name, "image-lab-1")
         self.assertIn("image.generate", provider_map["custom_image_lab"].capabilities)
+
+    def test_modelscope_profiles_enable_reference_caption_mode_by_default(self) -> None:
+        profiles_json = json.dumps(
+            [
+                {
+                    "provider_name": "modelscope_free_image",
+                    "api_key": "test-key",
+                    "base_url": "https://api-inference.modelscope.cn/v1",
+                    "model_name": "MAILAND/majicflus_v1",
+                }
+            ]
+        )
+
+        with patch.object(settings, "image_provider_profiles_json", profiles_json):
+            profile = settings.get_image_provider_profile("modelscope_free_image")
+
+        self.assertEqual(profile.provider_name, "modelscope_free_image")
+        self.assertEqual(profile.reference_mode, "caption_prompt")
+        self.assertIn("Qwen/Qwen3-VL-8B-Instruct", profile.reference_caption_fallback_models)
 
     def test_list_provider_capabilities_includes_dynamic_profile(self) -> None:
         profiles_json = json.dumps(

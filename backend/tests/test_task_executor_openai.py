@@ -8,6 +8,8 @@ from unittest.mock import patch
 os.environ.setdefault("QMDH_OPENAI_IMAGE_API_KEY", "test-key")
 
 from app.core.config import settings
+from app.core.config import ImageProviderProfile
+from app.services.model_registry import ProviderDefinition
 from app.services.model_registry import get_provider_definition
 from app.services.task_executor import OpenAIImageProviderAdapter
 
@@ -72,6 +74,50 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
             file_path = os.path.join(self.tempdir, relative_path)
             self.assertTrue(os.path.exists(file_path))
             self.assertGreater(os.path.getsize(file_path), 0)
+
+    def test_modelscope_reference_image_is_captioned_into_generation_prompt(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="modelscope_free_image",
+            api_key="test-key",
+            base_url="https://api-inference.modelscope.cn/v1",
+            model_name="MAILAND/majicflus_v1",
+            timeout_seconds=1,
+            reference_mode="caption_prompt",
+            reference_caption_model="Qwen/Test-VL",
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "modelscope_free_image",
+                "MAILAND/majicflus_v1",
+                ["image.generate"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        caption_payload = {"choices": [{"message": {"content": "A calm glass riverfront facade at sunrise."}}]}
+        generation_payload = {"images": ["https://cdn.example.test/generated.png"]}
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(caption_payload), _FakeResponse(generation_payload)],
+        ) as mocked_urlopen:
+            outcome = adapter.execute(
+                "image.generate",
+                {
+                    "prompt": "Design a waterfront commercial entrance",
+                    "aspect_ratio": "16:9",
+                    "reference_image": "data:image/png;base64,aGVsbG8=",
+                },
+            )
+
+        generation_request = mocked_urlopen.call_args_list[1].args[0]
+        generation_body = json.loads(generation_request.data.decode("utf-8"))
+
+        self.assertIn("Reference image analysis", generation_body["prompt"])
+        self.assertIn("A calm glass riverfront facade at sunrise.", generation_body["prompt"])
+        self.assertEqual(outcome.result["storage_path"], "https://cdn.example.test/generated.png")
+        self.assertTrue(outcome.result["reference_image_used"])
+        self.assertEqual(outcome.result["reference_caption_model"], "Qwen/Test-VL")
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@
 
 ## Latest Handoffs
 
-### [2026-04-29 14:28] Session Handoff
+### [2026-04-29 14:32] Session Handoff
 - 执行角色：Feature / Integration
 - 当前分支：`main`
 - 仓库状态：
@@ -25,6 +25,7 @@
   - 前端 `api.ts` 统一附带 MVP 认证头，任务与模板创建请求移除 `user_name`
   - 项目、任务和资产列表按 `project_codes` 做最小过滤，越权项目访问返回 `403`
   - 继续推进 `task-001`：任务提交成功后强制刷新历史流，并重置最新任务定位标记，避免刷新被后台轮询跳过
+  - 继续推进 `task-001`：参考图上传结束或校验失败后重置隐藏 file input，允许同一文件重复选择重新上传
   - 更新部署、架构、决策、任务和项目状态文档
   - 完成验证：
     - `python -m unittest discover -s tests` 通过

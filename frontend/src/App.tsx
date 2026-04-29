@@ -560,6 +560,12 @@ export default function App() {
     setTemplateDraftTitle(studioForm.title);
   }
 
+  function resetReferenceFileInput() {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
   function handleProjectSelect(project: Project) {
     setStudioForm((current) => ({
       ...current,
@@ -578,9 +584,7 @@ export default function App() {
       ...current,
       referenceImage: ""
     }));
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    resetReferenceFileInput();
   }
 
   function handleResetComposer() {
@@ -625,6 +629,7 @@ export default function App() {
 
   async function handleReferenceFile(file: File) {
     if (!file.type.startsWith("image/")) {
+      resetReferenceFileInput();
       setState((current) => ({
         ...current,
         error: "请上传图片文件作为参考图"
@@ -667,6 +672,7 @@ export default function App() {
       }));
     } finally {
       setUploadingReference(false);
+      resetReferenceFileInput();
     }
   }
 

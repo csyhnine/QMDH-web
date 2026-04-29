@@ -554,10 +554,12 @@ export default function App() {
   useEffect(() => {
     if (state.projects.length === 0) return;
     if (state.projects.some((project) => project.code === studioForm.projectCode)) return;
+    const nextProject = state.projects[0];
 
     setStudioForm((current) => ({
       ...current,
-      projectCode: state.projects[0].code
+      projectCode: nextProject.code,
+      classification: nextProject.classification
     }));
   }, [state.projects, studioForm.projectCode]);
 
@@ -588,7 +590,8 @@ export default function App() {
   function handleProjectSelect(project: Project) {
     setStudioForm((current) => ({
       ...current,
-      projectCode: project.code
+      projectCode: project.code,
+      classification: project.classification
     }));
   }
 
@@ -614,7 +617,8 @@ export default function App() {
     setTemplateDraftTitle("");
     setStudioForm((current) => ({
       ...defaultStudioForm,
-      projectCode: current.projectCode
+      projectCode: current.projectCode,
+      classification: current.classification
     }));
   }
 

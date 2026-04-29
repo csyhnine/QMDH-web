@@ -65,6 +65,30 @@ QMDH_IMAGE_PROVIDER_PROFILES_JSON=[{"provider_name":"modelscope_free_image","api
 - `QMDH_REDIS_URL=redis://redis:6379/0`
 - `QMDH_REDIS_QUEUE_NAME=qmdh:tasks`
 
+## 最小认证配置
+
+当前 MVP 已加入最小 token 认证。前端请求会发送：
+
+- `X-QMDH-User`
+- `X-QMDH-Auth`
+
+后端通过 `QMDH_AUTH_USERS_JSON` 派生可信用户与项目访问范围，不再信任任务或模板 payload 中的 `user_name`。
+
+开发默认值：
+
+```env
+QMDH_AUTH_USERS_JSON=[{"name":"reviewer","token":"dev-reviewer-token","role":"reviewer","project_codes":["QMDH-001"]}]
+```
+
+前端可通过 Vite 环境变量覆盖默认开发账号：
+
+```env
+VITE_QMDH_USER=reviewer
+VITE_QMDH_AUTH_TOKEN=dev-reviewer-token
+```
+
+生产环境应替换默认 token，并按项目授权填写 `project_codes`。如果需要临时允许某账号访问所有项目，可以使用 `"project_codes":["*"]`。
+
 ## 当前已具备
 
 - 图像生成主流程

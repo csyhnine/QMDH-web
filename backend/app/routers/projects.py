@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.auth import ensure_project_access, get_current_auth_user
+from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import Project
 from app.schemas import ProjectOut, ProjectStatusOut
@@ -11,8 +13,14 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 @router.get("", response_model=list[ProjectOut])
-def list_projects(db: Session = Depends(get_db)) -> list[dict]:
-    projects = list(db.scalars(select(Project).order_by(Project.code)).all())
+def list_projects(
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> list[dict]:
+    query = select(Project).order_by(Project.code)
+    if "*" not in auth_user.project_codes:
+        query = query.where(Project.code.in_(auth_user.project_codes))
+    projects = list(db.scalars(query).all())
     status_map = build_project_status_map()
 
     response: list[dict] = []
@@ -35,7 +43,11 @@ def list_projects(db: Session = Depends(get_db)) -> list[dict]:
 
 
 @router.get("/{project_code}/status", response_model=ProjectStatusOut)
-def get_project_status(project_code: str) -> dict:
+def get_project_status(
+    project_code: str,
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> dict:
+    ensure_project_access(auth_user, project_code)
     detail = build_project_status_detail(project_code)
     if not detail:
         raise HTTPException(status_code=404, detail="Project status not found")

@@ -26,7 +26,6 @@ type StudioFormState = {
   prompt: string;
   projectCode: string;
   requestedProvider: string;
-  userName: string;
   classification: string;
   style: string;
   aspectRatio: string;
@@ -135,7 +134,6 @@ const defaultStudioForm: StudioFormState = {
   prompt: featuredAtmosphereTemplates[0].prompt,
   projectCode: "QMDH-001",
   requestedProvider: "modelscope_free_image",
-  userName: "reviewer",
   classification: "B",
   style: featuredAtmosphereTemplates[0].style,
   aspectRatio: featuredAtmosphereTemplates[0].aspectRatio,
@@ -415,7 +413,7 @@ export default function App() {
         api.workflows(),
         api.tasks(),
         api.assets(),
-        api.promptTemplates(studioForm.userName).catch(() => null)
+        api.promptTemplates().catch(() => null)
       ]);
 
       setState({
@@ -707,7 +705,7 @@ export default function App() {
 
   async function handleDeleteCustomTemplate(templateId: number) {
     try {
-      await api.deletePromptTemplate(templateId, studioForm.userName);
+      await api.deletePromptTemplate(templateId);
       setCustomTemplates((current) => current.filter((template) => template.id !== templateId));
       if (editingTemplateId === templateId) {
         setEditingTemplateId(null);
@@ -750,7 +748,6 @@ export default function App() {
     try {
       if (editingTemplateId === null) {
         const createdTemplate = await api.createPromptTemplate({
-          user_name: studioForm.userName,
           label,
           title: title || `${workspaceName} 自定义提示词`,
           prompt,
@@ -764,7 +761,7 @@ export default function App() {
         setCustomTemplates((current) => sortTemplatesByUpdatedAt([createdTemplate, ...current]));
         setEditingTemplateId(createdTemplate.id);
       } else {
-        const updatedTemplate = await api.updatePromptTemplate(editingTemplateId, studioForm.userName, {
+        const updatedTemplate = await api.updatePromptTemplate(editingTemplateId, {
           label,
           title: title || `${workspaceName} 自定义提示词`,
           prompt,
@@ -814,7 +811,6 @@ export default function App() {
         workflow_key: IMAGE_WORKFLOW_KEY,
         project_code: studioForm.projectCode,
         requested_provider: studioForm.requestedProvider,
-        user_name: studioForm.userName,
         classification: studioForm.classification,
         payload: buildImagePayload(studioForm)
       });

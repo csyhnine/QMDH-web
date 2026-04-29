@@ -45,6 +45,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
   - `backend/app/main.py`
   - `backend/app/database.py`
   - `backend/app/core/config.py`
+  - `backend/app/core/auth.py`
 - 部署入口：
   - `docker-compose.yml`
   - `DEPLOYMENT.md`
@@ -84,8 +85,10 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 ### Module: API Surface
 - 路径：
   - `backend/app/routers/`
+  - `backend/app/core/auth.py`
 - 职责：
   - 提供健康检查、项目、provider、workflow、task、asset、dashboard 接口
+  - 通过 MVP token 认证派生可信用户和项目访问范围
 - 依赖：
   - `backend/app/schemas.py`
   - `backend/app/database.py`
@@ -191,18 +194,20 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 
 ### 主链路：图像生成任务
 1. 前端从 `frontend/src/App.tsx` 读取项目、workflow、provider、task、asset 数据。
-2. 用户在生图工作台填写业务字段，前端在 `frontend/src/api.ts` 中组装请求。
-3. `POST /api/v1/tasks` 进入 `backend/app/routers/tasks.py`。
-4. 后端校验 workflow、provider、project 和 capability 兼容性。
-5. 后端创建 `Task`、`AuditLog`，再根据执行模式触发：
+2. 前端在 `frontend/src/api.ts` 为 API 请求附带 `X-QMDH-Auth` 与 `X-QMDH-User`。
+3. 用户在生图工作台填写业务字段，前端组装请求，但不再提交可信执行人字段。
+4. `POST /api/v1/tasks` 进入 `backend/app/routers/tasks.py`。
+5. 后端通过 `backend/app/core/auth.py` 认证 token，派生当前用户与可访问项目范围。
+6. 后端校验 workflow、provider、project、项目访问权限和 capability 兼容性。
+7. 后端创建 `Task`、`AuditLog`，再根据执行模式触发：
    - `background`：FastAPI background task
    - `sync`：同步执行
    - `redis`：入队等待 worker
-6. `task_executor.py` 根据 provider 选择真实适配器或模拟适配器。
-7. 如果任务 payload 包含参考图，并且 provider profile 使用 `reference_mode=caption_prompt`，执行层会先调用视觉语言模型读取参考图，再把参考说明拼入真实文生图 prompt。
-8. 若为图像任务，执行层会把真实返回图片或模拟预览落到 `media_root`，并将 `/media/...` 写入 `task.result.storage_path`。
-9. 任务成功后，资产物化逻辑会把 `storage_path` 沉淀为 `Asset`，供图库和任务区复用。
-10. 前端定时轮询 `GET /api/v1/tasks`，更新最近任务状态。
+8. `task_executor.py` 根据 provider 选择真实适配器或模拟适配器。
+9. 如果任务 payload 包含参考图，并且 provider profile 使用 `reference_mode=caption_prompt`，执行层会先调用视觉语言模型读取参考图，再把参考说明拼入真实文生图 prompt。
+10. 若为图像任务，执行层会把真实返回图片或模拟预览落到 `media_root`，并将 `/media/...` 写入 `task.result.storage_path`。
+11. 任务成功后，资产物化逻辑会把 `storage_path` 沉淀为 `Asset`，供图库和任务区复用。
+12. 前端定时轮询 `GET /api/v1/tasks`，后端按当前用户可访问项目过滤任务列表。
 
 ### 辅助链路：项目状态
 1. `GET /api/v1/projects` 调用 `project_status.py`

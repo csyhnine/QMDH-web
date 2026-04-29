@@ -39,6 +39,14 @@ class ImageProviderProfile:
     reference_caption_prompt: str = DEFAULT_REFERENCE_CAPTION_PROMPT
 
 
+@dataclass(frozen=True)
+class AuthUserProfile:
+    name: str
+    token: str
+    role: str = "designer"
+    project_codes: tuple[str, ...] = ("QMDH-001",)
+
+
 class Settings(BaseSettings):
     app_name: str = "QMDH Internal AI Platform"
     api_prefix: str = "/api/v1"
@@ -56,6 +64,9 @@ class Settings(BaseSettings):
     openai_image_quality: str = "medium"
     openai_image_output_format: str = "png"
     image_provider_profiles_json: str = "[]"
+    auth_users_json: str = (
+        '[{"name":"reviewer","token":"dev-reviewer-token","role":"reviewer","project_codes":["QMDH-001"]}]'
+    )
 
     model_config = SettingsConfigDict(
         env_file=(str(BACKEND_DIR / ".env"), str(REPO_ROOT_DIR / ".env")),
@@ -142,6 +153,36 @@ class Settings(BaseSettings):
         if provider_name not in profiles:
             raise KeyError(f"Image provider profile not configured: {provider_name}")
         return profiles[provider_name]
+
+    def get_auth_user_profiles(self) -> dict[str, AuthUserProfile]:
+        raw_profiles = self.auth_users_json.strip()
+        if not raw_profiles:
+            return {}
+
+        parsed_profiles = json.loads(raw_profiles)
+        if not isinstance(parsed_profiles, list):
+            raise ValueError("QMDH_AUTH_USERS_JSON must be a JSON array")
+
+        profiles: dict[str, AuthUserProfile] = {}
+        for item in parsed_profiles:
+            if not isinstance(item, dict):
+                raise ValueError("Each auth user profile must be a JSON object")
+
+            name = str(item.get("name") or "").strip()
+            token = str(item.get("token") or "").strip()
+            role = str(item.get("role") or "designer").strip() or "designer"
+            raw_project_codes = item.get("project_codes") or ["QMDH-001"]
+            if isinstance(raw_project_codes, str):
+                raw_project_codes = [raw_project_codes]
+            if not isinstance(raw_project_codes, list):
+                raise ValueError(f"Auth user {name or '<unnamed>'} project_codes must be a JSON array")
+            project_codes = tuple(str(value).strip() for value in raw_project_codes if str(value).strip())
+
+            if not name or not token:
+                continue
+            profiles[token] = AuthUserProfile(name=name, token=token, role=role, project_codes=project_codes)
+
+        return profiles
 
 
 settings = Settings()

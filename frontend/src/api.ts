@@ -90,7 +90,6 @@ export type TaskCreatePayload = {
   title: string;
   workflow_key: string;
   project_code: string;
-  user_name: string;
   requested_provider: string;
   classification: string;
   payload: Record<string, unknown>;
@@ -112,7 +111,6 @@ export type PromptTemplateRecord = {
 };
 
 export type PromptTemplateCreatePayload = {
-  user_name: string;
   label: string;
   title: string;
   prompt: string;
@@ -123,7 +121,7 @@ export type PromptTemplateCreatePayload = {
   notes: string;
 };
 
-export type PromptTemplateUpdatePayload = Partial<Omit<PromptTemplateCreatePayload, "user_name">>;
+export type PromptTemplateUpdatePayload = Partial<PromptTemplateCreatePayload>;
 
 export type ReferenceUploadPayload = {
   file_name: string;
@@ -136,6 +134,15 @@ export type ReferenceUploadResponse = {
 };
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api/v1").replace(/\/$/, "");
+const AUTH_USER = import.meta.env.VITE_QMDH_USER ?? "reviewer";
+const AUTH_TOKEN = import.meta.env.VITE_QMDH_AUTH_TOKEN ?? "dev-reviewer-token";
+
+function authHeaders(): Record<string, string> {
+  return {
+    "X-QMDH-User": AUTH_USER,
+    "X-QMDH-Auth": AUTH_TOKEN
+  };
+}
 
 async function buildError(response: Response): Promise<Error> {
   let detail = "";
@@ -165,7 +172,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
 
   try {
-    response = await fetch(`${API_BASE}${path}`, init);
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        ...authHeaders(),
+        ...(init?.headers as Record<string, string> | undefined)
+      }
+    });
   } catch {
     throw new Error("无法连接到后端服务，请确认本地 API 已启动。");
   }
@@ -213,17 +226,14 @@ export const api = {
   workflows: () => request<Workflow[]>("/workflows"),
   tasks: () => request<Task[]>("/tasks"),
   assets: () => request<Asset[]>("/assets"),
-  promptTemplates: (userName: string) =>
-    request<PromptTemplateRecord[]>(`/prompt-templates?user_name=${encodeURIComponent(userName)}`),
+  promptTemplates: () =>
+    request<PromptTemplateRecord[]>("/prompt-templates"),
   createPromptTemplate: (payload: PromptTemplateCreatePayload) =>
     postJson<PromptTemplateRecord>("/prompt-templates", payload),
-  updatePromptTemplate: (templateId: number, userName: string, payload: PromptTemplateUpdatePayload) =>
-    patchJson<PromptTemplateRecord>(
-      `/prompt-templates/${templateId}?user_name=${encodeURIComponent(userName)}`,
-      payload
-    ),
-  deletePromptTemplate: (templateId: number, userName: string) =>
-    deleteRequest(`/prompt-templates/${templateId}?user_name=${encodeURIComponent(userName)}`),
+  updatePromptTemplate: (templateId: number, payload: PromptTemplateUpdatePayload) =>
+    patchJson<PromptTemplateRecord>(`/prompt-templates/${templateId}`, payload),
+  deletePromptTemplate: (templateId: number) =>
+    deleteRequest(`/prompt-templates/${templateId}`),
   uploadReferenceImage: (payload: ReferenceUploadPayload) =>
     postJson<ReferenceUploadResponse>("/assets/reference-upload", payload),
   createTask: (payload: TaskCreatePayload) => postJson<Task>("/tasks", payload),

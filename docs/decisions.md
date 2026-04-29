@@ -120,6 +120,23 @@
 - 禁止事项：
   - 不把 `caption_prompt` 模式宣传为直接 `img2img / image.edit`
 
+### Decision: MVP 1.0 先用配置型 token 建立最小用户边界
+- 状态：Accepted
+- 日期：2026-04-29
+- 背景：
+  - 任务和模板原先依赖前端传入 `user_name`，执行人与模板归属都可被客户端随意伪造
+  - 当前阶段需要先补可信执行人与项目访问边界，但还不适合引入完整账号、密码、会话或 SSO 体系
+- 决策内容：
+  - MVP 1.0 使用 `QMDH_AUTH_USERS_JSON` 配置用户、token、角色和可访问项目
+  - 前端通过 `X-QMDH-Auth` / `X-QMDH-User` 发送认证信息
+  - 后端以 token 派生用户身份和 `project_codes`，不把任务或模板 payload 中的 `user_name` 当作事实源
+- 影响：
+  - 任务、模板、项目和资产接口需要使用认证依赖
+  - 生产部署必须替换默认开发 token
+- 禁止事项：
+  - 不把当前 token 方案描述为完整账号体系
+  - 不重新让前端 payload 决定可信执行人
+
 ### Decision: 任务必须拆到可单次提交完成的粒度
 - 状态：Accepted
 - 日期：2026-04-17

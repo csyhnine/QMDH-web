@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_auth_user
+from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import PromptTemplate, User
 from app.schemas import PromptTemplateCreate, PromptTemplateOut, PromptTemplateUpdate
@@ -9,12 +11,14 @@ from app.schemas import PromptTemplateCreate, PromptTemplateOut, PromptTemplateU
 router = APIRouter(prefix="/prompt-templates", tags=["prompt_templates"])
 
 
-def _get_or_create_user(db: Session, user_name: str) -> User:
-    user = db.scalar(select(User).where(User.name == user_name))
+def _get_or_create_user(db: Session, auth_user: AuthUserProfile) -> User:
+    user = db.scalar(select(User).where(User.name == auth_user.name))
     if user:
+        if user.role != auth_user.role:
+            user.role = auth_user.role
         return user
 
-    user = User(name=user_name, role="designer")
+    user = User(name=auth_user.name, role=auth_user.role)
     db.add(user)
     db.flush()
     return user
@@ -37,9 +41,11 @@ def _to_prompt_template_out(template: PromptTemplate) -> PromptTemplateOut:
     )
 
 
-def _get_owned_template(db: Session, template_id: int, user_name: str) -> PromptTemplate:
+def _get_owned_template(db: Session, template_id: int, auth_user: AuthUserProfile) -> PromptTemplate:
     template = db.scalar(
-        select(PromptTemplate).join(PromptTemplate.user).where(PromptTemplate.id == template_id, User.name == user_name)
+        select(PromptTemplate)
+        .join(PromptTemplate.user)
+        .where(PromptTemplate.id == template_id, User.name == auth_user.name)
     )
     if not template:
         raise HTTPException(status_code=404, detail="Prompt template not found")
@@ -47,19 +53,26 @@ def _get_owned_template(db: Session, template_id: int, user_name: str) -> Prompt
 
 
 @router.get("", response_model=list[PromptTemplateOut])
-def list_prompt_templates(user_name: str = "reviewer", db: Session = Depends(get_db)) -> list[PromptTemplateOut]:
+def list_prompt_templates(
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> list[PromptTemplateOut]:
     templates = db.scalars(
         select(PromptTemplate)
         .join(PromptTemplate.user)
-        .where(User.name == user_name)
+        .where(User.name == auth_user.name)
         .order_by(PromptTemplate.updated_at.desc(), PromptTemplate.id.desc())
     ).all()
     return [_to_prompt_template_out(template) for template in templates]
 
 
 @router.post("", response_model=PromptTemplateOut, status_code=status.HTTP_201_CREATED)
-def create_prompt_template(payload: PromptTemplateCreate, db: Session = Depends(get_db)) -> PromptTemplateOut:
-    user = _get_or_create_user(db, payload.user_name)
+def create_prompt_template(
+    payload: PromptTemplateCreate,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> PromptTemplateOut:
+    user = _get_or_create_user(db, auth_user)
     template = PromptTemplate(
         user_id=user.id,
         label=payload.label,
@@ -81,10 +94,10 @@ def create_prompt_template(payload: PromptTemplateCreate, db: Session = Depends(
 def update_prompt_template(
     template_id: int,
     payload: PromptTemplateUpdate,
-    user_name: str = "reviewer",
     db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> PromptTemplateOut:
-    template = _get_owned_template(db, template_id, user_name)
+    template = _get_owned_template(db, template_id, auth_user)
 
     updates = payload.model_dump(exclude_unset=True)
     for field, value in updates.items():
@@ -96,8 +109,12 @@ def update_prompt_template(
 
 
 @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_prompt_template(template_id: int, user_name: str = "reviewer", db: Session = Depends(get_db)) -> Response:
-    template = _get_owned_template(db, template_id, user_name)
+def delete_prompt_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> Response:
+    template = _get_owned_template(db, template_id, auth_user)
 
     db.delete(template)
     db.commit()

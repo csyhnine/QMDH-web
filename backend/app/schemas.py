@@ -26,7 +26,6 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=3, max_length=150)
     workflow_key: str
     project_code: str
-    user_name: str = "reviewer"
     requested_provider: str
     classification: DataClassification = DataClassification.b
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -135,7 +134,7 @@ class PromptTemplateBase(BaseModel):
 
 
 class PromptTemplateCreate(PromptTemplateBase):
-    user_name: str = Field(min_length=1, max_length=100)
+    pass
 
 
 class PromptTemplateUpdate(BaseModel):

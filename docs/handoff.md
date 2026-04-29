@@ -10,6 +10,58 @@
 
 ## Latest Handoffs
 
+### [2026-04-29 14:15] Session Handoff
+- 执行角色：Feature / Integration
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：Yes（本轮提交后）
+  - 是否有未提交改动：No（本轮提交后）
+  - 是否已 push：No
+- 本次完成：
+  - 完成并提交 `task-001` 的一轮前端收口：提交 `7dd6782 refactor(task-001): focus image studio workflow`
+  - 推进并完成 `task-004` 最小认证与项目级访问控制
+  - 新增 `backend/app/core/auth.py`，通过 `X-QMDH-Auth` / `X-QMDH-User` 和 `QMDH_AUTH_USERS_JSON` 派生可信用户、角色与可访问项目
+  - 任务、模板、项目和资产接口接入认证依赖；任务和模板不再信任前端 payload / query 中的 `user_name`
+  - 前端 `api.ts` 统一附带 MVP 认证头，任务与模板创建请求移除 `user_name`
+  - 项目、任务和资产列表按 `project_codes` 做最小过滤，越权项目访问返回 `403`
+  - 更新部署、架构、决策、任务和项目状态文档
+  - 完成验证：
+    - `python -m unittest discover -s tests` 通过
+    - `npm run build` 通过
+- 修改文件：
+  - `backend/.env.example`
+  - `backend/app/core/auth.py`
+  - `backend/app/core/config.py`
+  - `backend/app/routers/assets.py`
+  - `backend/app/routers/projects.py`
+  - `backend/app/routers/prompt_templates.py`
+  - `backend/app/routers/tasks.py`
+  - `backend/app/schemas.py`
+  - `backend/tests/test_auth_boundaries.py`
+  - `frontend/src/App.tsx`
+  - `frontend/src/api.ts`
+  - `docs/architecture.md`
+  - `docs/decisions.md`
+  - `docs/deployment.md`
+  - `docs/handoff.md`
+  - `docs/tasks.md`
+  - `docs/projects/QMDH-001/status.md`
+- 当前任务状态：
+  - `task-001`: IN_PROGRESS
+  - `task-002`: DONE
+  - `task-004`: DONE
+  - `task-006`: DONE
+  - `task-sec-001`: BLOCKED
+- 风险与注意事项：
+  - 当前认证是 MVP 配置型 token，不是完整账号、密码、会话或 SSO 体系；生产环境必须替换默认 token
+  - 前端默认开发 token 写在 Vite 默认值里，仅用于本地开发
+  - `frontend/src/App.tsx` 仍偏大，后续可继续按小单元收口
+  - `task-sec-001` 仍被 `QMDH-SEC` 数据分级与模型使用规则阻塞
+- 下一位 agent 的第一步：
+  - 先检查 `git status`
+  - 优先继续 `task-001` 的前端收口，或补生产部署 token / 日志 / 运维说明
+- 是否可直接接手：Yes
+
 ### [2026-04-29 14:01] Session Handoff
 - 执行角色：Feature / Integration
 - 当前分支：`main`
@@ -85,57 +137,4 @@
   - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
   - 优先继续 `task-001`，收口前端工作台结构和文案
   - 然后再推进 `task-004` 最小认证与项目级访问控制
-- 是否可直接接手：Yes
-
-### [2026-04-23 16:20] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes
-  - 是否已 push：No
-- 本次完成：
-  - 推进并完成 `task-002`：参考图现在可以进入真实生成链路
-  - 为动态图片 provider 增加 `reference_mode`、`reference_caption_model`、`reference_caption_prompt` 配置
-  - ModelScope provider 默认启用 `reference_mode=caption_prompt`
-  - 有参考图时，后端会先用视觉语言模型读取参考图，再把参考说明拼入真实文生图 prompt
-  - 兼容 ModelScope 同步返回 `images / output_images / image_urls` 与异步轮询返回格式
-  - 修复本地开发 404：常见端口容易被 Codex Desktop 或其他项目占用，已将 Vite 代理默认改到 `127.0.0.1:18010`
-  - 已重启本地后端到 `18010`、前端到 `18080`，并验证前端代理能访问项目 API
-  - 通过 ModelScope `/v1/models` 探测到当前 token 可返回模型列表；默认参考图读图模型改为 `Qwen/Qwen3-VL-8B-Instruct`
-  - 修复参考图读图失败时整次任务失败的问题：读图不可用时会降级为文字生图并写入 warning
-  - 已重新提交一次失败任务，任务 `#12` 完成并返回真实 ModelScope 图片
-  - 更新 `backend/.env.example` 与 `docs/deployment.md`，说明参考图模式和 ModelScope 配置方式
-  - 更新 `docs/tasks.md`、`docs/projects/QMDH-001/status.md`、`docs/projects/QMDH-001/milestones.json`
-  - 完成验证：
-    - `python -m unittest discover -s tests` 通过
-    - `npm run build` 通过
-- 修改文件：
-  - `backend/.env.example`
-  - `backend/app/core/config.py`
-  - `backend/app/services/task_executor.py`
-  - `backend/tests/test_model_registry_profiles.py`
-  - `backend/tests/test_task_executor_openai.py`
-  - `docs/deployment.md`
-  - `docs/handoff.md`
-  - `docs/tasks.md`
-  - `docs/projects/QMDH-001/status.md`
-  - `docs/projects/QMDH-001/milestones.json`
-  - `frontend/vite.config.ts`
-- 当前任务状态：
-  - `task-001`: IN_PROGRESS
-  - `task-002`: DONE
-  - `task-004`: TODO
-  - `task-006`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - 当前参考图方案是“语义参考”：读图生成说明后辅助文生图，不是直接 `img2img / image.edit`
-  - 使用参考图会多一次视觉语言模型调用，会消耗 ModelScope 额度并增加延迟；当前 ModelScope VL 对公网图片 URL 可用，对本地 data URL 返回异常，后续如需稳定参考图能力应接对象存储或公网媒体 URL
-  - 本地开发请用后端 `18010`，不要直接访问 `8000`
-  - `frontend/src/App.tsx` 仍建议继续清理拆分
-  - 当前工作区仍有前序未提交改动，建议下一步先审查后提交稳定边界
-- 下一位 agent 的第一步：
-  - 先检查 `git status`
-  - 如果准备收口，请先提交当前 MVP 生图边界
-  - 如果继续开发，优先做 `task-001` 前端清理，之后再做 `task-004` 最小认证
 - 是否可直接接手：Yes

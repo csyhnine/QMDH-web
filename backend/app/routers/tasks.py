@@ -4,6 +4,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.auth import ensure_project_access, get_current_auth_user
+from app.core.config import AuthUserProfile
 from app.core.config import settings
 from app.database import get_db
 from app.models import AuditLog, Project, Task, TaskStatus, User, Workflow
@@ -12,6 +14,19 @@ from app.services.model_registry import get_provider_definition, get_provider_ma
 from app.services.task_executor import enqueue_task, execute_task
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+def _get_or_create_user(db: Session, auth_user: AuthUserProfile) -> User:
+    user = db.scalar(select(User).where(User.name == auth_user.name))
+    if user:
+        if user.role != auth_user.role:
+            user.role = auth_user.role
+        return user
+
+    user = User(name=auth_user.name, role=auth_user.role)
+    db.add(user)
+    db.flush()
+    return user
 
 
 def _to_task_out(task: Task) -> TaskOut:
@@ -34,16 +49,27 @@ def _to_task_out(task: Task) -> TaskOut:
 
 
 @router.get("", response_model=list[TaskOut])
-def list_tasks(db: Session = Depends(get_db)) -> list[TaskOut]:
-    tasks = db.scalars(select(Task).order_by(Task.created_at.desc())).all()
+def list_tasks(
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> list[TaskOut]:
+    query = select(Task).join(Task.project).order_by(Task.created_at.desc())
+    if "*" not in auth_user.project_codes:
+        query = query.where(Project.code.in_(auth_user.project_codes))
+    tasks = db.scalars(query).all()
     return [_to_task_out(task) for task in tasks]
 
 
 @router.get("/{task_id}", response_model=TaskOut)
-def get_task(task_id: int, db: Session = Depends(get_db)) -> TaskOut:
+def get_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> TaskOut:
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    ensure_project_access(auth_user, task.project.code)
     return _to_task_out(task)
 
 
@@ -52,6 +78,7 @@ def create_task(
     payload: TaskCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> TaskOut:
     workflow = db.scalar(select(Workflow).where(Workflow.key == payload.workflow_key))
     if not workflow:
@@ -68,12 +95,9 @@ def create_task(
     project = db.scalar(select(Project).where(Project.code == payload.project_code))
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    ensure_project_access(auth_user, project.code)
 
-    user = db.scalar(select(User).where(User.name == payload.user_name))
-    if not user:
-        user = User(name=payload.user_name, role="designer")
-        db.add(user)
-        db.flush()
+    user = _get_or_create_user(db, auth_user)
 
     task = Task(
         title=payload.title,

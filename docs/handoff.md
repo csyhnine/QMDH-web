@@ -10,6 +10,42 @@
 
 ## Latest Handoffs
 
+### [2026-04-29 11:10] Session Handoff
+- 执行角色：Feature / Integration
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：No
+  - 是否有未提交改动：Yes
+  - 是否已 push：No
+- 本次完成：
+  - 继续推进 `task-001`，收口生图工作台交互细节
+  - 修复空白页状态下“选择模板”弹层向上顶出容器的问题，改为可控高度、内部滚动、向下展开
+  - 调整热门预设模板，切换为“建筑效果图氛围增强一 / 建筑效果图氛围增强二 / 景观效果图氛围增强”
+  - 默认创作内容已切到新的建筑效果图氛围增强模板
+  - 同步更新 `docs/tasks.md` 与 `docs/projects/QMDH-001/status.md`
+  - 完成验证：
+    - `npm run build` 通过
+- 修改文件：
+  - `frontend/src/App.tsx`
+  - `frontend/src/styles.css`
+  - `docs/tasks.md`
+  - `docs/projects/QMDH-001/status.md`
+- 当前任务状态：
+  - `task-001`: IN_PROGRESS
+  - `task-002`: DONE
+  - `task-004`: TODO
+  - `task-006`: DONE
+  - `task-sec-001`: BLOCKED
+- 风险与注意事项：
+  - 当前模板体系虽然更贴近建筑/景观业务，但仍然写死在前端代码中，后续可考虑迁移到后端可配置数据
+  - `frontend/src/App.tsx` 仍然偏大，建议继续拆分和清理
+  - 参考图仍是“语义参考”方案，不是直接 `img2img / image.edit`
+- 下一位 agent 的第一步：
+  - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
+  - 优先继续 `task-001`，收口前端工作台结构和文案
+  - 然后再推进 `task-004` 最小认证与项目级访问控制
+- 是否可直接接手：Yes
+
 ### [2026-04-23 16:20] Session Handoff
 - 执行角色：Feature / Integration
 - 当前分支：`main`
@@ -119,20 +155,4 @@
   - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
   - 然后检查当前未提交改动，确认是直接提交当前阶段，还是继续完成 `task-002` 再一起提交
   - 如果继续做生图能力，优先从“参考图真正参与生成”开始，不要先扩散到更多 UI 微调
-- 是否可直接接手：Yes
-
-### [2026-04-21 18:25] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes
-  - 是否已 push：No
-- 本次完成：
-  - 生图链路已切换到可配置的真实 provider profile，并接通 `modelscope_free_image / MAILAND/majicflus_v1`
-  - 后端真实生图执行器已支持 ModelScope 异步出图轮询
-  - 生图任务支持 `image_count`，默认 1 张，最多 4 张
-  - 历史记录流已改为“旧任务在上，新任务在下”，并按 `source_task_id` 正确归组
-  - 前端工作台改为“左侧项目区 + 中间历史流 + 底部创作栏”的简洁布局
-  - 完成后端单测、前端 build 和真实 ModelScope 冒烟验证
 - 是否可直接接手：Yes

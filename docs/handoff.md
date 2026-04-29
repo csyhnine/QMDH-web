@@ -10,6 +10,47 @@
 
 ## Latest Handoffs
 
+### [2026-04-29 14:01] Session Handoff
+- 执行角色：Feature / Integration
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：No
+  - 是否有未提交改动：Yes
+  - 是否已 push：No
+- 本次完成：
+  - 按 `docs/protocol.md` 完成接手核对：当前分支为 `main`，HEAD 为 `fc25205`，与 `origin/main` 对齐
+  - 继续推进 `task-001`，清理 `frontend/src/App.tsx` 遗留逻辑
+  - 删除未使用的旧热门模板数组，避免与当前“建筑/景观效果图氛围增强”模板体系混杂
+  - 清理模板保存里的 `if (false)` 死分支和旧本地兜底保存逻辑，模板保存统一依赖后端持久化接口
+  - 简化自定义模板类型和排序逻辑，去掉旧本地模板 `updatedAt` / 字符串 id 兼容分支
+  - `新对话` 重置后保持当前项目，并回到默认建筑效果图氛围增强模板
+  - 前端工作台入口收束到 `image-generate`，移除视频“待开发”展示分支和提交拦截逻辑
+  - 项目切换不再把当前模板标题改回旧式“项目名 生图方案”
+  - 移除仅剩单项的工作流选择菜单，`App.tsx` 不再把 `workflowKey` 保存在表单状态中，提交固定使用图像工作流键
+  - 完成验证：
+    - `npm run build` 通过
+- 修改文件：
+  - `frontend/src/App.tsx`
+  - `frontend/src/styles.css`
+  - `docs/tasks.md`
+  - `docs/projects/QMDH-001/status.md`
+  - `docs/handoff.md`
+- 当前任务状态：
+  - `task-001`: IN_PROGRESS
+  - `task-002`: DONE
+  - `task-004`: TODO
+  - `task-006`: DONE
+  - `task-sec-001`: BLOCKED
+- 风险与注意事项：
+  - `frontend/src/App.tsx` 仍然偏大，下一步建议继续围绕表单状态、模板面板和历史流做小步清理，不要扩大到认证任务
+  - 当前用户标识仍由前端传入，属于 `task-004` 范围，尚未处理
+  - 参考图仍是“语义参考”方案，不是直接 `img2img / image.edit`
+- 下一位 agent 的第一步：
+  - 先检查 `git status`
+  - 如继续 `task-001`，优先审查 `frontend/src/App.tsx` 中表单状态和文案是否还有可删除的旧兜底分支
+  - `task-001` 收口并稳定提交后，再推进 `task-004` 最小认证与项目级访问控制
+- 是否可直接接手：Yes
+
 ### [2026-04-29 11:10] Session Handoff
 - 执行角色：Feature / Integration
 - 当前分支：`main`
@@ -97,62 +138,4 @@
   - 先检查 `git status`
   - 如果准备收口，请先提交当前 MVP 生图边界
   - 如果继续开发，优先做 `task-001` 前端清理，之后再做 `task-004` 最小认证
-- 是否可直接接手：Yes
-
-### [2026-04-22 10:10] Session Handoff
-- 执行角色：Feature / Integration / Handoff
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes
-  - 是否已 push：No
-- 本次完成：
-  - 修复了生图历史流“最新记录自动定位”逻辑，不再受“最近优先 / 最早优先”排序影响
-  - 新增提示词模板后端持久化能力，支持列表、创建、更新、删除
-  - 修复模板接口的用户归属边界：更新和删除必须匹配 `user_name`
-  - 参考图上传已从前端占位改为真实上传到后端媒体目录，并返回 `/media/...` 可访问地址
-  - 补充部署文档 `docs/deployment.md`
-  - 对齐现有 `docker-compose.yml`，为后端增加 `8000:8000` 端口暴露，保留 `frontend + backend + worker + postgres + redis` 结构
-  - 更新 `backend/.env.example`，增加 ModelScope provider 配置示例
-  - 完成验证：
-    - `npm run build` 通过
-    - `docker compose -f docker-compose.yml config -q` 通过
-    - `POST /api/v1/assets/reference-upload` 返回真实媒体路径
-    - 模板越权删除返回 `404`
-- 修改文件：
-  - `backend/.env.example`
-  - `backend/app/main.py`
-  - `backend/app/models.py`
-  - `backend/app/routers/__init__.py`
-  - `backend/app/routers/assets.py`
-  - `backend/app/routers/prompt_templates.py`
-  - `backend/app/schemas.py`
-  - `docker-compose.yml`
-  - `frontend/src/App.tsx`
-  - `frontend/src/api.ts`
-  - `frontend/src/styles.css`
-  - `docs/deployment.md`
-  - `docs/handoff.md`
-  - `docs/tasks.md`
-  - `docs/projects/QMDH-001/status.md`
-  - `docs/projects/QMDH-001/milestones.json`
-- 当前任务状态：
-  - `task-001`: IN_PROGRESS
-  - `task-002`: IN_PROGRESS
-  - `task-004`: TODO
-  - `task-006`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - 当前真实可用的图像 provider 仍以 `modelscope_free_image` 为主
-  - 参考图已上传并能进入任务 payload，但模型侧还没有真正做 `image.edit / img2img` 能力闭环
-  - `frontend/src/App.tsx` 仍有历史迭代留下的冗余逻辑和少量中文字符串异常，后续建议做一次代码清理
-  - 当前工作区尚未提交，切号后如果要继续开发，建议先审查并提交一轮稳定边界
-- 未完成内容：
-  - 收敛 `App.tsx` 中的冗余状态与旧兜底逻辑
-  - 推进参考图参与真实生成，而不是只做上传绑定
-  - 继续完善服务器部署说明与生产环境配置
-- 下一位 agent 的第一步：
-  - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
-  - 然后检查当前未提交改动，确认是直接提交当前阶段，还是继续完成 `task-002` 再一起提交
-  - 如果继续做生图能力，优先从“参考图真正参与生成”开始，不要先扩散到更多 UI 微调
 - 是否可直接接手：Yes

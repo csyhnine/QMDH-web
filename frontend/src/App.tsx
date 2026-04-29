@@ -24,7 +24,6 @@ type LoadState = {
 type StudioFormState = {
   title: string;
   prompt: string;
-  workflowKey: string;
   projectCode: string;
   requestedProvider: string;
   userName: string;
@@ -55,13 +54,7 @@ type PromptTemplateFormValue = Pick<
   "label" | "title" | "prompt" | "style" | "aspectRatio" | "resolution" | "deliverable" | "notes"
 >;
 
-type CustomPromptTemplate = Omit<PromptTemplateRecord, "id" | "aspect_ratio" | "updated_at"> & {
-  id: number | string;
-  aspectRatio?: string;
-  aspect_ratio?: string;
-  updatedAt?: string;
-  updated_at?: string;
-};
+type CustomPromptTemplate = PromptTemplateRecord;
 
 type FeedFilterState = {
   sort: "latest" | "oldest";
@@ -69,7 +62,9 @@ type FeedFilterState = {
   provider: string;
 };
 
-type ComposerMenuKey = "template" | "workflow" | "provider" | "display" | "count" | null;
+type ComposerMenuKey = "template" | "provider" | "display" | "count" | null;
+
+const IMAGE_WORKFLOW_KEY = "image-generate";
 
 const initialState: LoadState = {
   health: "loading",
@@ -94,64 +89,6 @@ const aspectRatioOptions = ["智能", "21:9", "16:9", "3:2", "4:3", "1:1", "3:4"
 const resolutionOptions = [
   { id: "2k", label: "高清 2K" },
   { id: "4k", label: "超清 4K" }
-];
-
-const hotPromptTemplates: PromptTemplate[] = [
-  {
-    id: "riverfront",
-    label: "滨水更新",
-    title: "滨水更新生图方案",
-    prompt: "滨水复合街区，连续骑行步道，首层商业外摆，玻璃与浅色石材立面，清晨柔光，适合作为方案汇报首页。",
-    style: "modern",
-    aspectRatio: "16:9",
-    resolution: "2k",
-    deliverable: "首页主视觉",
-    notes: "强调开放公共界面与亲水空间，避免过度赛博风。"
-  },
-  {
-    id: "night-scene",
-    label: "商业夜景",
-    title: "街角商业夜景效果图",
-    prompt: "街角商业综合体，暖色灯光克制，雨后路面轻微反射，入口节点有识别度，真实摄影视角。",
-    style: "cinematic",
-    aspectRatio: "3:2",
-    resolution: "2k",
-    deliverable: "夜景效果图",
-    notes: "控制灯光层次，保留真实尺度感和人流。"
-  },
-  {
-    id: "cultural-hub",
-    label: "文化综合体",
-    title: "文化综合体概念图",
-    prompt: "文化综合体入口广场，厚重体块与通透界面并置，前景有人群停留，天空通透，强调城市客厅气质。",
-    style: "editorial",
-    aspectRatio: "4:3",
-    resolution: "4k",
-    deliverable: "方案概念图",
-    notes: "突出入口仪式感和公共活动场景。"
-  },
-  {
-    id: "commercial-plaza",
-    label: "商业广场",
-    title: "商业广场主入口效果图",
-    prompt: "城市商业广场主入口，层叠雨棚，玻璃幕墙，导视醒目，人流活跃，日间通透光影，适合招商展示。",
-    style: "modern",
-    aspectRatio: "16:9",
-    resolution: "2k",
-    deliverable: "入口主视觉",
-    notes: "强调入口昭示性和商业氛围，但不要过度夸张。"
-  },
-  {
-    id: "landscape-axis",
-    label: "景观轴线",
-    title: "中央景观轴概念图",
-    prompt: "中央景观轴，连续水景与林荫步道，局部休憩平台，低维护植物配置，黄昏柔光，构图简洁。",
-    style: "minimal",
-    aspectRatio: "3:2",
-    resolution: "2k",
-    deliverable: "景观概念图",
-    notes: "控制色彩，突出空间秩序和慢行体验。"
-  }
 ];
 
 const featuredAtmosphereTemplates: PromptTemplate[] = [
@@ -196,7 +133,6 @@ const featuredAtmosphereTemplates: PromptTemplate[] = [
 const defaultStudioForm: StudioFormState = {
   title: featuredAtmosphereTemplates[0].title,
   prompt: featuredAtmosphereTemplates[0].prompt,
-  workflowKey: "image-generate",
   projectCode: "QMDH-001",
   requestedProvider: "modelscope_free_image",
   userName: "reviewer",
@@ -326,11 +262,17 @@ function toTemplateFormValue(template: CustomPromptTemplate): PromptTemplateForm
     title: template.title,
     prompt: template.prompt,
     style: template.style,
-    aspectRatio: template.aspect_ratio ?? template.aspectRatio ?? "16:9",
+    aspectRatio: template.aspect_ratio || "16:9",
     resolution: template.resolution,
     deliverable: template.deliverable,
     notes: template.notes
   };
+}
+
+function sortTemplatesByUpdatedAt(templates: CustomPromptTemplate[]): CustomPromptTemplate[] {
+  return [...templates].sort(
+    (left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
+  );
 }
 
 function buildGalleryAssets(taskAssets: Asset[]): Asset[] {
@@ -454,7 +396,7 @@ export default function App() {
   const [customTemplates, setCustomTemplates] = useState<CustomPromptTemplate[]>([]);
   const [templateDraftLabel, setTemplateDraftLabel] = useState("");
   const [templateDraftTitle, setTemplateDraftTitle] = useState("");
-  const [editingTemplateId, setEditingTemplateId] = useState<number | string | null>(null);
+  const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
   const isFetchingRef = useRef(false);
   const composerToolbarRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -487,7 +429,7 @@ export default function App() {
         ready: true
       });
       if (templates) {
-        setCustomTemplates(templates);
+        setCustomTemplates(sortTemplatesByUpdatedAt(templates));
       }
       setLastSyncedAt(new Date().toISOString());
     } catch (error) {
@@ -534,17 +476,11 @@ export default function App() {
     };
   }, [referencePreviewUrl]);
 
-  const studioWorkflows = state.workflows.filter(
-    (workflow) => workflow.key === "image-generate" || workflow.key === "video-generate"
-  );
-  const selectedWorkflow = studioWorkflows.find((workflow) => workflow.key === studioForm.workflowKey) ?? studioWorkflows[0];
-  const isVideoWorkflow = selectedWorkflow?.key === "video-generate";
+  const selectedWorkflow = state.workflows.find((workflow) => workflow.key === IMAGE_WORKFLOW_KEY);
 
-  const availableProviders = !isVideoWorkflow
-    ? state.providers.filter((provider) =>
-        selectedWorkflow ? provider.capabilities.includes(selectedWorkflow.provider_capability) : false
-      )
-    : [];
+  const availableProviders = state.providers.filter((provider) =>
+    selectedWorkflow ? provider.capabilities.includes(selectedWorkflow.provider_capability) : false
+  );
 
   const activeProject = state.projects.find((project) => project.code === studioForm.projectCode);
   const workspaceName = activeProject?.name ?? "默认创作";
@@ -554,7 +490,7 @@ export default function App() {
 
   const imageAssets = state.assets.filter((asset) => asset.asset_type === "image");
   const imageTasks = state.tasks.filter(
-    (task) => task.workflow_key === "image-generate" && task.project_code === studioForm.projectCode
+    (task) => task.workflow_key === IMAGE_WORKFLOW_KEY && task.project_code === studioForm.projectCode
   );
   const imageAssetsByTaskId = imageAssets.reduce((map, asset) => {
     if (asset.source_task_id === null) return map;
@@ -595,12 +531,6 @@ export default function App() {
     ) ?? null;
 
   useEffect(() => {
-    if (isVideoWorkflow) {
-      setActiveComposerMenu((current) => (current === "provider" ? null : current));
-    }
-  }, [isVideoWorkflow]);
-
-  useEffect(() => {
     if (availableProviders.length === 0) return;
     if (!availableProviders.some((provider) => provider.provider_name === studioForm.requestedProvider)) {
       const preferredProvider =
@@ -633,20 +563,10 @@ export default function App() {
   }
 
   function handleProjectSelect(project: Project) {
-    setStudioForm((current) => {
-      const suggestedTitle = `${project.name} 生图方案`;
-      const shouldReplaceTitle =
-        current.title.trim() === "" ||
-        current.title === defaultStudioForm.title ||
-        current.title.endsWith("生图方案") ||
-        current.title === `${workspaceName} 生图方案`;
-
-      return {
-        ...current,
-        projectCode: project.code,
-        title: shouldReplaceTitle ? suggestedTitle : current.title
-      };
-    });
+    setStudioForm((current) => ({
+      ...current,
+      projectCode: project.code
+    }));
   }
 
   function clearReferenceUpload() {
@@ -673,8 +593,7 @@ export default function App() {
     setTemplateDraftTitle("");
     setStudioForm((current) => ({
       ...defaultStudioForm,
-      projectCode: current.projectCode,
-      title: `${workspaceName} 生图方案`
+      projectCode: current.projectCode
     }));
   }
 
@@ -786,12 +705,11 @@ export default function App() {
     setActiveComposerMenu("template");
   }
 
-  async function handleDeleteCustomTemplate(templateId: number | string) {
+  async function handleDeleteCustomTemplate(templateId: number) {
     try {
-      const numericTemplateId = Number(templateId);
-      await api.deletePromptTemplate(numericTemplateId, studioForm.userName);
-      setCustomTemplates((current) => current.filter((template) => Number(template.id) !== numericTemplateId));
-      if (Number(editingTemplateId) === numericTemplateId) {
+      await api.deletePromptTemplate(templateId, studioForm.userName);
+      setCustomTemplates((current) => current.filter((template) => template.id !== templateId));
+      if (editingTemplateId === templateId) {
         setEditingTemplateId(null);
         setTemplateDraftLabel("");
         setTemplateDraftTitle("");
@@ -812,22 +730,6 @@ export default function App() {
     const label = templateDraftLabel.trim();
     const title = templateDraftTitle.trim() || studioForm.title.trim();
     const prompt = studioForm.prompt.trim();
-
-    if (false && !label) {
-      setState((current) => ({
-        ...current,
-        error: "请先填写自定义提示词名称"
-      }));
-      return;
-    }
-
-    if (false && !prompt) {
-      setState((current) => ({
-        ...current,
-        error: "请先填写提示词内容后再保存"
-      }));
-      return;
-    }
 
     if (!label) {
       setState((current) => ({
@@ -859,17 +761,10 @@ export default function App() {
           notes: studioForm.notes
         });
 
-        setCustomTemplates((current) =>
-          [createdTemplate, ...current].sort(
-            (left, right) =>
-              new Date(right.updated_at ?? right.updatedAt ?? 0).getTime() -
-              new Date(left.updated_at ?? left.updatedAt ?? 0).getTime()
-          )
-        );
+        setCustomTemplates((current) => sortTemplatesByUpdatedAt([createdTemplate, ...current]));
         setEditingTemplateId(createdTemplate.id);
       } else {
-        const templateId = Number(editingTemplateId);
-        const updatedTemplate = await api.updatePromptTemplate(templateId, studioForm.userName, {
+        const updatedTemplate = await api.updatePromptTemplate(editingTemplateId, studioForm.userName, {
           label,
           title: title || `${workspaceName} 自定义提示词`,
           prompt,
@@ -881,11 +776,7 @@ export default function App() {
         });
 
         setCustomTemplates((current) =>
-          [updatedTemplate, ...current.filter((template) => Number(template.id) !== updatedTemplate.id)].sort(
-            (left, right) =>
-              new Date(right.updated_at ?? right.updatedAt ?? 0).getTime() -
-              new Date(left.updated_at ?? left.updatedAt ?? 0).getTime()
-          )
+          sortTemplatesByUpdatedAt([updatedTemplate, ...current.filter((template) => template.id !== updatedTemplate.id)])
         );
         setEditingTemplateId(updatedTemplate.id);
       }
@@ -900,33 +791,7 @@ export default function App() {
         ...current,
         error: error instanceof Error ? error.message : "保存提示词失败"
       }));
-      return;
     }
-
-    const nextTemplate: CustomPromptTemplate = {
-      id: editingTemplateId ?? `custom-${Date.now()}`,
-      label,
-      title: title || `${workspaceName} 自定义提示词`,
-      prompt,
-      style: studioForm.style,
-      aspectRatio: studioForm.aspectRatio,
-      resolution: studioForm.resolution,
-      deliverable: studioForm.deliverable,
-      notes: studioForm.notes,
-      updatedAt: new Date().toISOString()
-    };
-
-    setCustomTemplates((current) => {
-      const nextTemplates = current.filter((template) => template.id !== nextTemplate.id);
-      return [nextTemplate, ...nextTemplates].sort(
-        (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
-      );
-    });
-    setEditingTemplateId(nextTemplate.id);
-    setState((current) => ({
-      ...current,
-      error: ""
-    }));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -941,20 +806,12 @@ export default function App() {
       return;
     }
 
-    if (isVideoWorkflow) {
-      setState((current) => ({
-        ...current,
-        error: "视频生成模块待开发，当前版本暂不支持提交。"
-      }));
-      return;
-    }
-
     setSubmitting(true);
 
     try {
       await api.createTask({
-        title: studioForm.title.trim() || `${workspaceName} 生图方案`,
-        workflow_key: studioForm.workflowKey,
+        title: studioForm.title.trim() || defaultStudioForm.title,
+        workflow_key: IMAGE_WORKFLOW_KEY,
         project_code: studioForm.projectCode,
         requested_provider: studioForm.requestedProvider,
         user_name: studioForm.userName,
@@ -1118,7 +975,7 @@ export default function App() {
             <div className="empty-stage-copy">
               <p className="canvas-kicker">QMDH / IMAGE STUDIO</p>
               <h1>你好，想创作什么？</h1>
-              <p>输入想法、脚本或参考方向，生成记录会在这里按时间沉淀下来。</p>
+              <p>上传参考图，输入主体、场景和氛围方向，生成记录会在这里按时间沉淀下来。</p>
             </div>
           </section>
         )}
@@ -1131,7 +988,7 @@ export default function App() {
             </div>
             <div className="composer-statusline">
               <span>{selectedWorkflow?.name ?? "图像生成"}</span>
-              <span>{isVideoWorkflow ? "待开发" : (selectedProvider?.model_name ?? studioForm.requestedProvider)}</span>
+              <span>{selectedProvider?.model_name ?? studioForm.requestedProvider}</span>
               <span>{studioForm.aspectRatio} / {selectedResolution?.label ?? studioForm.resolution}</span>
               <span>{studioForm.imageCount} 张</span>
             </div>
@@ -1157,11 +1014,7 @@ export default function App() {
                 rows={4}
                 value={studioForm.prompt}
                 onChange={(event) => setStudioForm((current) => ({ ...current, prompt: event.target.value }))}
-                placeholder={
-                  isVideoWorkflow
-                    ? "输入视频脚本、镜头描述与运动方式。该功能当前待开发。"
-                    : "上传参考图，输入文字或描述主体、场景和想要生成的画面。"
-                }
+                placeholder="上传参考图，输入文字或描述主体、场景和想要生成的画面。"
               />
               <span className="composer-textarea-hint">
                 {referenceFileName
@@ -1282,51 +1135,12 @@ export default function App() {
             <div className="composer-menu">
               <button
                 type="button"
-                className={activeComposerMenu === "workflow" ? "composer-menu-trigger is-open" : "composer-menu-trigger"}
-                onClick={() => toggleComposerMenu("workflow")}
-              >
-                {selectedWorkflow?.name ?? "创作类型"}
-              </button>
-              {activeComposerMenu === "workflow" ? (
-                <div className="composer-menu-panel composer-menu-panel-list">
-                  {studioWorkflows.map((workflow) => {
-                    const waiting = workflow.key === "video-generate";
-
-                    return (
-                      <button
-                        key={workflow.id}
-                        type="button"
-                        className={studioForm.workflowKey === workflow.key ? "composer-choice-item is-active" : "composer-choice-item"}
-                        onClick={() => {
-                          setStudioForm((current) => ({ ...current, workflowKey: workflow.key }));
-                          setActiveComposerMenu(null);
-                        }}
-                      >
-                        <strong>{workflow.name}</strong>
-                        <span>{waiting ? "待开发，当前仅展示入口" : workflow.description}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="composer-menu">
-              <button
-                type="button"
-                disabled={isVideoWorkflow}
-                className={
-                  isVideoWorkflow
-                    ? "composer-menu-trigger is-disabled"
-                    : activeComposerMenu === "provider"
-                      ? "composer-menu-trigger is-open"
-                      : "composer-menu-trigger"
-                }
+                className={activeComposerMenu === "provider" ? "composer-menu-trigger is-open" : "composer-menu-trigger"}
                 onClick={() => toggleComposerMenu("provider")}
               >
-                {isVideoWorkflow ? "待开发" : (selectedProvider?.model_name ?? "选择模型")}
+                {selectedProvider?.model_name ?? "选择模型"}
               </button>
-              {activeComposerMenu === "provider" && !isVideoWorkflow ? (
+              {activeComposerMenu === "provider" ? (
                 <div className="composer-menu-panel composer-menu-panel-list">
                   {availableProviders.map((provider) => (
                     <button
@@ -1430,9 +1244,9 @@ export default function App() {
               <button
                 type="submit"
                 className="submit-button"
-                disabled={submitting || uploadingReference || isVideoWorkflow || availableProviders.length === 0}
+                disabled={submitting || uploadingReference || availableProviders.length === 0}
               >
-                {isVideoWorkflow ? "视频生成待开发" : submitting ? "正在创建..." : "开始生成"}
+                {submitting ? "正在创建..." : "开始生成"}
               </button>
             </div>
           </div>

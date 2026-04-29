@@ -956,12 +956,6 @@ button {
   background: rgba(37, 99, 235, 0.08);
 }
 
-.composer-menu-trigger.is-disabled {
-  color: var(--muted);
-  background: rgba(15, 23, 42, 0.04);
-  cursor: not-allowed;
-}
-
 .composer-chip-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

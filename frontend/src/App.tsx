@@ -401,8 +401,8 @@ export default function App() {
   const latestTaskRef = useRef<HTMLElement | null>(null);
   const hasAutoPositionedRef = useRef(false);
 
-  async function loadData() {
-    if (isFetchingRef.current) return;
+  async function loadData(options: { force?: boolean } = {}) {
+    if (isFetchingRef.current && !options.force) return;
     isFetchingRef.current = true;
 
     try {
@@ -814,10 +814,8 @@ export default function App() {
         classification: studioForm.classification,
         payload: buildImagePayload(studioForm)
       });
-      await loadData();
-      window.requestAnimationFrame(() => {
-        latestTaskRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
+      hasAutoPositionedRef.current = false;
+      await loadData({ force: true });
     } catch (error) {
       setState((current) => ({
         ...current,

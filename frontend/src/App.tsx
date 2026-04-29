@@ -396,6 +396,7 @@ export default function App() {
   const [templateDraftTitle, setTemplateDraftTitle] = useState("");
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
   const isFetchingRef = useRef(false);
+  const loadRequestIdRef = useRef(0);
   const composerToolbarRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const latestTaskRef = useRef<HTMLElement | null>(null);
@@ -404,6 +405,8 @@ export default function App() {
   async function loadData(options: { force?: boolean } = {}) {
     if (isFetchingRef.current && !options.force) return;
     isFetchingRef.current = true;
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
 
     try {
       const [health, projects, providers, workflows, tasks, assets, templates] = await Promise.all([
@@ -415,6 +418,8 @@ export default function App() {
         api.assets(),
         api.promptTemplates().catch(() => null)
       ]);
+
+      if (requestId !== loadRequestIdRef.current) return;
 
       setState({
         health: health.status,
@@ -431,13 +436,17 @@ export default function App() {
       }
       setLastSyncedAt(new Date().toISOString());
     } catch (error) {
+      if (requestId !== loadRequestIdRef.current) return;
+
       setState((current) => ({
         ...current,
         health: "error",
         error: error instanceof Error ? error.message : "加载失败"
       }));
     } finally {
-      isFetchingRef.current = false;
+      if (requestId === loadRequestIdRef.current) {
+        isFetchingRef.current = false;
+      }
     }
   }
 

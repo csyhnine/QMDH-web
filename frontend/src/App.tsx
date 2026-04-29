@@ -385,6 +385,10 @@ function groupProviders(providers: Provider[]): Array<{ label: string; providers
   }));
 }
 
+function isRuntimeImageProvider(provider: Provider): boolean {
+  return provider.outbound && (provider.adapter_kind === "openai_compatible" || provider.provider_name.startsWith("modelscope_"));
+}
+
 function AssetTile(props: { asset: Asset; emphasis?: "primary" | "secondary" }) {
   const renderableUrl = getRenderableUrl(props.asset);
 
@@ -588,7 +592,7 @@ export default function App() {
 
   const availableProviders = state.providers.filter((provider) =>
     selectedWorkflow
-      ? provider.outbound && provider.adapter_kind !== "simulated" && provider.capabilities.includes(selectedWorkflow.provider_capability)
+      ? isRuntimeImageProvider(provider) && provider.capabilities.includes(selectedWorkflow.provider_capability)
       : false
   );
   const providerGroups = groupProviders(availableProviders);

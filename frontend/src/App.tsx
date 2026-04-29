@@ -543,6 +543,16 @@ export default function App() {
   }, [availableProviders, studioForm.requestedProvider]);
 
   useEffect(() => {
+    if (state.projects.length === 0) return;
+    if (state.projects.some((project) => project.code === studioForm.projectCode)) return;
+
+    setStudioForm((current) => ({
+      ...current,
+      projectCode: state.projects[0].code
+    }));
+  }, [state.projects, studioForm.projectCode]);
+
+  useEffect(() => {
     hasAutoPositionedRef.current = false;
   }, [studioForm.projectCode]);
 

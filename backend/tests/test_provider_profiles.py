@@ -18,9 +18,15 @@ from app.services.model_registry import get_image_provider_profile, get_provider
 AUTH_USERS_JSON = json.dumps(
     [
         {
-            "name": "reviewer",
-            "token": "reviewer-token",
-            "role": "reviewer",
+            "name": "admin",
+            "token": "admin-token",
+            "role": "admin",
+            "project_codes": ["*"],
+        },
+        {
+            "name": "designer",
+            "token": "designer-token",
+            "role": "designer",
             "project_codes": ["QMDH-001"],
         }
     ]
@@ -55,7 +61,10 @@ class ProviderProfileTests(unittest.TestCase):
         self.engine.dispose()
 
     def auth_headers(self) -> dict[str, str]:
-        return {"X-QMDH-Auth": "reviewer-token", "X-QMDH-User": "reviewer"}
+        return {"X-QMDH-Auth": "admin-token", "X-QMDH-User": "admin"}
+
+    def designer_headers(self) -> dict[str, str]:
+        return {"X-QMDH-Auth": "designer-token", "X-QMDH-User": "designer"}
 
     def test_crud_masks_key_and_registers_provider(self) -> None:
         response = self.client.post(
@@ -94,6 +103,10 @@ class ProviderProfileTests(unittest.TestCase):
         self.assertEqual(update_response.status_code, 200)
         self.assertEqual(update_response.json()["model_name"], "arch-render-v2")
         self.assertEqual(update_response.json()["masked_api_key"], "sk-t...cret")
+
+    def test_designer_cannot_manage_provider_profiles(self) -> None:
+        response = self.client.get("/providers/profiles", headers=self.designer_headers())
+        self.assertEqual(response.status_code, 403)
 
     def test_registry_uses_enabled_database_profile(self) -> None:
         with self.SessionLocal() as db:

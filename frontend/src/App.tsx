@@ -451,6 +451,8 @@ function FeedCard(props: {
 }
 
 export default function App() {
+  const isModelAdminRoute = window.location.pathname.replace(/\/$/, "") === "/admin/models";
+  const activeView: ActiveView = isModelAdminRoute ? "models" : "studio";
   const [state, setState] = useState<LoadState>(initialState);
   const [studioForm, setStudioForm] = useState<StudioFormState>(defaultStudioForm);
   const [filters, setFilters] = useState<FeedFilterState>({
@@ -459,7 +461,6 @@ export default function App() {
     provider: "all"
   });
   const [submitting, setSubmitting] = useState(false);
-  const [activeView, setActiveView] = useState<ActiveView>("studio");
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [activeComposerMenu, setActiveComposerMenu] = useState<ComposerMenuKey>(null);
   const [referencePreviewUrl, setReferencePreviewUrl] = useState<string | null>(null);
@@ -490,7 +491,7 @@ export default function App() {
         api.health(),
         api.projects(),
         api.providers(),
-        api.providerProfiles().catch(() => []),
+        isModelAdminRoute ? api.providerProfiles().catch(() => []) : Promise.resolve([]),
         api.workflows(),
         api.tasks(),
         api.assets(),
@@ -1044,30 +1045,27 @@ export default function App() {
   }
 
   return (
-    <div className="studio-shell">
+    <div className={activeView === "models" ? "studio-shell admin-shell" : "studio-shell"}>
       <aside className="global-rail">
         <div className="rail-logo">Q</div>
         <nav className="rail-nav">
-          <button type="button" className="rail-item">
-            <span>灵感</span>
-          </button>
-          <button
-            type="button"
-            className={activeView === "studio" ? "rail-item active" : "rail-item"}
-            onClick={() => setActiveView("studio")}
-          >
-            <span>生成</span>
-          </button>
-          <button
-            type="button"
-            className={activeView === "models" ? "rail-item active" : "rail-item"}
-            onClick={() => setActiveView("models")}
-          >
-            <span>模型</span>
-          </button>
-          <button type="button" className="rail-item">
-            <span>画布</span>
-          </button>
+          {activeView === "models" ? (
+            <button type="button" className="rail-item active">
+              <span>管理</span>
+            </button>
+          ) : (
+            <>
+              <button type="button" className="rail-item">
+                <span>灵感</span>
+              </button>
+              <button type="button" className="rail-item active">
+                <span>生成</span>
+              </button>
+              <button type="button" className="rail-item">
+                <span>画布</span>
+              </button>
+            </>
+          )}
         </nav>
         <div className="rail-footer">
           <div className={`rail-health rail-health-${state.health}`}>{formatStatus(state.health)}</div>
@@ -1075,7 +1073,8 @@ export default function App() {
         </div>
       </aside>
 
-      <aside className="workspace-pane">
+      {activeView === "studio" ? (
+        <aside className="workspace-pane">
         <div className="workspace-header">
           <div>
             <p className="workspace-kicker">开启创作</p>
@@ -1103,7 +1102,8 @@ export default function App() {
             </button>
           ))}
         </div>
-      </aside>
+        </aside>
+      ) : null}
 
       <main className={activeView === "models" ? "canvas-area model-admin-area" : showCenteredComposer ? "canvas-area canvas-area-empty" : "canvas-area"}>
         {activeView === "models" ? (

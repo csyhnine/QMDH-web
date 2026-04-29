@@ -74,6 +74,10 @@ button {
   align-items: start;
 }
 
+.admin-shell {
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+
 .global-rail,
 .workspace-pane,
 .composer-dock,

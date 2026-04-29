@@ -144,16 +144,18 @@
   - 真实生图模型需要频繁验证不同 provider、model 和 key
   - 只依赖 `.env` / `QMDH_IMAGE_PROVIDER_PROFILES_JSON` 会导致每次切换都需要改配置和重启，不利于排查提示词不跟随的问题
 - 决策内容：
-  - MVP 先新增数据库表 `provider_profiles` 和前端“模型”管理入口
+  - MVP 先新增数据库表 `provider_profiles` 和独立管理入口 `/admin/models`
   - 后端 provider 注册表合并静态模拟 provider、环境变量 provider 与数据库 provider
   - 同名数据库 provider 优先，便于运行中替换模型配置
   - 前端只展示脱敏 key，不返回明文 key
+  - 设计师创作台不暴露模型与 key 管理入口，provider profile 接口只允许 `admin / owner / ops` 角色访问
 - 影响：
   - 任务创建和任务执行必须读取数据库会话下的 provider 注册表
   - 生产部署还需要补密钥加密、轮换和操作审计
 - 禁止事项：
   - 不在前端存储或回显明文 API key
   - 不把当前数据库明文保存描述为生产级密钥管理
+  - 不把模型管理能力放进设计师日常创作导航
 
 ### Decision: 任务必须拆到可单次提交完成的粒度
 - 状态：Accepted

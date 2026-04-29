@@ -73,7 +73,7 @@ npm run dev -- --host 127.0.0.1
 当前生图 provider 可以通过两种方式配置：
 
 1. 后端环境变量 `QMDH_IMAGE_PROVIDER_PROFILES_JSON`
-2. 前端“模型”后台面板写入数据库的 provider profile
+2. 管理端 `/admin/models` 写入数据库的 provider profile
 
 示例：
 
@@ -83,7 +83,15 @@ QMDH_IMAGE_PROVIDER_PROFILES_JSON=[{"provider_name":"modelscope_free_image","api
 
 建议在服务器上通过 shell 环境变量或 `.env` 文件注入，不要直接把真实 token 写进仓库。
 
-后台面板保存的配置会进入 `provider_profiles` 表，并在后端返回 provider 列表、任务创建校验和任务执行时生效。同名数据库 provider 会覆盖环境变量中的同名配置，便于运行中切换模型或 key。
+管理端保存的配置会进入 `provider_profiles` 表，并在后端返回 provider 列表、任务创建校验和任务执行时生效。同名数据库 provider 会覆盖环境变量中的同名配置，便于运行中切换模型或 key。
+
+模型与 key 管理不在设计师创作台暴露。管理人员需要直接访问：
+
+```text
+http://127.0.0.1:18080/admin/models
+```
+
+对应的 `GET/POST/PATCH/DELETE /api/v1/providers/profiles` 接口只允许 `admin`、`owner`、`ops` 角色访问。
 
 当前 MVP 只在前端脱敏展示 key，数据库内仍是明文保存。生产环境上线前需要补充密钥加密、访问审计和轮换策略。
 
@@ -108,6 +116,14 @@ QMDH_IMAGE_PROVIDER_PROFILES_JSON=[{"provider_name":"modelscope_free_image","api
 
 ```env
 QMDH_AUTH_USERS_JSON=[{"name":"reviewer","token":"dev-reviewer-token","role":"reviewer","project_codes":["QMDH-001"]}]
+```
+
+如需本地打开 `/admin/models`，需要配置一个管理角色，例如：
+
+```env
+QMDH_AUTH_USERS_JSON=[{"name":"admin","token":"dev-admin-token","role":"admin","project_codes":["*"]},{"name":"reviewer","token":"dev-reviewer-token","role":"reviewer","project_codes":["QMDH-001"]}]
+VITE_QMDH_USER=admin
+VITE_QMDH_AUTH_TOKEN=dev-admin-token
 ```
 
 前端可通过 Vite 环境变量覆盖默认开发账号：

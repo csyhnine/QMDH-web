@@ -10,6 +10,7 @@ from app.schemas import ProviderCapability, ProviderProfileCreate, ProviderProfi
 from app.services.model_registry import list_provider_capabilities
 
 router = APIRouter(prefix="/providers", tags=["providers"])
+PROVIDER_ADMIN_ROLES = {"admin", "owner", "ops"}
 
 
 @router.get("", response_model=list[ProviderCapability])
@@ -55,11 +56,17 @@ def _to_profile_out(profile: ProviderProfile) -> ProviderProfileOut:
     )
 
 
+def _require_provider_admin(auth_user: AuthUserProfile) -> None:
+    if auth_user.role not in PROVIDER_ADMIN_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Provider profile admin access required")
+
+
 @router.get("/profiles", response_model=list[ProviderProfileOut])
 def list_provider_profiles(
     db: Session = Depends(get_db),
-    _: AuthUserProfile = Depends(get_current_auth_user),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> list[ProviderProfileOut]:
+    _require_provider_admin(auth_user)
     profiles = db.scalars(select(ProviderProfile).order_by(ProviderProfile.provider_name)).all()
     return [_to_profile_out(profile) for profile in profiles]
 
@@ -68,8 +75,9 @@ def list_provider_profiles(
 def create_provider_profile(
     payload: ProviderProfileCreate,
     db: Session = Depends(get_db),
-    _: AuthUserProfile = Depends(get_current_auth_user),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> ProviderProfileOut:
+    _require_provider_admin(auth_user)
     existing = db.scalar(select(ProviderProfile).where(ProviderProfile.provider_name == payload.provider_name))
     if existing:
         raise HTTPException(status_code=409, detail="Provider profile already exists")
@@ -99,8 +107,9 @@ def update_provider_profile(
     profile_id: int,
     payload: ProviderProfileUpdate,
     db: Session = Depends(get_db),
-    _: AuthUserProfile = Depends(get_current_auth_user),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> ProviderProfileOut:
+    _require_provider_admin(auth_user)
     profile = db.get(ProviderProfile, profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Provider profile not found")
@@ -131,8 +140,9 @@ def update_provider_profile(
 def delete_provider_profile(
     profile_id: int,
     db: Session = Depends(get_db),
-    _: AuthUserProfile = Depends(get_current_auth_user),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> Response:
+    _require_provider_admin(auth_user)
     profile = db.get(ProviderProfile, profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Provider profile not found")

@@ -98,12 +98,14 @@
   - 后端新增 `provider_profiles` 数据表、CRUD 接口和脱敏 key 返回
   - `model_registry` 支持合并 `.env` provider 与数据库 provider；同名数据库配置可覆盖环境配置
   - 任务创建与执行都改为读取数据库会话下的 provider 注册表
-  - 前端新增“模型”侧栏入口，可新增、编辑、停用和删除 provider profile
+  - 模型管理已从设计师工作台侧栏拆出，独立放在 `/admin/models`
+  - Provider profile 管理接口只允许 `admin / owner / ops` 角色访问
   - 已补充后端 provider profile 单测
 - 验收标准：
   1. 前端 build 通过：已完成
   2. 后端单测通过：已完成
   3. 前端不展示明文 API key：已完成
+  4. 设计师工作台不暴露模型管理入口：已完成
 
 ### Task: [task-sec-001] 明确涉密项目的可出域边界
 - 状态：BLOCKED
@@ -117,6 +119,6 @@
 如果换账号后继续开发，建议直接从下面这条开始：
 
 1. 先稳定提交当前工作区改动
-2. 用后台“模型”面板添加更适合建筑/景观效果图的真实 provider，替换当前提示词不跟随的模型
+2. 由管理账号访问 `/admin/models` 添加更适合建筑/景观效果图的真实 provider，替换当前提示词不跟随的模型
 3. 继续 `task-001`，收口 `frontend/src/App.tsx` 的剩余表单和历史流细节
 4. 视部署目标补生产环境 token、日志与运维参数说明

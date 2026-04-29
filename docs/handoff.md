@@ -10,6 +10,51 @@
 
 ## Latest Handoffs
 
+### [2026-04-29 17:05] Session Handoff
+- 执行角色：Feature / Integration
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：Yes（本轮提交后）
+  - 是否有未提交改动：No（本轮提交后）
+  - 是否已 push：Yes（本轮提交后）
+- 本次完成：
+  - 按产品边界调整模型管理：从设计师工作台侧栏移除“模型”入口
+  - 模型与 key 管理保留为独立管理地址 `/admin/models`
+  - 设计师工作台不再主动请求 provider profile 管理接口
+  - 后端 `/api/v1/providers/profiles` CRUD 增加角色校验，仅 `admin / owner / ops` 可访问
+  - 补充 designer 访问 provider profile 返回 403 的后端单测
+  - 同步更新部署、架构、决策、任务和项目状态文档
+  - 完成验证：
+    - `python -m unittest discover -s tests` 通过
+    - `npm run build` 通过
+- 修改文件：
+  - `backend/app/routers/providers.py`
+  - `backend/tests/test_provider_profiles.py`
+  - `frontend/src/App.tsx`
+  - `frontend/src/styles.css`
+  - `docs/architecture.md`
+  - `docs/decisions.md`
+  - `docs/deployment.md`
+  - `docs/handoff.md`
+  - `docs/tasks.md`
+  - `docs/projects/QMDH-001/status.md`
+- 当前任务状态：
+  - `task-001`: IN_PROGRESS
+  - `task-002`: DONE
+  - `task-004`: DONE
+  - `task-006`: DONE
+  - `task-007`: DONE
+  - `task-sec-001`: BLOCKED
+- 风险与注意事项：
+  - `/admin/models` 仍复用当前前端应用壳，后续如管理功能继续扩大，应拆独立 admin app 或路由模块
+  - 当前 key 只是在前端脱敏，数据库仍是明文保存；生产环境需要补加密、轮换和操作审计
+  - 本地访问 `/admin/models` 需要把 `QMDH_AUTH_USERS_JSON` 与 Vite token 切到管理角色
+- 下一位 agent 的第一步：
+  - 先检查 `git status`
+  - 使用管理账号访问 `/admin/models` 添加或替换真实生图 provider
+  - 继续 `task-001` 前端收口，避免把管理能力重新混进设计师工作台
+- 是否可直接接手：Yes
+
 ### [2026-04-29 16:45] Session Handoff
 - 执行角色：Feature / Integration
 - 当前分支：`main`
@@ -127,45 +172,4 @@
 - 下一位 agent 的第一步：
   - 先检查 `git status`
   - 优先继续 `task-001` 的前端收口，或补生产部署 token / 日志 / 运维说明
-- 是否可直接接手：Yes
-
-### [2026-04-29 14:01] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes
-  - 是否已 push：No
-- 本次完成：
-  - 按 `docs/protocol.md` 完成接手核对：当前分支为 `main`，HEAD 为 `fc25205`，与 `origin/main` 对齐
-  - 继续推进 `task-001`，清理 `frontend/src/App.tsx` 遗留逻辑
-  - 删除未使用的旧热门模板数组，避免与当前“建筑/景观效果图氛围增强”模板体系混杂
-  - 清理模板保存里的 `if (false)` 死分支和旧本地兜底保存逻辑，模板保存统一依赖后端持久化接口
-  - 简化自定义模板类型和排序逻辑，去掉旧本地模板 `updatedAt` / 字符串 id 兼容分支
-  - `新对话` 重置后保持当前项目，并回到默认建筑效果图氛围增强模板
-  - 前端工作台入口收束到 `image-generate`，移除视频“待开发”展示分支和提交拦截逻辑
-  - 项目切换不再把当前模板标题改回旧式“项目名 生图方案”
-  - 移除仅剩单项的工作流选择菜单，`App.tsx` 不再把 `workflowKey` 保存在表单状态中，提交固定使用图像工作流键
-  - 完成验证：
-    - `npm run build` 通过
-- 修改文件：
-  - `frontend/src/App.tsx`
-  - `frontend/src/styles.css`
-  - `docs/tasks.md`
-  - `docs/projects/QMDH-001/status.md`
-  - `docs/handoff.md`
-- 当前任务状态：
-  - `task-001`: IN_PROGRESS
-  - `task-002`: DONE
-  - `task-004`: TODO
-  - `task-006`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - `frontend/src/App.tsx` 仍然偏大，下一步建议继续围绕表单状态、模板面板和历史流做小步清理，不要扩大到认证任务
-  - 当前用户标识仍由前端传入，属于 `task-004` 范围，尚未处理
-  - 参考图仍是“语义参考”方案，不是直接 `img2img / image.edit`
-- 下一位 agent 的第一步：
-  - 先检查 `git status`
-  - 如继续 `task-001`，优先审查 `frontend/src/App.tsx` 中表单状态和文案是否还有可删除的旧兜底分支
-  - `task-001` 收口并稳定提交后，再推进 `task-004` 最小认证与项目级访问控制
 - 是否可直接接手：Yes

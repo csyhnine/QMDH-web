@@ -35,7 +35,8 @@
 - 前端切换项目时会同步项目分级，避免提交任务沿用旧项目的 classification
 - 已补充 Docker 部署基线与部署说明
 - 已补充 Windows 本地一键开发启动脚本，可同时拉起前端与后端开发服务
-- 已新增后台“模型”管理入口，可维护 provider、model、base URL、API key、能力、启停状态和参考图模式
+- 已新增独立后台模型管理入口 `/admin/models`，可维护 provider、model、base URL、API key、能力、启停状态和参考图模式
+- 模型管理已从设计师工作台侧栏拆出，并通过 `admin / owner / ops` 角色限制访问
 - 后端 provider 注册表已支持数据库配置，任务创建和执行都会读取后台保存的真实 provider profile
 
 ## 风险与阻塞
@@ -58,6 +59,6 @@
 ## 下一步动作
 
 - 收口当前未提交改动并形成稳定提交边界
-- 在后台模型面板添加并验证更适合建筑/景观效果图的真实 provider
+- 由管理账号访问 `/admin/models` 添加并验证更适合建筑/景观效果图的真实 provider
 - 清理 `frontend/src/App.tsx` 的历史遗留逻辑和异常文案
 - 继续补部署文档中的生产环境 token、日志与运维参数说明

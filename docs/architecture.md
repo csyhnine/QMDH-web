@@ -59,7 +59,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 - 模型配置入口：
   - `backend/app/routers/providers.py`
   - `backend/app/models.py` 中的 `ProviderProfile`
-  - `frontend/src/App.tsx` 中的“模型”管理视图
+  - `frontend/src/App.tsx` 中的 `/admin/models` 管理视图
 - 项目状态入口：
   - `docs/projects/project-index.json`
   - `docs/projects/<project-code>/status.md`
@@ -216,11 +216,13 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 13. 前端定时轮询 `GET /api/v1/tasks`，后端按当前用户可访问项目过滤任务列表。
 
 ### 辅助链路：模型与 Key 管理
-1. 前端“模型”视图调用 `GET /api/v1/providers/profiles` 读取数据库 provider profile。
-2. 新增、编辑、删除通过 `POST /providers/profiles`、`PATCH /providers/profiles/{id}`、`DELETE /providers/profiles/{id}` 完成。
-3. 后端保存真实 API key，但响应只返回 `has_api_key` 与 `masked_api_key`。
-4. `/api/v1/providers` 会合并静态 provider、环境变量 provider 与已启用的数据库 provider。
-5. 任务创建与执行都使用合并后的 provider 注册表，保证后台保存后可以真实参与生成。
+1. 管理人员直接访问 `/admin/models`，设计师工作台不暴露该入口。
+2. 管理视图调用 `GET /api/v1/providers/profiles` 读取数据库 provider profile。
+3. 新增、编辑、删除通过 `POST /providers/profiles`、`PATCH /providers/profiles/{id}`、`DELETE /providers/profiles/{id}` 完成。
+4. 后端保存真实 API key，但响应只返回 `has_api_key` 与 `masked_api_key`。
+5. Provider profile 管理接口只允许 `admin / owner / ops` 角色访问。
+6. `/api/v1/providers` 会合并静态 provider、环境变量 provider 与已启用的数据库 provider。
+7. 任务创建与执行都使用合并后的 provider 注册表，保证后台保存后可以真实参与生成。
 
 ### 辅助链路：项目状态
 1. `GET /api/v1/projects` 调用 `project_status.py`

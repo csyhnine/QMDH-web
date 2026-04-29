@@ -29,6 +29,29 @@ docker compose -f docker-compose.yml up --build -d
 
 ## 本地开发端口
 
+Windows 本地开发可以直接在仓库根目录双击或执行：
+
+```powershell
+.\start-dev.cmd
+```
+
+它会分别打开后端和前端两个 cmd 窗口：
+
+- 后端：`http://127.0.0.1:18010`
+- 前端：`http://127.0.0.1:18080`
+
+也可以通过 npm 别名启动：
+
+```powershell
+npm run dev:all
+```
+
+如需只检查依赖是否准备好：
+
+```powershell
+npm run dev:check
+```
+
 Codex Desktop 和其他本地项目可能会占用常见端口，本地开发时建议把 QMDH 后端启动在 `18010`：
 
 ```powershell

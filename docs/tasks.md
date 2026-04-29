@@ -86,6 +86,7 @@
 - 完成说明：
   - 已具备 `frontend + backend + worker + postgres + redis` 的部署编排
   - 已补充 Dockerfile、Nginx 反代和部署文档
+  - 已补充 Windows 本地一键开发启动脚本 `start-dev.cmd` 和 npm 别名 `dev:all` / `dev:check`
   - 当前仍需继续补生产环境参数与运维说明
 
 ### Task: [task-sec-001] 明确涉密项目的可出域边界

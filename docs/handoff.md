@@ -10,7 +10,7 @@
 
 ## Latest Handoffs
 
-### [2026-04-29 15:21] Session Handoff
+### [2026-04-29 15:54] Session Handoff
 - 执行角色：Feature / Integration
 - 当前分支：`main`
 - 仓库状态：
@@ -30,8 +30,11 @@
   - 继续推进 `task-001`：前端数据刷新增加请求序号保护，强制刷新与轮询并发时只有最新请求可以写入状态
   - 补强 `task-004` 前端边界：项目切换、授权项目自动切换和新对话重置时同步项目分级
   - 继续推进 `task-001`：历史流区分项目无历史与筛选无结果，筛选为空时保留筛选栏
+  - 补充 Windows 本地一键开发启动脚本 `start-dev.cmd`，可同时拉起后端 `18010` 与前端 `18080`
+  - 根目录 `package.json` 新增 `dev:all` / `dev:check`，README 与部署文档已同步启动方式
   - 更新部署、架构、决策、任务和项目状态文档
   - 完成验证：
+    - `cmd /c start-dev.cmd --check` 通过
     - `python -m unittest discover -s tests` 通过
     - `npm run build` 通过
 - 修改文件：
@@ -46,6 +49,9 @@
   - `backend/tests/test_auth_boundaries.py`
   - `frontend/src/App.tsx`
   - `frontend/src/api.ts`
+  - `start-dev.cmd`
+  - `package.json`
+  - `README.md`
   - `docs/architecture.md`
   - `docs/decisions.md`
   - `docs/deployment.md`

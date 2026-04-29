@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "npm --prefix frontend run dev",
+    "dev:all": "start-dev.cmd",
+    "dev:check": "start-dev.cmd --check",
     "build": "npm --prefix frontend run build",
     "dev:frontend": "npm --prefix frontend run dev",
     "build:frontend": "npm --prefix frontend run build"

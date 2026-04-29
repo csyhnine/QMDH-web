@@ -23,6 +23,31 @@
 
 ## 启动方式
 
+### 一键本地开发（Windows）
+
+在仓库根目录双击：
+
+```text
+start-dev.cmd
+```
+
+或在 cmd / PowerShell 中执行：
+
+```bash
+npm run dev:all
+```
+
+脚本会分别打开两个窗口：
+
+- 后端：`http://127.0.0.1:18010/api/v1/health`
+- 前端：`http://127.0.0.1:18080`
+
+如果只想检查依赖是否准备好：
+
+```bash
+npm run dev:check
+```
+
 ### 后端
 
 ```bash
@@ -30,7 +55,7 @@ cd backend
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 18010 --reload
 ```
 
 ### 前端
@@ -38,10 +63,10 @@ uvicorn app.main:app --reload
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev -- --host 127.0.0.1
 ```
 
-默认地址：`http://localhost:5180`
+默认地址：`http://127.0.0.1:18080`
 
 ### Redis Worker（可选）
 

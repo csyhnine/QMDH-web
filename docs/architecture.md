@@ -204,16 +204,17 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 4. `POST /api/v1/tasks` 进入 `backend/app/routers/tasks.py`。
 5. 后端通过 `backend/app/core/auth.py` 认证 token，派生当前用户与可访问项目范围。
 6. 后端校验 workflow、provider、project、项目访问权限和 capability 兼容性。
-7. provider 列表来自静态模拟 provider、环境变量 provider 和数据库 `provider_profiles` 的合并结果；数据库同名配置优先。
-8. 后端创建 `Task`、`AuditLog`，再根据执行模式触发：
+7. provider 校验来自静态模拟 provider、环境变量 provider 和数据库 `provider_profiles` 的合并结果；数据库同名配置优先。
+8. 设计师页面使用的 `GET /api/v1/providers` 只返回真实 runtime provider，不返回静态模拟 provider。
+9. 后端创建 `Task`、`AuditLog`，再根据执行模式触发：
    - `background`：FastAPI background task
    - `sync`：同步执行
    - `redis`：入队等待 worker
-9. `task_executor.py` 根据 provider 选择真实适配器或模拟适配器，并在执行时读取数据库会话下的 provider profile。
-10. 如果任务 payload 包含参考图，并且 provider profile 使用 `reference_mode=caption_prompt`，执行层会先调用视觉语言模型读取参考图，再把参考说明拼入真实文生图 prompt。
-11. 若为图像任务，执行层会把真实返回图片或模拟预览落到 `media_root`，并将 `/media/...` 写入 `task.result.storage_path`。
-12. 任务成功后，资产物化逻辑会把 `storage_path` 沉淀为 `Asset`，供图库和任务区复用。
-13. 前端定时轮询 `GET /api/v1/tasks`，后端按当前用户可访问项目过滤任务列表。
+10. `task_executor.py` 根据 provider 选择真实适配器或模拟适配器，并在执行时读取数据库会话下的 provider profile。
+11. 如果任务 payload 包含参考图，并且 provider profile 使用 `reference_mode=caption_prompt`，执行层会先调用视觉语言模型读取参考图，再把参考说明拼入真实文生图 prompt。
+12. 若为图像任务，执行层会把真实返回图片或模拟预览落到 `media_root`，并将 `/media/...` 写入 `task.result.storage_path`。
+13. 任务成功后，资产物化逻辑会把 `storage_path` 沉淀为 `Asset`，供图库和任务区复用。
+14. 前端定时轮询 `GET /api/v1/tasks`，后端按当前用户可访问项目过滤任务列表。
 
 ### 辅助链路：模型与 Key 管理
 1. 管理人员直接访问 `/admin/models`，设计师工作台不暴露该入口。
@@ -222,7 +223,8 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 4. 后端保存真实 API key，但响应只返回 `has_api_key` 与 `masked_api_key`。
 5. Provider profile 管理接口只允许 `admin / owner / ops` 角色访问。
 6. `/api/v1/providers` 会合并静态 provider、环境变量 provider 与已启用的数据库 provider。
-7. 任务创建与执行都使用合并后的 provider 注册表，保证后台保存后可以真实参与生成。
+7. 如果存在 ModelScope profile，注册表会自动派生 `Qwen/Qwen-Image-2512`、`Tongyi-MAI/Z-Image`、`Tongyi-MAI/Z-Image-Turbo`、`FireRedTeam/FireRed-Image-Edit-1.1` 等同 token provider。
+8. 任务创建与执行都使用合并后的 provider 注册表，保证后台保存后可以真实参与生成。
 
 ### 辅助链路：项目状态
 1. `GET /api/v1/projects` 调用 `project_status.py`

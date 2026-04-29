@@ -48,6 +48,29 @@ class ProviderRegistryProfileTests(unittest.TestCase):
         self.assertEqual(profile.reference_mode, "caption_prompt")
         self.assertIn("Qwen/Qwen3-VL-8B-Instruct", profile.reference_caption_fallback_models)
 
+    def test_modelscope_profile_expands_curated_image_variants(self) -> None:
+        profiles_json = json.dumps(
+            [
+                {
+                    "provider_name": "modelscope_free_image",
+                    "api_key": "test-key",
+                    "base_url": "https://api-inference.modelscope.cn/v1",
+                    "model_name": "MAILAND/majicflus_v1",
+                }
+            ]
+        )
+
+        with patch.object(settings, "image_provider_profiles_json", profiles_json):
+            provider_map = get_provider_map(include_static=False)
+
+        self.assertEqual(provider_map["modelscope_qwen_image_2512"].model_name, "Qwen/Qwen-Image-2512")
+        self.assertEqual(provider_map["modelscope_z_image"].model_name, "Tongyi-MAI/Z-Image")
+        self.assertEqual(provider_map["modelscope_z_image_turbo"].model_name, "Tongyi-MAI/Z-Image-Turbo")
+        self.assertEqual(
+            provider_map["modelscope_firered_image_edit"].model_name,
+            "FireRedTeam/FireRed-Image-Edit-1.1",
+        )
+
     def test_list_provider_capabilities_includes_dynamic_profile(self) -> None:
         profiles_json = json.dumps(
             [

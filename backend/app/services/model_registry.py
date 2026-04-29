@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,12 +21,25 @@ class ProviderDefinition:
 
 
 STATIC_PROVIDERS: dict[str, ProviderDefinition] = {
-    "jimeng": ProviderDefinition("jimeng", "jimeng-4.0", ["image.generate", "image.edit"]),
-    "nano_banana": ProviderDefinition("nano_banana", "nano-banana-pro", ["image.generate", "image.edit"]),
-    "openai": ProviderDefinition("openai", "gpt-4.1", ["text.generate", "document.generate", "image.edit"]),
-    "anthropic": ProviderDefinition("anthropic", "claude-sonnet-4", ["text.generate", "document.generate"]),
-    "runway": ProviderDefinition("runway", "gen-4-turbo", ["video.generate"]),
+    "jimeng": ProviderDefinition("jimeng", "jimeng-4.0", ["image.generate", "image.edit"], configurable=False, outbound=False),
+    "nano_banana": ProviderDefinition(
+        "nano_banana", "nano-banana-pro", ["image.generate", "image.edit"], configurable=False, outbound=False
+    ),
+    "openai": ProviderDefinition(
+        "openai", "gpt-4.1", ["text.generate", "document.generate", "image.edit"], configurable=False, outbound=False
+    ),
+    "anthropic": ProviderDefinition(
+        "anthropic", "claude-sonnet-4", ["text.generate", "document.generate"], configurable=False, outbound=False
+    ),
+    "runway": ProviderDefinition("runway", "gen-4-turbo", ["video.generate"], configurable=False, outbound=False),
 }
+
+MODELSCOPE_IMAGE_VARIANTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("modelscope_qwen_image_2512", "Qwen/Qwen-Image-2512", ("image.generate",)),
+    ("modelscope_z_image", "Tongyi-MAI/Z-Image", ("image.generate",)),
+    ("modelscope_z_image_turbo", "Tongyi-MAI/Z-Image-Turbo", ("image.generate",)),
+    ("modelscope_firered_image_edit", "FireRedTeam/FireRed-Image-Edit-1.1", ("image.generate", "image.edit")),
+)
 
 
 def _profile_from_record(record: ProviderProfile) -> ImageProviderProfile:
@@ -51,8 +64,28 @@ def _profile_from_record(record: ProviderProfile) -> ImageProviderProfile:
     )
 
 
+def _add_modelscope_image_variants(profiles: dict[str, ImageProviderProfile]) -> dict[str, ImageProviderProfile]:
+    seed_profile = profiles.get("modelscope_free_image")
+    if seed_profile is None:
+        seed_profile = next((profile for profile in profiles.values() if "modelscope.cn" in profile.base_url), None)
+    if seed_profile is None:
+        return profiles
+
+    for provider_name, model_name, capabilities in MODELSCOPE_IMAGE_VARIANTS:
+        profiles.setdefault(
+            provider_name,
+            replace(
+                seed_profile,
+                provider_name=provider_name,
+                model_name=model_name,
+                capabilities=capabilities,
+            ),
+        )
+    return profiles
+
+
 def get_image_provider_profiles(db: Session | None = None) -> dict[str, ImageProviderProfile]:
-    profiles = settings.get_image_provider_profiles()
+    profiles = _add_modelscope_image_variants(settings.get_image_provider_profiles())
     if db is None:
         return profiles
 
@@ -70,8 +103,8 @@ def get_image_provider_profile(provider_name: str, db: Session | None = None) ->
     return profiles[provider_name]
 
 
-def get_provider_map(db: Session | None = None) -> dict[str, ProviderDefinition]:
-    providers = dict(STATIC_PROVIDERS)
+def get_provider_map(db: Session | None = None, *, include_static: bool = True) -> dict[str, ProviderDefinition]:
+    providers = dict(STATIC_PROVIDERS) if include_static else {}
     for profile in get_image_provider_profiles(db).values():
         providers[profile.provider_name] = ProviderDefinition(
             provider_name=profile.provider_name,
@@ -89,5 +122,5 @@ def get_provider_definition(provider_name: str, db: Session | None = None) -> Pr
     return get_provider_map(db)[provider_name]
 
 
-def list_provider_capabilities(db: Session | None = None) -> list[ProviderDefinition]:
-    return list(get_provider_map(db).values())
+def list_provider_capabilities(db: Session | None = None, *, include_static: bool = True) -> list[ProviderDefinition]:
+    return list(get_provider_map(db, include_static=include_static).values())

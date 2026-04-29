@@ -38,6 +38,8 @@
 - 已新增独立后台模型管理入口 `/admin/models`，可维护 provider、model、base URL、API key、能力、启停状态和参考图模式
 - 模型管理已从设计师工作台侧栏拆出，并通过 `admin / owner / ops` 角色限制访问
 - 后端 provider 注册表已支持数据库配置，任务创建和执行都会读取后台保存的真实 provider profile
+- 当存在 ModelScope token 时，设计师模型列表会自动出现 5 个真实魔搭 provider：`MAILAND/majicflus_v1`、`Qwen/Qwen-Image-2512`、`Tongyi-MAI/Z-Image`、`Tongyi-MAI/Z-Image-Turbo`、`FireRedTeam/FireRed-Image-Edit-1.1`
+- 设计师页面已不再显示 `jimeng`、`nano_banana` 等模拟 provider
 
 ## 风险与阻塞
 
@@ -46,7 +48,7 @@
 - `frontend/src/App.tsx` 还有历史重构遗留，后续需要收口清理
 - 当前热门模板已切到更贴近建筑/景观业务的方向，但模板配置仍在前端代码里，后续可考虑继续后端化
 - 当前 API key 采用数据库明文保存并在前端脱敏展示，生产环境仍需要补密钥加密、轮换和审计策略
-- 当前使用的 ModelScope 模型对建筑提示词跟随较差，需要通过后台模型配置切换到更适合建筑/景观效果图的模型
+- 新增的魔搭模型仍需逐个实测请求/返回格式和建筑提示词跟随效果；部分 API-Inference 模型可能需要专用 adapter
 
 ## 最近决策
 
@@ -59,6 +61,6 @@
 ## 下一步动作
 
 - 收口当前未提交改动并形成稳定提交边界
-- 由管理账号访问 `/admin/models` 添加并验证更适合建筑/景观效果图的真实 provider
+- 在设计师页面逐个试跑新增的魔搭图像模型，筛出最适合建筑/景观效果图的默认 provider
 - 清理 `frontend/src/App.tsx` 的历史遗留逻辑和异常文案
 - 继续补部署文档中的生产环境 token、日志与运维参数说明

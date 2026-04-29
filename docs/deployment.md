@@ -85,6 +85,14 @@ QMDH_IMAGE_PROVIDER_PROFILES_JSON=[{"provider_name":"modelscope_free_image","api
 
 管理端保存的配置会进入 `provider_profiles` 表，并在后端返回 provider 列表、任务创建校验和任务执行时生效。同名数据库 provider 会覆盖环境变量中的同名配置，便于运行中切换模型或 key。
 
+如果存在 ModelScope profile，后端会用同一个 token 自动派生一组可试图像 provider，设计师页面只显示这些真实 runtime provider，不显示 `jimeng`、`nano_banana` 等模拟项：
+
+- `modelscope_free_image`：`MAILAND/majicflus_v1`
+- `modelscope_qwen_image_2512`：`Qwen/Qwen-Image-2512`
+- `modelscope_z_image`：`Tongyi-MAI/Z-Image`
+- `modelscope_z_image_turbo`：`Tongyi-MAI/Z-Image-Turbo`
+- `modelscope_firered_image_edit`：`FireRedTeam/FireRed-Image-Edit-1.1`
+
 模型与 key 管理不在设计师创作台暴露。管理人员需要直接访问：
 
 ```text

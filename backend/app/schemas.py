@@ -80,6 +80,7 @@ class ProviderCapability(BaseModel):
     capabilities: list[str]
     configurable: bool
     outbound: bool
+    adapter_kind: str
 
 
 class ProviderProfileBase(BaseModel):

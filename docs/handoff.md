@@ -10,6 +10,57 @@
 
 ## Latest Handoffs
 
+### [2026-04-29 17:35] Session Handoff
+- 执行角色：Feature / Integration
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：Yes（本轮提交后）
+  - 是否有未提交改动：No（本轮提交后）
+  - 是否已 push：Yes（本轮提交后）
+- 本次完成：
+  - 调整设计师模型列表为“真实 runtime provider”列表，不再展示静态模拟 provider
+  - `/api/v1/providers` 改为只返回真实 provider；内部 `get_provider_map()` 仍保留静态模拟 provider 供测试/开发使用
+  - 当配置了 ModelScope token 时，自动派生 4 个新增魔搭图像模型：
+    - `Qwen/Qwen-Image-2512`
+    - `Tongyi-MAI/Z-Image`
+    - `Tongyi-MAI/Z-Image-Turbo`
+    - `FireRedTeam/FireRed-Image-Edit-1.1`
+  - 前端模型下拉按 `魔搭 / Qwen`、`魔搭 / 造相 Z`、`魔搭 / FireRed`、`魔搭 / 其他` 分组展示
+  - 设计师页不再显示 `jimeng`、`nano_banana` 这类模拟项
+  - 补充 ModelScope 派生 provider 单测
+  - 同步更新架构、任务和项目状态文档
+  - 完成验证：
+    - `python -m unittest discover -s tests` 通过
+    - `npm run build` 通过
+- 修改文件：
+  - `backend/app/routers/providers.py`
+  - `backend/app/schemas.py`
+  - `backend/app/services/model_registry.py`
+  - `backend/tests/test_model_registry_profiles.py`
+  - `frontend/src/App.tsx`
+  - `frontend/src/api.ts`
+  - `frontend/src/styles.css`
+  - `docs/architecture.md`
+  - `docs/handoff.md`
+  - `docs/tasks.md`
+  - `docs/projects/QMDH-001/status.md`
+- 当前任务状态：
+  - `task-001`: IN_PROGRESS
+  - `task-002`: DONE
+  - `task-004`: DONE
+  - `task-006`: DONE
+  - `task-007`: DONE
+  - `task-sec-001`: BLOCKED
+- 风险与注意事项：
+  - 新增的魔搭 API-Inference 模型虽然会出现在列表中，但仍需逐个实测请求/返回格式；不兼容 OpenAI image generation 格式的模型需要专用 adapter
+  - 当前默认 provider 仍偏向 `modelscope_free_image`，后续应根据实测结果调整默认模型
+  - 如果没有配置 ModelScope token，设计师模型列表会为空
+- 下一位 agent 的第一步：
+  - 先检查 `git status`
+  - 用设计师页面逐个试跑新增的魔搭模型，记录哪些模型能直接生成、哪些需要 adapter
+  - 根据实测把默认 provider 切到建筑/景观效果图表现最稳定的模型
+- 是否可直接接手：Yes
+
 ### [2026-04-29 17:05] Session Handoff
 - 执行角色：Feature / Integration
 - 当前分支：`main`
@@ -108,68 +159,4 @@
   - 先检查 `git status`
   - 启动本地前后端后进入侧栏“模型”，添加或替换真实生图 provider
   - 继续 `task-001` 前端收口，或补 provider profile 的密钥安全策略
-- 是否可直接接手：Yes
-
-### [2026-04-29 15:54] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：Yes（本轮提交后）
-  - 是否有未提交改动：No（本轮提交后）
-  - 是否已 push：No
-- 本次完成：
-  - 完成并提交 `task-001` 的一轮前端收口：提交 `7dd6782 refactor(task-001): focus image studio workflow`
-  - 推进并完成 `task-004` 最小认证与项目级访问控制
-  - 新增 `backend/app/core/auth.py`，通过 `X-QMDH-Auth` / `X-QMDH-User` 和 `QMDH_AUTH_USERS_JSON` 派生可信用户、角色与可访问项目
-  - 任务、模板、项目和资产接口接入认证依赖；任务和模板不再信任前端 payload / query 中的 `user_name`
-  - 前端 `api.ts` 统一附带 MVP 认证头，任务与模板创建请求移除 `user_name`
-  - 项目、任务和资产列表按 `project_codes` 做最小过滤，越权项目访问返回 `403`
-  - 继续推进 `task-001`：任务提交成功后强制刷新历史流，并重置最新任务定位标记，避免刷新被后台轮询跳过
-  - 继续推进 `task-001`：参考图上传结束或校验失败后重置隐藏 file input，允许同一文件重复选择重新上传
-  - 补强 `task-004` 前端边界：认证后的可见项目列表不包含当前默认项目时，自动切到首个可访问项目
-  - 继续推进 `task-001`：前端数据刷新增加请求序号保护，强制刷新与轮询并发时只有最新请求可以写入状态
-  - 补强 `task-004` 前端边界：项目切换、授权项目自动切换和新对话重置时同步项目分级
-  - 继续推进 `task-001`：历史流区分项目无历史与筛选无结果，筛选为空时保留筛选栏
-  - 补充 Windows 本地一键开发启动脚本 `start-dev.cmd`，可同时拉起后端 `18010` 与前端 `18080`
-  - 根目录 `package.json` 新增 `dev:all` / `dev:check`，README 与部署文档已同步启动方式
-  - 更新部署、架构、决策、任务和项目状态文档
-  - 完成验证：
-    - `cmd /c start-dev.cmd --check` 通过
-    - `python -m unittest discover -s tests` 通过
-    - `npm run build` 通过
-- 修改文件：
-  - `backend/.env.example`
-  - `backend/app/core/auth.py`
-  - `backend/app/core/config.py`
-  - `backend/app/routers/assets.py`
-  - `backend/app/routers/projects.py`
-  - `backend/app/routers/prompt_templates.py`
-  - `backend/app/routers/tasks.py`
-  - `backend/app/schemas.py`
-  - `backend/tests/test_auth_boundaries.py`
-  - `frontend/src/App.tsx`
-  - `frontend/src/api.ts`
-  - `start-dev.cmd`
-  - `package.json`
-  - `README.md`
-  - `docs/architecture.md`
-  - `docs/decisions.md`
-  - `docs/deployment.md`
-  - `docs/handoff.md`
-  - `docs/tasks.md`
-  - `docs/projects/QMDH-001/status.md`
-- 当前任务状态：
-  - `task-001`: IN_PROGRESS
-  - `task-002`: DONE
-  - `task-004`: DONE
-  - `task-006`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - 当前认证是 MVP 配置型 token，不是完整账号、密码、会话或 SSO 体系；生产环境必须替换默认 token
-  - 前端默认开发 token 写在 Vite 默认值里，仅用于本地开发
-  - `frontend/src/App.tsx` 仍偏大，后续可继续按小单元收口
-  - `task-sec-001` 仍被 `QMDH-SEC` 数据分级与模型使用规则阻塞
-- 下一位 agent 的第一步：
-  - 先检查 `git status`
-  - 优先继续 `task-001` 的前端收口，或补生产部署 token / 日志 / 运维说明
 - 是否可直接接手：Yes

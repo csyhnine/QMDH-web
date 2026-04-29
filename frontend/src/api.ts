@@ -46,6 +46,7 @@ export type Provider = {
   capabilities: string[];
   configurable: boolean;
   outbound: boolean;
+  adapter_kind: string;
 };
 
 export type ProviderProfileRecord = {

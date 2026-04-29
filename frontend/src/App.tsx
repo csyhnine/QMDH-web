@@ -364,6 +364,27 @@ function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileC
   };
 }
 
+function providerGroupLabel(provider: Provider): string {
+  const name = `${provider.provider_name} ${provider.model_name}`.toLowerCase();
+  if (name.includes("firered")) return "魔搭 / FireRed";
+  if (name.includes("z_image") || name.includes("z-image")) return "魔搭 / 造相 Z";
+  if (name.includes("qwen")) return "魔搭 / Qwen";
+  if (name.includes("modelscope")) return "魔搭 / 其他";
+  return "其他真实模型";
+}
+
+function groupProviders(providers: Provider[]): Array<{ label: string; providers: Provider[] }> {
+  const groups = new Map<string, Provider[]>();
+  for (const provider of providers) {
+    const label = providerGroupLabel(provider);
+    groups.set(label, [...(groups.get(label) ?? []), provider]);
+  }
+  return Array.from(groups.entries()).map(([label, groupedProviders]) => ({
+    label,
+    providers: groupedProviders
+  }));
+}
+
 function AssetTile(props: { asset: Asset; emphasis?: "primary" | "secondary" }) {
   const renderableUrl = getRenderableUrl(props.asset);
 
@@ -566,8 +587,11 @@ export default function App() {
   const selectedWorkflow = state.workflows.find((workflow) => workflow.key === IMAGE_WORKFLOW_KEY);
 
   const availableProviders = state.providers.filter((provider) =>
-    selectedWorkflow ? provider.capabilities.includes(selectedWorkflow.provider_capability) : false
+    selectedWorkflow
+      ? provider.outbound && provider.adapter_kind !== "simulated" && provider.capabilities.includes(selectedWorkflow.provider_capability)
+      : false
   );
+  const providerGroups = groupProviders(availableProviders);
 
   const activeProject = state.projects.find((project) => project.code === studioForm.projectCode);
   const workspaceName = activeProject?.name ?? "默认创作";
@@ -1528,22 +1552,27 @@ export default function App() {
                 {selectedProvider?.model_name ?? "选择模型"}
               </button>
               {activeComposerMenu === "provider" ? (
-                <div className="composer-menu-panel composer-menu-panel-list">
-                  {availableProviders.map((provider) => (
-                    <button
-                      key={provider.provider_name}
-                      type="button"
-                      className={
-                        studioForm.requestedProvider === provider.provider_name ? "composer-choice-item is-active" : "composer-choice-item"
-                      }
-                      onClick={() => {
-                        setStudioForm((current) => ({ ...current, requestedProvider: provider.provider_name }));
-                        setActiveComposerMenu(null);
-                      }}
-                    >
-                      <strong>{provider.model_name}</strong>
-                      <span>{provider.provider_name}</span>
-                    </button>
+                <div className="composer-menu-panel composer-menu-panel-list composer-menu-panel-provider">
+                  {providerGroups.map((group) => (
+                    <div key={group.label} className="provider-choice-group">
+                      <span className="provider-choice-group-title">{group.label}</span>
+                      {group.providers.map((provider) => (
+                        <button
+                          key={provider.provider_name}
+                          type="button"
+                          className={
+                            studioForm.requestedProvider === provider.provider_name ? "composer-choice-item is-active" : "composer-choice-item"
+                          }
+                          onClick={() => {
+                            setStudioForm((current) => ({ ...current, requestedProvider: provider.provider_name }));
+                            setActiveComposerMenu(null);
+                          }}
+                        >
+                          <strong>{provider.model_name}</strong>
+                          <span>{provider.provider_name}</span>
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
               ) : null}

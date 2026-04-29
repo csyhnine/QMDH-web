@@ -898,6 +898,10 @@ button {
   width: min(280px, 82vw);
 }
 
+.composer-menu-panel-provider {
+  width: min(380px, 88vw);
+}
+
 .composer-menu-panel-display {
   width: min(360px, 88vw);
 }
@@ -958,6 +962,24 @@ button {
 .composer-choice-item.is-active {
   border-color: rgba(37, 99, 235, 0.2);
   background: rgba(37, 99, 235, 0.08);
+}
+
+.provider-choice-group {
+  display: grid;
+  gap: 8px;
+}
+
+.provider-choice-group + .provider-choice-group {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.provider-choice-group-title {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .composer-chip-grid {

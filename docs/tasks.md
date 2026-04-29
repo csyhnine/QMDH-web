@@ -97,6 +97,8 @@
 - 完成说明：
   - 后端新增 `provider_profiles` 数据表、CRUD 接口和脱敏 key 返回
   - `model_registry` 支持合并 `.env` provider 与数据库 provider；同名数据库配置可覆盖环境配置
+  - 当配置了 ModelScope token 时，后端会自动派生 `Qwen/Qwen-Image-2512`、`Tongyi-MAI/Z-Image`、`Tongyi-MAI/Z-Image-Turbo`、`FireRedTeam/FireRed-Image-Edit-1.1` 四个可试 provider
+  - 设计师页面的模型列表只读取真实 runtime provider，不再显示 `jimeng`、`nano_banana` 等模拟占位项
   - 任务创建与执行都改为读取数据库会话下的 provider 注册表
   - 模型管理已从设计师工作台侧栏拆出，独立放在 `/admin/models`
   - Provider profile 管理接口只允许 `admin / owner / ops` 角色访问
@@ -106,6 +108,7 @@
   2. 后端单测通过：已完成
   3. 前端不展示明文 API key：已完成
   4. 设计师工作台不暴露模型管理入口：已完成
+  5. 设计师模型列表不显示模拟 provider：已完成
 
 ### Task: [task-sec-001] 明确涉密项目的可出域边界
 - 状态：BLOCKED
@@ -119,6 +122,6 @@
 如果换账号后继续开发，建议直接从下面这条开始：
 
 1. 先稳定提交当前工作区改动
-2. 由管理账号访问 `/admin/models` 添加更适合建筑/景观效果图的真实 provider，替换当前提示词不跟随的模型
+2. 在设计师页面逐个试跑新增的魔搭图像模型，筛出最适合建筑/景观效果图的默认 provider
 3. 继续 `task-001`，收口 `frontend/src/App.tsx` 的剩余表单和历史流细节
 4. 视部署目标补生产环境 token、日志与运维参数说明

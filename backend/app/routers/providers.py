@@ -22,8 +22,9 @@ def get_providers(db: Session = Depends(get_db)) -> list[ProviderCapability]:
             capabilities=item.capabilities,
             configurable=item.configurable,
             outbound=item.outbound,
+            adapter_kind=item.adapter_kind,
         )
-        for item in list_provider_capabilities(db)
+        for item in list_provider_capabilities(db, include_static=False)
     ]
 
 

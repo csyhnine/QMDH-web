@@ -530,8 +530,9 @@ export default function App() {
           new Date(task.created_at).getTime() > new Date(currentLatest.created_at).getTime() ? task : currentLatest
         )
       : null;
-  const hasHistory = filteredTasks.length > 0;
-  const showCenteredComposer = !hasHistory;
+  const hasProjectHistory = imageTasks.length > 0;
+  const hasFilteredHistory = filteredTasks.length > 0;
+  const showCenteredComposer = !hasProjectHistory;
   const activeTemplate =
     [...featuredAtmosphereTemplates, ...customTemplates].find(
       (template) => template.title === studioForm.title && template.prompt === studioForm.prompt
@@ -568,13 +569,13 @@ export default function App() {
   }, [studioForm.projectCode]);
 
   useEffect(() => {
-    if (!state.ready || !hasHistory || hasAutoPositionedRef.current) return;
+    if (!state.ready || !hasFilteredHistory || hasAutoPositionedRef.current) return;
 
     window.requestAnimationFrame(() => {
       latestTaskRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
       hasAutoPositionedRef.current = true;
     });
-  }, [state.ready, hasHistory, latestTask?.id]);
+  }, [state.ready, hasFilteredHistory, latestTask?.id]);
 
   function syncTemplateDraftWithCurrentForm() {
     setTemplateDraftLabel(activeTemplate?.label ?? "");
@@ -926,7 +927,7 @@ export default function App() {
       </aside>
 
       <main className={showCenteredComposer ? "canvas-area canvas-area-empty" : "canvas-area"}>
-        {hasHistory ? (
+        {hasProjectHistory ? (
           <header className="canvas-topbar canvas-topbar-history">
             <div className="toolbar-row">
               <label className="toolbar-field">
@@ -972,26 +973,36 @@ export default function App() {
 
         {state.error ? <div className="floating-error">{state.error}</div> : null}
 
-        {hasHistory ? (
+        {hasProjectHistory ? (
           <section className="feed-stream">
-            {filteredTasks.map((task) => {
-              const galleryAssets = buildGalleryAssets(imageAssetsByTaskId.get(task.id) ?? []);
-              const linkedAsset = galleryAssets[0];
-              const isLatestTask = task.id === latestTask?.id;
+            {hasFilteredHistory ? (
+              filteredTasks.map((task) => {
+                const galleryAssets = buildGalleryAssets(imageAssetsByTaskId.get(task.id) ?? []);
+                const linkedAsset = galleryAssets[0];
+                const isLatestTask = task.id === latestTask?.id;
 
-              return (
-                <FeedCard
-                  key={task.id}
-                  task={task}
-                  asset={linkedAsset}
-                  galleryAssets={galleryAssets}
-                  onReuse={() => handleReuseTask(task, linkedAsset ?? galleryAssets[0])}
-                  onLike={() => (linkedAsset ? void handleGalleryAction("like", linkedAsset.id) : undefined)}
-                  onShare={() => (linkedAsset ? void handleGalleryAction("share", linkedAsset.id) : undefined)}
-                  anchorRef={isLatestTask ? latestTaskRef : undefined}
-                />
-              );
-            })}
+                return (
+                  <FeedCard
+                    key={task.id}
+                    task={task}
+                    asset={linkedAsset}
+                    galleryAssets={galleryAssets}
+                    onReuse={() => handleReuseTask(task, linkedAsset ?? galleryAssets[0])}
+                    onLike={() => (linkedAsset ? void handleGalleryAction("like", linkedAsset.id) : undefined)}
+                    onShare={() => (linkedAsset ? void handleGalleryAction("share", linkedAsset.id) : undefined)}
+                    anchorRef={isLatestTask ? latestTaskRef : undefined}
+                  />
+                );
+              })
+            ) : (
+              <section className="empty-stage empty-stage-filtered">
+                <div className="empty-stage-copy">
+                  <p className="canvas-kicker">QMDH / IMAGE STUDIO</p>
+                  <h1>没有匹配的生成记录</h1>
+                  <p>调整时间、模型或状态筛选后，可以继续查看这个项目的历史任务。</p>
+                </div>
+              </section>
+            )}
           </section>
         ) : (
           <section className="empty-stage">

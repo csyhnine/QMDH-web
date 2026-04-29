@@ -6,6 +6,8 @@ import {
   type Project,
   type PromptTemplateRecord,
   type Provider,
+  type ProviderProfileCreatePayload,
+  type ProviderProfileRecord,
   type Task,
   type Workflow
 } from "./api";
@@ -14,6 +16,7 @@ type LoadState = {
   health: string;
   projects: Project[];
   providers: Provider[];
+  providerProfiles: ProviderProfileRecord[];
   workflows: Workflow[];
   tasks: Task[];
   assets: Asset[];
@@ -62,6 +65,21 @@ type FeedFilterState = {
 };
 
 type ComposerMenuKey = "template" | "provider" | "display" | "count" | null;
+type ActiveView = "studio" | "models";
+
+type ProviderProfileDraft = {
+  providerName: string;
+  apiKey: string;
+  baseUrl: string;
+  modelName: string;
+  capabilities: string;
+  quality: string;
+  outputFormat: string;
+  timeoutSeconds: number;
+  enabled: boolean;
+  referenceMode: string;
+  referenceCaptionModel: string;
+};
 
 const IMAGE_WORKFLOW_KEY = "image-generate";
 
@@ -69,11 +87,26 @@ const initialState: LoadState = {
   health: "loading",
   projects: [],
   providers: [],
+  providerProfiles: [],
   workflows: [],
   tasks: [],
   assets: [],
   error: "",
   ready: false
+};
+
+const defaultProviderProfileDraft: ProviderProfileDraft = {
+  providerName: "",
+  apiKey: "",
+  baseUrl: "",
+  modelName: "",
+  capabilities: "image.generate",
+  quality: "medium",
+  outputFormat: "png",
+  timeoutSeconds: 90,
+  enabled: true,
+  referenceMode: "disabled",
+  referenceCaptionModel: ""
 };
 
 const stylePresets = [
@@ -291,6 +324,46 @@ function inferRequestedImageCount(task: Task): number {
   return clampImageCount(requestedCount);
 }
 
+function parseCapabilities(value: string): string[] {
+  return value
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfileDraft {
+  return {
+    providerName: profile.provider_name,
+    apiKey: "",
+    baseUrl: profile.base_url,
+    modelName: profile.model_name,
+    capabilities: profile.capabilities.join(", "),
+    quality: profile.quality,
+    outputFormat: profile.output_format,
+    timeoutSeconds: profile.timeout_seconds,
+    enabled: profile.enabled,
+    referenceMode: profile.reference_mode,
+    referenceCaptionModel: profile.reference_caption_model ?? ""
+  };
+}
+
+function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileCreatePayload {
+  return {
+    provider_name: draft.providerName.trim(),
+    api_key: draft.apiKey.trim(),
+    base_url: draft.baseUrl.trim(),
+    model_name: draft.modelName.trim(),
+    adapter_kind: "openai_compatible",
+    capabilities: parseCapabilities(draft.capabilities),
+    quality: draft.quality.trim() || "medium",
+    output_format: draft.outputFormat.trim() || "png",
+    timeout_seconds: Number(draft.timeoutSeconds) || 90,
+    enabled: draft.enabled,
+    reference_mode: draft.referenceMode.trim() || "disabled",
+    reference_caption_model: draft.referenceCaptionModel.trim() || null
+  };
+}
+
 function AssetTile(props: { asset: Asset; emphasis?: "primary" | "secondary" }) {
   const renderableUrl = getRenderableUrl(props.asset);
 
@@ -386,6 +459,7 @@ export default function App() {
     provider: "all"
   });
   const [submitting, setSubmitting] = useState(false);
+  const [activeView, setActiveView] = useState<ActiveView>("studio");
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [activeComposerMenu, setActiveComposerMenu] = useState<ComposerMenuKey>(null);
   const [referencePreviewUrl, setReferencePreviewUrl] = useState<string | null>(null);
@@ -395,6 +469,9 @@ export default function App() {
   const [templateDraftLabel, setTemplateDraftLabel] = useState("");
   const [templateDraftTitle, setTemplateDraftTitle] = useState("");
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
+  const [providerDraft, setProviderDraft] = useState<ProviderProfileDraft>(defaultProviderProfileDraft);
+  const [editingProviderProfileId, setEditingProviderProfileId] = useState<number | null>(null);
+  const [savingProviderProfile, setSavingProviderProfile] = useState(false);
   const isFetchingRef = useRef(false);
   const loadRequestIdRef = useRef(0);
   const composerToolbarRef = useRef<HTMLDivElement | null>(null);
@@ -409,10 +486,11 @@ export default function App() {
     loadRequestIdRef.current = requestId;
 
     try {
-      const [health, projects, providers, workflows, tasks, assets, templates] = await Promise.all([
+      const [health, projects, providers, providerProfiles, workflows, tasks, assets, templates] = await Promise.all([
         api.health(),
         api.projects(),
         api.providers(),
+        api.providerProfiles().catch(() => []),
         api.workflows(),
         api.tasks(),
         api.assets(),
@@ -425,6 +503,7 @@ export default function App() {
         health: health.status,
         projects,
         providers,
+        providerProfiles,
         workflows,
         tasks,
         assets,
@@ -821,6 +900,98 @@ export default function App() {
     }
   }
 
+  function resetProviderProfileDraft() {
+    setEditingProviderProfileId(null);
+    setProviderDraft(defaultProviderProfileDraft);
+  }
+
+  function handleEditProviderProfile(profile: ProviderProfileRecord) {
+    setEditingProviderProfileId(profile.id);
+    setProviderDraft(toProviderProfileDraft(profile));
+  }
+
+  async function handleSaveProviderProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const payload = toProviderProfilePayload(providerDraft);
+
+    if (!payload.provider_name || !payload.base_url || !payload.model_name) {
+      setState((current) => ({
+        ...current,
+        error: "请填写 provider 名称、base URL 和模型名称"
+      }));
+      return;
+    }
+
+    if (payload.capabilities.length === 0) {
+      setState((current) => ({
+        ...current,
+        error: "请至少填写一个模型能力，例如 image.generate"
+      }));
+      return;
+    }
+
+    if (editingProviderProfileId === null && !payload.api_key) {
+      setState((current) => ({
+        ...current,
+        error: "新增模型配置需要填写 API Key"
+      }));
+      return;
+    }
+
+    setSavingProviderProfile(true);
+    try {
+      if (editingProviderProfileId === null) {
+        await api.createProviderProfile(payload);
+      } else {
+        await api.updateProviderProfile(editingProviderProfileId, {
+          base_url: payload.base_url,
+          model_name: payload.model_name,
+          adapter_kind: payload.adapter_kind,
+          capabilities: payload.capabilities,
+          quality: payload.quality,
+          output_format: payload.output_format,
+          timeout_seconds: payload.timeout_seconds,
+          enabled: payload.enabled,
+          reference_mode: payload.reference_mode,
+          reference_caption_model: payload.reference_caption_model,
+          ...(payload.api_key ? { api_key: payload.api_key } : {})
+        });
+      }
+      resetProviderProfileDraft();
+      await loadData({ force: true });
+      setState((current) => ({
+        ...current,
+        error: ""
+      }));
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : "保存模型配置失败"
+      }));
+    } finally {
+      setSavingProviderProfile(false);
+    }
+  }
+
+  async function handleDeleteProviderProfile(profileId: number) {
+    try {
+      await api.deleteProviderProfile(profileId);
+      if (editingProviderProfileId === profileId) {
+        resetProviderProfileDraft();
+      }
+      await loadData({ force: true });
+      setState((current) => ({
+        ...current,
+        error: ""
+      }));
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : "删除模型配置失败"
+      }));
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setActiveComposerMenu(null);
@@ -880,11 +1051,19 @@ export default function App() {
           <button type="button" className="rail-item">
             <span>灵感</span>
           </button>
-          <button type="button" className="rail-item active">
+          <button
+            type="button"
+            className={activeView === "studio" ? "rail-item active" : "rail-item"}
+            onClick={() => setActiveView("studio")}
+          >
             <span>生成</span>
           </button>
-          <button type="button" className="rail-item">
-            <span>资产</span>
+          <button
+            type="button"
+            className={activeView === "models" ? "rail-item active" : "rail-item"}
+            onClick={() => setActiveView("models")}
+          >
+            <span>模型</span>
           </button>
           <button type="button" className="rail-item">
             <span>画布</span>
@@ -926,7 +1105,181 @@ export default function App() {
         </div>
       </aside>
 
-      <main className={showCenteredComposer ? "canvas-area canvas-area-empty" : "canvas-area"}>
+      <main className={activeView === "models" ? "canvas-area model-admin-area" : showCenteredComposer ? "canvas-area canvas-area-empty" : "canvas-area"}>
+        {activeView === "models" ? (
+          <section className="model-admin">
+            <header className="canvas-title model-admin-head">
+              <p className="canvas-kicker">QMDH / MODEL ADMIN</p>
+              <h1>模型与 Key 管理</h1>
+              <p>管理可用于图像生成的 OpenAI-compatible 模型配置。Key 只会在后端保存，前端只显示脱敏结果。</p>
+            </header>
+
+            {state.error ? <div className="floating-error">{state.error}</div> : null}
+
+            <div className="model-admin-layout">
+              <form className="model-profile-form" onSubmit={handleSaveProviderProfile}>
+                <div className="template-section-head">
+                  <strong>{editingProviderProfileId === null ? "新增模型配置" : "编辑模型配置"}</strong>
+                  <span>保存后会立即进入生成模型列表，停用后不会再参与任务选择。</span>
+                </div>
+
+                <div className="model-form-grid">
+                  <label className="composer-menu-field">
+                    <span>Provider</span>
+                    <input
+                      value={providerDraft.providerName}
+                      disabled={editingProviderProfileId !== null}
+                      onChange={(event) => setProviderDraft((current) => ({ ...current, providerName: event.target.value }))}
+                      placeholder="modelscope_arch"
+                    />
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>Model</span>
+                    <input
+                      value={providerDraft.modelName}
+                      onChange={(event) => setProviderDraft((current) => ({ ...current, modelName: event.target.value }))}
+                      placeholder="Qwen/Qwen-Image"
+                    />
+                  </label>
+                  <label className="composer-menu-field composer-menu-field-full">
+                    <span>Base URL</span>
+                    <input
+                      value={providerDraft.baseUrl}
+                      onChange={(event) => setProviderDraft((current) => ({ ...current, baseUrl: event.target.value }))}
+                      placeholder="https://api-inference.modelscope.cn/v1"
+                    />
+                  </label>
+                  <label className="composer-menu-field composer-menu-field-full">
+                    <span>API Key</span>
+                    <input
+                      type="password"
+                      value={providerDraft.apiKey}
+                      onChange={(event) => setProviderDraft((current) => ({ ...current, apiKey: event.target.value }))}
+                      placeholder={editingProviderProfileId === null ? "新增时必填" : "留空则保留已保存 key"}
+                    />
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>Capabilities</span>
+                    <input
+                      value={providerDraft.capabilities}
+                      onChange={(event) => setProviderDraft((current) => ({ ...current, capabilities: event.target.value }))}
+                      placeholder="image.generate"
+                    />
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>Quality</span>
+                    <input
+                      value={providerDraft.quality}
+                      onChange={(event) => setProviderDraft((current) => ({ ...current, quality: event.target.value }))}
+                      placeholder="medium"
+                    />
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>Format</span>
+                    <select
+                      value={providerDraft.outputFormat}
+                      onChange={(event) => setProviderDraft((current) => ({ ...current, outputFormat: event.target.value }))}
+                    >
+                      <option value="png">png</option>
+                      <option value="jpeg">jpeg</option>
+                      <option value="webp">webp</option>
+                    </select>
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>Timeout</span>
+                    <input
+                      type="number"
+                      min="10"
+                      value={providerDraft.timeoutSeconds}
+                      onChange={(event) =>
+                        setProviderDraft((current) => ({ ...current, timeoutSeconds: Number(event.target.value) || 90 }))
+                      }
+                    />
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>Reference</span>
+                    <select
+                      value={providerDraft.referenceMode}
+                      onChange={(event) => setProviderDraft((current) => ({ ...current, referenceMode: event.target.value }))}
+                    >
+                      <option value="disabled">disabled</option>
+                      <option value="caption_prompt">caption_prompt</option>
+                    </select>
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>Caption Model</span>
+                    <input
+                      value={providerDraft.referenceCaptionModel}
+                      onChange={(event) =>
+                        setProviderDraft((current) => ({ ...current, referenceCaptionModel: event.target.value }))
+                      }
+                      placeholder="Qwen/Qwen3-VL-8B-Instruct"
+                    />
+                  </label>
+                </div>
+
+                <label className="model-toggle">
+                  <input
+                    type="checkbox"
+                    checked={providerDraft.enabled}
+                    onChange={(event) => setProviderDraft((current) => ({ ...current, enabled: event.target.checked }))}
+                  />
+                  <span>启用这个模型配置</span>
+                </label>
+
+                <div className="template-editor-actions">
+                  <button type="submit" className="submit-button" disabled={savingProviderProfile}>
+                    {savingProviderProfile ? "保存中..." : editingProviderProfileId === null ? "保存配置" : "更新配置"}
+                  </button>
+                  {editingProviderProfileId !== null ? (
+                    <button type="button" className="ghost-button" onClick={resetProviderProfileDraft}>
+                      取消编辑
+                    </button>
+                  ) : null}
+                </div>
+              </form>
+
+              <section className="model-profile-list">
+                <div className="template-section-head">
+                  <strong>已保存配置</strong>
+                  <span>{state.providerProfiles.length} 条后台配置，当前运行时共 {state.providers.length} 个 provider。</span>
+                </div>
+                {state.providerProfiles.length > 0 ? (
+                  state.providerProfiles.map((profile) => (
+                    <article key={profile.id} className="model-profile-card">
+                      <div>
+                        <div className="feed-card-topline">
+                          <strong>{profile.provider_name}</strong>
+                          <span className={`status-pill ${profile.enabled ? "status-completed" : "status-failed"}`}>
+                            {profile.enabled ? "enabled" : "disabled"}
+                          </span>
+                        </div>
+                        <p>{profile.model_name}</p>
+                        <div className="feed-card-meta">
+                          <span>{profile.capabilities.join(", ")}</span>
+                          <span>{profile.masked_api_key || "no key"}</span>
+                          <span>{profile.reference_mode}</span>
+                        </div>
+                      </div>
+                      <div className="model-profile-url">{profile.base_url}</div>
+                      <div className="template-card-actions">
+                        <button type="button" className="template-action-button" onClick={() => handleEditProviderProfile(profile)}>
+                          编辑
+                        </button>
+                        <button type="button" className="template-action-button" onClick={() => handleDeleteProviderProfile(profile.id)}>
+                          删除
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="template-empty">还没有后台模型配置；当前仍会读取 .env 中的 provider。</div>
+                )}
+              </section>
+            </div>
+          </section>
+        ) : (
+          <>
         {hasProjectHistory ? (
           <header className="canvas-topbar canvas-topbar-history">
             <div className="toolbar-row">
@@ -1285,6 +1638,8 @@ export default function App() {
             </div>
           </div>
         </form>
+          </>
+        )}
       </main>
     </div>
   );

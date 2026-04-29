@@ -70,7 +70,10 @@ npm run dev -- --host 127.0.0.1
 
 ## 生图模型配置
 
-当前生图依赖后端环境变量 `QMDH_IMAGE_PROVIDER_PROFILES_JSON`。
+当前生图 provider 可以通过两种方式配置：
+
+1. 后端环境变量 `QMDH_IMAGE_PROVIDER_PROFILES_JSON`
+2. 前端“模型”后台面板写入数据库的 provider profile
 
 示例：
 
@@ -79,6 +82,10 @@ QMDH_IMAGE_PROVIDER_PROFILES_JSON=[{"provider_name":"modelscope_free_image","api
 ```
 
 建议在服务器上通过 shell 环境变量或 `.env` 文件注入，不要直接把真实 token 写进仓库。
+
+后台面板保存的配置会进入 `provider_profiles` 表，并在后端返回 provider 列表、任务创建校验和任务执行时生效。同名数据库 provider 会覆盖环境变量中的同名配置，便于运行中切换模型或 key。
+
+当前 MVP 只在前端脱敏展示 key，数据库内仍是明文保存。生产环境上线前需要补充密钥加密、访问审计和轮换策略。
 
 如果上传了参考图，`reference_mode=caption_prompt` 会让后端先调用视觉语言模型读取参考图，再把参考说明拼入文生图 prompt。这个方案能让参考图真实影响结果，但它不是直接的 `img2img / image.edit`，后续如果接入支持图生图的模型，需要再补专用 adapter。
 
@@ -118,9 +125,11 @@ VITE_QMDH_AUTH_TOKEN=dev-reviewer-token
 - 生成历史流展示
 - 自定义提示词后端持久化
 - 参考图真实上传并保存到后端媒体目录
+- 模型与 API key 后台配置入口
 
 ## 下一步建议
 
 - 为后端补生产级日志方案和反向代理配置
+- 为 provider profile 增加密钥加密、轮换和操作审计
 - 将热门提示词也改成后端可配置
 - 为参考图和生成图补清理策略与容量监控

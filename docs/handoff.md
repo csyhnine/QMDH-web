@@ -10,6 +10,61 @@
 
 ## Latest Handoffs
 
+### [2026-04-29 16:45] Session Handoff
+- 执行角色：Feature / Integration
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：Yes（本轮提交后）
+  - 是否有未提交改动：No（本轮提交后）
+  - 是否已 push：Yes（本轮提交后）
+- 本次完成：
+  - 新增后台“模型”管理入口，前端侧栏可进入模型配置页
+  - 后端新增 `provider_profiles` 表，用于保存 provider、model、base URL、API key、capability、启停状态和参考图模式
+  - 新增 `/api/v1/providers/profiles` CRUD 接口，前端只接收 `has_api_key` 与 `masked_api_key`，不回显明文 key
+  - `model_registry` 支持合并静态 provider、环境变量 provider 和数据库 provider，同名数据库配置优先
+  - 任务创建校验和任务执行都改为读取数据库会话下的 provider 注册表，后台保存后可真实用于生成
+  - 前端 `api.ts` 增加 provider profile 类型和接口封装
+  - 前端 `App.tsx` 增加 provider profile 新增、编辑、停用、删除表单和列表
+  - 补充 provider profile 后端单测
+  - 更新部署、架构、决策、任务和项目状态文档
+  - 完成验证：
+    - `python -m unittest discover -s tests` 通过
+    - `npm run build` 通过
+- 修改文件：
+  - `backend/app/models.py`
+  - `backend/app/routers/providers.py`
+  - `backend/app/routers/tasks.py`
+  - `backend/app/schemas.py`
+  - `backend/app/services/model_registry.py`
+  - `backend/app/services/task_executor.py`
+  - `backend/tests/test_provider_profiles.py`
+  - `frontend/src/App.tsx`
+  - `frontend/src/api.ts`
+  - `frontend/src/styles.css`
+  - `docs/architecture.md`
+  - `docs/decisions.md`
+  - `docs/deployment.md`
+  - `docs/handoff.md`
+  - `docs/tasks.md`
+  - `docs/projects/QMDH-001/status.md`
+- 当前任务状态：
+  - `task-001`: IN_PROGRESS
+  - `task-002`: DONE
+  - `task-004`: DONE
+  - `task-006`: DONE
+  - `task-007`: DONE
+  - `task-sec-001`: BLOCKED
+- 风险与注意事项：
+  - 当前 key 只是在前端脱敏，数据库仍是明文保存；生产环境需要补加密、轮换和操作审计
+  - 后台面板可以管理 provider，但还没有角色级后台权限隔离；当前依赖 MVP token 认证
+  - 当前使用的 ModelScope 模型对建筑提示词跟随较差，下一步应通过后台面板切换更合适的建筑/景观模型
+  - `frontend/src/App.tsx` 继续变大，后续仍应按组件拆分和文案清理推进 `task-001`
+- 下一位 agent 的第一步：
+  - 先检查 `git status`
+  - 启动本地前后端后进入侧栏“模型”，添加或替换真实生图 provider
+  - 继续 `task-001` 前端收口，或补 provider profile 的密钥安全策略
+- 是否可直接接手：Yes
+
 ### [2026-04-29 15:54] Session Handoff
 - 执行角色：Feature / Integration
 - 当前分支：`main`
@@ -113,40 +168,4 @@
   - 先检查 `git status`
   - 如继续 `task-001`，优先审查 `frontend/src/App.tsx` 中表单状态和文案是否还有可删除的旧兜底分支
   - `task-001` 收口并稳定提交后，再推进 `task-004` 最小认证与项目级访问控制
-- 是否可直接接手：Yes
-
-### [2026-04-29 11:10] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes
-  - 是否已 push：No
-- 本次完成：
-  - 继续推进 `task-001`，收口生图工作台交互细节
-  - 修复空白页状态下“选择模板”弹层向上顶出容器的问题，改为可控高度、内部滚动、向下展开
-  - 调整热门预设模板，切换为“建筑效果图氛围增强一 / 建筑效果图氛围增强二 / 景观效果图氛围增强”
-  - 默认创作内容已切到新的建筑效果图氛围增强模板
-  - 同步更新 `docs/tasks.md` 与 `docs/projects/QMDH-001/status.md`
-  - 完成验证：
-    - `npm run build` 通过
-- 修改文件：
-  - `frontend/src/App.tsx`
-  - `frontend/src/styles.css`
-  - `docs/tasks.md`
-  - `docs/projects/QMDH-001/status.md`
-- 当前任务状态：
-  - `task-001`: IN_PROGRESS
-  - `task-002`: DONE
-  - `task-004`: TODO
-  - `task-006`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - 当前模板体系虽然更贴近建筑/景观业务，但仍然写死在前端代码中，后续可考虑迁移到后端可配置数据
-  - `frontend/src/App.tsx` 仍然偏大，建议继续拆分和清理
-  - 参考图仍是“语义参考”方案，不是直接 `img2img / image.edit`
-- 下一位 agent 的第一步：
-  - 先读 `docs/protocol.md`、`docs/tasks.md`、本文件
-  - 优先继续 `task-001`，收口前端工作台结构和文案
-  - 然后再推进 `task-004` 最小认证与项目级访问控制
 - 是否可直接接手：Yes

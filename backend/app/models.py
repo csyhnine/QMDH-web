@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import JSON, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -161,3 +161,23 @@ class PromptTemplate(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     user: Mapped[User] = relationship(back_populates="prompt_templates")
+
+
+class ProviderProfile(Base):
+    __tablename__ = "provider_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider_name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    api_key: Mapped[str] = mapped_column(Text)
+    base_url: Mapped[str] = mapped_column(String(255))
+    model_name: Mapped[str] = mapped_column(String(150))
+    adapter_kind: Mapped[str] = mapped_column(String(50), default="openai_compatible")
+    capabilities: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["image.generate"])
+    quality: Mapped[str] = mapped_column(String(50), default="medium")
+    output_format: Mapped[str] = mapped_column(String(20), default="png")
+    timeout_seconds: Mapped[float] = mapped_column(Float, default=90.0)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    reference_mode: Mapped[str] = mapped_column(String(50), default="disabled")
+    reference_caption_model: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

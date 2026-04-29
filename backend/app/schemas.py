@@ -82,6 +82,46 @@ class ProviderCapability(BaseModel):
     outbound: bool
 
 
+class ProviderProfileBase(BaseModel):
+    provider_name: str = Field(min_length=2, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$")
+    base_url: str = Field(min_length=5, max_length=255)
+    model_name: str = Field(min_length=1, max_length=150)
+    adapter_kind: str = "openai_compatible"
+    capabilities: list[str] = Field(default_factory=lambda: ["image.generate"])
+    quality: str = "medium"
+    output_format: str = "png"
+    timeout_seconds: float = 90.0
+    enabled: bool = True
+    reference_mode: str = "disabled"
+    reference_caption_model: str | None = None
+
+
+class ProviderProfileCreate(ProviderProfileBase):
+    api_key: str = Field(min_length=1)
+
+
+class ProviderProfileUpdate(BaseModel):
+    api_key: str | None = None
+    base_url: str | None = Field(default=None, min_length=5, max_length=255)
+    model_name: str | None = Field(default=None, min_length=1, max_length=150)
+    adapter_kind: str | None = None
+    capabilities: list[str] | None = None
+    quality: str | None = None
+    output_format: str | None = None
+    timeout_seconds: float | None = None
+    enabled: bool | None = None
+    reference_mode: str | None = None
+    reference_caption_model: str | None = None
+
+
+class ProviderProfileOut(ProviderProfileBase):
+    id: int
+    has_api_key: bool
+    masked_api_key: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class ProjectOut(BaseModel):
     id: int
     name: str

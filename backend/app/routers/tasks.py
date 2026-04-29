@@ -84,11 +84,11 @@ def create_task(
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
-    provider_map = get_provider_map()
+    provider_map = get_provider_map(db)
     if payload.requested_provider not in provider_map:
         raise HTTPException(status_code=404, detail="Provider not found")
 
-    provider = get_provider_definition(payload.requested_provider)
+    provider = get_provider_definition(payload.requested_provider, db)
     if workflow.provider_capability not in provider.capabilities:
         raise HTTPException(status_code=400, detail="Provider does not support workflow capability")
 

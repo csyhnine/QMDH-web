@@ -48,6 +48,42 @@ export type Provider = {
   outbound: boolean;
 };
 
+export type ProviderProfileRecord = {
+  id: number;
+  provider_name: string;
+  base_url: string;
+  model_name: string;
+  adapter_kind: string;
+  capabilities: string[];
+  quality: string;
+  output_format: string;
+  timeout_seconds: number;
+  enabled: boolean;
+  reference_mode: string;
+  reference_caption_model: string | null;
+  has_api_key: boolean;
+  masked_api_key: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProviderProfileCreatePayload = {
+  provider_name: string;
+  api_key: string;
+  base_url: string;
+  model_name: string;
+  adapter_kind: string;
+  capabilities: string[];
+  quality: string;
+  output_format: string;
+  timeout_seconds: number;
+  enabled: boolean;
+  reference_mode: string;
+  reference_caption_model: string | null;
+};
+
+export type ProviderProfileUpdatePayload = Partial<Omit<ProviderProfileCreatePayload, "provider_name">>;
+
 export type Project = {
   id: number;
   name: string;
@@ -223,6 +259,13 @@ export const api = {
   projects: () => request<Project[]>("/projects"),
   projectStatus: (projectCode: string) => request<ProjectStatus>(`/projects/${projectCode}/status`),
   providers: () => request<Provider[]>("/providers"),
+  providerProfiles: () => request<ProviderProfileRecord[]>("/providers/profiles"),
+  createProviderProfile: (payload: ProviderProfileCreatePayload) =>
+    postJson<ProviderProfileRecord>("/providers/profiles", payload),
+  updateProviderProfile: (profileId: number, payload: ProviderProfileUpdatePayload) =>
+    patchJson<ProviderProfileRecord>(`/providers/profiles/${profileId}`, payload),
+  deleteProviderProfile: (profileId: number) =>
+    deleteRequest(`/providers/profiles/${profileId}`),
   workflows: () => request<Workflow[]>("/workflows"),
   tasks: () => request<Task[]>("/tasks"),
   assets: () => request<Asset[]>("/assets"),

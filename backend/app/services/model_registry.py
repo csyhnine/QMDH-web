@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.core.config import settings
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.config import ImageProviderProfile, settings
+from app.models import ProviderProfile
 
 
 @dataclass(frozen=True)
@@ -25,9 +29,50 @@ STATIC_PROVIDERS: dict[str, ProviderDefinition] = {
 }
 
 
-def get_provider_map() -> dict[str, ProviderDefinition]:
+def _profile_from_record(record: ProviderProfile) -> ImageProviderProfile:
+    reference_mode = record.reference_mode.strip() if record.reference_mode else ""
+    if not reference_mode:
+        reference_mode = "caption_prompt" if "modelscope.cn" in record.base_url else "disabled"
+
+    return ImageProviderProfile(
+        provider_name=record.provider_name,
+        api_key=record.api_key,
+        base_url=record.base_url.rstrip("/"),
+        model_name=record.model_name,
+        timeout_seconds=record.timeout_seconds,
+        quality=record.quality,
+        output_format=record.output_format,
+        adapter_kind=record.adapter_kind,
+        capabilities=tuple(record.capabilities or ["image.generate"]),
+        configurable=True,
+        outbound=True,
+        reference_mode=reference_mode,
+        reference_caption_model=record.reference_caption_model,
+    )
+
+
+def get_image_provider_profiles(db: Session | None = None) -> dict[str, ImageProviderProfile]:
+    profiles = settings.get_image_provider_profiles()
+    if db is None:
+        return profiles
+
+    records = db.scalars(select(ProviderProfile).order_by(ProviderProfile.provider_name)).all()
+    for record in records:
+        if record.enabled and record.api_key and record.base_url and record.model_name:
+            profiles[record.provider_name] = _profile_from_record(record)
+    return profiles
+
+
+def get_image_provider_profile(provider_name: str, db: Session | None = None) -> ImageProviderProfile:
+    profiles = get_image_provider_profiles(db)
+    if provider_name not in profiles:
+        raise KeyError(f"Image provider profile not configured: {provider_name}")
+    return profiles[provider_name]
+
+
+def get_provider_map(db: Session | None = None) -> dict[str, ProviderDefinition]:
     providers = dict(STATIC_PROVIDERS)
-    for profile in settings.get_image_provider_profiles().values():
+    for profile in get_image_provider_profiles(db).values():
         providers[profile.provider_name] = ProviderDefinition(
             provider_name=profile.provider_name,
             model_name=profile.model_name,
@@ -40,9 +85,9 @@ def get_provider_map() -> dict[str, ProviderDefinition]:
     return providers
 
 
-def get_provider_definition(provider_name: str) -> ProviderDefinition:
-    return get_provider_map()[provider_name]
+def get_provider_definition(provider_name: str, db: Session | None = None) -> ProviderDefinition:
+    return get_provider_map(db)[provider_name]
 
 
-def list_provider_capabilities() -> list[ProviderDefinition]:
-    return list(get_provider_map().values())
+def list_provider_capabilities(db: Session | None = None) -> list[ProviderDefinition]:
+    return list(get_provider_map(db).values())

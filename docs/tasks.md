@@ -89,6 +89,22 @@
   - 已补充 Windows 本地一键开发启动脚本 `start-dev.cmd` 和 npm 别名 `dev:all` / `dev:check`
   - 当前仍需继续补生产环境参数与运维说明
 
+### Task: [task-007] 增加后台模型与 Key 管理入口
+- 状态：DONE
+- 目标：
+  - 允许在前端后台面板维护真实生图 provider、model、base URL、API key 和能力记录
+  - 让后台保存的 provider 配置真实参与 `/providers` 列表、任务创建校验和任务执行
+- 完成说明：
+  - 后端新增 `provider_profiles` 数据表、CRUD 接口和脱敏 key 返回
+  - `model_registry` 支持合并 `.env` provider 与数据库 provider；同名数据库配置可覆盖环境配置
+  - 任务创建与执行都改为读取数据库会话下的 provider 注册表
+  - 前端新增“模型”侧栏入口，可新增、编辑、停用和删除 provider profile
+  - 已补充后端 provider profile 单测
+- 验收标准：
+  1. 前端 build 通过：已完成
+  2. 后端单测通过：已完成
+  3. 前端不展示明文 API key：已完成
+
 ### Task: [task-sec-001] 明确涉密项目的可出域边界
 - 状态：BLOCKED
 - 阻塞原因：
@@ -101,5 +117,6 @@
 如果换账号后继续开发，建议直接从下面这条开始：
 
 1. 先稳定提交当前工作区改动
-2. 继续 `task-001`，收口 `frontend/src/App.tsx` 的剩余表单和历史流细节
-3. 视部署目标补生产环境 token、日志与运维参数说明
+2. 用后台“模型”面板添加更适合建筑/景观效果图的真实 provider，替换当前提示词不跟随的模型
+3. 继续 `task-001`，收口 `frontend/src/App.tsx` 的剩余表单和历史流细节
+4. 视部署目标补生产环境 token、日志与运维参数说明

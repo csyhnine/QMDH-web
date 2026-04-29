@@ -19,7 +19,7 @@ from app.core.config import ImageProviderProfile, settings
 from app.database import SessionLocal
 from app.models import Asset, AssetType, Project, ProviderCall, Task, TaskStatus, Workflow
 from app.services.media_storage import media_root_path, write_base64_asset, write_preview_svg
-from app.services.model_registry import ProviderDefinition, get_provider_definition
+from app.services.model_registry import ProviderDefinition, get_image_provider_profile, get_provider_definition
 
 
 @dataclass(frozen=True)
@@ -208,10 +208,10 @@ def _materialize_preview_asset(*, provider_name: str, capability: str, prompt_su
     )
 
 
-def get_provider_adapter(provider_name: str) -> ProviderAdapter:
-    definition = get_provider_definition(provider_name)
+def get_provider_adapter(provider_name: str, db: Session | None = None) -> ProviderAdapter:
+    definition = get_provider_definition(provider_name, db)
     if definition.adapter_kind == "openai_compatible":
-        return OpenAIImageProviderAdapter(definition, settings.get_image_provider_profile(provider_name))
+        return OpenAIImageProviderAdapter(definition, get_image_provider_profile(provider_name, db))
     return SimulatedProviderAdapter(definition)
 
 
@@ -625,7 +625,7 @@ def execute_task(task_id: int) -> None:
         db.commit()
 
         try:
-            adapter = get_provider_adapter(task.requested_provider)
+            adapter = get_provider_adapter(task.requested_provider, db)
             outcome = adapter.execute(workflow.provider_capability, task.payload)
             task.status = TaskStatus.completed
             task.latency_ms = outcome.latency_ms

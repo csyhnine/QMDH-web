@@ -146,6 +146,45 @@
 - 阻塞原因：
   - `QMDH-SEC` 的数据分级与模型使用规则尚未确认
 
+### Task: [task-009] 运营看板接入真实时间序列
+- 状态：TODO
+- 目标：
+  - 让 `/admin/dashboard` 中的成本趋势、模型调用趋势、失败趋势从后端真实时间聚合生成
+  - 替换当前前端静态示意图形
+- 边界：
+  - `backend/app/routers/dashboard.py`
+  - `backend/app/schemas.py`
+  - `frontend/src/App.tsx`
+  - `frontend/src/styles.css`
+- 验收标准：
+  1. 支持按天聚合最近 7 / 30 天的任务、成本、模型调用和失败数据
+  2. 图表为空时有清晰空状态
+  3. 后端单测与前端 build 通过
+
+### Task: [task-010] 生产化安全与数据迁移补强
+- 状态：TODO
+- 目标：
+  - 补 provider key 加密、操作审计和正式 migration
+- 边界：
+  - 后端配置、数据库 schema、provider profiles、审计日志
+- 验收标准：
+  1. API key 不再以明文业务字段保存
+  2. 用户、模型、价格配置等管理操作有审计记录
+  3. schema 变更不再只依赖启动时 `ALTER TABLE`
+
+### Task: [task-011] 设计师工作台主页重设计
+- 状态：TODO
+- 目标：
+  - 参考外部设计图，重新整理设计师主页的信息结构
+  - 减少历史流长提示词占屏，强化图片结果、复用、当前创作输入区
+- 边界：
+  - `frontend/src/App.tsx`
+  - `frontend/src/styles.css`
+- 验收标准：
+  1. 1920x1080 下首屏可清楚看到项目、历史摘要和创作入口
+  2. 长提示词折叠或摘要化
+  3. 前端 build 通过
+
 ---
 
 ## Next Suggested Step
@@ -155,4 +194,5 @@
 1. 先稳定提交当前工作区改动
 2. 双击 `open-accounts.cmd` 查看本地账号清单，并用预置设计师账号验证项目权限
 3. 用 `/admin/models` 给真实 provider 填写币种、计费单位和单价，再用 `/admin/dashboard` 检查真实成本、失败原因、账号额度和模型调用统计
-4. 后续生产化补强优先做密钥加密、操作审计、日志与正式 migration
+4. 如果 AI 额度或上下文不足，先读 `docs/continuity.md` 再继续
+5. 后续生产化补强优先做真实时间序列、密钥加密、操作审计、日志与正式 migration

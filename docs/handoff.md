@@ -10,6 +10,32 @@
 
 ## Latest Handoffs
 
+### [2026-04-30 16:35] Session Handoff
+- 执行角色：UI / Continuity Archive
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：Yes（本轮提交后）
+  - 是否有未提交改动：No（本轮提交后）
+  - 是否已 push：Yes（本轮提交后）
+- 本次完成：
+  - 已按参考图结构重做 `/admin/dashboard`：宽侧栏管理导航、顶部时间/导出工具栏、KPI 卡片、成本趋势、模型分布、项目排行、失败分析、模型调用趋势和账号额度监管
+  - 该次 UI 改造只改前端 `frontend/src/App.tsx` 与 `frontend/src/styles.css`，没有新增接口
+  - 已新增 `docs/continuity.md`，用于 AI 额度不足、上下文不足或换 agent 时快速接手
+  - 完成验证：
+    - `python -m unittest discover -s tests` 通过
+    - `npm run build` 通过
+    - `cmd /c start-dev.cmd --check` 通过
+- 最新提交：
+  - `67e6246 style: redesign operations dashboard`
+- 风险与注意事项：
+  - 当前看板视觉已接近参考图，但趋势图和堆叠柱仍主要是前端静态形状结合汇总数据；后续应补真实时间序列接口
+  - 后续开发量较大，建议按 `docs/continuity.md` 的小提交节奏推进，避免额度或上下文不足时丢失现场
+- 下一位 agent 的第一步：
+  - 先检查 `git status`
+  - 阅读 `docs/continuity.md`
+  - 如果继续做看板，优先实现真实时间序列数据；如果转回设计师主页，先用外部参考图确定布局再改代码
+- 是否可直接接手：Yes
+
 ### [2026-04-30 16:40] Session Handoff
 - 执行角色：Feature / Operations Dashboard
 - 当前分支：`main`
@@ -108,47 +134,4 @@
   - 先检查 `git status`
   - 双击 `open-accounts.cmd` 打开账号清单，用预置设计师账号验证项目权限
   - 用 `/admin/dashboard` 对一次真实生成任务检查用量和失败统计
-- 是否可直接接手：Yes
-
-### [2026-04-30 10:20] Session Handoff
-- 执行角色：Feature / Provider Compatibility
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：Yes（本轮提交后）
-  - 是否有未提交改动：No（本轮提交后）
-  - 是否已 push：Yes（本轮提交后）
-- 本次完成：
-  - 验证 ModelScope 的 FireRed 图像编辑模型可通过 `images/generations` 请求体中的 `image_url` 字段调用
-  - 将 `modelscope_firered_image_edit` 恢复为 `image.generate + image.edit`，让设计师模型列表重新显示 FireRed
-  - 在 `task_executor.py` 增加图像编辑模型桥接：无参考图时自动传入白底 PNG，有参考图时转发用户参考图
-  - FireRed 不再走 `caption_prompt` 读图增强路径，避免因为缺少真实图片输入而返回 `Qwen Image Edit requires image upload`
-  - 增加单测覆盖白底图桥接和参考图桥接，并更新架构、部署、任务与项目状态文档
-  - 完成验证：
-    - `python -m unittest discover -s tests` 通过
-    - `npm run build` 通过
-    - `cmd /c start-dev.cmd --check` 通过
-- 修改文件：
-  - `backend/app/services/model_registry.py`
-  - `backend/app/services/task_executor.py`
-  - `backend/tests/test_model_registry_profiles.py`
-  - `backend/tests/test_task_executor_openai.py`
-  - `docs/architecture.md`
-  - `docs/deployment.md`
-  - `docs/handoff.md`
-  - `docs/tasks.md`
-  - `docs/projects/QMDH-001/status.md`
-- 当前任务状态：
-  - `task-001`: IN_PROGRESS
-  - `task-002`: DONE
-  - `task-004`: DONE
-  - `task-006`: DONE
-  - `task-007`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - FireRed 白底图桥接是兼容方案，不等同于完整图片编辑产品能力；后续若需要蒙版、编辑强度或专用图生图流程，仍应补专用 adapter / workflow
-  - 当前本机 18010 仍可能有旧 API 进程或 stale listener；以 `start-dev.cmd` 打印的端口为准
-- 下一位 agent 的第一步：
-  - 先检查 `git status`
-  - 重启本地服务后确认设计师模型列表包含 FireRed、Qwen、Z-Image、Z-Image-Turbo 和 Majic
-  - 在设计师页面实测 FireRed 白底图生成结果是否符合建筑/景观提示词预期
 - 是否可直接接手：Yes

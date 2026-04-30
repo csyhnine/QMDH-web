@@ -10,6 +10,38 @@
 
 ## Latest Handoffs
 
+### [2026-04-30 17:40] Session Handoff
+- 执行角色：UI / Admin Console
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：Yes（本轮提交并推送后）
+  - 是否有未提交改动：No（本轮提交并推送后）
+  - 是否已 push：Yes（本轮提交并推送后）
+- 本次完成：
+  - 已按参考后台面板方向统一后台侧栏，入口收敛为运营看板、项目管理、模型管理、账号管理、设置中心
+  - 新增 `/admin/projects` 只读项目管理页，使用现有项目、任务和看板数据展示项目卡片与右侧详情，不做项目 CRUD
+  - 新增 `/admin/settings` 轻量设置中心，展示系统信息、功能开关说明、资源使用和现有管理入口，不做真实配置写入
+  - `/admin/users` 已改为统计卡、工具条、账号表格和右侧创建/编辑面板，保留账号创建、编辑、停用和重置密码能力
+  - `/admin/models` 已改为统计卡、工具条、模型表格和右侧配置面板，保留模型新增、编辑、删除、启停和计费配置能力
+  - 本轮未推进 `task-009`；运营看板趋势图仍使用现有汇总数据/示意形态，真实时间序列后续单独做
+  - 完成验证：
+    - `npm run build` 通过
+- 修改文件：
+  - `frontend/src/App.tsx`
+  - `frontend/src/styles.css`
+  - `docs/tasks.md`
+  - `docs/handoff.md`
+  - `docs/projects/QMDH-001/status.md`
+- 风险与注意事项：
+  - `/admin/projects` 和 `/admin/settings` 是基于现有数据的轻量前端页，不代表后端已有项目 CRUD、设置写入、账单、告警或日志能力
+  - `/admin/users` 中停用按钮调用现有 `DELETE /users/{id}`，只能停用账号；重新启用仍需通过编辑账号保存启用状态
+  - 真实时间序列仍是下一步最高优先级之一，`task-009` 状态保持 TODO
+- 下一位 agent 的第一步：
+  - 先检查 `git status`
+  - 运行 `cmd /c start-dev.cmd --check`
+  - 手动打开 `/admin/dashboard`、`/admin/projects`、`/admin/models`、`/admin/users`、`/admin/settings` 检查后台页面布局
+- 是否可直接接手：Yes
+
 ### [2026-04-30 16:35] Session Handoff
 - 执行角色：UI / Continuity Archive
 - 当前分支：`main`
@@ -76,62 +108,4 @@
 - 下一位 agent 的第一步：
   - 先检查 `git status`
   - 打开 `/admin/models` 配置真实单价，再用 `/admin/dashboard` 确认真实成本、失败原因 Top 和账号监管表是否符合运营预期
-- 是否可直接接手：Yes
-
-### [2026-04-30 11:20] Session Handoff
-- 执行角色：Feature / Production Management
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：Yes（本轮提交后）
-  - 是否有未提交改动：No（本轮提交后）
-  - 是否已 push：Yes（本轮提交后）
-- 本次完成：
-  - 将下一阶段主线从 `App.tsx` 收口切换到生产化管理能力
-  - 上线数据库账号系统：`users` 扩展密码哈希、显示名、启停状态、项目授权、最后登录时间；新增 `auth_sessions`
-  - 新增用户名密码登录、退出、当前用户接口：`/api/v1/auth/login`、`/auth/logout`、`/auth/me`
-  - 新增用户管理接口与 `/admin/users` 页面，`owner / admin` 可创建、编辑、停用账号和重置密码
-  - 后端认证优先读取 `Authorization: Bearer <token>`，保留旧 `X-QMDH-Auth` 兼容路径
-  - 新增 `/admin/dashboard` 使用与成本看板，统计任务数、成功率、失败数、成本、用户/项目排行、provider/model 分布和失败原因
-  - `/admin/models` 保留为运维配置入口，模型测试不再是当前业务主线
-  - 预置本地开发账号包，并生成忽略文件 `local/qmdh-dev-accounts.md`；可通过 `open-accounts.cmd` 打开
-  - 完成验证：
-    - `python -m unittest discover -s tests` 通过
-    - `npm run build` 通过
-    - `cmd /c start-dev.cmd --check` 通过
-- 修改文件：
-  - `backend/app/models.py`
-  - `backend/app/core/auth.py`
-  - `backend/app/core/config.py`
-  - `backend/app/core/security.py`
-  - `backend/app/routers/auth.py`
-  - `backend/app/routers/users.py`
-  - `backend/app/routers/dashboard.py`
-  - `frontend/src/api.ts`
-  - `frontend/src/App.tsx`
-  - `frontend/src/styles.css`
-  - `.gitignore`
-  - `open-accounts.cmd`
-  - `docs/architecture.md`
-  - `docs/deployment.md`
-  - `docs/handoff.md`
-  - `docs/tasks.md`
-  - `docs/projects/QMDH-001/status.md`
-- 当前任务状态：
-  - `task-001`: DONE（后续拆分降级为技术债）
-  - `task-002`: DONE
-  - `task-004`: DONE（已被数据库账号系统替代为主认证）
-  - `task-006`: DONE
-  - `task-007`: DONE
-  - `task-008`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - 默认本地管理员为 `admin / dev-admin-password`，生产环境必须通过环境变量替换
-  - 本地账号清单 `local/qmdh-dev-accounts.md` 不提交 Git；如果丢失，可按 `docs/deployment.md` 重新生成或让 Codex 补回
-  - `QMDH_AUTH_USERS_JSON` 旧 token 认证仍保留为兼容路径，后续稳定后可移除
-  - 还没有正式 migration 体系，当前仍由启动补列承担 schema 演进
-  - Provider API key 仍是数据库明文保存，后续需要加密、轮换和操作审计
-- 下一位 agent 的第一步：
-  - 先检查 `git status`
-  - 双击 `open-accounts.cmd` 打开账号清单，用预置设计师账号验证项目权限
-  - 用 `/admin/dashboard` 对一次真实生成任务检查用量和失败统计
 - 是否可直接接手：Yes

@@ -141,6 +141,29 @@
   4. `ops` 可访问看板和模型运维但不可管理用户：已完成
   5. `owner / admin` 可管理用户：已完成
 
+### Task: [task-admin-ui-001] 统一后台管理面板样式与信息结构
+- 状态：DONE
+- 目标：
+  - 按后台面板参考图统一运营看板、项目管理、模型管理、账号管理和设置中心的信息结构与视觉风格
+  - 基于现有后端能力轻量补齐 `/admin/projects` 和 `/admin/settings`，不做空壳账单、告警和日志页面
+- 完成说明：
+  - 后台侧栏已统一为运营看板、项目管理、模型管理、账号管理、设置中心
+  - `/admin/projects` 已使用现有项目、任务和看板数据提供只读项目监控页与右侧详情面板，不提供项目 CRUD
+  - `/admin/settings` 已提供轻量设置中心概览，展示系统信息、功能开关说明、资源使用和现有管理入口，不写入真实配置
+  - `/admin/users` 已改为统计卡、工具条、账号表格和右侧创建/编辑面板，保留现有账号保存、停用和重置密码能力
+  - `/admin/models` 已改为统计卡、工具条、模型表格和右侧模型配置面板，保留现有新增、编辑、删除、启停和计费配置能力
+  - `/admin/dashboard` 本轮只做样式与信息结构延续，不接入真实时间序列
+- 边界：
+  - `frontend/src/App.tsx`
+  - `frontend/src/styles.css`
+  - `docs/tasks.md`
+  - `docs/handoff.md`
+  - `docs/projects/QMDH-001/status.md`
+- 验收标准：
+  1. 前端 build 通过：已完成
+  2. 新增 `/admin/projects` 和 `/admin/settings` 前端路由：已完成
+  3. 不推进 `task-009`，真实时间序列仍保持 TODO：已确认
+
 ### Task: [task-sec-001] 明确涉密项目的可出域边界
 - 状态：BLOCKED
 - 阻塞原因：

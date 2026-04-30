@@ -74,7 +74,7 @@ type FeedFilterState = {
 };
 
 type ComposerMenuKey = "template" | "provider" | "display" | "count" | null;
-type ActiveView = "studio" | "models" | "users" | "dashboard";
+type ActiveView = "studio" | "projects" | "models" | "users" | "dashboard" | "settings";
 
 type ProviderProfileDraft = {
   providerName: string;
@@ -406,6 +406,8 @@ function resolveActiveView(): ActiveView {
   if (path === "/admin/models") return "models";
   if (path === "/admin/users") return "users";
   if (path === "/admin/dashboard") return "dashboard";
+  if (path === "/admin/projects") return "projects";
+  if (path === "/admin/settings") return "settings";
   return "studio";
 }
 
@@ -689,6 +691,7 @@ export default function App() {
   const [userDraft, setUserDraft] = useState<UserDraft>(defaultUserDraft);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [savingUser, setSavingUser] = useState(false);
+  const [selectedAdminProjectCode, setSelectedAdminProjectCode] = useState("");
   const isFetchingRef = useRef(false);
   const loadRequestIdRef = useRef(0);
   const composerToolbarRef = useRef<HTMLDivElement | null>(null);
@@ -703,17 +706,21 @@ export default function App() {
     loadRequestIdRef.current = requestId;
 
     try {
+      const shouldLoadAdminData = activeView !== "studio";
+      const shouldLoadProviderProfiles = activeView === "models" || activeView === "settings";
+      const shouldLoadUsers = activeView === "users" || activeView === "settings";
+      const shouldLoadDashboard = activeView === "dashboard" || activeView === "projects" || activeView === "settings";
       const [health, projects, providers, providerProfiles, workflows, tasks, assets, templates, users, dashboard] = await Promise.all([
         api.health(),
         api.projects(),
         api.providers(),
-        activeView === "models" ? api.providerProfiles().catch(() => []) : Promise.resolve([]),
+        shouldLoadProviderProfiles ? api.providerProfiles().catch(() => []) : Promise.resolve([]),
         api.workflows(),
         api.tasks(),
         api.assets(),
         api.promptTemplates().catch(() => null),
-        activeView === "users" ? api.users().catch(() => []) : Promise.resolve([]),
-        activeView === "dashboard" ? api.dashboardStats().catch(() => null) : Promise.resolve(null)
+        shouldLoadUsers ? api.users().catch(() => []) : Promise.resolve([]),
+        shouldLoadAdminData && shouldLoadDashboard ? api.dashboardStats().catch(() => null) : Promise.resolve(null)
       ]);
 
       if (requestId !== loadRequestIdRef.current) return;
@@ -1409,12 +1416,30 @@ export default function App() {
 
   const userCanManageUsers = canManageUsers(currentUser);
   const userCanUseOpsViews = canUseOpsViews(currentUser);
-  const isAdminView = activeView === "models" || activeView === "users" || activeView === "dashboard";
+  const isAdminView =
+    activeView === "models" ||
+    activeView === "users" ||
+    activeView === "dashboard" ||
+    activeView === "projects" ||
+    activeView === "settings";
   const dashboardModelTotal = state.dashboard ? sumMetric(state.dashboard.model_rankings, "count") : 0;
   const dashboardAccountQuotaTotal = state.dashboard ? sumMetric(state.dashboard.account_usage, "quota_limit") : 0;
   const dashboardAccountUsedTotal = state.dashboard ? sumMetric(state.dashboard.account_usage, "quota_used") : 0;
   const dashboardProjectTotal = state.dashboard ? sumMetric(state.dashboard.project_rankings, "count") : 0;
   const dashboardFailureTotal = state.dashboard ? sumMetric(state.dashboard.failure_reasons, "count") : 0;
+  const activeUsers = state.users.filter((user) => user.is_active);
+  const disabledUsers = state.users.filter((user) => !user.is_active);
+  const adminUsers = state.users.filter((user) => ["owner", "admin"].includes(user.role));
+  const enabledProviderProfiles = state.providerProfiles.filter((profile) => profile.enabled);
+  const disabledProviderProfiles = state.providerProfiles.filter((profile) => !profile.enabled);
+  const selectedAdminProject =
+    state.projects.find((project) => project.code === selectedAdminProjectCode) ?? state.projects[0] ?? null;
+  const selectedAdminProjectTasks = selectedAdminProject
+    ? state.tasks.filter((task) => task.project_code === selectedAdminProject.code)
+    : [];
+  const selectedAdminProjectCost = selectedAdminProjectTasks.reduce((total, task) => total + Number(task.cost || 0), 0);
+  const selectedAdminProjectFailures = selectedAdminProjectTasks.filter((task) => task.status === "failed").length;
+  const selectedAdminProjectSuccesses = selectedAdminProjectTasks.filter((task) => task.status === "completed").length;
 
   return (
     <div className={isAdminView ? "studio-shell admin-shell" : "studio-shell"}>
@@ -1428,29 +1453,39 @@ export default function App() {
                 className={activeView === "dashboard" ? "rail-item active" : "rail-item"}
                 onClick={() => (window.location.href = "/admin/dashboard")}
               >
+                <b>□</b>
                 <span>运营看板</span>
               </button>
               <button
                 type="button"
-                className={activeView === "users" ? "rail-item active" : "rail-item"}
-                onClick={() => (window.location.href = "/admin/users")}
+                className={activeView === "projects" ? "rail-item active" : "rail-item"}
+                onClick={() => (window.location.href = "/admin/projects")}
               >
-                <span>账号管理</span>
+                <b>◇</b>
+                <span>项目管理</span>
               </button>
               <button
                 type="button"
                 className={activeView === "models" ? "rail-item active" : "rail-item"}
                 onClick={() => (window.location.href = "/admin/models")}
               >
+                <b>⬡</b>
                 <span>模型管理</span>
               </button>
-              <button type="button" className="rail-item">
-                <span>账单管理</span>
+              <button
+                type="button"
+                className={activeView === "users" ? "rail-item active" : "rail-item"}
+                onClick={() => (window.location.href = "/admin/users")}
+              >
+                <b>▤</b>
+                <span>账号管理</span>
               </button>
-              <button type="button" className="rail-item">
-                <span>告警中心</span>
-              </button>
-              <button type="button" className="rail-item">
+              <button
+                type="button"
+                className={activeView === "settings" ? "rail-item active" : "rail-item"}
+                onClick={() => (window.location.href = "/admin/settings")}
+              >
+                <b>⚙</b>
                 <span>设置中心</span>
               </button>
             </>
@@ -1530,100 +1565,171 @@ export default function App() {
 
       <main className={isAdminView ? "canvas-area model-admin-area" : showCenteredComposer ? "canvas-area canvas-area-empty" : "canvas-area"}>
         {activeView === "users" ? (
-          <section className="model-admin">
-            <header className="canvas-title model-admin-head">
-              <p className="canvas-kicker">QMDH / USER ADMIN</p>
-              <h1>账号管理</h1>
-              <p>创建和停用设计师账号，分配角色与可访问项目。</p>
-              <div className="template-card-actions">
-                <button type="button" className="ghost-button" onClick={() => (window.location.href = "/admin/dashboard")}>使用看板</button>
-                <button type="button" className="ghost-button" onClick={() => (window.location.href = "/admin/models")}>运维配置</button>
+          <section className="admin-page">
+            <header className="admin-page-head">
+              <div>
+                <h1>账号管理</h1>
+                <p>管理团队成员账号、角色权限及状态</p>
               </div>
+              {userCanManageUsers ? (
+                <button type="button" className="admin-primary-button" onClick={resetUserDraft}>+ 创建账号</button>
+              ) : null}
             </header>
 
             {!userCanManageUsers ? (
               <div className="floating-error">当前账号没有用户管理权限。</div>
             ) : (
-              <div className="model-admin-layout">
-                <form className="model-profile-form" onSubmit={handleSaveUser}>
-                  <div className="template-section-head">
-                    <strong>{editingUserId === null ? "新增账号" : "编辑账号"}</strong>
-                    <span>项目权限用英文逗号分隔，使用 * 可访问全部项目。</span>
-                  </div>
-                  <div className="model-form-grid">
-                    <label className="composer-menu-field">
-                      <span>用户名</span>
-                      <input value={userDraft.name} disabled={editingUserId !== null} onChange={(event) => setUserDraft((current) => ({ ...current, name: event.target.value }))} />
-                    </label>
-                    <label className="composer-menu-field">
-                      <span>显示名</span>
-                      <input value={userDraft.displayName} onChange={(event) => setUserDraft((current) => ({ ...current, displayName: event.target.value }))} />
-                    </label>
-                    <label className="composer-menu-field">
-                      <span>角色</span>
-                      <select value={userDraft.role} onChange={(event) => setUserDraft((current) => ({ ...current, role: event.target.value }))}>
-                        <option value="designer">designer</option>
-                        <option value="ops">ops</option>
-                        <option value="admin">admin</option>
-                        <option value="owner">owner</option>
-                      </select>
-                    </label>
-                    <label className="composer-menu-field">
-                      <span>{editingUserId === null ? "初始密码" : "重置密码"}</span>
-                      <input type="password" value={userDraft.password} onChange={(event) => setUserDraft((current) => ({ ...current, password: event.target.value }))} />
-                    </label>
-                    <label className="composer-menu-field composer-menu-field-full">
-                      <span>项目权限</span>
-                      <input value={userDraft.projectCodes} onChange={(event) => setUserDraft((current) => ({ ...current, projectCodes: event.target.value }))} placeholder="QMDH-001 或 *" />
-                    </label>
-                    <label className="composer-menu-field">
-                      <span>月度额度</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={userDraft.monthlyQuota}
-                        onChange={(event) => setUserDraft((current) => ({ ...current, monthlyQuota: event.target.value }))}
-                        placeholder="留空表示不限额"
-                      />
-                    </label>
-                  </div>
-                  <label className="model-toggle">
-                    <input type="checkbox" checked={userDraft.isActive} onChange={(event) => setUserDraft((current) => ({ ...current, isActive: event.target.checked }))} />
-                    <span>启用账号</span>
-                  </label>
-                  {state.error ? <div className="floating-error">{state.error}</div> : null}
-                  <div className="template-editor-actions">
-                    <button type="submit" className="submit-button" disabled={savingUser}>{savingUser ? "保存中..." : "保存账号"}</button>
-                    {editingUserId !== null ? <button type="button" className="ghost-button" onClick={resetUserDraft}>取消编辑</button> : null}
-                  </div>
-                </form>
+              <>
+                <div className="admin-kpi-grid">
+                  <article className="admin-kpi-card admin-blue"><span>账号总数</span><strong>{state.users.length}</strong><small>全部后台账号</small><i>♙</i></article>
+                  <article className="admin-kpi-card admin-green"><span>活跃账号</span><strong>{activeUsers.length}</strong><small>可正常登录</small><i>●</i></article>
+                  <article className="admin-kpi-card admin-gray"><span>已禁用账号</span><strong>{disabledUsers.length}</strong><small>停用或不可登录</small><i>○</i></article>
+                  <article className="admin-kpi-card admin-purple"><span>管理员账号</span><strong>{adminUsers.length}</strong><small>owner / admin</small><i>◆</i></article>
+                </div>
 
-                <section className="model-profile-list">
-                  <div className="template-section-head">
-                    <strong>账号列表</strong>
-                    <span>{state.users.length} 个账号</span>
+                <div className="admin-split-layout">
+                  <section className="admin-table-panel">
+                    <div className="admin-toolbar">
+                      <select aria-label="账号状态筛选"><option>全部状态</option><option>活跃</option><option>禁用</option></select>
+                      <select aria-label="账号角色筛选"><option>全部角色</option><option>designer</option><option>ops</option><option>admin</option><option>owner</option></select>
+                      <input aria-label="搜索账号" placeholder="搜索账号、姓名或角色" />
+                      <button type="button" onClick={() => void loadData({ force: true })}>刷新</button>
+                    </div>
+                    <div className="admin-data-table admin-user-table">
+                      <div className="admin-table-row admin-table-head">
+                        <span>账号</span><span>角色</span><span>项目权限</span><span>额度</span><span>状态</span><span>最后登录</span><span>操作</span>
+                      </div>
+                      {state.users.map((user) => (
+                        <div key={user.id} className="admin-table-row">
+                          <span><strong>{user.display_name || user.name}</strong><small>@{user.name}</small></span>
+                          <span><em className="admin-tag">{user.role}</em></span>
+                          <span>{user.project_codes.join(", ")}</span>
+                          <span>{user.monthly_quota === null ? "不限额" : `${user.monthly_quota} / 月`}</span>
+                          <span><em className={`status-pill ${user.is_active ? "status-completed" : "status-failed"}`}>{user.is_active ? "活跃" : "禁用"}</em></span>
+                          <span>{user.last_login_at ? formatDate(user.last_login_at) : "未登录"}</span>
+                          <span className="admin-row-actions">
+                            <button type="button" onClick={() => handleEditUser(user)}>编辑</button>
+                            <button type="button" onClick={() => handleDeactivateUser(user.id)} disabled={!user.is_active}>停用</button>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <aside className="admin-detail-panel">
+                    <form className="admin-side-form" onSubmit={handleSaveUser}>
+                      <div className="admin-detail-head">
+                        <h2>{editingUserId === null ? "创建账号" : "编辑账号"}</h2>
+                        <p>项目权限用英文逗号分隔，使用 * 可访问全部项目。</p>
+                      </div>
+                      <label className="composer-menu-field"><span>用户名</span><input value={userDraft.name} disabled={editingUserId !== null} onChange={(event) => setUserDraft((current) => ({ ...current, name: event.target.value }))} /></label>
+                      <label className="composer-menu-field"><span>显示名</span><input value={userDraft.displayName} onChange={(event) => setUserDraft((current) => ({ ...current, displayName: event.target.value }))} /></label>
+                      <label className="composer-menu-field"><span>角色</span><select value={userDraft.role} onChange={(event) => setUserDraft((current) => ({ ...current, role: event.target.value }))}><option value="designer">designer</option><option value="ops">ops</option><option value="admin">admin</option><option value="owner">owner</option></select></label>
+                      <label className="composer-menu-field"><span>{editingUserId === null ? "初始密码" : "重置密码"}</span><input type="password" value={userDraft.password} onChange={(event) => setUserDraft((current) => ({ ...current, password: event.target.value }))} /></label>
+                      <label className="composer-menu-field"><span>项目权限</span><input value={userDraft.projectCodes} onChange={(event) => setUserDraft((current) => ({ ...current, projectCodes: event.target.value }))} placeholder="QMDH-001 或 *" /></label>
+                      <label className="composer-menu-field"><span>月度额度</span><input type="number" min="0" step="0.01" value={userDraft.monthlyQuota} onChange={(event) => setUserDraft((current) => ({ ...current, monthlyQuota: event.target.value }))} placeholder="留空表示不限额" /></label>
+                      <label className="model-toggle"><input type="checkbox" checked={userDraft.isActive} onChange={(event) => setUserDraft((current) => ({ ...current, isActive: event.target.checked }))} /><span>启用账号</span></label>
+                      {state.error ? <div className="floating-error">{state.error}</div> : null}
+                      <div className="template-editor-actions">
+                        <button type="submit" className="submit-button" disabled={savingUser}>{savingUser ? "保存中..." : "保存账号"}</button>
+                        {editingUserId !== null ? <button type="button" className="ghost-button" onClick={resetUserDraft}>取消编辑</button> : null}
+                      </div>
+                    </form>
+                  </aside>
+                </div>
+              </>
+            )}
+          </section>
+        ) : activeView === "projects" ? (
+          <section className="admin-page">
+            <header className="admin-page-head">
+              <div>
+                <h1>项目管理</h1>
+                <p>管理和监控所有项目的使用情况与成本</p>
+              </div>
+              <div className="admin-head-actions">
+                <button type="button" className="ghost-button">卡片视图</button>
+                <button type="button" className="ghost-button">列表视图</button>
+              </div>
+            </header>
+            {!userCanUseOpsViews ? (
+              <div className="floating-error">当前账号没有查看项目管理的权限。</div>
+            ) : (
+              <div className="admin-split-layout admin-project-layout">
+                <section className="admin-table-panel">
+                  <div className="admin-toolbar">
+                    <input aria-label="搜索项目" placeholder="搜索项目名称或 Key" />
+                    <select aria-label="项目状态"><option>全部状态</option><option>运行中</option><option>暂停</option></select>
+                    <select aria-label="成本区间"><option>成本区间</option><option>0-10</option><option>10-100</option></select>
+                    <button type="button" onClick={() => void loadData({ force: true })}>刷新</button>
                   </div>
-                  {state.users.map((user) => (
-                    <article key={user.id} className="model-profile-card">
-                      <div className="feed-card-topline">
-                        <strong>{user.display_name || user.name}</strong>
-                        <span className={`status-pill ${user.is_active ? "status-completed" : "status-failed"}`}>{user.is_active ? "active" : "disabled"}</span>
-                      </div>
-                      <p>{user.name}</p>
-                      <div className="feed-card-meta">
-                        <span>{user.role}</span>
-                        <span>{user.project_codes.join(", ")}</span>
-                        <span>{user.monthly_quota === null ? "不限额" : `${user.monthly_quota} cost unit/月`}</span>
-                        <span>{user.last_login_at ? formatDate(user.last_login_at) : "未登录"}</span>
-                      </div>
-                      <div className="template-card-actions">
-                        <button type="button" className="template-action-button" onClick={() => handleEditUser(user)}>编辑</button>
-                        <button type="button" className="template-action-button" onClick={() => handleDeactivateUser(user.id)}>停用</button>
-                      </div>
-                    </article>
-                  ))}
+                  <div className="project-card-grid">
+                    {state.projects.map((project) => {
+                      const projectTasks = state.tasks.filter((task) => task.project_code === project.code);
+                      const projectCost = projectTasks.reduce((total, task) => total + Number(task.cost || 0), 0);
+                      const projectFailures = projectTasks.filter((task) => task.status === "failed").length;
+                      const failureRate = percentOf(projectFailures, projectTasks.length);
+                      const topProviders = Array.from(
+                        projectTasks.reduce((counter, task) => counter.set(task.requested_provider, (counter.get(task.requested_provider) ?? 0) + 1), new Map<string, number>())
+                      ).sort((a, b) => b[1] - a[1]).slice(0, 2);
+                      return (
+                        <article
+                          key={project.code}
+                          className={selectedAdminProject?.code === project.code ? "project-card active" : "project-card"}
+                          onClick={() => setSelectedAdminProjectCode(project.code)}
+                        >
+                          <div className="feed-card-topline">
+                            <strong>{project.code}</strong>
+                            <span className="status-pill status-completed">运行中</span>
+                          </div>
+                          <p>{project.name}</p>
+                          <div className="project-metrics">
+                            <span><small>今日成本</small><b>{formatCost(projectCost, "CNY")}</b></span>
+                            <span><small>调用次数</small><b>{projectTasks.length}</b></span>
+                            <span><small>失败率</small><b>{formatPercent(failureRate)}</b></span>
+                          </div>
+                          <div className="project-provider-list">
+                            {topProviders.length > 0 ? topProviders.map(([provider, count]) => (
+                              <span key={provider}><em>{provider}</em><b style={{ width: `${percentOf(count, projectTasks.length)}%` }} /></span>
+                            )) : <small>暂无调用数据</small>}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
                 </section>
+                <aside className="admin-detail-panel">
+                  {selectedAdminProject ? (
+                    <>
+                      <button type="button" className="admin-panel-close">×</button>
+                      <div className="admin-detail-head">
+                        <h2>{selectedAdminProject.code}</h2>
+                        <p>{selectedAdminProject.name}</p>
+                      </div>
+                      <div className="admin-detail-meta">
+                        <span>阶段：{selectedAdminProject.current_phase ?? "未设置"}</span>
+                        <span>状态：{selectedAdminProject.phase_status ?? "进行中"}</span>
+                        <span>更新：{selectedAdminProject.last_updated ?? "未记录"}</span>
+                      </div>
+                      <div className="detail-metric-grid">
+                        <span><small>调用次数</small><strong>{selectedAdminProjectTasks.length}</strong></span>
+                        <span><small>实际成本</small><strong>{formatCost(selectedAdminProjectCost, "CNY")}</strong></span>
+                        <span><small>成功任务</small><strong>{selectedAdminProjectSuccesses}</strong></span>
+                        <span><small>失败任务</small><strong>{selectedAdminProjectFailures}</strong></span>
+                      </div>
+                      <section className="admin-mini-panel">
+                        <h3>项目说明</h3>
+                        <p>{selectedAdminProject.summary ?? "暂无项目说明。"}</p>
+                      </section>
+                      <section className="admin-mini-panel">
+                        <h3>下一步</h3>
+                        <p>{selectedAdminProject.next_action ?? "暂无下一步记录。"}</p>
+                      </section>
+                    </>
+                  ) : (
+                    <div className="template-empty">暂无项目数据。</div>
+                  )}
+                </aside>
               </div>
             )}
           </section>
@@ -1805,27 +1911,61 @@ export default function App() {
             )}
           </section>
         ) : activeView === "models" ? (
-          <section className="model-admin">
-            <header className="canvas-title model-admin-head">
-              <p className="canvas-kicker">QMDH / MODEL ADMIN</p>
-              <h1>模型与 Key 管理</h1>
-              <p>管理可用于图像生成的 OpenAI-compatible 模型配置。Key 只会在后端保存，前端只显示脱敏结果。</p>
-              <div className="template-card-actions">
-                <button type="button" className="ghost-button" onClick={() => (window.location.href = "/admin/dashboard")}>使用看板</button>
-                {userCanManageUsers ? <button type="button" className="ghost-button" onClick={() => (window.location.href = "/admin/users")}>账号管理</button> : null}
+          <section className="admin-page">
+            <header className="admin-page-head">
+              <div>
+                <h1>模型管理</h1>
+                <p>管理可用模型，查看使用情况、成本与配置</p>
               </div>
+              <button type="button" className="admin-primary-button" onClick={resetProviderProfileDraft}>+ 添加模型</button>
             </header>
 
             {state.error ? <div className="floating-error">{state.error}</div> : null}
 
-            <div className="model-admin-layout">
-              <form className="model-profile-form" onSubmit={handleSaveProviderProfile}>
-                <div className="template-section-head">
-                  <strong>{editingProviderProfileId === null ? "新增模型配置" : "编辑模型配置"}</strong>
-                  <span>保存后会立即进入生成模型列表，停用后不会再参与任务选择。</span>
-                </div>
+            <div className="admin-kpi-grid admin-kpi-grid-4">
+              <article className="admin-kpi-card admin-blue"><span>模型总数</span><strong>{state.providerProfiles.length}</strong><small>后台配置</small><i>⬡</i></article>
+              <article className="admin-kpi-card admin-green"><span>启用模型</span><strong>{enabledProviderProfiles.length}</strong><small>{formatPercent(percentOf(enabledProviderProfiles.length, state.providerProfiles.length))}</small><i>✓</i></article>
+              <article className="admin-kpi-card admin-orange"><span>停用模型</span><strong>{disabledProviderProfiles.length}</strong><small>不参与任务选择</small><i>Ⅱ</i></article>
+              <article className="admin-kpi-card admin-red"><span>运行时模型</span><strong>{state.providers.length}</strong><small>当前 provider</small><i>!</i></article>
+            </div>
 
-                <div className="model-form-grid">
+            <div className="admin-split-layout">
+              <section className="admin-table-panel">
+                <div className="admin-toolbar">
+                  <input aria-label="搜索模型" placeholder="搜索模型名称或 ID" />
+                  <select aria-label="模型类型"><option>全部类型</option><option>图像生成</option><option>图像编辑</option></select>
+                  <select aria-label="模型状态"><option>状态</option><option>启用</option><option>停用</option></select>
+                  <select aria-label="计费方式"><option>计费方式</option><option>按张图片</option><option>按次请求</option></select>
+                  <button type="button" onClick={() => void loadData({ force: true })}>刷新</button>
+                </div>
+                <div className="admin-data-table admin-model-table">
+                  <div className="admin-table-row admin-table-head">
+                    <span>模型名称</span><span>状态</span><span>能力</span><span>计费方式</span><span>单价</span><span>Key</span><span>操作</span>
+                  </div>
+                  {state.providerProfiles.length > 0 ? state.providerProfiles.map((profile) => (
+                    <div key={profile.id} className="admin-table-row">
+                      <span><strong>{profile.provider_name}</strong><small>{profile.model_name}</small></span>
+                      <span><em className={`status-pill ${profile.enabled ? "status-completed" : "status-failed"}`}>{profile.enabled ? "启用" : "停用"}</em></span>
+                      <span>{profile.capabilities.join(", ")}</span>
+                      <span>{profile.pricing_unit}</span>
+                      <span>{profile.unit_price} {profile.pricing_currency}</span>
+                      <span>{profile.masked_api_key || "no key"}</span>
+                      <span className="admin-row-actions">
+                        <button type="button" onClick={() => handleEditProviderProfile(profile)}>编辑</button>
+                        <button type="button" onClick={() => handleDeleteProviderProfile(profile.id)}>删除</button>
+                      </span>
+                    </div>
+                  )) : <div className="template-empty">还没有后台模型配置；当前仍会读取 .env 中的 provider。</div>}
+                </div>
+              </section>
+
+              <aside className="admin-detail-panel">
+                <form className="admin-side-form" onSubmit={handleSaveProviderProfile}>
+                  <div className="admin-detail-head">
+                    <h2>{editingProviderProfileId === null ? "新增模型配置" : "编辑模型配置"}</h2>
+                    <p>保存后会立即进入生成模型列表，停用后不会再参与任务选择。</p>
+                  </div>
+                  <div className="model-form-grid model-form-grid-tight">
                   <label className="composer-menu-field">
                     <span>Provider</span>
                     <input
@@ -1971,46 +2111,89 @@ export default function App() {
                   ) : null}
                 </div>
               </form>
-
-              <section className="model-profile-list">
-                <div className="template-section-head">
-                  <strong>已保存配置</strong>
-                  <span>{state.providerProfiles.length} 条后台配置，当前运行时共 {state.providers.length} 个 provider。</span>
+              </aside>
+            </div>
+          </section>
+        ) : activeView === "settings" ? (
+          <section className="admin-page">
+            <header className="admin-page-head">
+              <div>
+                <h1>设置中心</h1>
+                <p>系统配置、权限管理、通知与运行状态概览</p>
+              </div>
+              <button type="button" className="admin-primary-button" onClick={() => void loadData({ force: true })}>刷新状态</button>
+            </header>
+            {!userCanUseOpsViews ? (
+              <div className="floating-error">当前账号没有查看设置中心的权限。</div>
+            ) : (
+              <>
+                <div className="settings-tabs">
+                  <button type="button" className="active">系统设置</button>
+                  <button type="button">权限管理</button>
+                  <button type="button">数据管理</button>
+                  <button type="button">安全设置</button>
+                  <button type="button">集成配置</button>
                 </div>
-                {state.providerProfiles.length > 0 ? (
-                  state.providerProfiles.map((profile) => (
-                    <article key={profile.id} className="model-profile-card">
-                      <div>
-                        <div className="feed-card-topline">
-                          <strong>{profile.provider_name}</strong>
-                          <span className={`status-pill ${profile.enabled ? "status-completed" : "status-failed"}`}>
-                            {profile.enabled ? "enabled" : "disabled"}
-                          </span>
-                        </div>
-                        <p>{profile.model_name}</p>
-                        <div className="feed-card-meta">
-                          <span>{profile.capabilities.join(", ")}</span>
-                          <span>{profile.masked_api_key || "no key"}</span>
-                          <span>{profile.unit_price} {profile.pricing_currency} / {profile.pricing_unit}</span>
-                          <span>{profile.reference_mode}</span>
-                        </div>
+                <div className="settings-layout">
+                  <aside className="settings-menu">
+                    {["基本信息", "界面设置", "时间与日期", "计量单位", "语言设置", "系统维护"].map((item, index) => (
+                      <button key={item} type="button" className={index === 0 ? "active" : ""}>{item}</button>
+                    ))}
+                  </aside>
+                  <section className="settings-main">
+                    <article className="admin-table-panel settings-info-card">
+                      <div className="admin-detail-head">
+                        <h2>基本信息</h2>
+                        <p>配置系统的基础信息。当前页面为轻量概览，不写入真实配置。</p>
                       </div>
-                      <div className="model-profile-url">{profile.base_url}</div>
-                      <div className="template-card-actions">
-                        <button type="button" className="template-action-button" onClick={() => handleEditProviderProfile(profile)}>
-                          编辑
-                        </button>
-                        <button type="button" className="template-action-button" onClick={() => handleDeleteProviderProfile(profile.id)}>
-                          删除
-                        </button>
+                      <div className="settings-field-grid">
+                        <label className="composer-menu-field"><span>系统名称</span><input value="QMDH 设计师运营平台" readOnly /></label>
+                        <label className="composer-menu-field"><span>公司名称</span><input value="QMDH Studio" readOnly /></label>
+                        <label className="composer-menu-field composer-menu-field-full"><span>系统描述</span><input value="面向设计团队的 AI 模型运营与设计师账号管理平台" readOnly /></label>
+                        <label className="composer-menu-field"><span>时区设置</span><input value="(UTC+08:00) 北京、上海、香港特别行政区" readOnly /></label>
+                        <label className="composer-menu-field"><span>系统版本</span><input value="MVP 1.0" readOnly /></label>
                       </div>
                     </article>
-                  ))
-                ) : (
-                  <div className="template-empty">还没有后台模型配置；当前仍会读取 .env 中的 provider。</div>
-                )}
-              </section>
-            </div>
+                    <article className="admin-table-panel settings-switch-card">
+                      <div className="admin-detail-head">
+                        <h2>系统功能开关</h2>
+                        <p>仅展示当前项目已具备或待补强能力。</p>
+                      </div>
+                      <div className="settings-switch-grid">
+                        {[
+                          ["模型上传", "允许管理员维护模型配置", true],
+                          ["账号管理", "启用数据库账号与角色权限", true],
+                          ["导出报告", "当前仅保留入口，后续补报表", false],
+                          ["API 访问", "旧 token 兼容路径仍保留", true],
+                          ["操作日志", "待 task-010 接入审计", false],
+                          ["维护模式", "暂未接入真实开关", false]
+                        ].map(([title, desc, enabled]) => (
+                          <div key={String(title)} className="settings-switch-row">
+                            <span><strong>{title}</strong><small>{desc}</small></span>
+                            <em className={enabled ? "on" : ""}>{enabled ? "ON" : "OFF"}</em>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  </section>
+                  <aside className="admin-detail-panel settings-resource-panel">
+                    <div className="admin-detail-head">
+                      <h2>系统资源使用</h2>
+                      <p>当前数据来自本地运行状态与现有业务统计。</p>
+                    </div>
+                    <div className="resource-meter"><span>任务记录</span><b><i style={{ width: `${percentOf(state.tasks.length, 200)}%` }} /></b><em>{state.tasks.length} / 200</em></div>
+                    <div className="resource-meter"><span>模型配置</span><b><i style={{ width: `${percentOf(state.providerProfiles.length, 20)}%` }} /></b><em>{state.providerProfiles.length} / 20</em></div>
+                    <div className="resource-meter"><span>账号数量</span><b><i style={{ width: `${percentOf(state.users.length, 50)}%` }} /></b><em>{state.users.length} / 50</em></div>
+                    <div className="resource-meter"><span>项目数量</span><b><i style={{ width: `${percentOf(state.projects.length, 20)}%` }} /></b><em>{state.projects.length} / 20</em></div>
+                    <div className="settings-quick-actions">
+                      <button type="button" onClick={() => (window.location.href = "/admin/models")}>运维配置</button>
+                      {userCanManageUsers ? <button type="button" onClick={() => (window.location.href = "/admin/users")}>账号管理</button> : null}
+                      <button type="button" onClick={() => (window.location.href = "/admin/dashboard")}>运营看板</button>
+                    </div>
+                  </aside>
+                </div>
+              </>
+            )}
           </section>
         ) : (
           <>

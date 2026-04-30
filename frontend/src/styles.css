@@ -67,6 +67,30 @@ button {
   min-height: 100vh;
 }
 
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: min(420px, 100%);
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 16px;
+}
+
+.auth-card h1 {
+  margin: 0;
+  font-family: "Sora", sans-serif;
+  font-size: 2rem;
+}
+
 .studio-shell {
   min-height: 100vh;
   display: grid;
@@ -152,6 +176,16 @@ button {
   display: grid;
   gap: 10px;
   justify-items: center;
+}
+
+.rail-logout {
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .rail-health,
@@ -1323,6 +1357,29 @@ button {
   word-break: break-all;
 }
 
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dashboard-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.dashboard-row span {
+  color: var(--muted);
+  word-break: break-word;
+}
+
+.dashboard-row strong {
+  font-family: "IBM Plex Mono", monospace;
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
@@ -1433,7 +1490,8 @@ textarea:focus-visible {
     .composer-inline-grid,
     .composer-control-grid,
     .model-form-grid,
-    .feed-gallery {
+    .feed-gallery,
+    .dashboard-grid {
     grid-template-columns: 1fr;
   }
 

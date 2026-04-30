@@ -49,6 +49,56 @@ export type Provider = {
   adapter_kind: string;
 };
 
+export type AuthUser = {
+  id: number;
+  name: string;
+  display_name: string;
+  role: string;
+  project_codes: string[];
+  is_active: boolean;
+};
+
+export type LoginResponse = {
+  token: string;
+  expires_at: string;
+  user: AuthUser;
+};
+
+export type ManagedUser = AuthUser & {
+  created_at: string;
+  updated_at: string;
+  last_login_at: string | null;
+};
+
+export type UserCreatePayload = {
+  name: string;
+  password: string;
+  display_name: string;
+  role: string;
+  project_codes: string[];
+  is_active: boolean;
+};
+
+export type UserUpdatePayload = Partial<Pick<UserCreatePayload, "display_name" | "role" | "project_codes" | "is_active">>;
+
+export type DashboardStats = {
+  active_workflows: number;
+  total_tasks: number;
+  successful_tasks: number;
+  failed_tasks: number;
+  success_rate: number;
+  average_cost: number;
+  average_latency_ms: number;
+  audit_coverage_rate: number;
+  outbound_tasks: number;
+  total_cost: number;
+  user_rankings: Array<Record<string, unknown>>;
+  project_rankings: Array<Record<string, unknown>>;
+  provider_rankings: Array<Record<string, unknown>>;
+  model_rankings: Array<Record<string, unknown>>;
+  failure_reasons: Array<Record<string, unknown>>;
+};
+
 export type ProviderProfileRecord = {
   id: number;
   provider_name: string;
@@ -171,14 +221,34 @@ export type ReferenceUploadResponse = {
 };
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api/v1").replace(/\/$/, "");
-const AUTH_USER = import.meta.env.VITE_QMDH_USER ?? "reviewer";
-const AUTH_TOKEN = import.meta.env.VITE_QMDH_AUTH_TOKEN ?? "dev-reviewer-token";
+const AUTH_STORAGE_KEY = "qmdh.session.token";
+const LEGACY_AUTH_USER = import.meta.env.VITE_QMDH_LEGACY_USER ?? "";
+const LEGACY_AUTH_TOKEN = import.meta.env.VITE_QMDH_LEGACY_AUTH_TOKEN ?? "";
+
+export function getStoredAuthToken(): string {
+  return window.localStorage.getItem(AUTH_STORAGE_KEY) ?? "";
+}
+
+export function setStoredAuthToken(token: string): void {
+  window.localStorage.setItem(AUTH_STORAGE_KEY, token);
+}
+
+export function clearStoredAuthToken(): void {
+  window.localStorage.removeItem(AUTH_STORAGE_KEY);
+}
 
 function authHeaders(): Record<string, string> {
-  return {
-    "X-QMDH-User": AUTH_USER,
-    "X-QMDH-Auth": AUTH_TOKEN
-  };
+  const token = getStoredAuthToken();
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
+  }
+  if (LEGACY_AUTH_TOKEN) {
+    return {
+      "X-QMDH-User": LEGACY_AUTH_USER,
+      "X-QMDH-Auth": LEGACY_AUTH_TOKEN
+    };
+  }
+  return {};
 }
 
 async function buildError(response: Response): Promise<Error> {
@@ -256,6 +326,26 @@ async function deleteRequest(path: string): Promise<void> {
 }
 
 export const api = {
+  login: async (username: string, password: string) => {
+    const response = await fetch(`${API_BASE}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    if (!response.ok) {
+      throw await buildError(response);
+    }
+    return response.json() as Promise<LoginResponse>;
+  },
+  logout: () => postJson<void>("/auth/logout"),
+  me: () => request<AuthUser>("/auth/me"),
+  users: () => request<ManagedUser[]>("/users"),
+  createUser: (payload: UserCreatePayload) => postJson<ManagedUser>("/users", payload),
+  updateUser: (userId: number, payload: UserUpdatePayload) => patchJson<ManagedUser>(`/users/${userId}`, payload),
+  resetUserPassword: (userId: number, password: string) =>
+    postJson<ManagedUser>(`/users/${userId}/reset-password`, { password }),
+  deleteUser: (userId: number) => deleteRequest(`/users/${userId}`),
+  dashboardStats: () => request<DashboardStats>("/dashboard/stats"),
   health: () => request<{ status: string; service: string }>("/health"),
   projects: () => request<Project[]>("/projects"),
   projectStatus: (projectCode: string) => request<ProjectStatus>(`/projects/${projectCode}/status`),

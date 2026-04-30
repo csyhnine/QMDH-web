@@ -2,13 +2,20 @@ import { type CSSProperties, type ChangeEvent, type DragEvent, type FormEvent, t
 
 import {
   api,
+  clearStoredAuthToken,
   type Asset,
+  type AuthUser,
+  type DashboardStats,
+  getStoredAuthToken,
+  type ManagedUser,
   type Project,
   type PromptTemplateRecord,
   type Provider,
   type ProviderProfileCreatePayload,
   type ProviderProfileRecord,
+  setStoredAuthToken,
   type Task,
+  type UserCreatePayload,
   type Workflow
 } from "./api";
 
@@ -20,6 +27,8 @@ type LoadState = {
   workflows: Workflow[];
   tasks: Task[];
   assets: Asset[];
+  users: ManagedUser[];
+  dashboard: DashboardStats | null;
   error: string;
   ready: boolean;
 };
@@ -65,7 +74,7 @@ type FeedFilterState = {
 };
 
 type ComposerMenuKey = "template" | "provider" | "display" | "count" | null;
-type ActiveView = "studio" | "models";
+type ActiveView = "studio" | "models" | "users" | "dashboard";
 
 type ProviderProfileDraft = {
   providerName: string;
@@ -81,6 +90,15 @@ type ProviderProfileDraft = {
   referenceCaptionModel: string;
 };
 
+type UserDraft = {
+  name: string;
+  password: string;
+  displayName: string;
+  role: string;
+  projectCodes: string;
+  isActive: boolean;
+};
+
 const IMAGE_WORKFLOW_KEY = "image-generate";
 
 const initialState: LoadState = {
@@ -91,6 +109,8 @@ const initialState: LoadState = {
   workflows: [],
   tasks: [],
   assets: [],
+  users: [],
+  dashboard: null,
   error: "",
   ready: false
 };
@@ -107,6 +127,15 @@ const defaultProviderProfileDraft: ProviderProfileDraft = {
   enabled: true,
   referenceMode: "disabled",
   referenceCaptionModel: ""
+};
+
+const defaultUserDraft: UserDraft = {
+  name: "",
+  password: "",
+  displayName: "",
+  role: "designer",
+  projectCodes: "QMDH-001",
+  isActive: true
 };
 
 const stylePresets = [
@@ -331,6 +360,56 @@ function parseCapabilities(value: string): string[] {
     .filter(Boolean);
 }
 
+function parseProjectCodes(value: string): string[] {
+  return value
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function toUserPayload(draft: UserDraft): UserCreatePayload {
+  return {
+    name: draft.name.trim(),
+    password: draft.password,
+    display_name: draft.displayName.trim(),
+    role: draft.role,
+    project_codes: parseProjectCodes(draft.projectCodes),
+    is_active: draft.isActive
+  };
+}
+
+function toUserDraft(user: ManagedUser): UserDraft {
+  return {
+    name: user.name,
+    password: "",
+    displayName: user.display_name,
+    role: user.role,
+    projectCodes: user.project_codes.join(", "),
+    isActive: user.is_active
+  };
+}
+
+function resolveActiveView(): ActiveView {
+  const path = window.location.pathname.replace(/\/$/, "");
+  if (path === "/admin/models") return "models";
+  if (path === "/admin/users") return "users";
+  if (path === "/admin/dashboard") return "dashboard";
+  return "studio";
+}
+
+function canManageUsers(user: AuthUser | null): boolean {
+  return user ? ["owner", "admin"].includes(user.role) : false;
+}
+
+function canUseOpsViews(user: AuthUser | null): boolean {
+  return user ? ["owner", "admin", "ops"].includes(user.role) : false;
+}
+
+function metricValue(item: Record<string, unknown>, key: string): string {
+  const value = item[key];
+  return typeof value === "number" || typeof value === "string" ? String(value) : "";
+}
+
 function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfileDraft {
   return {
     providerName: profile.provider_name,
@@ -476,9 +555,13 @@ function FeedCard(props: {
 }
 
 export default function App() {
-  const isModelAdminRoute = window.location.pathname.replace(/\/$/, "") === "/admin/models";
-  const activeView: ActiveView = isModelAdminRoute ? "models" : "studio";
+  const activeView = resolveActiveView();
   const [state, setState] = useState<LoadState>(initialState);
+  const [authReady, setAuthReady] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [loginName, setLoginName] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
   const [studioForm, setStudioForm] = useState<StudioFormState>(defaultStudioForm);
   const [filters, setFilters] = useState<FeedFilterState>({
     sort: "oldest",
@@ -498,6 +581,9 @@ export default function App() {
   const [providerDraft, setProviderDraft] = useState<ProviderProfileDraft>(defaultProviderProfileDraft);
   const [editingProviderProfileId, setEditingProviderProfileId] = useState<number | null>(null);
   const [savingProviderProfile, setSavingProviderProfile] = useState(false);
+  const [userDraft, setUserDraft] = useState<UserDraft>(defaultUserDraft);
+  const [editingUserId, setEditingUserId] = useState<number | null>(null);
+  const [savingUser, setSavingUser] = useState(false);
   const isFetchingRef = useRef(false);
   const loadRequestIdRef = useRef(0);
   const composerToolbarRef = useRef<HTMLDivElement | null>(null);
@@ -512,15 +598,17 @@ export default function App() {
     loadRequestIdRef.current = requestId;
 
     try {
-      const [health, projects, providers, providerProfiles, workflows, tasks, assets, templates] = await Promise.all([
+      const [health, projects, providers, providerProfiles, workflows, tasks, assets, templates, users, dashboard] = await Promise.all([
         api.health(),
         api.projects(),
         api.providers(),
-        isModelAdminRoute ? api.providerProfiles().catch(() => []) : Promise.resolve([]),
+        activeView === "models" ? api.providerProfiles().catch(() => []) : Promise.resolve([]),
         api.workflows(),
         api.tasks(),
         api.assets(),
-        api.promptTemplates().catch(() => null)
+        api.promptTemplates().catch(() => null),
+        activeView === "users" ? api.users().catch(() => []) : Promise.resolve([]),
+        activeView === "dashboard" ? api.dashboardStats().catch(() => null) : Promise.resolve(null)
       ]);
 
       if (requestId !== loadRequestIdRef.current) return;
@@ -533,6 +621,8 @@ export default function App() {
         workflows,
         tasks,
         assets,
+        users,
+        dashboard,
         error: "",
         ready: true
       });
@@ -556,16 +646,39 @@ export default function App() {
   }
 
   useEffect(() => {
-    void loadData();
+    async function restoreSession() {
+      if (!getStoredAuthToken()) {
+        setAuthReady(true);
+        return;
+      }
+
+      try {
+        const user = await api.me();
+        setCurrentUser(user);
+      } catch {
+        clearStoredAuthToken();
+        setCurrentUser(null);
+      } finally {
+        setAuthReady(true);
+      }
+    }
+
+    void restoreSession();
   }, []);
 
   useEffect(() => {
+    if (!currentUser) return;
+    void loadData({ force: true });
+  }, [currentUser?.name, activeView]);
+
+  useEffect(() => {
+    if (!currentUser) return;
     const timer = window.setInterval(() => {
       void loadData();
     }, 8000);
 
     return () => window.clearInterval(timer);
-  }, []);
+  }, [currentUser?.name, activeView]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -1072,12 +1185,129 @@ export default function App() {
     }
   }
 
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoginError("");
+    try {
+      const response = await api.login(loginName.trim(), loginPassword);
+      setStoredAuthToken(response.token);
+      setCurrentUser(response.user);
+      setLoginPassword("");
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "登录失败");
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await api.logout();
+    } catch {
+      // Local logout should still clear the browser session.
+    }
+    clearStoredAuthToken();
+    setCurrentUser(null);
+    setState(initialState);
+    window.location.href = "/";
+  }
+
+  function resetUserDraft() {
+    setEditingUserId(null);
+    setUserDraft(defaultUserDraft);
+  }
+
+  function handleEditUser(user: ManagedUser) {
+    setEditingUserId(user.id);
+    setUserDraft(toUserDraft(user));
+  }
+
+  async function handleSaveUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const payload = toUserPayload(userDraft);
+    if (!payload.name || (editingUserId === null && !payload.password)) {
+      setState((current) => ({ ...current, error: "请填写用户名和初始密码" }));
+      return;
+    }
+
+    setSavingUser(true);
+    try {
+      if (editingUserId === null) {
+        await api.createUser(payload);
+      } else {
+        await api.updateUser(editingUserId, {
+          display_name: payload.display_name,
+          role: payload.role,
+          project_codes: payload.project_codes,
+          is_active: payload.is_active
+        });
+        if (payload.password) {
+          await api.resetUserPassword(editingUserId, payload.password);
+        }
+      }
+      resetUserDraft();
+      await loadData({ force: true });
+      setState((current) => ({ ...current, error: "" }));
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : "保存用户失败"
+      }));
+    } finally {
+      setSavingUser(false);
+    }
+  }
+
+  async function handleDeactivateUser(userId: number) {
+    try {
+      await api.deleteUser(userId);
+      await loadData({ force: true });
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : "停用用户失败"
+      }));
+    }
+  }
+
+  if (!authReady) {
+    return <div className="auth-shell">正在确认登录状态...</div>;
+  }
+
+  if (!currentUser) {
+    return (
+      <main className="auth-shell">
+        <form className="auth-card" onSubmit={handleLogin}>
+          <p className="canvas-kicker">QMDH / LOGIN</p>
+          <h1>登录 QMDH</h1>
+          <label className="composer-menu-field">
+            <span>用户名</span>
+            <input value={loginName} onChange={(event) => setLoginName(event.target.value)} autoComplete="username" />
+          </label>
+          <label className="composer-menu-field">
+            <span>密码</span>
+            <input
+              type="password"
+              value={loginPassword}
+              onChange={(event) => setLoginPassword(event.target.value)}
+              autoComplete="current-password"
+            />
+          </label>
+          {loginError ? <div className="floating-error">{loginError}</div> : null}
+          <button type="submit" className="submit-button">登录</button>
+        </form>
+      </main>
+    );
+  }
+
+  const userCanManageUsers = canManageUsers(currentUser);
+  const userCanUseOpsViews = canUseOpsViews(currentUser);
+  const isAdminView = activeView === "models" || activeView === "users" || activeView === "dashboard";
+
   return (
-    <div className={activeView === "models" ? "studio-shell admin-shell" : "studio-shell"}>
+    <div className={isAdminView ? "studio-shell admin-shell" : "studio-shell"}>
       <aside className="global-rail">
         <div className="rail-logo">Q</div>
         <nav className="rail-nav">
-          {activeView === "models" ? (
+          {isAdminView ? (
             <button type="button" className="rail-item active">
               <span>管理</span>
             </button>
@@ -1096,6 +1326,19 @@ export default function App() {
           )}
         </nav>
         <div className="rail-footer">
+          {userCanUseOpsViews && !isAdminView ? (
+            <button type="button" className="rail-logout" onClick={() => (window.location.href = "/admin/dashboard")}>
+              看板
+            </button>
+          ) : null}
+          {userCanManageUsers && !isAdminView ? (
+            <button type="button" className="rail-logout" onClick={() => (window.location.href = "/admin/users")}>
+              账号
+            </button>
+          ) : null}
+          <button type="button" className="rail-logout" onClick={handleLogout}>
+            退出
+          </button>
           <div className={`rail-health rail-health-${state.health}`}>{formatStatus(state.health)}</div>
           <span className="rail-sync">{lastSyncedAt ? formatDate(lastSyncedAt) : "等待同步"}</span>
         </div>
@@ -1133,8 +1376,143 @@ export default function App() {
         </aside>
       ) : null}
 
-      <main className={activeView === "models" ? "canvas-area model-admin-area" : showCenteredComposer ? "canvas-area canvas-area-empty" : "canvas-area"}>
-        {activeView === "models" ? (
+      <main className={isAdminView ? "canvas-area model-admin-area" : showCenteredComposer ? "canvas-area canvas-area-empty" : "canvas-area"}>
+        {activeView === "users" ? (
+          <section className="model-admin">
+            <header className="canvas-title model-admin-head">
+              <p className="canvas-kicker">QMDH / USER ADMIN</p>
+              <h1>账号管理</h1>
+              <p>创建和停用设计师账号，分配角色与可访问项目。</p>
+              <div className="template-card-actions">
+                <button type="button" className="ghost-button" onClick={() => (window.location.href = "/admin/dashboard")}>使用看板</button>
+                <button type="button" className="ghost-button" onClick={() => (window.location.href = "/admin/models")}>运维配置</button>
+              </div>
+            </header>
+
+            {!userCanManageUsers ? (
+              <div className="floating-error">当前账号没有用户管理权限。</div>
+            ) : (
+              <div className="model-admin-layout">
+                <form className="model-profile-form" onSubmit={handleSaveUser}>
+                  <div className="template-section-head">
+                    <strong>{editingUserId === null ? "新增账号" : "编辑账号"}</strong>
+                    <span>项目权限用英文逗号分隔，使用 * 可访问全部项目。</span>
+                  </div>
+                  <div className="model-form-grid">
+                    <label className="composer-menu-field">
+                      <span>用户名</span>
+                      <input value={userDraft.name} disabled={editingUserId !== null} onChange={(event) => setUserDraft((current) => ({ ...current, name: event.target.value }))} />
+                    </label>
+                    <label className="composer-menu-field">
+                      <span>显示名</span>
+                      <input value={userDraft.displayName} onChange={(event) => setUserDraft((current) => ({ ...current, displayName: event.target.value }))} />
+                    </label>
+                    <label className="composer-menu-field">
+                      <span>角色</span>
+                      <select value={userDraft.role} onChange={(event) => setUserDraft((current) => ({ ...current, role: event.target.value }))}>
+                        <option value="designer">designer</option>
+                        <option value="ops">ops</option>
+                        <option value="admin">admin</option>
+                        <option value="owner">owner</option>
+                      </select>
+                    </label>
+                    <label className="composer-menu-field">
+                      <span>{editingUserId === null ? "初始密码" : "重置密码"}</span>
+                      <input type="password" value={userDraft.password} onChange={(event) => setUserDraft((current) => ({ ...current, password: event.target.value }))} />
+                    </label>
+                    <label className="composer-menu-field composer-menu-field-full">
+                      <span>项目权限</span>
+                      <input value={userDraft.projectCodes} onChange={(event) => setUserDraft((current) => ({ ...current, projectCodes: event.target.value }))} placeholder="QMDH-001 或 *" />
+                    </label>
+                  </div>
+                  <label className="model-toggle">
+                    <input type="checkbox" checked={userDraft.isActive} onChange={(event) => setUserDraft((current) => ({ ...current, isActive: event.target.checked }))} />
+                    <span>启用账号</span>
+                  </label>
+                  {state.error ? <div className="floating-error">{state.error}</div> : null}
+                  <div className="template-editor-actions">
+                    <button type="submit" className="submit-button" disabled={savingUser}>{savingUser ? "保存中..." : "保存账号"}</button>
+                    {editingUserId !== null ? <button type="button" className="ghost-button" onClick={resetUserDraft}>取消编辑</button> : null}
+                  </div>
+                </form>
+
+                <section className="model-profile-list">
+                  <div className="template-section-head">
+                    <strong>账号列表</strong>
+                    <span>{state.users.length} 个账号</span>
+                  </div>
+                  {state.users.map((user) => (
+                    <article key={user.id} className="model-profile-card">
+                      <div className="feed-card-topline">
+                        <strong>{user.display_name || user.name}</strong>
+                        <span className={`status-pill ${user.is_active ? "status-completed" : "status-failed"}`}>{user.is_active ? "active" : "disabled"}</span>
+                      </div>
+                      <p>{user.name}</p>
+                      <div className="feed-card-meta">
+                        <span>{user.role}</span>
+                        <span>{user.project_codes.join(", ")}</span>
+                        <span>{user.last_login_at ? formatDate(user.last_login_at) : "未登录"}</span>
+                      </div>
+                      <div className="template-card-actions">
+                        <button type="button" className="template-action-button" onClick={() => handleEditUser(user)}>编辑</button>
+                        <button type="button" className="template-action-button" onClick={() => handleDeactivateUser(user.id)}>停用</button>
+                      </div>
+                    </article>
+                  ))}
+                </section>
+              </div>
+            )}
+          </section>
+        ) : activeView === "dashboard" ? (
+          <section className="model-admin">
+            <header className="canvas-title model-admin-head">
+              <p className="canvas-kicker">QMDH / OPERATIONS</p>
+              <h1>使用与成本看板</h1>
+              <p>按最近 30 天统计任务、成功率、成本、用户和模型调用情况。</p>
+              <div className="template-card-actions">
+                {userCanManageUsers ? <button type="button" className="ghost-button" onClick={() => (window.location.href = "/admin/users")}>账号管理</button> : null}
+                <button type="button" className="ghost-button" onClick={() => (window.location.href = "/admin/models")}>运维配置</button>
+              </div>
+            </header>
+            {!userCanUseOpsViews ? (
+              <div className="floating-error">当前账号没有查看运营看板的权限。</div>
+            ) : state.dashboard ? (
+              <>
+                <div className="stat-strip">
+                  <div className="stat-card accent"><span>任务数</span><strong>{state.dashboard.total_tasks}</strong></div>
+                  <div className="stat-card"><span>成功率</span><strong>{state.dashboard.success_rate}%</strong></div>
+                  <div className="stat-card"><span>失败数</span><strong>{state.dashboard.failed_tasks}</strong></div>
+                  <div className="stat-card"><span>总成本</span><strong>{state.dashboard.total_cost}</strong></div>
+                </div>
+                <div className="dashboard-grid">
+                  {[
+                    ["用户排行", state.dashboard.user_rankings, "name"],
+                    ["项目排行", state.dashboard.project_rankings, "code"],
+                    ["Provider 调用", state.dashboard.provider_rankings, "name"],
+                    ["模型调用", state.dashboard.model_rankings, "name"],
+                    ["失败原因", state.dashboard.failure_reasons, "reason"]
+                  ].map(([title, rows, key]) => (
+                    <section key={String(title)} className="model-profile-card">
+                      <div className="template-section-head"><strong>{String(title)}</strong></div>
+                      {(rows as Array<Record<string, unknown>>).length > 0 ? (
+                        (rows as Array<Record<string, unknown>>).map((row, index) => (
+                          <div key={`${String(title)}-${index}`} className="dashboard-row">
+                            <span>{metricValue(row, String(key))}</span>
+                            <strong>{metricValue(row, "count")}</strong>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="template-empty">暂无数据</div>
+                      )}
+                    </section>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="template-empty">看板数据加载中。</div>
+            )}
+          </section>
+        ) : activeView === "models" ? (
           <section className="model-admin">
             <header className="canvas-title model-admin-head">
               <p className="canvas-kicker">QMDH / MODEL ADMIN</p>

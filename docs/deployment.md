@@ -123,37 +123,54 @@ FireRed 当前使用兼容桥接：在 `image.generate` 流程里向 ModelScope 
 - `QMDH_REDIS_URL=redis://redis:6379/0`
 - `QMDH_REDIS_QUEUE_NAME=qmdh:tasks`
 
-## 最小认证配置
+## 账号系统与认证配置
 
-当前 MVP 已加入最小 token 认证。前端请求会发送：
+当前认证主线已经升级为数据库账号与 session。默认启动时会根据环境变量创建首个管理员：
 
-- `X-QMDH-User`
-- `X-QMDH-Auth`
+```env
+QMDH_BOOTSTRAP_ADMIN_NAME=admin
+QMDH_BOOTSTRAP_ADMIN_PASSWORD=dev-admin-password
+QMDH_AUTH_SESSION_DAYS=7
+```
 
-后端通过 `QMDH_AUTH_USERS_JSON` 派生可信用户与项目访问范围，不再信任任务或模板 payload 中的 `user_name`。
+本地默认账号是：
 
-开发默认值：
+```text
+用户名：admin
+密码：dev-admin-password
+```
+
+生产环境必须替换默认密码。登录成功后，前端会把 session token 存入浏览器 `localStorage`，后续请求发送：
+
+```http
+Authorization: Bearer <session-token>
+```
+
+账号管理入口：
+
+```text
+http://127.0.0.1:18080/admin/users
+```
+
+使用与成本看板入口：
+
+```text
+http://127.0.0.1:18080/admin/dashboard
+```
+
+角色边界：
+
+- `owner / admin`：可管理用户、查看看板、维护运维配置
+- `ops`：可查看看板、维护模型运维配置，不可管理用户
+- `designer`：只能使用设计师工作台
+
+旧版 `QMDH_AUTH_USERS_JSON` 与 `X-QMDH-Auth` / `X-QMDH-User` 仍作为兼容路径保留，便于旧脚本和测试平滑迁移。它不再是前端主登录方式。
+
+兼容配置示例：
 
 ```env
 QMDH_AUTH_USERS_JSON=[{"name":"reviewer","token":"dev-reviewer-token","role":"reviewer","project_codes":["QMDH-001"]}]
 ```
-
-如需本地打开 `/admin/models`，需要配置一个管理角色，例如：
-
-```env
-QMDH_AUTH_USERS_JSON=[{"name":"admin","token":"dev-admin-token","role":"admin","project_codes":["*"]},{"name":"reviewer","token":"dev-reviewer-token","role":"reviewer","project_codes":["QMDH-001"]}]
-VITE_QMDH_USER=admin
-VITE_QMDH_AUTH_TOKEN=dev-admin-token
-```
-
-前端可通过 Vite 环境变量覆盖默认开发账号：
-
-```env
-VITE_QMDH_USER=reviewer
-VITE_QMDH_AUTH_TOKEN=dev-reviewer-token
-```
-
-生产环境应替换默认 token，并按项目授权填写 `project_codes`。如果需要临时允许某账号访问所有项目，可以使用 `"project_codes":["*"]`。
 
 ## 当前已具备
 

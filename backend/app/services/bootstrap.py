@@ -2,6 +2,8 @@ from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.security import hash_password
 from app.models import Asset, AssetType, DataClassification, Project, User, Workflow
 from app.services.media_storage import write_preview_svg
 
@@ -9,6 +11,7 @@ from app.services.media_storage import write_preview_svg
 def ensure_schema(engine: Engine) -> None:
     inspector = inspect(engine)
     asset_columns = {column["name"] for column in inspector.get_columns("assets")} if inspector.has_table("assets") else set()
+    user_columns = {column["name"] for column in inspector.get_columns("users")} if inspector.has_table("users") else set()
 
     statements: list[str] = []
     if "prompt_text" not in asset_columns:
@@ -19,6 +22,19 @@ def ensure_schema(engine: Engine) -> None:
         statements.append("ALTER TABLE assets ADD COLUMN share_count INTEGER DEFAULT 0 NOT NULL")
     if "source_task_id" not in asset_columns:
         statements.append("ALTER TABLE assets ADD COLUMN source_task_id INTEGER")
+    if user_columns:
+        if "display_name" not in user_columns:
+            statements.append("ALTER TABLE users ADD COLUMN display_name VARCHAR(150)")
+        if "password_hash" not in user_columns:
+            statements.append("ALTER TABLE users ADD COLUMN password_hash TEXT")
+        if "is_active" not in user_columns:
+            statements.append("ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE")
+        if "project_codes" not in user_columns:
+            statements.append("ALTER TABLE users ADD COLUMN project_codes JSON")
+        if "last_login_at" not in user_columns:
+            statements.append("ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP")
+        if "updated_at" not in user_columns:
+            statements.append("ALTER TABLE users ADD COLUMN updated_at TIMESTAMP")
 
     if not statements:
         return
@@ -26,6 +42,11 @@ def ensure_schema(engine: Engine) -> None:
     with engine.begin() as connection:
         for statement in statements:
             connection.execute(text(statement))
+        if user_columns:
+            connection.execute(text("UPDATE users SET display_name = name WHERE display_name IS NULL OR display_name = ''"))
+            connection.execute(text("UPDATE users SET password_hash = '' WHERE password_hash IS NULL"))
+            connection.execute(text("UPDATE users SET is_active = TRUE WHERE is_active IS NULL"))
+            connection.execute(text("UPDATE users SET project_codes = '[\"QMDH-001\"]' WHERE project_codes IS NULL"))
 
 
 def seed_initial_data(db: Session) -> None:
@@ -33,7 +54,27 @@ def seed_initial_data(db: Session) -> None:
     for name, role in users:
         existing = db.scalar(select(User).where(User.name == name))
         if not existing:
-            db.add(User(name=name, role=role))
+            db.add(User(name=name, display_name=name, role=role, project_codes=["QMDH-001"]))
+
+    if settings.bootstrap_admin_name and settings.bootstrap_admin_password:
+        admin = db.scalar(select(User).where(User.name == settings.bootstrap_admin_name))
+        if not admin:
+            db.add(
+                User(
+                    name=settings.bootstrap_admin_name,
+                    display_name=settings.bootstrap_admin_name,
+                    role="owner",
+                    password_hash=hash_password(settings.bootstrap_admin_password),
+                    is_active=True,
+                    project_codes=["*"],
+                )
+            )
+        elif not admin.password_hash:
+            admin.role = "owner"
+            admin.display_name = admin.display_name or admin.name
+            admin.password_hash = hash_password(settings.bootstrap_admin_password)
+            admin.is_active = True
+            admin.project_codes = ["*"]
 
     projects = [
         ("QMDH 示范项目", "QMDH-001", DataClassification.b),

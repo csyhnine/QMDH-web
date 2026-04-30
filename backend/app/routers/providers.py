@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_auth_user
+from app.core.auth import get_current_auth_user, require_ops_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import ProviderProfile
@@ -67,7 +67,7 @@ def list_provider_profiles(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> list[ProviderProfileOut]:
-    _require_provider_admin(auth_user)
+    require_ops_access(auth_user)
     profiles = db.scalars(select(ProviderProfile).order_by(ProviderProfile.provider_name)).all()
     return [_to_profile_out(profile) for profile in profiles]
 

@@ -1,0 +1,196 @@
+import unittest
+from datetime import datetime, timedelta, timezone
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.core.security import hash_password, hash_session_token
+from app.database import Base, get_db
+from app.models import AuthSession, DataClassification, Project, Task, TaskStatus, User, Workflow
+from app.routers import auth, dashboard, projects, users
+
+
+class DatabaseAuthTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(bind=self.engine)
+        self.SessionLocal = sessionmaker(bind=self.engine)
+
+        with self.SessionLocal() as db:
+            admin = User(
+                name="admin",
+                display_name="Admin",
+                role="admin",
+                password_hash=hash_password("admin-pass"),
+                is_active=True,
+                project_codes=["*"],
+            )
+            ops = User(
+                name="ops",
+                display_name="Ops",
+                role="ops",
+                password_hash=hash_password("ops-pass"),
+                is_active=True,
+                project_codes=["*"],
+            )
+            designer = User(
+                name="designer",
+                display_name="Designer",
+                role="designer",
+                password_hash=hash_password("designer-pass"),
+                is_active=True,
+                project_codes=["QMDH-001"],
+            )
+            disabled = User(
+                name="disabled",
+                display_name="Disabled",
+                role="designer",
+                password_hash=hash_password("disabled-pass"),
+                is_active=False,
+                project_codes=["QMDH-001"],
+            )
+            db.add_all([admin, ops, designer, disabled])
+            db.flush()
+            db.add(Project(name="Demo", code="QMDH-001", classification=DataClassification.b))
+            db.add(Project(name="Secret", code="QMDH-SEC", classification=DataClassification.a))
+            workflow = Workflow(
+                key="image-generate",
+                name="Image",
+                description="Image generation",
+                category="image",
+                priority="P1",
+                provider_capability="image.generate",
+                config={},
+            )
+            db.add(workflow)
+            db.flush()
+            project = db.query(Project).filter_by(code="QMDH-001").one()
+            db.add(
+                Task(
+                    title="Done",
+                    status=TaskStatus.completed,
+                    workflow_id=workflow.id,
+                    project_id=project.id,
+                    user_id=designer.id,
+                    requested_provider="modelscope_free_image",
+                    payload={},
+                    result={},
+                    classification=DataClassification.b,
+                    cost=1.25,
+                    latency_ms=1200,
+                )
+            )
+            db.commit()
+
+        self.app = FastAPI()
+
+        def override_get_db():
+            with self.SessionLocal() as db:
+                yield db
+
+        self.app.dependency_overrides[get_db] = override_get_db
+        self.app.include_router(auth.router)
+        self.app.include_router(users.router)
+        self.app.include_router(projects.router)
+        self.app.include_router(dashboard.router)
+        self.client = TestClient(self.app)
+
+    def tearDown(self) -> None:
+        Base.metadata.drop_all(bind=self.engine)
+        self.engine.dispose()
+
+    def login(self, username: str, password: str) -> str:
+        response = self.client.post("/auth/login", json={"username": username, "password": password})
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()["token"]
+
+    def test_login_me_and_logout_session(self) -> None:
+        token = self.login("designer", "designer-pass")
+
+        me = self.client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(me.status_code, 200)
+        self.assertEqual(me.json()["name"], "designer")
+
+        logout = self.client.post("/auth/logout", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(logout.status_code, 204)
+
+        rejected = self.client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(rejected.status_code, 401)
+
+    def test_login_rejects_wrong_password_disabled_and_expired_session(self) -> None:
+        wrong = self.client.post("/auth/login", json={"username": "designer", "password": "bad-pass"})
+        self.assertEqual(wrong.status_code, 401)
+
+        disabled = self.client.post("/auth/login", json={"username": "disabled", "password": "disabled-pass"})
+        self.assertEqual(disabled.status_code, 401)
+
+        with self.SessionLocal() as db:
+            user = db.query(User).filter_by(name="designer").one()
+            db.add(
+                AuthSession(
+                    user_id=user.id,
+                    token_hash=hash_session_token("expired-token"),
+                    expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+                )
+            )
+            db.commit()
+
+        expired = self.client.get("/auth/me", headers={"Authorization": "Bearer expired-token"})
+        self.assertEqual(expired.status_code, 401)
+
+    def test_role_boundaries_for_users_and_dashboard(self) -> None:
+        designer_token = self.login("designer", "designer-pass")
+        ops_token = self.login("ops", "ops-pass")
+        admin_token = self.login("admin", "admin-pass")
+
+        designer_users = self.client.get("/users", headers={"Authorization": f"Bearer {designer_token}"})
+        self.assertEqual(designer_users.status_code, 403)
+
+        ops_users = self.client.get("/users", headers={"Authorization": f"Bearer {ops_token}"})
+        self.assertEqual(ops_users.status_code, 403)
+
+        ops_dashboard = self.client.get("/dashboard/stats", headers={"Authorization": f"Bearer {ops_token}"})
+        self.assertEqual(ops_dashboard.status_code, 200)
+        self.assertEqual(ops_dashboard.json()["total_tasks"], 1)
+
+        created = self.client.post(
+            "/users",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={
+                "name": "new.designer",
+                "password": "new-pass",
+                "display_name": "New Designer",
+                "role": "designer",
+                "project_codes": ["QMDH-001"],
+                "is_active": True,
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+
+        reset = self.client.post(
+            f"/users/{created.json()['id']}/reset-password",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"password": "newer-pass"},
+        )
+        self.assertEqual(reset.status_code, 200)
+
+    def test_project_list_is_filtered_by_database_session_user(self) -> None:
+        designer_token = self.login("designer", "designer-pass")
+        response = self.client.get("/projects", headers={"Authorization": f"Bearer {designer_token}"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([project["code"] for project in response.json()], ["QMDH-001"])
+
+        forbidden = self.client.get("/projects/QMDH-SEC/status", headers={"Authorization": f"Bearer {designer_token}"})
+        self.assertEqual(forbidden.status_code, 403)
+
+
+if __name__ == "__main__":
+    unittest.main()

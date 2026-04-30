@@ -17,7 +17,7 @@
 QMDH-web 当前是一个前后端分离的原型项目：
 
 - `frontend/`：React + Vite + TypeScript 前端，当前正在收束为图像生成工作台
-- `backend/`：FastAPI + SQLAlchemy 后端，提供项目、工作流、任务、资产、dashboard 等接口
+- `backend/`：FastAPI + SQLAlchemy 后端，提供账号、项目、工作流、任务、资产、dashboard 等接口
 - `docs/projects/`：项目阶段状态和里程碑记录
 
 系统当前核心能力是“工作流驱动的任务系统”，图像生成、图像编辑、视频生成、文档生成等能力都被统一抽象为 workflow + task，而不是真正独立的业务服务。
@@ -46,6 +46,11 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
   - `backend/app/database.py`
   - `backend/app/core/config.py`
   - `backend/app/core/auth.py`
+  - `backend/app/core/security.py`
+- 账号与管理入口：
+  - `backend/app/routers/auth.py`
+  - `backend/app/routers/users.py`
+  - `frontend/src/App.tsx` 中的 `/admin/users` 与 `/admin/dashboard`
 - 部署入口：
   - `docker-compose.yml`
   - `DEPLOYMENT.md`
@@ -91,8 +96,8 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
   - `backend/app/routers/`
   - `backend/app/core/auth.py`
 - 职责：
-  - 提供健康检查、项目、provider、workflow、task、asset、dashboard 接口
-  - 通过 MVP token 认证派生可信用户和项目访问范围
+  - 提供健康检查、登录、用户管理、项目、provider、workflow、task、asset、dashboard 接口
+  - 通过数据库 session 认证派生可信用户和项目访问范围，短期保留旧 token 兼容
 - 依赖：
   - `backend/app/schemas.py`
   - `backend/app/database.py`
@@ -102,7 +107,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
   - 持久任务编排细节
 - 当前相关任务：
   - 任务创建与状态查询稳定化
-  - 认证与权限补齐
+  - 账号、认证与权限补齐
   - provider profile 后台管理
   - 服务器部署联调
 
@@ -199,10 +204,10 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 
 ### 主链路：图像生成任务
 1. 前端从 `frontend/src/App.tsx` 读取项目、workflow、provider、task、asset 数据。
-2. 前端在 `frontend/src/api.ts` 为 API 请求附带 `X-QMDH-Auth` 与 `X-QMDH-User`。
+2. 前端在 `frontend/src/api.ts` 为 API 请求附带 `Authorization: Bearer <session token>`；旧 `X-QMDH-Auth` 仅作为兼容路径保留。
 3. 用户在生图工作台填写业务字段，前端组装请求，但不再提交可信执行人字段。
 4. `POST /api/v1/tasks` 进入 `backend/app/routers/tasks.py`。
-5. 后端通过 `backend/app/core/auth.py` 认证 token，派生当前用户与可访问项目范围。
+5. 后端通过 `backend/app/core/auth.py` 校验数据库 session，派生当前用户、角色与可访问项目范围。
 6. 后端校验 workflow、provider、project、项目访问权限和 capability 兼容性。
 7. provider 校验来自静态模拟 provider、环境变量 provider 和数据库 `provider_profiles` 的合并结果；数据库同名配置优先。
 8. 设计师页面使用的 `GET /api/v1/providers` 只返回真实 runtime provider，不返回静态模拟 provider。
@@ -227,6 +232,14 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 7. 如果存在 ModelScope profile，注册表会自动派生 `Qwen/Qwen-Image-2512`、`Tongyi-MAI/Z-Image`、`Tongyi-MAI/Z-Image-Turbo` 等同 token 文生图 provider；`FireRedTeam/FireRed-Image-Edit-1.1` 通过后端白底图桥接同时暴露 `image.generate` 与 `image.edit` 能力。
 8. 任务创建与执行都使用合并后的 provider 注册表，保证后台保存后可以真实参与生成。
 
+### 辅助链路：账号与看板
+1. 未登录用户访问前端时进入登录页，调用 `POST /api/v1/auth/login` 获取 session token。
+2. `auth_sessions` 保存 token hash、过期时间和撤销时间，默认会话有效期 7 天。
+3. `GET /api/v1/auth/me` 返回当前用户、角色、启停状态和项目授权。
+4. `owner / admin` 可访问 `/admin/users`，通过 `/api/v1/users` 创建、编辑、停用账号和重置密码。
+5. `owner / admin / ops` 可访问 `/admin/dashboard`，读取最近任务数、成功率、成本、用户/项目排行、provider/model 分布和失败原因。
+6. `designer` 只使用设计师工作台，仍按 `project_codes` 过滤项目、任务、资产和模板。
+
 ### 辅助链路：项目状态
 1. `GET /api/v1/projects` 调用 `project_status.py`
 2. 后端从 `docs/projects/project-index.json` 和对应 `status.md`、`milestones.json` 读取状态
@@ -250,7 +263,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 
 - 热点模块：`frontend/src/App.tsx`
   - 原因：当前大部分前端页面逻辑仍集中在单文件中
-  - 风险：继续扩展会导致状态、布局和模块职责混杂
+  - 风险：现在同时承载设计师工作台、登录页和管理页，后续应在产品主线稳定后拆分
 
 - 热点模块：`backend/app/services/task_executor.py`
   - 原因：图像/视频/文档执行能力都汇集在这里
@@ -263,6 +276,10 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 - 热点模块：`backend/app/routers/tasks.py`
   - 原因：任务创建牵涉用户、项目、provider、workflow、审计和执行模式
   - 风险：认证、权限和一致性问题集中暴露在这里
+
+- 热点模块：`backend/app/core/auth.py` 与 `backend/app/routers/users.py`
+  - 原因：数据库 session、旧 token fallback 和角色边界集中在这里
+  - 风险：后续移除兼容认证或接入 SSO 时需要集中回归权限边界
 
 - 热点模块：`docs/projects/` 与 `docs/*.md`
   - 原因：项目状态文档和协作文档同时开始建立

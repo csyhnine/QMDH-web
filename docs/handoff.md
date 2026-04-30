@@ -10,6 +10,60 @@
 
 ## Latest Handoffs
 
+### [2026-04-30 11:20] Session Handoff
+- 执行角色：Feature / Production Management
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：Yes（本轮提交后）
+  - 是否有未提交改动：No（本轮提交后）
+  - 是否已 push：Yes（本轮提交后）
+- 本次完成：
+  - 将下一阶段主线从 `App.tsx` 收口切换到生产化管理能力
+  - 上线数据库账号系统：`users` 扩展密码哈希、显示名、启停状态、项目授权、最后登录时间；新增 `auth_sessions`
+  - 新增用户名密码登录、退出、当前用户接口：`/api/v1/auth/login`、`/auth/logout`、`/auth/me`
+  - 新增用户管理接口与 `/admin/users` 页面，`owner / admin` 可创建、编辑、停用账号和重置密码
+  - 后端认证优先读取 `Authorization: Bearer <token>`，保留旧 `X-QMDH-Auth` 兼容路径
+  - 新增 `/admin/dashboard` 使用与成本看板，统计任务数、成功率、失败数、成本、用户/项目排行、provider/model 分布和失败原因
+  - `/admin/models` 保留为运维配置入口，模型测试不再是当前业务主线
+  - 完成验证：
+    - `python -m unittest discover -s tests` 通过
+    - `npm run build` 通过
+    - `cmd /c start-dev.cmd --check` 通过
+- 修改文件：
+  - `backend/app/models.py`
+  - `backend/app/core/auth.py`
+  - `backend/app/core/config.py`
+  - `backend/app/core/security.py`
+  - `backend/app/routers/auth.py`
+  - `backend/app/routers/users.py`
+  - `backend/app/routers/dashboard.py`
+  - `frontend/src/api.ts`
+  - `frontend/src/App.tsx`
+  - `frontend/src/styles.css`
+  - `docs/architecture.md`
+  - `docs/deployment.md`
+  - `docs/handoff.md`
+  - `docs/tasks.md`
+  - `docs/projects/QMDH-001/status.md`
+- 当前任务状态：
+  - `task-001`: DONE（后续拆分降级为技术债）
+  - `task-002`: DONE
+  - `task-004`: DONE（已被数据库账号系统替代为主认证）
+  - `task-006`: DONE
+  - `task-007`: DONE
+  - `task-008`: DONE
+  - `task-sec-001`: BLOCKED
+- 风险与注意事项：
+  - 默认本地管理员为 `admin / dev-admin-password`，生产环境必须通过环境变量替换
+  - `QMDH_AUTH_USERS_JSON` 旧 token 认证仍保留为兼容路径，后续稳定后可移除
+  - 还没有正式 migration 体系，当前仍由启动补列承担 schema 演进
+  - Provider API key 仍是数据库明文保存，后续需要加密、轮换和操作审计
+- 下一位 agent 的第一步：
+  - 先检查 `git status`
+  - 登录 `/admin/users` 创建真实设计师账号并验证项目权限
+  - 用 `/admin/dashboard` 对一次真实生成任务检查用量和失败统计
+- 是否可直接接手：Yes
+
 ### [2026-04-30 10:20] Session Handoff
 - 执行角色：Feature / Provider Compatibility
 - 当前分支：`main`
@@ -91,41 +145,4 @@
   - 先检查 `git status`
   - 重启本地服务后确认设计师模型列表只保留文生图模型
   - 继续实测 `Qwen-Image-2512`、`Z-Image`、`Z-Image-Turbo` 的建筑效果图表现
-- 是否可直接接手：Yes
-
-### [2026-04-29 17:55] Session Handoff
-- 执行角色：Bugfix / Local Dev
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：Yes（本轮提交后）
-  - 是否有未提交改动：No（本轮提交后）
-  - 是否已 push：Yes（本轮提交后）
-- 本次完成：
-  - 排查设计师页面只显示 `MAILAND/majicflus_v1` 的原因：当前 `18010` 上运行的是旧后端 API，直接请求 `/api/v1/providers` 仍返回旧结构且没有 `adapter_kind`
-  - 验证当前仓库代码在 `18011` 启动后可正确返回 5 个真实魔搭 provider
-  - 增强 `start-dev.cmd`：如果 `18010` 上已有旧 API 或 stale listener，自动把新后端切到 `18011`，并同步设置前端代理
-  - `start-dev.cmd` 支持 `QMDH_BACKEND_PORT` / `QMDH_FRONTEND_PORT` 显式覆盖
-  - 更新部署文档说明本地 fallback 端口
-  - 完成验证：
-    - `cmd /c start-dev.cmd --check` 通过
-    - `python -m unittest discover -s tests` 通过
-    - `npm run build` 通过
-- 修改文件：
-  - `start-dev.cmd`
-  - `docs/deployment.md`
-  - `docs/handoff.md`
-- 当前任务状态：
-  - `task-001`: IN_PROGRESS
-  - `task-002`: DONE
-  - `task-004`: DONE
-  - `task-006`: DONE
-  - `task-007`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - 本机当前可能仍有不可通过常规 `taskkill` 清理的旧 18010 listener；重新运行 `start-dev.cmd` 后应以脚本打印端口为准
-  - 如果前端已经在 18080 跑着旧代理，也需要关闭旧前端窗口后重新启动
-- 下一位 agent 的第一步：
-  - 先检查 `git status`
-  - 关闭旧前后端窗口，重新运行 `start-dev.cmd`
-  - 确认 `/api/v1/providers` 返回 5 个真实魔搭 provider 后再继续试跑模型
 - 是否可直接接手：Yes

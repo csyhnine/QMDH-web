@@ -67,11 +67,64 @@ class DashboardStats(BaseModel):
     active_workflows: int
     total_tasks: int
     successful_tasks: int
+    failed_tasks: int = 0
     success_rate: float
     average_cost: float
     average_latency_ms: float
     audit_coverage_rate: float
     outbound_tasks: int
+    total_cost: float = 0.0
+    user_rankings: list[dict[str, Any]] = Field(default_factory=list)
+    project_rankings: list[dict[str, Any]] = Field(default_factory=list)
+    provider_rankings: list[dict[str, Any]] = Field(default_factory=list)
+    model_rankings: list[dict[str, Any]] = Field(default_factory=list)
+    failure_reasons: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class AuthLoginIn(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class AuthUserOut(BaseModel):
+    id: int
+    name: str
+    display_name: str
+    role: str
+    project_codes: list[str]
+    is_active: bool
+
+
+class AuthLoginOut(BaseModel):
+    token: str
+    expires_at: datetime
+    user: AuthUserOut
+
+
+class UserCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$")
+    password: str = Field(min_length=6, max_length=200)
+    display_name: str = Field(default="", max_length=150)
+    role: str = "designer"
+    project_codes: list[str] = Field(default_factory=lambda: ["QMDH-001"])
+    is_active: bool = True
+
+
+class UserUpdate(BaseModel):
+    display_name: str | None = Field(default=None, max_length=150)
+    role: str | None = None
+    project_codes: list[str] | None = None
+    is_active: bool | None = None
+
+
+class UserPasswordReset(BaseModel):
+    password: str = Field(min_length=6, max_length=200)
+
+
+class UserOut(AuthUserOut):
+    created_at: datetime
+    updated_at: datetime
+    last_login_at: datetime | None = None
 
 
 class ProviderCapability(BaseModel):

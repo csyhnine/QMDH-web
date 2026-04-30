@@ -45,6 +45,8 @@ class AuthUserProfile:
     token: str
     role: str = "designer"
     project_codes: tuple[str, ...] = ("QMDH-001",)
+    user_id: int | None = None
+    display_name: str = ""
 
 
 class Settings(BaseSettings):
@@ -67,6 +69,9 @@ class Settings(BaseSettings):
     auth_users_json: str = (
         '[{"name":"reviewer","token":"dev-reviewer-token","role":"reviewer","project_codes":["QMDH-001"]}]'
     )
+    bootstrap_admin_name: str = "admin"
+    bootstrap_admin_password: str = "dev-admin-password"
+    auth_session_days: int = 7
 
     model_config = SettingsConfigDict(
         env_file=(str(BACKEND_DIR / ".env"), str(REPO_ROOT_DIR / ".env")),

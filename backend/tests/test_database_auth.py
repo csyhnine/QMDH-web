@@ -11,6 +11,7 @@ from app.core.security import hash_password, hash_session_token
 from app.database import Base, get_db
 from app.models import AuthSession, DataClassification, Project, Task, TaskStatus, User, Workflow
 from app.routers import auth, dashboard, projects, users
+from app.services.bootstrap import seed_initial_data
 
 
 class DatabaseAuthTests(unittest.TestCase):
@@ -190,6 +191,26 @@ class DatabaseAuthTests(unittest.TestCase):
 
         forbidden = self.client.get("/projects/QMDH-SEC/status", headers={"Authorization": f"Bearer {designer_token}"})
         self.assertEqual(forbidden.status_code, 403)
+
+    def test_seed_initial_data_creates_local_dev_accounts_without_overwriting_passwords(self) -> None:
+        with self.SessionLocal() as db:
+            seed_initial_data(db)
+            owner = db.query(User).filter_by(name="qmdh.owner").one()
+            designer = db.query(User).filter_by(name="designer.arch").one()
+
+        self.assertEqual(owner.role, "owner")
+        self.assertEqual(owner.project_codes, ["*"])
+        self.assertEqual(designer.role, "designer")
+        self.assertEqual(designer.project_codes, ["QMDH-001"])
+
+        owner_token = self.login("qmdh.owner", "qmdh-owner-2026")
+        designer_token = self.login("designer.arch", "qmdh-arch-2026")
+
+        owner_users = self.client.get("/users", headers={"Authorization": f"Bearer {owner_token}"})
+        self.assertEqual(owner_users.status_code, 200)
+
+        designer_users = self.client.get("/users", headers={"Authorization": f"Bearer {designer_token}"})
+        self.assertEqual(designer_users.status_code, 403)
 
 
 if __name__ == "__main__":

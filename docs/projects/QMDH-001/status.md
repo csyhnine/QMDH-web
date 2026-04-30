@@ -46,6 +46,7 @@
 - 已新增 `/admin/users` 账号管理页，`owner / admin` 可维护设计师账号
 - 已新增 `/admin/dashboard` 使用与成本看板，`owner / admin / ops` 可查看任务数、成功率、成本、模型调用分布和失败原因
 - 模型与 Key 管理已降级为 `/admin/models` 运维配置入口，不再作为设计师侧能力
+- 已预置本地开发账号包，账号清单保存在 `local/qmdh-dev-accounts.md`，可通过 `open-accounts.cmd` 打开
 
 ## 风险与阻塞
 
@@ -66,6 +67,6 @@
 
 ## 下一步动作
 
-- 用 `/admin/users` 创建真实设计师账号并验证项目权限
+- 用 `open-accounts.cmd` 打开本地账号清单，并用预置设计师账号验证项目权限
 - 用 `/admin/dashboard` 观察真实生成任务的使用、成本和失败统计
 - 补 provider key 加密、操作审计、生产日志和正式 migration

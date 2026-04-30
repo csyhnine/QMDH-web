@@ -25,6 +25,7 @@
   - 后端认证优先读取 `Authorization: Bearer <token>`，保留旧 `X-QMDH-Auth` 兼容路径
   - 新增 `/admin/dashboard` 使用与成本看板，统计任务数、成功率、失败数、成本、用户/项目排行、provider/model 分布和失败原因
   - `/admin/models` 保留为运维配置入口，模型测试不再是当前业务主线
+  - 预置本地开发账号包，并生成忽略文件 `local/qmdh-dev-accounts.md`；可通过 `open-accounts.cmd` 打开
   - 完成验证：
     - `python -m unittest discover -s tests` 通过
     - `npm run build` 通过
@@ -40,6 +41,8 @@
   - `frontend/src/api.ts`
   - `frontend/src/App.tsx`
   - `frontend/src/styles.css`
+  - `.gitignore`
+  - `open-accounts.cmd`
   - `docs/architecture.md`
   - `docs/deployment.md`
   - `docs/handoff.md`
@@ -55,12 +58,13 @@
   - `task-sec-001`: BLOCKED
 - 风险与注意事项：
   - 默认本地管理员为 `admin / dev-admin-password`，生产环境必须通过环境变量替换
+  - 本地账号清单 `local/qmdh-dev-accounts.md` 不提交 Git；如果丢失，可按 `docs/deployment.md` 重新生成或让 Codex 补回
   - `QMDH_AUTH_USERS_JSON` 旧 token 认证仍保留为兼容路径，后续稳定后可移除
   - 还没有正式 migration 体系，当前仍由启动补列承担 schema 演进
   - Provider API key 仍是数据库明文保存，后续需要加密、轮换和操作审计
 - 下一位 agent 的第一步：
   - 先检查 `git status`
-  - 登录 `/admin/users` 创建真实设计师账号并验证项目权限
+  - 双击 `open-accounts.cmd` 打开账号清单，用预置设计师账号验证项目权限
   - 用 `/admin/dashboard` 对一次真实生成任务检查用量和失败统计
 - 是否可直接接手：Yes
 

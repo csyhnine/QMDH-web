@@ -7,6 +7,51 @@ from app.core.security import hash_password
 from app.models import Asset, AssetType, DataClassification, Project, User, Workflow
 from app.services.media_storage import write_preview_svg
 
+LOCAL_DEV_ACCOUNTS = [
+    {
+        "name": "qmdh.owner",
+        "display_name": "QMDH Owner",
+        "role": "owner",
+        "password": "qmdh-owner-2026",
+        "project_codes": ["*"],
+    },
+    {
+        "name": "qmdh.admin",
+        "display_name": "QMDH Admin",
+        "role": "admin",
+        "password": "qmdh-admin-2026",
+        "project_codes": ["*"],
+    },
+    {
+        "name": "qmdh.ops",
+        "display_name": "QMDH Ops",
+        "role": "ops",
+        "password": "qmdh-ops-2026",
+        "project_codes": ["*"],
+    },
+    {
+        "name": "designer.arch",
+        "display_name": "Architecture Designer",
+        "role": "designer",
+        "password": "qmdh-arch-2026",
+        "project_codes": ["QMDH-001"],
+    },
+    {
+        "name": "designer.landscape",
+        "display_name": "Landscape Designer",
+        "role": "designer",
+        "password": "qmdh-landscape-2026",
+        "project_codes": ["QMDH-001"],
+    },
+    {
+        "name": "designer.sec",
+        "display_name": "Secure Project Designer",
+        "role": "designer",
+        "password": "qmdh-sec-2026",
+        "project_codes": ["QMDH-SEC"],
+    },
+]
+
 
 def ensure_schema(engine: Engine) -> None:
     inspector = inspect(engine)
@@ -75,6 +120,30 @@ def seed_initial_data(db: Session) -> None:
             admin.password_hash = hash_password(settings.bootstrap_admin_password)
             admin.is_active = True
             admin.project_codes = ["*"]
+
+    for account in LOCAL_DEV_ACCOUNTS:
+        user = db.scalar(select(User).where(User.name == account["name"]))
+        if not user:
+            db.add(
+                User(
+                    name=account["name"],
+                    display_name=account["display_name"],
+                    role=account["role"],
+                    password_hash=hash_password(account["password"]),
+                    is_active=True,
+                    project_codes=account["project_codes"],
+                )
+            )
+            continue
+
+        user.display_name = user.display_name or account["display_name"]
+        if user.role not in {"owner", "admin", "ops", "designer"}:
+            user.role = account["role"]
+        if not user.project_codes:
+            user.project_codes = account["project_codes"]
+        if not user.password_hash:
+            user.password_hash = hash_password(account["password"])
+        user.is_active = True
 
     projects = [
         ("QMDH 示范项目", "QMDH-001", DataClassification.b),

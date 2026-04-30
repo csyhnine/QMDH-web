@@ -140,6 +140,14 @@ QMDH_AUTH_SESSION_DAYS=7
 密码：dev-admin-password
 ```
 
+本地开发还会自动补一组常用测试账号，覆盖 `owner / admin / ops / designer` 角色。账号清单保存在本机忽略目录：
+
+```text
+E:\projects\QMDH-web\local\qmdh-dev-accounts.md
+```
+
+可双击仓库根目录的 `open-accounts.cmd` 打开清单。`local/` 已加入 `.gitignore`，该清单只用于本机调试，不会随 Git 提交。
+
 生产环境必须替换默认密码。登录成功后，前端会把 session token 存入浏览器 `localStorage`，后续请求发送：
 
 ```http

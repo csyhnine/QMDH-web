@@ -129,7 +129,8 @@
   - `/admin/models` 保留为运维配置入口，不再作为设计师侧能力
   - 看板面向 `owner / admin / ops`，统计任务数、成功率、失败数、成本、用户排行、项目排行、provider / model 分布和失败原因
   - 已补充管理页互跳：`/admin/users`、`/admin/dashboard`、`/admin/models` 之间可直接跳转
-  - 已明确成本口径：`total_cost = sum(tasks.cost)`，单位为内部 `QMDH cost unit`，失败任务默认成本为 0，除非任务已记录成本
+  - 已将成本口径改为真实计费配置：模型后台维护 `pricing_currency / pricing_unit / unit_price`，成功任务按实际输出张数或请求次数写入 `tasks.cost`
+  - 已移除模拟 provider 的随机成本；历史模拟成本在 schema 刷新时归零，避免看板继续显示虚假支出
   - 已补充失败原因 Top 展示，失败项会带出相关 provider、用户和项目，方便排查类似 `jimeng` 未配置导致的调度失败
   - 已新增账号级监管：看板按账户显示月度额度、已用额度、剩余额度、任务成功/失败、provider 调用和模型调用
   - 已预置本地开发账号包，并生成本机忽略清单 `local/qmdh-dev-accounts.md`，可通过 `open-accounts.cmd` 打开
@@ -153,5 +154,5 @@
 
 1. 先稳定提交当前工作区改动
 2. 双击 `open-accounts.cmd` 查看本地账号清单，并用预置设计师账号验证项目权限
-3. 用 `/admin/dashboard` 检查生成任务、成本口径、失败原因、账号额度和模型调用统计
+3. 用 `/admin/models` 给真实 provider 填写币种、计费单位和单价，再用 `/admin/dashboard` 检查真实成本、失败原因、账号额度和模型调用统计
 4. 后续生产化补强优先做密钥加密、操作审计、日志与正式 migration

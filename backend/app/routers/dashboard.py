@@ -66,7 +66,11 @@ def get_dashboard_stats(
     total_tasks = len(tasks)
     successful_tasks = sum(1 for task in tasks if task.status == TaskStatus.completed)
     failed_tasks = sum(1 for task in tasks if task.status == TaskStatus.failed)
-    total_cost = sum(float(task.cost or 0) for task in tasks)
+    cost_by_currency_counter: Counter[str] = Counter()
+    for task in tasks:
+        cost_by_currency_counter[(task.cost_currency or "CNY").upper()] += float(task.cost or 0)
+    total_cost = sum(cost_by_currency_counter.values())
+    primary_currency = cost_by_currency_counter.most_common(1)[0][0] if cost_by_currency_counter else "CNY"
     avg_cost = total_cost / total_tasks if total_tasks else 0.0
     avg_latency = sum(int(task.latency_ms or 0) for task in tasks) / total_tasks if total_tasks else 0.0
     audit_logs = db.scalar(select(func.count(AuditLog.id))) or 0
@@ -94,6 +98,8 @@ def get_dashboard_stats(
         provider_success = sum(1 for task in provider_tasks if task.status == TaskStatus.completed)
         provider_failed = sum(1 for task in provider_tasks if task.status == TaskStatus.failed)
         provider_cost = sum(float(task.cost or 0) for task in provider_tasks)
+        provider_currency_counts = Counter((task.cost_currency or "CNY").upper() for task in provider_tasks)
+        provider_currency = provider_currency_counts.most_common(1)[0][0] if provider_currency_counts else "CNY"
         provider_latency = (
             sum(int(task.latency_ms or 0) for task in provider_tasks) / len(provider_tasks)
             if provider_tasks
@@ -107,6 +113,7 @@ def get_dashboard_stats(
                 "failed_tasks": provider_failed,
                 "success_rate": _success_rate(provider_success, count),
                 "total_cost": _round(provider_cost),
+                "cost_currency": provider_currency,
                 "average_latency_ms": _round(provider_latency),
             }
         )
@@ -141,6 +148,8 @@ def get_dashboard_stats(
         user_success = sum(1 for task in user_tasks if task.status == TaskStatus.completed)
         user_failed = sum(1 for task in user_tasks if task.status == TaskStatus.failed)
         user_cost = sum(float(task.cost or 0) for task in user_tasks)
+        user_currency_counts = Counter((task.cost_currency or "CNY").upper() for task in user_tasks)
+        user_currency = user_currency_counts.most_common(1)[0][0] if user_currency_counts else "CNY"
         user_latency = (
             sum(int(task.latency_ms or 0) for task in user_tasks) / user_total
             if user_total
@@ -166,6 +175,7 @@ def get_dashboard_stats(
                 "project_codes": user.project_codes or [],
                 "quota_limit": quota_limit,
                 "quota_used": _round(user_cost),
+                "quota_currency": user_currency,
                 "quota_remaining": quota_remaining,
                 "quota_status": _quota_status(quota_limit, user_cost),
                 "total_tasks": user_total,
@@ -194,15 +204,19 @@ def get_dashboard_stats(
         audit_coverage_rate=audit_coverage_rate,
         outbound_tasks=outbound_tasks,
         total_cost=round(total_cost, 2),
-        cost_unit="QMDH cost unit",
+        cost_unit=primary_currency if len(cost_by_currency_counter) <= 1 else "multiple currencies",
         cost_formula=(
-            "total_cost = sum(tasks.cost) in the selected range; completed tasks write adapter "
-            "estimated cost, failed tasks are counted with cost 0 unless a task already recorded cost."
+            "总成本按币种分别汇总：total_cost = sum(tasks.cost)。真实生图任务按模型配置中的单价计费："
+            "按张计费时单价乘以实际输出张数，按次计费时单价乘以 1 次请求。失败任务默认成本为 0，除非任务已记录成本。"
         ),
         cost_notes=[
-            "This is an internal estimated usage unit, not a RMB invoice amount.",
-            "Provider/model distributions show scheduling success and failure separately.",
-            "Account quota is a soft monitoring limit; it does not block task creation yet.",
+            "只有在模型配置里维护了 pricing_currency、pricing_unit 和 unit_price 后，成本才代表真实计费口径。",
+            "免费额度或暂未计价的模型请将 unit_price 配置为 0。",
+            "账号额度目前是软监管，只展示和预警，不会阻断任务创建。",
+        ],
+        cost_by_currency=[
+            {"currency": currency, "total_cost": _round(cost)}
+            for currency, cost in cost_by_currency_counter.most_common()
         ],
         user_rankings=[{"name": name, "count": count} for name, count in user_counts.most_common(10)],
         project_rankings=[{"code": code, "count": count} for code, count in project_counts.most_common(10)],
@@ -214,6 +228,7 @@ def get_dashboard_stats(
                 "successful_tasks": count,
                 "failed_tasks": 0,
                 "total_cost": _round(model_costs.get(name, 0.0)),
+                "cost_currency": primary_currency,
             }
             for name, count in model_counts.most_common(10)
         ],

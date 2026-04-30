@@ -47,6 +47,9 @@ def _to_profile_out(profile: ProviderProfile) -> ProviderProfileOut:
         quality=profile.quality,
         output_format=profile.output_format,
         timeout_seconds=profile.timeout_seconds,
+        pricing_currency=profile.pricing_currency or "CNY",
+        pricing_unit=profile.pricing_unit or "per_image",
+        unit_price=float(profile.unit_price or 0.0),
         enabled=profile.enabled,
         reference_mode=profile.reference_mode,
         reference_caption_model=profile.reference_caption_model,
@@ -93,6 +96,9 @@ def create_provider_profile(
         quality=payload.quality.strip() or "medium",
         output_format=payload.output_format.strip() or "png",
         timeout_seconds=payload.timeout_seconds,
+        pricing_currency=payload.pricing_currency.strip().upper() or "CNY",
+        pricing_unit=payload.pricing_unit.strip() or "per_image",
+        unit_price=payload.unit_price,
         enabled=payload.enabled,
         reference_mode=payload.reference_mode.strip() or "disabled",
         reference_caption_model=(payload.reference_caption_model or "").strip() or None,
@@ -126,6 +132,10 @@ def update_provider_profile(
             value = value.strip()
         if field == "base_url" and isinstance(value, str):
             value = value.rstrip("/")
+        if field == "pricing_currency" and isinstance(value, str):
+            value = value.upper() or "CNY"
+        if field == "pricing_unit" and isinstance(value, str):
+            value = value or "per_image"
         if field == "capabilities" and isinstance(value, list):
             value = [item.strip() for item in value if item.strip()] or ["image.generate"]
         if field == "reference_caption_model" and value == "":

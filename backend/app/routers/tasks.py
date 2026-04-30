@@ -41,6 +41,7 @@ def _to_task_out(task: Task) -> TaskOut:
         requested_provider=task.requested_provider,
         classification=task.classification,
         cost=task.cost,
+        cost_currency=task.cost_currency or "CNY",
         latency_ms=task.latency_ms,
         result=task.result,
         created_at=task.created_at,

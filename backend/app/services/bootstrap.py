@@ -63,6 +63,17 @@ def ensure_schema(engine: Engine) -> None:
     inspector = inspect(engine)
     asset_columns = {column["name"] for column in inspector.get_columns("assets")} if inspector.has_table("assets") else set()
     user_columns = {column["name"] for column in inspector.get_columns("users")} if inspector.has_table("users") else set()
+    task_columns = {column["name"] for column in inspector.get_columns("tasks")} if inspector.has_table("tasks") else set()
+    provider_call_columns = (
+        {column["name"] for column in inspector.get_columns("provider_calls")}
+        if inspector.has_table("provider_calls")
+        else set()
+    )
+    provider_profile_columns = (
+        {column["name"] for column in inspector.get_columns("provider_profiles")}
+        if inspector.has_table("provider_profiles")
+        else set()
+    )
 
     statements: list[str] = []
     if "prompt_text" not in asset_columns:
@@ -88,9 +99,17 @@ def ensure_schema(engine: Engine) -> None:
             statements.append("ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP")
         if "updated_at" not in user_columns:
             statements.append("ALTER TABLE users ADD COLUMN updated_at TIMESTAMP")
-
-    if not statements:
-        return
+    if task_columns and "cost_currency" not in task_columns:
+        statements.append("ALTER TABLE tasks ADD COLUMN cost_currency VARCHAR(12) DEFAULT 'CNY'")
+    if provider_call_columns and "cost_currency" not in provider_call_columns:
+        statements.append("ALTER TABLE provider_calls ADD COLUMN cost_currency VARCHAR(12) DEFAULT 'CNY'")
+    if provider_profile_columns:
+        if "pricing_currency" not in provider_profile_columns:
+            statements.append("ALTER TABLE provider_profiles ADD COLUMN pricing_currency VARCHAR(12) DEFAULT 'CNY'")
+        if "pricing_unit" not in provider_profile_columns:
+            statements.append("ALTER TABLE provider_profiles ADD COLUMN pricing_unit VARCHAR(50) DEFAULT 'per_image'")
+        if "unit_price" not in provider_profile_columns:
+            statements.append("ALTER TABLE provider_profiles ADD COLUMN unit_price FLOAT DEFAULT 0.0")
 
     with engine.begin() as connection:
         for statement in statements:
@@ -100,6 +119,32 @@ def ensure_schema(engine: Engine) -> None:
             connection.execute(text("UPDATE users SET password_hash = '' WHERE password_hash IS NULL"))
             connection.execute(text("UPDATE users SET is_active = TRUE WHERE is_active IS NULL"))
             connection.execute(text("UPDATE users SET project_codes = '[\"QMDH-001\"]' WHERE project_codes IS NULL"))
+        if task_columns:
+            connection.execute(text("UPDATE tasks SET cost_currency = 'CNY' WHERE cost_currency IS NULL OR cost_currency = ''"))
+        if provider_call_columns:
+            connection.execute(text("UPDATE provider_calls SET cost_currency = 'CNY' WHERE cost_currency IS NULL OR cost_currency = ''"))
+        if provider_profile_columns:
+            connection.execute(
+                text("UPDATE provider_profiles SET pricing_currency = 'CNY' WHERE pricing_currency IS NULL OR pricing_currency = ''")
+            )
+            connection.execute(
+                text("UPDATE provider_profiles SET pricing_unit = 'per_image' WHERE pricing_unit IS NULL OR pricing_unit = ''")
+            )
+            connection.execute(text("UPDATE provider_profiles SET unit_price = 0.0 WHERE unit_price IS NULL"))
+        if task_columns:
+            connection.execute(
+                text(
+                    "UPDATE tasks SET cost = 0.0, cost_currency = 'CNY' "
+                    "WHERE requested_provider IN ('jimeng', 'nano_banana', 'openai', 'anthropic', 'runway')"
+                )
+            )
+        if provider_call_columns:
+            connection.execute(
+                text(
+                    "UPDATE provider_calls SET cost = 0.0, cost_currency = 'CNY' "
+                    "WHERE provider_name IN ('jimeng', 'nano_banana', 'openai', 'anthropic', 'runway')"
+                )
+            )
 
 
 def seed_initial_data(db: Session) -> None:

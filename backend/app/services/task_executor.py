@@ -6,7 +6,7 @@ from base64 import b64encode
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from random import randint, uniform
+from random import randint
 from time import perf_counter, sleep
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -32,6 +32,7 @@ class ExecutionOutcome:
     model_name: str
     latency_ms: int
     cost: float
+    cost_currency: str
     outbound: bool
     result: dict
 
@@ -54,14 +55,14 @@ class SimulatedProviderAdapter(ProviderAdapter):
             "video.generate": randint(60_000, 120_000),
         }
         base_cost = {
-            "image.generate": uniform(2.5, 8.5),
-            "image.edit": uniform(1.8, 5.0),
-            "document.generate": uniform(0.4, 2.2),
-            "text.generate": uniform(0.2, 1.4),
-            "video.generate": uniform(12.0, 35.0),
+            "image.generate": 0.0,
+            "image.edit": 0.0,
+            "document.generate": 0.0,
+            "text.generate": 0.0,
+            "video.generate": 0.0,
         }
         latency_ms = base_latency.get(capability, 3_000)
-        cost = round(base_cost.get(capability, 1.0), 2)
+        cost = round(base_cost.get(capability, 0.0), 2)
         prompt_summary = str(payload.get("prompt") or payload.get("edit_prompt") or payload.get("deliverable") or "QMDH")
         requested_count = _requested_image_count(payload)
         preview_paths = [
@@ -80,11 +81,20 @@ class SimulatedProviderAdapter(ProviderAdapter):
             "storage_paths": preview_paths,
             "requested_image_count": requested_count,
             "output_count": len(preview_paths),
+            "billing": {
+                "cost": cost,
+                "currency": "CNY",
+                "pricing_unit": "simulated",
+                "unit_price": 0.0,
+                "billable_units": 0,
+                "source": "simulated_unpriced",
+            },
         }
         return ExecutionOutcome(
             model_name=self.definition.model_name,
             latency_ms=latency_ms,
             cost=cost,
+            cost_currency="CNY",
             outbound=self.definition.outbound,
             result=result,
         )
@@ -185,6 +195,7 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
                     break
 
         latency_ms = max(1, round((perf_counter() - started_at) * 1000))
+        billing = _calculate_image_billing(profile=self.profile, output_count=len(storage_paths))
         result = {
             "summary": f"{self.definition.provider_name} completed a live {capability} run.",
             "payload_keys": list(payload.keys()),
@@ -197,16 +208,37 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
             "usage_records": usage_records,
             "requested_image_count": requested_count,
             "output_count": len(storage_paths),
+            "billing": billing,
             **reference_result,
         }
 
         return ExecutionOutcome(
             model_name=self.profile.model_name,
             latency_ms=latency_ms,
-            cost=0.0,
+            cost=billing["cost"],
+            cost_currency=billing["currency"],
             outbound=self.definition.outbound,
             result=result,
         )
+
+
+def _calculate_image_billing(*, profile: ImageProviderProfile, output_count: int) -> dict:
+    unit_price = round(float(profile.unit_price or 0.0), 6)
+    pricing_unit = (profile.pricing_unit or "per_image").strip() or "per_image"
+    currency = (profile.pricing_currency or "CNY").strip().upper() or "CNY"
+    billable_units = output_count if pricing_unit == "per_image" else 1
+    if pricing_unit not in {"per_image", "per_request"}:
+        pricing_unit = "per_image"
+        billable_units = output_count
+    cost = round(unit_price * billable_units, 4)
+    return {
+        "cost": cost,
+        "currency": currency,
+        "pricing_unit": pricing_unit,
+        "unit_price": unit_price,
+        "billable_units": billable_units,
+        "source": "provider_profile",
+    }
 
 
 def _materialize_preview_asset(*, provider_name: str, capability: str, prompt_summary: str) -> str:
@@ -669,6 +701,7 @@ def execute_task(task_id: int) -> None:
             task.status = TaskStatus.completed
             task.latency_ms = outcome.latency_ms
             task.cost = outcome.cost
+            task.cost_currency = outcome.cost_currency
             task.result = outcome.result
 
             db.add(
@@ -678,6 +711,7 @@ def execute_task(task_id: int) -> None:
                     model_name=outcome.model_name,
                     capability=workflow.provider_capability,
                     cost=outcome.cost,
+                    cost_currency=outcome.cost_currency,
                     latency_ms=outcome.latency_ms,
                     outbound=outcome.outbound,
                     request_summary={

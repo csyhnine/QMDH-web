@@ -166,6 +166,20 @@ http://127.0.0.1:18080/admin/users
 http://127.0.0.1:18080/admin/dashboard
 ```
 
+真实成本配置在模型运维入口维护：
+
+```text
+http://127.0.0.1:18080/admin/models
+```
+
+每个真实 provider 需要维护：
+
+- `pricing_currency`：币种，例如 `CNY` / `USD`
+- `pricing_unit`：计费单位，当前支持 `per_image`（按张）和 `per_request`（按次）
+- `unit_price`：单价。免费额度或暂未计价模型填 `0`
+
+任务成功后，后端会按实际输出数量或请求次数写入 `tasks.cost` 和 `tasks.cost_currency`；失败任务默认成本为 `0`。看板按币种分别汇总，避免不同币种直接相加。
+
 角色边界：
 
 - `owner / admin`：可管理用户、查看看板、维护运维配置

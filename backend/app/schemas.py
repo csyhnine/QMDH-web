@@ -42,6 +42,7 @@ class TaskOut(BaseModel):
     requested_provider: str
     classification: DataClassification
     cost: float
+    cost_currency: str = "CNY"
     latency_ms: int
     result: dict[str, Any]
     created_at: datetime
@@ -74,9 +75,10 @@ class DashboardStats(BaseModel):
     audit_coverage_rate: float
     outbound_tasks: int
     total_cost: float = 0.0
-    cost_unit: str = "cost_unit"
+    cost_unit: str = "CNY"
     cost_formula: str = ""
     cost_notes: list[str] = Field(default_factory=list)
+    cost_by_currency: list[dict[str, Any]] = Field(default_factory=list)
     user_rankings: list[dict[str, Any]] = Field(default_factory=list)
     project_rankings: list[dict[str, Any]] = Field(default_factory=list)
     provider_rankings: list[dict[str, Any]] = Field(default_factory=list)
@@ -152,6 +154,9 @@ class ProviderProfileBase(BaseModel):
     quality: str = "medium"
     output_format: str = "png"
     timeout_seconds: float = 90.0
+    pricing_currency: str = Field(default="CNY", max_length=12)
+    pricing_unit: str = "per_image"
+    unit_price: float = Field(default=0.0, ge=0)
     enabled: bool = True
     reference_mode: str = "disabled"
     reference_caption_model: str | None = None

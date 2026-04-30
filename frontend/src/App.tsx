@@ -85,6 +85,9 @@ type ProviderProfileDraft = {
   quality: string;
   outputFormat: string;
   timeoutSeconds: number;
+  pricingCurrency: string;
+  pricingUnit: string;
+  unitPrice: number;
   enabled: boolean;
   referenceMode: string;
   referenceCaptionModel: string;
@@ -125,6 +128,9 @@ const defaultProviderProfileDraft: ProviderProfileDraft = {
   quality: "medium",
   outputFormat: "png",
   timeoutSeconds: 90,
+  pricingCurrency: "CNY",
+  pricingUnit: "per_image",
+  unitPrice: 0,
   enabled: true,
   referenceMode: "disabled",
   referenceCaptionModel: ""
@@ -438,16 +444,28 @@ function metricCost(item: Record<string, unknown>, key: string): string {
   return typeof value === "number" ? value.toFixed(2) : metricValue(item, key);
 }
 
+function formatCost(value: unknown, currency: unknown): string {
+  const amount = typeof value === "number" ? value.toFixed(2) : String(value ?? "0.00");
+  const unit = typeof currency === "string" && currency ? currency : "CNY";
+  return `${amount} ${unit}`;
+}
+
+function formatCostBreakdown(rows: Array<Record<string, unknown>>): string {
+  if (rows.length === 0) return "0.00 CNY";
+  return rows.map((row) => formatCost(row.total_cost, row.currency)).join(" / ");
+}
+
 function metricQuota(item: Record<string, unknown>): string {
   const limit = item.quota_limit;
   const remaining = item.quota_remaining;
   const status = metricValue(item, "quota_status");
+  const currency = metricValue(item, "quota_currency") || "CNY";
   if (typeof limit !== "number") {
-    return `不限额 / 已用 ${metricCost(item, "quota_used")}`;
+    return `不限额 / 已用 ${formatCost(item.quota_used, currency)}`;
   }
-  return `${metricCost(item, "quota_used")} / ${limit.toFixed(2)}，剩余 ${
+  return `${formatCost(item.quota_used, currency)} / ${limit.toFixed(2)} ${currency}，剩余 ${
     typeof remaining === "number" ? remaining.toFixed(2) : "0.00"
-  }（${status}）`;
+  } ${currency}（${status}）`;
 }
 
 function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfileDraft {
@@ -460,6 +478,9 @@ function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfile
     quality: profile.quality,
     outputFormat: profile.output_format,
     timeoutSeconds: profile.timeout_seconds,
+    pricingCurrency: profile.pricing_currency || "CNY",
+    pricingUnit: profile.pricing_unit || "per_image",
+    unitPrice: profile.unit_price || 0,
     enabled: profile.enabled,
     referenceMode: profile.reference_mode,
     referenceCaptionModel: profile.reference_caption_model ?? ""
@@ -477,6 +498,9 @@ function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileC
     quality: draft.quality.trim() || "medium",
     output_format: draft.outputFormat.trim() || "png",
     timeout_seconds: Number(draft.timeoutSeconds) || 90,
+    pricing_currency: draft.pricingCurrency.trim().toUpperCase() || "CNY",
+    pricing_unit: draft.pricingUnit.trim() || "per_image",
+    unit_price: Number(draft.unitPrice) || 0,
     enabled: draft.enabled,
     reference_mode: draft.referenceMode.trim() || "disabled",
     reference_caption_model: draft.referenceCaptionModel.trim() || null
@@ -1133,6 +1157,9 @@ export default function App() {
           quality: payload.quality,
           output_format: payload.output_format,
           timeout_seconds: payload.timeout_seconds,
+          pricing_currency: payload.pricing_currency,
+          pricing_unit: payload.pricing_unit,
+          unit_price: payload.unit_price,
           enabled: payload.enabled,
           reference_mode: payload.reference_mode,
           reference_caption_model: payload.reference_caption_model,
@@ -1537,8 +1564,8 @@ export default function App() {
                     <div className="stat-card"><span>失败数</span><strong>{state.dashboard.failed_tasks}</strong></div>
                     <div className="stat-card">
                       <span>总成本</span>
-                      <strong>{state.dashboard.total_cost}</strong>
-                      <small>{state.dashboard.cost_unit}</small>
+                      <strong>{formatCostBreakdown(state.dashboard.cost_by_currency)}</strong>
+                      <small>真实计费配置汇总</small>
                     </div>
                   </div>
                   <section className="model-profile-card dashboard-wide-card">
@@ -1570,7 +1597,7 @@ export default function App() {
                               {row.providers ? <small>涉及：{metricList(row, "providers")}</small> : null}
                               {row.successful_tasks !== undefined ? (
                                 <small>
-                                  成功 {metricValue(row, "successful_tasks")} / 失败 {metricValue(row, "failed_tasks")} / 成本 {metricCost(row, "total_cost")}
+                                  成功 {metricValue(row, "successful_tasks")} / 失败 {metricValue(row, "failed_tasks")} / 成本 {formatCost(row.total_cost, row.cost_currency)}
                                 </small>
                               ) : null}
                             </span>
@@ -1721,6 +1748,37 @@ export default function App() {
                     />
                   </label>
                   <label className="composer-menu-field">
+                    <span>计费币种</span>
+                    <input
+                      value={providerDraft.pricingCurrency}
+                      onChange={(event) => setProviderDraft((current) => ({ ...current, pricingCurrency: event.target.value }))}
+                      placeholder="CNY"
+                    />
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>计费单位</span>
+                    <select
+                      value={providerDraft.pricingUnit}
+                      onChange={(event) => setProviderDraft((current) => ({ ...current, pricingUnit: event.target.value }))}
+                    >
+                      <option value="per_image">按张图片</option>
+                      <option value="per_request">按次请求</option>
+                    </select>
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>单价</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={providerDraft.unitPrice}
+                      onChange={(event) =>
+                        setProviderDraft((current) => ({ ...current, unitPrice: Number(event.target.value) || 0 }))
+                      }
+                      placeholder="0"
+                    />
+                  </label>
+                  <label className="composer-menu-field">
                     <span>Reference</span>
                     <select
                       value={providerDraft.referenceMode}
@@ -1782,6 +1840,7 @@ export default function App() {
                         <div className="feed-card-meta">
                           <span>{profile.capabilities.join(", ")}</span>
                           <span>{profile.masked_api_key || "no key"}</span>
+                          <span>{profile.unit_price} {profile.pricing_currency} / {profile.pricing_unit}</span>
                           <span>{profile.reference_mode}</span>
                         </div>
                       </div>

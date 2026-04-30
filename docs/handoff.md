@@ -20,8 +20,10 @@
 - 本次完成：
   - 三个管理页面补齐互跳入口：账号管理、使用看板、运维配置可互相跳转
   - `users` 增加 `monthly_quota`，本地设计师账号预置月度额度
-  - `/dashboard/stats` 补充成本口径、成本单位、说明文案、失败原因上下文、provider 成功/失败拆分
+  - `/dashboard/stats` 补充真实成本口径、币种汇总、说明文案、失败原因上下文、provider 成功/失败拆分
   - `/admin/dashboard` 增加成本口径说明和账号级监管表，展示额度、任务成功/失败、provider 调用、模型调用
+  - 模型运维配置增加 `pricing_currency / pricing_unit / unit_price`；真实任务按配置单价和实际输出数写入成本
+  - 模拟 provider 不再生成随机成本；历史模拟成本在 schema 刷新时归零
   - 本地数据库已执行 schema 补列与种子刷新
   - 完成验证：
     - `python -m unittest discover -s tests` 通过
@@ -43,11 +45,11 @@
   - `docs/projects/QMDH-001/status.md`
 - 风险与注意事项：
   - 额度目前是软监管，只展示不阻断任务创建
-  - 成本单位仍是内部估算单位，不是人民币结算金额
+  - 真实成本依赖运维在模型配置里维护正确单价；免费额度或未计价模型应配置为 0
   - 正式生产仍需要 migration、密钥加密和操作审计
 - 下一位 agent 的第一步：
   - 先检查 `git status`
-  - 打开 `/admin/dashboard`，用失败任务确认失败原因 Top 和账号监管表是否符合运营预期
+  - 打开 `/admin/models` 配置真实单价，再用 `/admin/dashboard` 确认真实成本、失败原因 Top 和账号监管表是否符合运营预期
 - 是否可直接接手：Yes
 
 ### [2026-04-30 11:20] Session Handoff

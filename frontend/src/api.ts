@@ -21,6 +21,7 @@ export type Task = {
   requested_provider: string;
   classification: string;
   cost: number;
+  cost_currency: string;
   latency_ms: number;
   result: Record<string, unknown>;
   created_at: string;
@@ -99,6 +100,7 @@ export type DashboardStats = {
   cost_unit: string;
   cost_formula: string;
   cost_notes: string[];
+  cost_by_currency: Array<Record<string, unknown>>;
   user_rankings: Array<Record<string, unknown>>;
   project_rankings: Array<Record<string, unknown>>;
   provider_rankings: Array<Record<string, unknown>>;
@@ -117,6 +119,9 @@ export type ProviderProfileRecord = {
   quality: string;
   output_format: string;
   timeout_seconds: number;
+  pricing_currency: string;
+  pricing_unit: string;
+  unit_price: number;
   enabled: boolean;
   reference_mode: string;
   reference_caption_model: string | null;
@@ -136,6 +141,9 @@ export type ProviderProfileCreatePayload = {
   quality: string;
   output_format: string;
   timeout_seconds: number;
+  pricing_currency: string;
+  pricing_unit: string;
+  unit_price: number;
   enabled: boolean;
   reference_mode: string;
   reference_caption_model: string | null;

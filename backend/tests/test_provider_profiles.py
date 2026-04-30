@@ -79,6 +79,9 @@ class ProviderProfileTests(unittest.TestCase):
                 "quality": "high",
                 "output_format": "png",
                 "timeout_seconds": 60,
+                "pricing_currency": "CNY",
+                "pricing_unit": "per_image",
+                "unit_price": 0.35,
                 "enabled": True,
                 "reference_mode": "disabled",
             },
@@ -88,6 +91,9 @@ class ProviderProfileTests(unittest.TestCase):
         payload = response.json()
         self.assertTrue(payload["has_api_key"])
         self.assertEqual(payload["masked_api_key"], "sk-t...cret")
+        self.assertEqual(payload["pricing_currency"], "CNY")
+        self.assertEqual(payload["pricing_unit"], "per_image")
+        self.assertEqual(payload["unit_price"], 0.35)
         self.assertNotIn("sk-test-secret", json.dumps(payload))
 
         providers_response = self.client.get("/providers")

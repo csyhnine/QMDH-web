@@ -29,6 +29,9 @@ class ImageProviderProfile:
     timeout_seconds: float = 90.0
     quality: str = "medium"
     output_format: str = "png"
+    pricing_currency: str = "CNY"
+    pricing_unit: str = "per_image"
+    unit_price: float = 0.0
     adapter_kind: str = "openai_compatible"
     capabilities: tuple[str, ...] = ("image.generate",)
     configurable: bool = True
@@ -138,6 +141,9 @@ class Settings(BaseSettings):
                 timeout_seconds=float(item.get("timeout_seconds") or 90.0),
                 quality=str(item.get("quality") or "medium"),
                 output_format=str(item.get("output_format") or "png"),
+                pricing_currency=str(item.get("pricing_currency") or "CNY").upper(),
+                pricing_unit=str(item.get("pricing_unit") or "per_image"),
+                unit_price=float(item.get("unit_price") or 0.0),
                 adapter_kind=str(item.get("adapter_kind") or "openai_compatible"),
                 capabilities=tuple(str(value) for value in capabilities if str(value).strip()),
                 configurable=bool(item.get("configurable", True)),

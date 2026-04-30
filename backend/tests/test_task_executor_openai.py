@@ -3,6 +3,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from dataclasses import replace
 from unittest.mock import patch
 
 os.environ.setdefault("QMDH_OPENAI_IMAGE_API_KEY", "test-key")
@@ -34,7 +35,10 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         self.openai_api_key_patcher = patch.object(settings, "openai_image_api_key", "test-key")
         self.openai_api_key_patcher.start()
         profile = settings.get_image_provider_profile("openai_image")
-        self.adapter = OpenAIImageProviderAdapter(get_provider_definition("openai_image"), profile)
+        self.adapter = OpenAIImageProviderAdapter(
+            get_provider_definition("openai_image"),
+            replace(profile, pricing_currency="CNY", pricing_unit="per_image", unit_price=0.25),
+        )
 
     def tearDown(self) -> None:
         self.openai_api_key_patcher.stop()
@@ -66,6 +70,9 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         self.assertEqual(outcome.result["usage"]["total_tokens"], 123)
         self.assertEqual(outcome.result["requested_image_count"], 2)
         self.assertEqual(outcome.result["output_count"], 2)
+        self.assertEqual(outcome.cost, 0.5)
+        self.assertEqual(outcome.cost_currency, "CNY")
+        self.assertEqual(outcome.result["billing"]["billable_units"], 2)
         self.assertEqual(len(outcome.result["storage_paths"]), 2)
         self.assertTrue(outcome.result["storage_path"].startswith("/media/generated/openai_image/"))
 

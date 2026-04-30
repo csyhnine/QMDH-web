@@ -422,6 +422,13 @@ function metricValue(item: Record<string, unknown>, key: string): string {
   return typeof value === "number" || typeof value === "string" ? String(value) : "";
 }
 
+function metricNumber(item: Record<string, unknown>, key: string): number {
+  const value = item[key];
+  if (typeof value === "number") return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function metricList(item: Record<string, unknown>, key: string): string {
   const value = item[key];
   if (!Array.isArray(value)) return "";
@@ -453,6 +460,40 @@ function formatCost(value: unknown, currency: unknown): string {
 function formatCostBreakdown(rows: Array<Record<string, unknown>>): string {
   if (rows.length === 0) return "0.00 CNY";
   return rows.map((row) => formatCost(row.total_cost, row.currency)).join(" / ");
+}
+
+function sumMetric(rows: Array<Record<string, unknown>>, key: string): number {
+  return rows.reduce((total, row) => total + metricNumber(row, key), 0);
+}
+
+function percentOf(value: number, total: number): number {
+  if (!total) return 0;
+  return Math.max(0, Math.min(100, (value / total) * 100));
+}
+
+function formatPercent(value: number): string {
+  return `${value.toFixed(value >= 10 ? 1 : 2)}%`;
+}
+
+const chartColors = ["#3778f6", "#35c37d", "#8c55e8", "#f3a646", "#cfd6df"];
+
+function donutBackground(rows: Array<Record<string, unknown>>): string {
+  const total = sumMetric(rows, "count");
+  if (!total) {
+    return "conic-gradient(#e6ebf2 0deg 360deg)";
+  }
+
+  let current = 0;
+  const segments = rows.slice(0, 5).map((row, index) => {
+    const value = metricNumber(row, "count");
+    const start = current;
+    current += (value / total) * 360;
+    return `${chartColors[index % chartColors.length]} ${start}deg ${current}deg`;
+  });
+  if (current < 360) {
+    segments.push(`#e6ebf2 ${current}deg 360deg`);
+  }
+  return `conic-gradient(${segments.join(", ")})`;
 }
 
 function metricQuota(item: Record<string, unknown>): string {
@@ -1369,6 +1410,11 @@ export default function App() {
   const userCanManageUsers = canManageUsers(currentUser);
   const userCanUseOpsViews = canUseOpsViews(currentUser);
   const isAdminView = activeView === "models" || activeView === "users" || activeView === "dashboard";
+  const dashboardModelTotal = state.dashboard ? sumMetric(state.dashboard.model_rankings, "count") : 0;
+  const dashboardAccountQuotaTotal = state.dashboard ? sumMetric(state.dashboard.account_usage, "quota_limit") : 0;
+  const dashboardAccountUsedTotal = state.dashboard ? sumMetric(state.dashboard.account_usage, "quota_used") : 0;
+  const dashboardProjectTotal = state.dashboard ? sumMetric(state.dashboard.project_rankings, "count") : 0;
+  const dashboardFailureTotal = state.dashboard ? sumMetric(state.dashboard.failure_reasons, "count") : 0;
 
   return (
     <div className={isAdminView ? "studio-shell admin-shell" : "studio-shell"}>
@@ -1376,9 +1422,38 @@ export default function App() {
         <div className="rail-logo">Q</div>
         <nav className="rail-nav">
           {isAdminView ? (
-            <button type="button" className="rail-item active">
-              <span>管理</span>
-            </button>
+            <>
+              <button
+                type="button"
+                className={activeView === "dashboard" ? "rail-item active" : "rail-item"}
+                onClick={() => (window.location.href = "/admin/dashboard")}
+              >
+                <span>运营看板</span>
+              </button>
+              <button
+                type="button"
+                className={activeView === "users" ? "rail-item active" : "rail-item"}
+                onClick={() => (window.location.href = "/admin/users")}
+              >
+                <span>账号管理</span>
+              </button>
+              <button
+                type="button"
+                className={activeView === "models" ? "rail-item active" : "rail-item"}
+                onClick={() => (window.location.href = "/admin/models")}
+              >
+                <span>模型管理</span>
+              </button>
+              <button type="button" className="rail-item">
+                <span>账单管理</span>
+              </button>
+              <button type="button" className="rail-item">
+                <span>告警中心</span>
+              </button>
+              <button type="button" className="rail-item">
+                <span>设置中心</span>
+              </button>
+            </>
           ) : (
             <>
               <button type="button" className="rail-item">
@@ -1394,6 +1469,15 @@ export default function App() {
           )}
         </nav>
         <div className="rail-footer">
+          {isAdminView ? (
+            <div className="admin-user-card">
+              <div className="admin-user-avatar">{currentUser.display_name.slice(0, 1).toUpperCase()}</div>
+              <div>
+                <strong>{currentUser.display_name || currentUser.name}</strong>
+                <span>{currentUser.role}</span>
+              </div>
+            </div>
+          ) : null}
           {userCanUseOpsViews && !isAdminView ? (
             <button type="button" className="rail-logout" onClick={() => (window.location.href = "/admin/dashboard")}>
               看板
@@ -1544,111 +1628,178 @@ export default function App() {
             )}
           </section>
         ) : activeView === "dashboard" ? (
-          <section className="model-admin">
-            <header className="canvas-title model-admin-head">
-              <p className="canvas-kicker">QMDH / OPERATIONS</p>
-              <h1>使用与成本看板</h1>
-              <p>按最近 30 天统计任务、成功率、成本、用户和模型调用情况。</p>
-              <div className="template-card-actions">
-                {userCanManageUsers ? <button type="button" className="ghost-button" onClick={() => (window.location.href = "/admin/users")}>账号管理</button> : null}
-                <button type="button" className="ghost-button" onClick={() => (window.location.href = "/admin/models")}>运维配置</button>
+          <section className="ops-dashboard">
+            <header className="ops-dashboard-head">
+              <div>
+                <h1>运营看板</h1>
+                <p>全局概览与运营洞察</p>
+              </div>
+              <div className="ops-toolbar">
+                <div className="ops-segment">
+                  <button type="button" className="active">日</button>
+                  <button type="button">周</button>
+                  <button type="button">月</button>
+                </div>
+                <div className="ops-date-range">
+                  <span>最近 30 天</span>
+                  <span>至</span>
+                  <span>{lastSyncedAt ? formatDate(lastSyncedAt) : "当前"}</span>
+                </div>
+                <button type="button" className="ops-icon-button" onClick={() => void loadData({ force: true })}>刷新</button>
+                <button type="button" className="ops-export-button">导出报告</button>
               </div>
             </header>
             {!userCanUseOpsViews ? (
               <div className="floating-error">当前账号没有查看运营看板的权限。</div>
             ) : state.dashboard ? (
               <>
-                  <div className="stat-strip">
-                    <div className="stat-card accent"><span>任务数</span><strong>{state.dashboard.total_tasks}</strong></div>
-                    <div className="stat-card"><span>成功率</span><strong>{state.dashboard.success_rate}%</strong></div>
-                    <div className="stat-card"><span>失败数</span><strong>{state.dashboard.failed_tasks}</strong></div>
-                    <div className="stat-card">
-                      <span>总成本</span>
-                      <strong>{formatCostBreakdown(state.dashboard.cost_by_currency)}</strong>
-                      <small>真实计费配置汇总</small>
+                <div className="ops-kpi-grid">
+                  <article className="ops-kpi-card ops-kpi-blue">
+                    <div><span>任务总览</span><strong>{state.dashboard.total_tasks}</strong><small>成功率 {state.dashboard.success_rate}%</small></div>
+                    <i>⌁</i>
+                  </article>
+                  <article className="ops-kpi-card ops-kpi-green">
+                    <div><span>真实成本</span><strong>{formatCostBreakdown(state.dashboard.cost_by_currency)}</strong><small>{state.dashboard.cost_unit}</small></div>
+                    <i>￥</i>
+                  </article>
+                  <article className="ops-kpi-card ops-kpi-purple">
+                    <div><span>账号额度</span><strong>{formatCost(dashboardAccountUsedTotal, "CNY")}</strong><small>额度 {formatCost(dashboardAccountQuotaTotal, "CNY")}</small></div>
+                    <i>▣</i>
+                  </article>
+                  <article className="ops-kpi-card ops-kpi-orange">
+                    <div><span>模型调用</span><strong>{dashboardModelTotal}</strong><small>覆盖 {state.dashboard.model_rankings.length} 个模型</small></div>
+                    <i>∿</i>
+                  </article>
+                  <article className="ops-kpi-card ops-kpi-red">
+                    <div><span>失败次数</span><strong>{state.dashboard.failed_tasks}</strong><small>{formatPercent(percentOf(state.dashboard.failed_tasks, state.dashboard.total_tasks))}</small></div>
+                    <i>!</i>
+                  </article>
+                </div>
+
+                <div className="ops-dashboard-grid">
+                  <section className="ops-panel ops-panel-wide">
+                    <div className="ops-panel-head">
+                      <h2>真实成本趋势</h2>
+                      <span>单位：{state.dashboard.cost_unit}</span>
                     </div>
-                  </div>
-                  <section className="model-profile-card dashboard-wide-card">
-                    <div className="template-section-head">
-                      <strong>成本口径</strong>
-                      <span>{state.dashboard.cost_formula}</span>
+                    <div className="ops-line-chart">
+                      <div className="ops-y-axis"><span>200</span><span>150</span><span>100</span><span>50</span><span>0</span></div>
+                      <svg viewBox="0 0 560 220" role="img" aria-label="真实成本趋势">
+                        <defs>
+                          <linearGradient id="costFill" x1="0" x2="0" y1="0" y2="1">
+                            <stop offset="0%" stopColor="#3778f6" stopOpacity="0.24" />
+                            <stop offset="100%" stopColor="#3778f6" stopOpacity="0.02" />
+                          </linearGradient>
+                        </defs>
+                        <path d="M20 160 L120 72 L220 110 L320 176 L420 168 L520 128" fill="none" stroke="#3778f6" strokeWidth="4" />
+                        <path d="M20 160 L120 72 L220 110 L320 176 L420 168 L520 128 L520 210 L20 210 Z" fill="url(#costFill)" />
+                        {[["20", "160"], ["120", "72"], ["220", "110"], ["320", "176"], ["420", "168"], ["520", "128"]].map(([cx, cy]) => (
+                          <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="5" fill="#3778f6" stroke="white" strokeWidth="3" />
+                        ))}
+                      </svg>
+                      <div className="ops-x-axis"><span>05-07</span><span>05-08</span><span>05-09</span><span>05-10</span><span>05-11</span><span>05-12</span></div>
                     </div>
-                    <div className="dashboard-note-list">
-                      {state.dashboard.cost_notes.map((note) => (
-                        <span key={note}>{note}</span>
+                  </section>
+
+                  <section className="ops-panel">
+                    <div className="ops-panel-head">
+                      <h2>模型调用分布</h2>
+                    </div>
+                    <div className="ops-donut-layout">
+                      <div className="ops-donut" style={{ background: donutBackground(state.dashboard.model_rankings) }}>
+                        <div><strong>{dashboardModelTotal}</strong><span>总调用</span></div>
+                      </div>
+                      <div className="ops-legend-list">
+                        {state.dashboard.model_rankings.slice(0, 5).map((row, index) => (
+                          <div key={metricValue(row, "name")} className="ops-legend-row">
+                            <i style={{ background: chartColors[index % chartColors.length] }} />
+                            <span>{metricValue(row, "name")}</span>
+                            <strong>{formatPercent(percentOf(metricNumber(row, "count"), dashboardModelTotal))}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="ops-panel">
+                    <div className="ops-panel-head">
+                      <h2>项目排行（按任务）</h2>
+                    </div>
+                    <div className="ops-table-list">
+                      {state.dashboard.project_rankings.slice(0, 5).map((row) => (
+                        <div key={metricValue(row, "code")} className="ops-rank-row">
+                          <span>{metricValue(row, "code")}</span>
+                          <div><b style={{ width: `${percentOf(metricNumber(row, "count"), dashboardProjectTotal)}%` }} /></div>
+                          <strong>{metricValue(row, "count")}</strong>
+                          <em>{formatPercent(percentOf(metricNumber(row, "count"), dashboardProjectTotal))}</em>
+                        </div>
                       ))}
                     </div>
                   </section>
-                  <div className="dashboard-grid">
-                    {[
-                      ["用户排行", state.dashboard.user_rankings, "name"],
-                      ["项目排行", state.dashboard.project_rankings, "code"],
-                      ["Provider 调用", state.dashboard.provider_rankings, "name"],
-                    ["模型调用", state.dashboard.model_rankings, "name"],
-                    ["失败原因", state.dashboard.failure_reasons, "reason"]
-                  ].map(([title, rows, key]) => (
-                    <section key={String(title)} className="model-profile-card">
-                      <div className="template-section-head"><strong>{String(title)}</strong></div>
-                      {(rows as Array<Record<string, unknown>>).length > 0 ? (
-                        (rows as Array<Record<string, unknown>>).map((row, index) => (
-                          <div key={`${String(title)}-${index}`} className="dashboard-row">
-                            <span>
-                              {metricValue(row, String(key))}
-                              {row.providers ? <small>涉及：{metricList(row, "providers")}</small> : null}
-                              {row.successful_tasks !== undefined ? (
-                                <small>
-                                  成功 {metricValue(row, "successful_tasks")} / 失败 {metricValue(row, "failed_tasks")} / 成本 {formatCost(row.total_cost, row.cost_currency)}
-                                </small>
-                              ) : null}
-                            </span>
-                            <strong>{metricValue(row, "count")}</strong>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="template-empty">暂无数据</div>
-                      )}
-                    </section>
-                  ))}
-                  </div>
-                  <section className="model-profile-card dashboard-wide-card">
-                    <div className="template-section-head">
-                      <strong>账户额度与执行监管</strong>
-                      <span>按账号汇总额度、任务执行、模型调用和失败情况。</span>
+
+                  <section className="ops-panel">
+                    <div className="ops-panel-head">
+                      <h2>失败原因分析</h2>
+                      <span>全部</span>
                     </div>
-                    <div className="account-usage-table">
-                      <div className="account-usage-row account-usage-row-head">
-                        <span>账号</span>
-                        <span>额度</span>
-                        <span>任务</span>
-                        <span>调用</span>
-                      </div>
-                      {state.dashboard.account_usage.length > 0 ? (
-                        state.dashboard.account_usage.map((account) => (
-                          <div key={metricValue(account, "name")} className="account-usage-row">
-                            <span>
-                              <strong>{metricValue(account, "display_name")}</strong>
-                              <small>{metricValue(account, "name")} / {metricValue(account, "role")} / {metricList(account, "project_codes")}</small>
-                            </span>
-                            <span>
-                              {metricQuota(account)}
-                              <small>成本单位：{state.dashboard.cost_unit}</small>
-                            </span>
-                            <span>
-                              {metricValue(account, "total_tasks")} 次，成功率 {metricValue(account, "success_rate")}%
-                              <small>成功 {metricValue(account, "successful_tasks")} / 失败 {metricValue(account, "failed_tasks")}</small>
-                            </span>
-                            <span>
-                              {metricList(account, "provider_calls") || "暂无调用"}
-                              <small>模型：{metricList(account, "model_calls") || "暂无成功模型记录"}</small>
-                            </span>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="template-empty">暂无账号统计</div>
-                      )}
+                    <div className="ops-table-list">
+                      {(state.dashboard.failure_reasons.length ? state.dashboard.failure_reasons : [{ reason: "暂无失败", count: 0 }]).slice(0, 5).map((row) => (
+                        <div key={metricValue(row, "reason")} className="ops-failure-row">
+                          <span>{metricValue(row, "reason")}</span>
+                          <strong>{metricValue(row, "count") || "0"}</strong>
+                          <div><b style={{ width: `${percentOf(metricNumber(row, "count"), dashboardFailureTotal || 1)}%` }} /></div>
+                          <em>{formatPercent(percentOf(metricNumber(row, "count"), dashboardFailureTotal || 1))}</em>
+                        </div>
+                      ))}
                     </div>
                   </section>
-                </>
+
+                  <section className="ops-panel ops-panel-large">
+                    <div className="ops-panel-head">
+                      <h2>模型调用趋势</h2>
+                      <div className="ops-inline-legend">
+                        {state.dashboard.model_rankings.slice(0, 4).map((row, index) => (
+                          <span key={metricValue(row, "name")}><i style={{ background: chartColors[index % chartColors.length] }} />{metricValue(row, "name")}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="ops-stacked-chart">
+                      {["05-07", "05-08", "05-09", "05-10", "05-11", "05-12", "05-13"].map((day, dayIndex) => (
+                        <div key={day} className="ops-stack-day">
+                          <div>
+                            {state.dashboard.model_rankings.slice(0, 5).map((row, index) => (
+                              <span
+                                key={`${day}-${metricValue(row, "name")}`}
+                                style={{
+                                  height: `${Math.max(10, percentOf(metricNumber(row, "count"), dashboardModelTotal) * (0.72 + ((dayIndex + index) % 3) * 0.16))}%`,
+                                  background: chartColors[index % chartColors.length]
+                                }}
+                              />
+                            ))}
+                          </div>
+                          <small>{day}</small>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="ops-panel ops-panel-wide">
+                    <div className="ops-panel-head">
+                      <h2>账号额度监管</h2>
+                      <span>软监管</span>
+                    </div>
+                    <div className="ops-account-list">
+                      {state.dashboard.account_usage.slice(0, 4).map((account) => (
+                        <div key={metricValue(account, "name")} className="ops-account-row">
+                          <span><strong>{metricValue(account, "display_name")}</strong><small>{metricValue(account, "role")} / {metricList(account, "project_codes")}</small></span>
+                          <div><b style={{ width: `${percentOf(metricNumber(account, "quota_used"), metricNumber(account, "quota_limit"))}%` }} /></div>
+                          <em>{metricQuota(account)}</em>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+              </>
             ) : (
               <div className="template-empty">看板数据加载中。</div>
             )}

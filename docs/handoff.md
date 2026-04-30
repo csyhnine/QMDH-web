@@ -10,6 +10,46 @@
 
 ## Latest Handoffs
 
+### [2026-04-30 16:40] Session Handoff
+- 执行角色：Feature / Operations Dashboard
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：Yes（本轮提交后）
+  - 是否有未提交改动：No（本轮提交后）
+  - 是否已 push：Yes（本轮提交后）
+- 本次完成：
+  - 三个管理页面补齐互跳入口：账号管理、使用看板、运维配置可互相跳转
+  - `users` 增加 `monthly_quota`，本地设计师账号预置月度额度
+  - `/dashboard/stats` 补充成本口径、成本单位、说明文案、失败原因上下文、provider 成功/失败拆分
+  - `/admin/dashboard` 增加成本口径说明和账号级监管表，展示额度、任务成功/失败、provider 调用、模型调用
+  - 本地数据库已执行 schema 补列与种子刷新
+  - 完成验证：
+    - `python -m unittest discover -s tests` 通过
+    - `npm run build` 通过
+    - `cmd /c start-dev.cmd --check` 通过
+- 修改文件：
+  - `backend/app/models.py`
+  - `backend/app/services/bootstrap.py`
+  - `backend/app/schemas.py`
+  - `backend/app/routers/auth.py`
+  - `backend/app/routers/users.py`
+  - `backend/app/routers/dashboard.py`
+  - `backend/tests/test_database_auth.py`
+  - `frontend/src/api.ts`
+  - `frontend/src/App.tsx`
+  - `frontend/src/styles.css`
+  - `docs/tasks.md`
+  - `docs/handoff.md`
+  - `docs/projects/QMDH-001/status.md`
+- 风险与注意事项：
+  - 额度目前是软监管，只展示不阻断任务创建
+  - 成本单位仍是内部估算单位，不是人民币结算金额
+  - 正式生产仍需要 migration、密钥加密和操作审计
+- 下一位 agent 的第一步：
+  - 先检查 `git status`
+  - 打开 `/admin/dashboard`，用失败任务确认失败原因 Top 和账号监管表是否符合运营预期
+- 是否可直接接手：Yes
+
 ### [2026-04-30 11:20] Session Handoff
 - 执行角色：Feature / Production Management
 - 当前分支：`main`
@@ -109,44 +149,4 @@
   - 先检查 `git status`
   - 重启本地服务后确认设计师模型列表包含 FireRed、Qwen、Z-Image、Z-Image-Turbo 和 Majic
   - 在设计师页面实测 FireRed 白底图生成结果是否符合建筑/景观提示词预期
-- 是否可直接接手：Yes
-
-### [2026-04-30 09:45] Session Handoff
-- 执行角色：Bugfix / Provider Triage
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：Yes（本轮提交后）
-  - 是否有未提交改动：No（本轮提交后）
-  - 是否已 push：Yes（本轮提交后）
-- 本次完成：
-  - 排查 FireRed 生成失败：任务 `18` 返回 `HTTP 400`，错误为 `Qwen Image Edit requires image upload`
-  - 结论：`FireRedTeam/FireRed-Image-Edit-1.1` 是图片编辑/图生图类模型，当前纯文生图 workflow 不应暴露
-  - 将 `modelscope_firered_image_edit` capability 从 `image.generate + image.edit` 收紧为仅 `image.edit`
-  - 设计师当前图像生成模型列表会继续显示文生图模型，不再显示 FireRed edit 模型
-  - 更新测试和文档
-  - 完成验证：
-    - `python -m unittest discover -s tests` 通过
-    - `npm run build` 通过
-- 修改文件：
-  - `backend/app/services/model_registry.py`
-  - `backend/tests/test_model_registry_profiles.py`
-  - `docs/architecture.md`
-  - `docs/deployment.md`
-  - `docs/handoff.md`
-  - `docs/tasks.md`
-  - `docs/projects/QMDH-001/status.md`
-- 当前任务状态：
-  - `task-001`: IN_PROGRESS
-  - `task-002`: DONE
-  - `task-004`: DONE
-  - `task-006`: DONE
-  - `task-007`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - FireRed 如需使用，需要新增图片编辑 workflow / adapter，不能走当前 `images/generations` 纯文生图路径
-  - 当前本机 18010 仍可能有旧 API 进程或 stale listener；以 `start-dev.cmd` 打印的端口为准
-- 下一位 agent 的第一步：
-  - 先检查 `git status`
-  - 重启本地服务后确认设计师模型列表只保留文生图模型
-  - 继续实测 `Qwen-Image-2512`、`Z-Image`、`Z-Image-Turbo` 的建筑效果图表现
 - 是否可直接接手：Yes

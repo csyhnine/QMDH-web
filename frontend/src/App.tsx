@@ -96,6 +96,7 @@ type UserDraft = {
   displayName: string;
   role: string;
   projectCodes: string;
+  monthlyQuota: string;
   isActive: boolean;
 };
 
@@ -135,6 +136,7 @@ const defaultUserDraft: UserDraft = {
   displayName: "",
   role: "designer",
   projectCodes: "QMDH-001",
+  monthlyQuota: "200",
   isActive: true
 };
 
@@ -368,12 +370,15 @@ function parseProjectCodes(value: string): string[] {
 }
 
 function toUserPayload(draft: UserDraft): UserCreatePayload {
+  const trimmedQuota = draft.monthlyQuota.trim();
+
   return {
     name: draft.name.trim(),
     password: draft.password,
     display_name: draft.displayName.trim(),
     role: draft.role,
     project_codes: parseProjectCodes(draft.projectCodes),
+    monthly_quota: trimmedQuota ? Number(trimmedQuota) : null,
     is_active: draft.isActive
   };
 }
@@ -385,6 +390,7 @@ function toUserDraft(user: ManagedUser): UserDraft {
     displayName: user.display_name,
     role: user.role,
     projectCodes: user.project_codes.join(", "),
+    monthlyQuota: user.monthly_quota === null ? "" : String(user.monthly_quota),
     isActive: user.is_active
   };
 }
@@ -408,6 +414,40 @@ function canUseOpsViews(user: AuthUser | null): boolean {
 function metricValue(item: Record<string, unknown>, key: string): string {
   const value = item[key];
   return typeof value === "number" || typeof value === "string" ? String(value) : "";
+}
+
+function metricList(item: Record<string, unknown>, key: string): string {
+  const value = item[key];
+  if (!Array.isArray(value)) return "";
+  return value
+    .map((entry) => {
+      if (entry && typeof entry === "object") {
+        const row = entry as Record<string, unknown>;
+        const name = metricValue(row, "name");
+        const count = metricValue(row, "count");
+        return count ? `${name} ${count}` : name;
+      }
+      return String(entry);
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
+function metricCost(item: Record<string, unknown>, key: string): string {
+  const value = item[key];
+  return typeof value === "number" ? value.toFixed(2) : metricValue(item, key);
+}
+
+function metricQuota(item: Record<string, unknown>): string {
+  const limit = item.quota_limit;
+  const remaining = item.quota_remaining;
+  const status = metricValue(item, "quota_status");
+  if (typeof limit !== "number") {
+    return `不限额 / 已用 ${metricCost(item, "quota_used")}`;
+  }
+  return `${metricCost(item, "quota_used")} / ${limit.toFixed(2)}，剩余 ${
+    typeof remaining === "number" ? remaining.toFixed(2) : "0.00"
+  }（${status}）`;
 }
 
 function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfileDraft {
@@ -1237,6 +1277,7 @@ export default function App() {
           display_name: payload.display_name,
           role: payload.role,
           project_codes: payload.project_codes,
+          monthly_quota: payload.monthly_quota,
           is_active: payload.is_active
         });
         if (payload.password) {
@@ -1424,6 +1465,17 @@ export default function App() {
                       <span>项目权限</span>
                       <input value={userDraft.projectCodes} onChange={(event) => setUserDraft((current) => ({ ...current, projectCodes: event.target.value }))} placeholder="QMDH-001 或 *" />
                     </label>
+                    <label className="composer-menu-field">
+                      <span>月度额度</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={userDraft.monthlyQuota}
+                        onChange={(event) => setUserDraft((current) => ({ ...current, monthlyQuota: event.target.value }))}
+                        placeholder="留空表示不限额"
+                      />
+                    </label>
                   </div>
                   <label className="model-toggle">
                     <input type="checkbox" checked={userDraft.isActive} onChange={(event) => setUserDraft((current) => ({ ...current, isActive: event.target.checked }))} />
@@ -1451,6 +1503,7 @@ export default function App() {
                       <div className="feed-card-meta">
                         <span>{user.role}</span>
                         <span>{user.project_codes.join(", ")}</span>
+                        <span>{user.monthly_quota === null ? "不限额" : `${user.monthly_quota} cost unit/月`}</span>
                         <span>{user.last_login_at ? formatDate(user.last_login_at) : "未登录"}</span>
                       </div>
                       <div className="template-card-actions">
@@ -1478,17 +1531,32 @@ export default function App() {
               <div className="floating-error">当前账号没有查看运营看板的权限。</div>
             ) : state.dashboard ? (
               <>
-                <div className="stat-strip">
-                  <div className="stat-card accent"><span>任务数</span><strong>{state.dashboard.total_tasks}</strong></div>
-                  <div className="stat-card"><span>成功率</span><strong>{state.dashboard.success_rate}%</strong></div>
-                  <div className="stat-card"><span>失败数</span><strong>{state.dashboard.failed_tasks}</strong></div>
-                  <div className="stat-card"><span>总成本</span><strong>{state.dashboard.total_cost}</strong></div>
-                </div>
-                <div className="dashboard-grid">
-                  {[
-                    ["用户排行", state.dashboard.user_rankings, "name"],
-                    ["项目排行", state.dashboard.project_rankings, "code"],
-                    ["Provider 调用", state.dashboard.provider_rankings, "name"],
+                  <div className="stat-strip">
+                    <div className="stat-card accent"><span>任务数</span><strong>{state.dashboard.total_tasks}</strong></div>
+                    <div className="stat-card"><span>成功率</span><strong>{state.dashboard.success_rate}%</strong></div>
+                    <div className="stat-card"><span>失败数</span><strong>{state.dashboard.failed_tasks}</strong></div>
+                    <div className="stat-card">
+                      <span>总成本</span>
+                      <strong>{state.dashboard.total_cost}</strong>
+                      <small>{state.dashboard.cost_unit}</small>
+                    </div>
+                  </div>
+                  <section className="model-profile-card dashboard-wide-card">
+                    <div className="template-section-head">
+                      <strong>成本口径</strong>
+                      <span>{state.dashboard.cost_formula}</span>
+                    </div>
+                    <div className="dashboard-note-list">
+                      {state.dashboard.cost_notes.map((note) => (
+                        <span key={note}>{note}</span>
+                      ))}
+                    </div>
+                  </section>
+                  <div className="dashboard-grid">
+                    {[
+                      ["用户排行", state.dashboard.user_rankings, "name"],
+                      ["项目排行", state.dashboard.project_rankings, "code"],
+                      ["Provider 调用", state.dashboard.provider_rankings, "name"],
                     ["模型调用", state.dashboard.model_rankings, "name"],
                     ["失败原因", state.dashboard.failure_reasons, "reason"]
                   ].map(([title, rows, key]) => (
@@ -1497,7 +1565,15 @@ export default function App() {
                       {(rows as Array<Record<string, unknown>>).length > 0 ? (
                         (rows as Array<Record<string, unknown>>).map((row, index) => (
                           <div key={`${String(title)}-${index}`} className="dashboard-row">
-                            <span>{metricValue(row, String(key))}</span>
+                            <span>
+                              {metricValue(row, String(key))}
+                              {row.providers ? <small>涉及：{metricList(row, "providers")}</small> : null}
+                              {row.successful_tasks !== undefined ? (
+                                <small>
+                                  成功 {metricValue(row, "successful_tasks")} / 失败 {metricValue(row, "failed_tasks")} / 成本 {metricCost(row, "total_cost")}
+                                </small>
+                              ) : null}
+                            </span>
                             <strong>{metricValue(row, "count")}</strong>
                           </div>
                         ))
@@ -1506,8 +1582,46 @@ export default function App() {
                       )}
                     </section>
                   ))}
-                </div>
-              </>
+                  </div>
+                  <section className="model-profile-card dashboard-wide-card">
+                    <div className="template-section-head">
+                      <strong>账户额度与执行监管</strong>
+                      <span>按账号汇总额度、任务执行、模型调用和失败情况。</span>
+                    </div>
+                    <div className="account-usage-table">
+                      <div className="account-usage-row account-usage-row-head">
+                        <span>账号</span>
+                        <span>额度</span>
+                        <span>任务</span>
+                        <span>调用</span>
+                      </div>
+                      {state.dashboard.account_usage.length > 0 ? (
+                        state.dashboard.account_usage.map((account) => (
+                          <div key={metricValue(account, "name")} className="account-usage-row">
+                            <span>
+                              <strong>{metricValue(account, "display_name")}</strong>
+                              <small>{metricValue(account, "name")} / {metricValue(account, "role")} / {metricList(account, "project_codes")}</small>
+                            </span>
+                            <span>
+                              {metricQuota(account)}
+                              <small>成本单位：{state.dashboard.cost_unit}</small>
+                            </span>
+                            <span>
+                              {metricValue(account, "total_tasks")} 次，成功率 {metricValue(account, "success_rate")}%
+                              <small>成功 {metricValue(account, "successful_tasks")} / 失败 {metricValue(account, "failed_tasks")}</small>
+                            </span>
+                            <span>
+                              {metricList(account, "provider_calls") || "暂无调用"}
+                              <small>模型：{metricList(account, "model_calls") || "暂无成功模型记录"}</small>
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="template-empty">暂无账号统计</div>
+                      )}
+                    </div>
+                  </section>
+                </>
             ) : (
               <div className="template-empty">看板数据加载中。</div>
             )}
@@ -1518,6 +1632,10 @@ export default function App() {
               <p className="canvas-kicker">QMDH / MODEL ADMIN</p>
               <h1>模型与 Key 管理</h1>
               <p>管理可用于图像生成的 OpenAI-compatible 模型配置。Key 只会在后端保存，前端只显示脱敏结果。</p>
+              <div className="template-card-actions">
+                <button type="button" className="ghost-button" onClick={() => (window.location.href = "/admin/dashboard")}>使用看板</button>
+                {userCanManageUsers ? <button type="button" className="ghost-button" onClick={() => (window.location.href = "/admin/users")}>账号管理</button> : null}
+              </div>
             </header>
 
             {state.error ? <div className="floating-error">{state.error}</div> : null}

@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.security import hash_password, hash_session_token
 from app.database import Base, get_db
-from app.models import AuthSession, DataClassification, Project, Task, TaskStatus, User, Workflow
+from app.models import AuthSession, DataClassification, Project, ProviderCall, Task, TaskStatus, User, Workflow
 from app.routers import auth, dashboard, projects, users
 from app.services.bootstrap import seed_initial_data
 
@@ -73,19 +73,44 @@ class DatabaseAuthTests(unittest.TestCase):
             db.add(workflow)
             db.flush()
             project = db.query(Project).filter_by(code="QMDH-001").one()
+            completed_task = Task(
+                title="Done",
+                status=TaskStatus.completed,
+                workflow_id=workflow.id,
+                project_id=project.id,
+                user_id=designer.id,
+                requested_provider="modelscope_free_image",
+                payload={},
+                result={},
+                classification=DataClassification.b,
+                cost=1.25,
+                latency_ms=1200,
+            )
+            failed_task = Task(
+                title="Jimeng failed",
+                status=TaskStatus.failed,
+                workflow_id=workflow.id,
+                project_id=project.id,
+                user_id=designer.id,
+                requested_provider="jimeng",
+                payload={},
+                result={"error": "Provider not configured: jimeng"},
+                classification=DataClassification.b,
+                cost=0.0,
+                latency_ms=0,
+            )
+            db.add_all([completed_task, failed_task])
+            db.flush()
             db.add(
-                Task(
-                    title="Done",
-                    status=TaskStatus.completed,
-                    workflow_id=workflow.id,
-                    project_id=project.id,
-                    user_id=designer.id,
-                    requested_provider="modelscope_free_image",
-                    payload={},
-                    result={},
-                    classification=DataClassification.b,
+                ProviderCall(
+                    task_id=completed_task.id,
+                    provider_name="modelscope_free_image",
+                    model_name="MAILAND/majicflus_v1",
+                    capability="image.generate",
                     cost=1.25,
                     latency_ms=1200,
+                    outbound=True,
+                    request_summary={},
                 )
             )
             db.commit()
@@ -159,7 +184,17 @@ class DatabaseAuthTests(unittest.TestCase):
 
         ops_dashboard = self.client.get("/dashboard/stats", headers={"Authorization": f"Bearer {ops_token}"})
         self.assertEqual(ops_dashboard.status_code, 200)
-        self.assertEqual(ops_dashboard.json()["total_tasks"], 1)
+        stats = ops_dashboard.json()
+        self.assertEqual(stats["total_tasks"], 2)
+        self.assertEqual(stats["failed_tasks"], 1)
+        self.assertEqual(stats["total_cost"], 1.25)
+        self.assertEqual(stats["cost_unit"], "QMDH cost unit")
+        self.assertEqual(stats["failure_reasons"][0]["reason"], "Provider not configured: jimeng")
+        jimeng_provider = next(row for row in stats["provider_rankings"] if row["name"] == "jimeng")
+        self.assertEqual(jimeng_provider["failed_tasks"], 1)
+        designer_usage = next(row for row in stats["account_usage"] if row["name"] == "designer")
+        self.assertEqual(designer_usage["total_tasks"], 2)
+        self.assertEqual(designer_usage["quota_status"], "unlimited")
 
         created = self.client.post(
             "/users",

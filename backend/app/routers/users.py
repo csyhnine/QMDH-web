@@ -35,6 +35,7 @@ def _to_user_out(user: User) -> UserOut:
         role=user.role,
         project_codes=user.project_codes or [],
         is_active=user.is_active,
+        monthly_quota=user.monthly_quota,
         created_at=user.created_at,
         updated_at=user.updated_at,
         last_login_at=user.last_login_at,
@@ -69,6 +70,7 @@ def create_user(
         password_hash=hash_password(payload.password),
         is_active=payload.is_active,
         project_codes=_normalize_project_codes(payload.project_codes),
+        monthly_quota=payload.monthly_quota,
     )
     db.add(user)
     db.commit()
@@ -99,6 +101,8 @@ def update_user(
         if auth_user.user_id == user.id and not updates["is_active"]:
             raise HTTPException(status_code=400, detail="Cannot disable the current user")
         user.is_active = bool(updates["is_active"])
+    if "monthly_quota" in updates:
+        user.monthly_quota = updates["monthly_quota"]
 
     db.commit()
     db.refresh(user)

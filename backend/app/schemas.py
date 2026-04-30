@@ -74,11 +74,15 @@ class DashboardStats(BaseModel):
     audit_coverage_rate: float
     outbound_tasks: int
     total_cost: float = 0.0
+    cost_unit: str = "cost_unit"
+    cost_formula: str = ""
+    cost_notes: list[str] = Field(default_factory=list)
     user_rankings: list[dict[str, Any]] = Field(default_factory=list)
     project_rankings: list[dict[str, Any]] = Field(default_factory=list)
     provider_rankings: list[dict[str, Any]] = Field(default_factory=list)
     model_rankings: list[dict[str, Any]] = Field(default_factory=list)
     failure_reasons: list[dict[str, Any]] = Field(default_factory=list)
+    account_usage: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class AuthLoginIn(BaseModel):
@@ -93,6 +97,7 @@ class AuthUserOut(BaseModel):
     role: str
     project_codes: list[str]
     is_active: bool
+    monthly_quota: float | None = None
 
 
 class AuthLoginOut(BaseModel):
@@ -108,6 +113,7 @@ class UserCreate(BaseModel):
     role: str = "designer"
     project_codes: list[str] = Field(default_factory=lambda: ["QMDH-001"])
     is_active: bool = True
+    monthly_quota: float | None = Field(default=None, ge=0)
 
 
 class UserUpdate(BaseModel):
@@ -115,6 +121,7 @@ class UserUpdate(BaseModel):
     role: str | None = None
     project_codes: list[str] | None = None
     is_active: bool | None = None
+    monthly_quota: float | None = Field(default=None, ge=0)
 
 
 class UserPasswordReset(BaseModel):

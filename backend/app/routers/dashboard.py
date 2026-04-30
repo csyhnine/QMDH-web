@@ -14,6 +14,32 @@ from app.schemas import DashboardStats
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
+def _round(value: float) -> float:
+    return round(float(value or 0), 2)
+
+
+def _failure_reason(task: Task) -> str:
+    if isinstance(task.result, dict):
+        raw_reason = task.result.get("error") or task.result.get("asset_warning") or task.result.get("summary")
+        if raw_reason:
+            return str(raw_reason)[:220]
+    return "Task failed without a recorded error message"
+
+
+def _success_rate(successful_tasks: int, total_tasks: int) -> float:
+    return round((successful_tasks / total_tasks) * 100, 2) if total_tasks else 0.0
+
+
+def _quota_status(quota_limit: float | None, quota_used: float) -> str:
+    if quota_limit is None:
+        return "unlimited"
+    if quota_used > quota_limit:
+        return "exceeded"
+    if quota_limit > 0 and quota_used / quota_limit >= 0.8:
+        return "warning"
+    return "ok"
+
+
 @router.get("/stats", response_model=DashboardStats)
 def get_dashboard_stats(
     days: int = Query(default=30, ge=1, le=365),
@@ -46,20 +72,116 @@ def get_dashboard_stats(
     audit_logs = db.scalar(select(func.count(AuditLog.id))) or 0
     outbound_tasks = sum(1 for task in tasks if task.requested_provider)
 
-    success_rate = round((successful_tasks / total_tasks) * 100, 2) if total_tasks else 0.0
+    success_rate = _success_rate(successful_tasks, total_tasks)
     audit_coverage_rate = round((audit_logs / total_tasks) * 100, 2) if total_tasks else 100.0
     user_counts = Counter(task.user.name for task in tasks)
     project_counts = Counter(task.project.code for task in tasks)
     provider_counts = Counter(task.requested_provider for task in tasks)
-    failure_counts = Counter(
-        str(task.result.get("error") or "Unknown failure")[:160]
-        for task in tasks
-        if task.status == TaskStatus.failed
-    )
+    failure_counts = Counter(_failure_reason(task) for task in tasks if task.status == TaskStatus.failed)
     model_counts: Counter[str] = Counter()
+    model_costs: Counter[str] = Counter()
+    provider_calls: list[ProviderCall] = []
     if task_ids:
-        provider_calls = db.scalars(select(ProviderCall).where(ProviderCall.task_id.in_(task_ids))).all()
-        model_counts.update(call.model_name or call.provider_name for call in provider_calls)
+        provider_calls = list(db.scalars(select(ProviderCall).where(ProviderCall.task_id.in_(task_ids))).all())
+        for call in provider_calls:
+            model_name = call.model_name or call.provider_name
+            model_counts[model_name] += 1
+            model_costs[model_name] += float(call.cost or 0)
+
+    provider_rows = []
+    for name, count in provider_counts.most_common(10):
+        provider_tasks = [task for task in tasks if task.requested_provider == name]
+        provider_success = sum(1 for task in provider_tasks if task.status == TaskStatus.completed)
+        provider_failed = sum(1 for task in provider_tasks if task.status == TaskStatus.failed)
+        provider_cost = sum(float(task.cost or 0) for task in provider_tasks)
+        provider_latency = (
+            sum(int(task.latency_ms or 0) for task in provider_tasks) / len(provider_tasks)
+            if provider_tasks
+            else 0.0
+        )
+        provider_rows.append(
+            {
+                "name": name,
+                "count": count,
+                "successful_tasks": provider_success,
+                "failed_tasks": provider_failed,
+                "success_rate": _success_rate(provider_success, count),
+                "total_cost": _round(provider_cost),
+                "average_latency_ms": _round(provider_latency),
+            }
+        )
+
+    failure_rows = []
+    for reason, count in failure_counts.most_common(10):
+        failed_for_reason = [
+            task for task in tasks if task.status == TaskStatus.failed and _failure_reason(task) == reason
+        ]
+        failure_rows.append(
+            {
+                "reason": reason,
+                "count": count,
+                "providers": sorted({task.requested_provider for task in failed_for_reason}),
+                "users": sorted({task.user.name for task in failed_for_reason}),
+                "projects": sorted({task.project.code for task in failed_for_reason}),
+            }
+        )
+
+    user_filters = []
+    if user_name:
+        user_filters.append(User.name == user_name)
+    users = db.scalars(select(User).where(*user_filters).order_by(User.created_at.desc(), User.id.desc())).all()
+    tasks_by_user: dict[int, list[Task]] = {}
+    for task in tasks:
+        tasks_by_user.setdefault(task.user_id, []).append(task)
+
+    account_usage = []
+    for user in users:
+        user_tasks = tasks_by_user.get(user.id, [])
+        user_total = len(user_tasks)
+        user_success = sum(1 for task in user_tasks if task.status == TaskStatus.completed)
+        user_failed = sum(1 for task in user_tasks if task.status == TaskStatus.failed)
+        user_cost = sum(float(task.cost or 0) for task in user_tasks)
+        user_latency = (
+            sum(int(task.latency_ms or 0) for task in user_tasks) / user_total
+            if user_total
+            else 0.0
+        )
+        user_providers = Counter(task.requested_provider for task in user_tasks)
+        user_models: Counter[str] = Counter()
+        if task_ids and user_tasks:
+            user_task_ids = {task.id for task in user_tasks}
+            user_models.update(
+                call.model_name or call.provider_name
+                for call in provider_calls
+                if call.task_id in user_task_ids
+            )
+        quota_limit = user.monthly_quota
+        quota_remaining = None if quota_limit is None else _round(max(quota_limit - user_cost, 0.0))
+        account_usage.append(
+            {
+                "name": user.name,
+                "display_name": user.display_name or user.name,
+                "role": user.role,
+                "is_active": user.is_active,
+                "project_codes": user.project_codes or [],
+                "quota_limit": quota_limit,
+                "quota_used": _round(user_cost),
+                "quota_remaining": quota_remaining,
+                "quota_status": _quota_status(quota_limit, user_cost),
+                "total_tasks": user_total,
+                "successful_tasks": user_success,
+                "failed_tasks": user_failed,
+                "success_rate": _success_rate(user_success, user_total),
+                "average_latency_ms": _round(user_latency),
+                "provider_calls": [
+                    {"name": name, "count": count} for name, count in user_providers.most_common(5)
+                ],
+                "model_calls": [
+                    {"name": name, "count": count} for name, count in user_models.most_common(5)
+                ],
+                "last_task_at": max((task.created_at for task in user_tasks), default=None),
+            }
+        )
 
     return DashboardStats(
         active_workflows=active_workflows,
@@ -72,12 +194,29 @@ def get_dashboard_stats(
         audit_coverage_rate=audit_coverage_rate,
         outbound_tasks=outbound_tasks,
         total_cost=round(total_cost, 2),
+        cost_unit="QMDH cost unit",
+        cost_formula=(
+            "total_cost = sum(tasks.cost) in the selected range; completed tasks write adapter "
+            "estimated cost, failed tasks are counted with cost 0 unless a task already recorded cost."
+        ),
+        cost_notes=[
+            "This is an internal estimated usage unit, not a RMB invoice amount.",
+            "Provider/model distributions show scheduling success and failure separately.",
+            "Account quota is a soft monitoring limit; it does not block task creation yet.",
+        ],
         user_rankings=[{"name": name, "count": count} for name, count in user_counts.most_common(10)],
         project_rankings=[{"code": code, "count": count} for code, count in project_counts.most_common(10)],
-        provider_rankings=[
-            {"name": name, "count": count}
-            for name, count in provider_counts.most_common(10)
+        provider_rankings=provider_rows,
+        model_rankings=[
+            {
+                "name": name,
+                "count": count,
+                "successful_tasks": count,
+                "failed_tasks": 0,
+                "total_cost": _round(model_costs.get(name, 0.0)),
+            }
+            for name, count in model_counts.most_common(10)
         ],
-        model_rankings=[{"name": name, "count": count} for name, count in model_counts.most_common(10)],
-        failure_reasons=[{"reason": reason, "count": count} for reason, count in failure_counts.most_common(10)],
+        failure_reasons=failure_rows,
+        account_usage=account_usage,
     )

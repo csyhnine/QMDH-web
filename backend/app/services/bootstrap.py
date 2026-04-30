@@ -14,6 +14,7 @@ LOCAL_DEV_ACCOUNTS = [
         "role": "owner",
         "password": "qmdh-owner-2026",
         "project_codes": ["*"],
+        "monthly_quota": None,
     },
     {
         "name": "qmdh.admin",
@@ -21,6 +22,7 @@ LOCAL_DEV_ACCOUNTS = [
         "role": "admin",
         "password": "qmdh-admin-2026",
         "project_codes": ["*"],
+        "monthly_quota": None,
     },
     {
         "name": "qmdh.ops",
@@ -28,6 +30,7 @@ LOCAL_DEV_ACCOUNTS = [
         "role": "ops",
         "password": "qmdh-ops-2026",
         "project_codes": ["*"],
+        "monthly_quota": None,
     },
     {
         "name": "designer.arch",
@@ -35,6 +38,7 @@ LOCAL_DEV_ACCOUNTS = [
         "role": "designer",
         "password": "qmdh-arch-2026",
         "project_codes": ["QMDH-001"],
+        "monthly_quota": 200.0,
     },
     {
         "name": "designer.landscape",
@@ -42,6 +46,7 @@ LOCAL_DEV_ACCOUNTS = [
         "role": "designer",
         "password": "qmdh-landscape-2026",
         "project_codes": ["QMDH-001"],
+        "monthly_quota": 200.0,
     },
     {
         "name": "designer.sec",
@@ -49,6 +54,7 @@ LOCAL_DEV_ACCOUNTS = [
         "role": "designer",
         "password": "qmdh-sec-2026",
         "project_codes": ["QMDH-SEC"],
+        "monthly_quota": 100.0,
     },
 ]
 
@@ -76,6 +82,8 @@ def ensure_schema(engine: Engine) -> None:
             statements.append("ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE")
         if "project_codes" not in user_columns:
             statements.append("ALTER TABLE users ADD COLUMN project_codes JSON")
+        if "monthly_quota" not in user_columns:
+            statements.append("ALTER TABLE users ADD COLUMN monthly_quota FLOAT")
         if "last_login_at" not in user_columns:
             statements.append("ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP")
         if "updated_at" not in user_columns:
@@ -132,6 +140,7 @@ def seed_initial_data(db: Session) -> None:
                     password_hash=hash_password(account["password"]),
                     is_active=True,
                     project_codes=account["project_codes"],
+                    monthly_quota=account["monthly_quota"],
                 )
             )
             continue
@@ -143,6 +152,8 @@ def seed_initial_data(db: Session) -> None:
             user.project_codes = account["project_codes"]
         if not user.password_hash:
             user.password_hash = hash_password(account["password"])
+        if user.monthly_quota is None:
+            user.monthly_quota = account["monthly_quota"]
         user.is_active = True
 
     projects = [

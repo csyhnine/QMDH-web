@@ -120,7 +120,7 @@
   - 让管理员维护设计师账号、角色和项目授权
   - 给管理人员提供使用、成本、模型调用和失败原因看板
 - 完成说明：
-  - 已扩展 `users` 表，新增密码哈希、显示名、启停状态、项目授权、最后登录时间和更新时间
+  - 已扩展 `users` 表，新增密码哈希、显示名、启停状态、项目授权、月度额度、最后登录时间和更新时间
   - 已新增 `auth_sessions` 表，使用 PBKDF2 密码哈希和 7 天会话 token
   - 已新增 `/api/v1/auth/login`、`/api/v1/auth/logout`、`/api/v1/auth/me`
   - 已新增 `/api/v1/users` 用户管理接口，`owner / admin` 可创建、编辑、停用和重置密码
@@ -128,6 +128,10 @@
   - `/admin/users` 提供账号管理页，`/admin/dashboard` 提供使用与成本看板
   - `/admin/models` 保留为运维配置入口，不再作为设计师侧能力
   - 看板面向 `owner / admin / ops`，统计任务数、成功率、失败数、成本、用户排行、项目排行、provider / model 分布和失败原因
+  - 已补充管理页互跳：`/admin/users`、`/admin/dashboard`、`/admin/models` 之间可直接跳转
+  - 已明确成本口径：`total_cost = sum(tasks.cost)`，单位为内部 `QMDH cost unit`，失败任务默认成本为 0，除非任务已记录成本
+  - 已补充失败原因 Top 展示，失败项会带出相关 provider、用户和项目，方便排查类似 `jimeng` 未配置导致的调度失败
+  - 已新增账号级监管：看板按账户显示月度额度、已用额度、剩余额度、任务成功/失败、provider 调用和模型调用
   - 已预置本地开发账号包，并生成本机忽略清单 `local/qmdh-dev-accounts.md`，可通过 `open-accounts.cmd` 打开
 - 验收标准：
   1. 后端账号与权限单测通过：已完成
@@ -149,5 +153,5 @@
 
 1. 先稳定提交当前工作区改动
 2. 双击 `open-accounts.cmd` 查看本地账号清单，并用预置设计师账号验证项目权限
-3. 用 `/admin/dashboard` 检查生成任务、成本、失败原因和模型调用统计
+3. 用 `/admin/dashboard` 检查生成任务、成本口径、失败原因、账号额度和模型调用统计
 4. 后续生产化补强优先做密钥加密、操作审计、日志与正式 migration

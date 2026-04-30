@@ -56,6 +56,7 @@ export type AuthUser = {
   role: string;
   project_codes: string[];
   is_active: boolean;
+  monthly_quota: number | null;
 };
 
 export type LoginResponse = {
@@ -77,9 +78,12 @@ export type UserCreatePayload = {
   role: string;
   project_codes: string[];
   is_active: boolean;
+  monthly_quota: number | null;
 };
 
-export type UserUpdatePayload = Partial<Pick<UserCreatePayload, "display_name" | "role" | "project_codes" | "is_active">>;
+export type UserUpdatePayload = Partial<
+  Pick<UserCreatePayload, "display_name" | "role" | "project_codes" | "is_active" | "monthly_quota">
+>;
 
 export type DashboardStats = {
   active_workflows: number;
@@ -92,11 +96,15 @@ export type DashboardStats = {
   audit_coverage_rate: number;
   outbound_tasks: number;
   total_cost: number;
+  cost_unit: string;
+  cost_formula: string;
+  cost_notes: string[];
   user_rankings: Array<Record<string, unknown>>;
   project_rankings: Array<Record<string, unknown>>;
   provider_rankings: Array<Record<string, unknown>>;
   model_rankings: Array<Record<string, unknown>>;
   failure_reasons: Array<Record<string, unknown>>;
+  account_usage: Array<Record<string, unknown>>;
 };
 
 export type ProviderProfileRecord = {

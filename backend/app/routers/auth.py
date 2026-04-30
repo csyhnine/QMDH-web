@@ -24,6 +24,7 @@ def _to_auth_user_out(user: User) -> AuthUserOut:
         role=user.role,
         project_codes=user.project_codes or [],
         is_active=user.is_active,
+        monthly_quota=user.monthly_quota,
     )
 
 
@@ -77,4 +78,5 @@ def me(
         role=auth_user.role,
         project_codes=list(auth_user.project_codes),
         is_active=True,
+        monthly_quota=None,
     )

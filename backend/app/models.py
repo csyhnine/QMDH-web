@@ -39,6 +39,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(Text, default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     project_codes: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["QMDH-001"])
+    monthly_quota: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

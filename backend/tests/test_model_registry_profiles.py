@@ -70,7 +70,7 @@ class ProviderRegistryProfileTests(unittest.TestCase):
             provider_map["modelscope_firered_image_edit"].model_name,
             "FireRedTeam/FireRed-Image-Edit-1.1",
         )
-        self.assertEqual(provider_map["modelscope_firered_image_edit"].capabilities, ["image.edit"])
+        self.assertEqual(provider_map["modelscope_firered_image_edit"].capabilities, ["image.generate", "image.edit"])
 
     def test_list_provider_capabilities_includes_dynamic_profile(self) -> None:
         profiles_json = json.dumps(

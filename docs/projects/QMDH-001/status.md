@@ -39,12 +39,12 @@
 - 模型管理已从设计师工作台侧栏拆出，并通过 `admin / owner / ops` 角色限制访问
 - 后端 provider 注册表已支持数据库配置，任务创建和执行都会读取后台保存的真实 provider profile
 - 当存在 ModelScope token 时，设计师文生图模型列表会自动出现 `MAILAND/majicflus_v1`、`Qwen/Qwen-Image-2512`、`Tongyi-MAI/Z-Image`、`Tongyi-MAI/Z-Image-Turbo`
-- `FireRedTeam/FireRed-Image-Edit-1.1` 已确认要求图片上传，保留为后续 `image.edit` 能力，不进入当前纯文生图列表
+- `FireRedTeam/FireRed-Image-Edit-1.1` 已确认要求图片上传；当前由后端自动补白底图或转发用户参考图，兼容到设计师文生图体验中
 - 设计师页面已不再显示 `jimeng`、`nano_banana` 等模拟 provider
 
 ## 风险与阻塞
 
-- 当前参考图接入是“语义参考”方案，还不是直接 `img2img / image.edit` 能力
+- 当前大多数参考图接入仍是“语义参考”方案；FireRed 使用白底图 / 参考图桥接调用图像编辑模型，属于兼容方案，后续仍需要专用 `image.edit` workflow / adapter
 - 当前用户边界是 MVP token 认证，不是完整账号、会话、密码或 SSO 体系
 - `frontend/src/App.tsx` 还有历史重构遗留，后续需要收口清理
 - 当前热门模板已切到更贴近建筑/景观业务的方向，但模板配置仍在前端代码里，后续可考虑继续后端化

@@ -38,7 +38,7 @@ MODELSCOPE_IMAGE_VARIANTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("modelscope_qwen_image_2512", "Qwen/Qwen-Image-2512", ("image.generate",)),
     ("modelscope_z_image", "Tongyi-MAI/Z-Image", ("image.generate",)),
     ("modelscope_z_image_turbo", "Tongyi-MAI/Z-Image-Turbo", ("image.generate",)),
-    ("modelscope_firered_image_edit", "FireRedTeam/FireRed-Image-Edit-1.1", ("image.edit",)),
+    ("modelscope_firered_image_edit", "FireRedTeam/FireRed-Image-Edit-1.1", ("image.generate", "image.edit")),
 )
 
 

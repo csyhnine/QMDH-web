@@ -98,7 +98,7 @@
   - 后端新增 `provider_profiles` 数据表、CRUD 接口和脱敏 key 返回
   - `model_registry` 支持合并 `.env` provider 与数据库 provider；同名数据库配置可覆盖环境配置
   - 当配置了 ModelScope token 时，后端会自动派生 `Qwen/Qwen-Image-2512`、`Tongyi-MAI/Z-Image`、`Tongyi-MAI/Z-Image-Turbo` 等可试文生图 provider
-  - `FireRedTeam/FireRed-Image-Edit-1.1` 已确认要求图片上传，标记为 `image.edit`，不进入当前纯文生图列表
+  - `FireRedTeam/FireRed-Image-Edit-1.1` 已确认要求图片上传；当前通过后端白底图兼容桥接进入设计师文生图列表，后续仍建议补专用 `image.edit` workflow / adapter
   - 设计师页面的模型列表只读取真实 runtime provider，不再显示 `jimeng`、`nano_banana` 等模拟占位项
   - 任务创建与执行都改为读取数据库会话下的 provider 注册表
   - 模型管理已从设计师工作台侧栏拆出，独立放在 `/admin/models`

@@ -101,7 +101,7 @@ QMDH_IMAGE_PROVIDER_PROFILES_JSON=[{"provider_name":"modelscope_free_image","api
 - `modelscope_qwen_image_2512`：`Qwen/Qwen-Image-2512`
 - `modelscope_z_image`：`Tongyi-MAI/Z-Image`
 - `modelscope_z_image_turbo`：`Tongyi-MAI/Z-Image-Turbo`
-- `modelscope_firered_image_edit`：`FireRedTeam/FireRed-Image-Edit-1.1`，仅用于后续图片编辑能力，不进入当前纯文生图列表
+- `modelscope_firered_image_edit`：`FireRedTeam/FireRed-Image-Edit-1.1`，模型本身要求图片输入；当前后端会在无参考图时自动补一张白底图，有参考图时转发参考图，从而兼容设计师文生图列表
 
 模型与 key 管理不在设计师创作台暴露。管理人员需要直接访问：
 
@@ -113,7 +113,9 @@ http://127.0.0.1:18080/admin/models
 
 当前 MVP 只在前端脱敏展示 key，数据库内仍是明文保存。生产环境上线前需要补充密钥加密、访问审计和轮换策略。
 
-如果上传了参考图，`reference_mode=caption_prompt` 会让后端先调用视觉语言模型读取参考图，再把参考说明拼入文生图 prompt。这个方案能让参考图真实影响结果，但它不是直接的 `img2img / image.edit`，后续如果接入支持图生图的模型，需要再补专用 adapter。
+如果上传了参考图，`reference_mode=caption_prompt` 会让后端先调用视觉语言模型读取参考图，再把参考说明拼入文生图 prompt。这个方案能让参考图真实影响结果，但它不是直接的 `img2img / image.edit`。
+
+FireRed 当前使用兼容桥接：在 `image.generate` 流程里向 ModelScope 请求体补 `image_url`，无参考图时使用白底 PNG，有参考图时使用用户上传图。这个做法可以先统一设计师体验，但后续如果要完整支持图像编辑参数、蒙版或强度控制，仍需要专用 adapter。
 
 如果需要兼容当前 `docker-compose.yml` 中的 Redis worker 模式，请同时确认：
 

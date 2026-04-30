@@ -119,6 +119,82 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         self.assertTrue(outcome.result["reference_image_used"])
         self.assertEqual(outcome.result["reference_caption_model"], "Qwen/Test-VL")
 
+    def test_firered_uses_white_canvas_bridge_without_reference_image(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="modelscope_firered_image_edit",
+            api_key="test-key",
+            base_url="https://api-inference.modelscope.cn/v1",
+            model_name="FireRedTeam/FireRed-Image-Edit-1.1",
+            timeout_seconds=1,
+            reference_mode="caption_prompt",
+            reference_caption_model="Qwen/Test-VL",
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "modelscope_firered_image_edit",
+                "FireRedTeam/FireRed-Image-Edit-1.1",
+                ["image.generate", "image.edit"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {"images": ["https://cdn.example.test/firered.png"]}
+
+        with patch("app.services.task_executor.urlopen", side_effect=[_FakeResponse(generation_payload)]) as mocked_urlopen:
+            outcome = adapter.execute(
+                "image.generate",
+                {"prompt": "A minimal white gallery with polished concrete floor", "aspect_ratio": "16:9"},
+            )
+
+        generation_request = mocked_urlopen.call_args_list[0].args[0]
+        generation_body = json.loads(generation_request.data.decode("utf-8"))
+
+        self.assertEqual(generation_body["model"], "FireRedTeam/FireRed-Image-Edit-1.1")
+        self.assertTrue(generation_body["image_url"].startswith("data:image/png;base64,"))
+        self.assertEqual(outcome.result["storage_path"], "https://cdn.example.test/firered.png")
+        self.assertTrue(outcome.result["image_edit_bridge_used"])
+        self.assertEqual(outcome.result["image_edit_bridge_mode"], "white_canvas")
+
+    def test_firered_uses_uploaded_reference_image_for_bridge(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="modelscope_firered_image_edit",
+            api_key="test-key",
+            base_url="https://api-inference.modelscope.cn/v1",
+            model_name="FireRedTeam/FireRed-Image-Edit-1.1",
+            timeout_seconds=1,
+            reference_mode="caption_prompt",
+            reference_caption_model="Qwen/Test-VL",
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "modelscope_firered_image_edit",
+                "FireRedTeam/FireRed-Image-Edit-1.1",
+                ["image.generate", "image.edit"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        reference_image = "data:image/png;base64,cmVmZXJlbmNl"
+        generation_payload = {"images": ["https://cdn.example.test/firered-reference.png"]}
+
+        with patch("app.services.task_executor.urlopen", side_effect=[_FakeResponse(generation_payload)]) as mocked_urlopen:
+            outcome = adapter.execute(
+                "image.edit",
+                {
+                    "edit_prompt": "Enhance the architectural atmosphere",
+                    "aspect_ratio": "16:9",
+                    "source_image": reference_image,
+                },
+            )
+
+        generation_request = mocked_urlopen.call_args_list[0].args[0]
+        generation_body = json.loads(generation_request.data.decode("utf-8"))
+
+        self.assertEqual(generation_body["image_url"], reference_image)
+        self.assertEqual(outcome.result["storage_path"], "https://cdn.example.test/firered-reference.png")
+        self.assertTrue(outcome.result["reference_image_used"])
+        self.assertEqual(outcome.result["image_edit_bridge_mode"], "reference_image")
+
 
 if __name__ == "__main__":
     unittest.main()

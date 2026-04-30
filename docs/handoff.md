@@ -10,6 +10,49 @@
 
 ## Latest Handoffs
 
+### [2026-04-30 10:20] Session Handoff
+- 执行角色：Feature / Provider Compatibility
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：Yes（本轮提交后）
+  - 是否有未提交改动：No（本轮提交后）
+  - 是否已 push：Yes（本轮提交后）
+- 本次完成：
+  - 验证 ModelScope 的 FireRed 图像编辑模型可通过 `images/generations` 请求体中的 `image_url` 字段调用
+  - 将 `modelscope_firered_image_edit` 恢复为 `image.generate + image.edit`，让设计师模型列表重新显示 FireRed
+  - 在 `task_executor.py` 增加图像编辑模型桥接：无参考图时自动传入白底 PNG，有参考图时转发用户参考图
+  - FireRed 不再走 `caption_prompt` 读图增强路径，避免因为缺少真实图片输入而返回 `Qwen Image Edit requires image upload`
+  - 增加单测覆盖白底图桥接和参考图桥接，并更新架构、部署、任务与项目状态文档
+  - 完成验证：
+    - `python -m unittest discover -s tests` 通过
+    - `npm run build` 通过
+    - `cmd /c start-dev.cmd --check` 通过
+- 修改文件：
+  - `backend/app/services/model_registry.py`
+  - `backend/app/services/task_executor.py`
+  - `backend/tests/test_model_registry_profiles.py`
+  - `backend/tests/test_task_executor_openai.py`
+  - `docs/architecture.md`
+  - `docs/deployment.md`
+  - `docs/handoff.md`
+  - `docs/tasks.md`
+  - `docs/projects/QMDH-001/status.md`
+- 当前任务状态：
+  - `task-001`: IN_PROGRESS
+  - `task-002`: DONE
+  - `task-004`: DONE
+  - `task-006`: DONE
+  - `task-007`: DONE
+  - `task-sec-001`: BLOCKED
+- 风险与注意事项：
+  - FireRed 白底图桥接是兼容方案，不等同于完整图片编辑产品能力；后续若需要蒙版、编辑强度或专用图生图流程，仍应补专用 adapter / workflow
+  - 当前本机 18010 仍可能有旧 API 进程或 stale listener；以 `start-dev.cmd` 打印的端口为准
+- 下一位 agent 的第一步：
+  - 先检查 `git status`
+  - 重启本地服务后确认设计师模型列表包含 FireRed、Qwen、Z-Image、Z-Image-Turbo 和 Majic
+  - 在设计师页面实测 FireRed 白底图生成结果是否符合建筑/景观提示词预期
+- 是否可直接接手：Yes
+
 ### [2026-04-30 09:45] Session Handoff
 - 执行角色：Bugfix / Provider Triage
 - 当前分支：`main`
@@ -85,55 +128,4 @@
   - 先检查 `git status`
   - 关闭旧前后端窗口，重新运行 `start-dev.cmd`
   - 确认 `/api/v1/providers` 返回 5 个真实魔搭 provider 后再继续试跑模型
-- 是否可直接接手：Yes
-
-### [2026-04-29 17:35] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：Yes（本轮提交后）
-  - 是否有未提交改动：No（本轮提交后）
-  - 是否已 push：Yes（本轮提交后）
-- 本次完成：
-  - 调整设计师模型列表为“真实 runtime provider”列表，不再展示静态模拟 provider
-  - `/api/v1/providers` 改为只返回真实 provider；内部 `get_provider_map()` 仍保留静态模拟 provider 供测试/开发使用
-  - 当配置了 ModelScope token 时，自动派生 4 个新增魔搭图像模型：
-    - `Qwen/Qwen-Image-2512`
-    - `Tongyi-MAI/Z-Image`
-    - `Tongyi-MAI/Z-Image-Turbo`
-    - `FireRedTeam/FireRed-Image-Edit-1.1`
-  - 前端模型下拉按 `魔搭 / Qwen`、`魔搭 / 造相 Z`、`魔搭 / FireRed`、`魔搭 / 其他` 分组展示
-  - 设计师页不再显示 `jimeng`、`nano_banana` 这类模拟项
-  - 补充 ModelScope 派生 provider 单测
-  - 同步更新架构、任务和项目状态文档
-  - 完成验证：
-    - `python -m unittest discover -s tests` 通过
-    - `npm run build` 通过
-- 修改文件：
-  - `backend/app/routers/providers.py`
-  - `backend/app/schemas.py`
-  - `backend/app/services/model_registry.py`
-  - `backend/tests/test_model_registry_profiles.py`
-  - `frontend/src/App.tsx`
-  - `frontend/src/api.ts`
-  - `frontend/src/styles.css`
-  - `docs/architecture.md`
-  - `docs/handoff.md`
-  - `docs/tasks.md`
-  - `docs/projects/QMDH-001/status.md`
-- 当前任务状态：
-  - `task-001`: IN_PROGRESS
-  - `task-002`: DONE
-  - `task-004`: DONE
-  - `task-006`: DONE
-  - `task-007`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - 新增的魔搭 API-Inference 模型虽然会出现在列表中，但仍需逐个实测请求/返回格式；不兼容 OpenAI image generation 格式的模型需要专用 adapter
-  - 当前默认 provider 仍偏向 `modelscope_free_image`，后续应根据实测结果调整默认模型
-  - 如果没有配置 ModelScope token，设计师模型列表会为空
-- 下一位 agent 的第一步：
-  - 先检查 `git status`
-  - 用设计师页面逐个试跑新增的魔搭模型，记录哪些模型能直接生成、哪些需要 adapter
-  - 根据实测把默认 provider 切到建筑/景观效果图表现最稳定的模型
 - 是否可直接接手：Yes

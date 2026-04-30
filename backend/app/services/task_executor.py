@@ -21,6 +21,11 @@ from app.models import Asset, AssetType, Project, ProviderCall, Task, TaskStatus
 from app.services.media_storage import media_root_path, write_base64_asset, write_preview_svg
 from app.services.model_registry import ProviderDefinition, get_image_provider_profile, get_provider_definition
 
+WHITE_CANVAS_DATA_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yh3cAAAAASUVORK5CYII="
+)
+
 
 @dataclass(frozen=True)
 class ExecutionOutcome:
@@ -91,18 +96,24 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
         self.profile = profile
 
     def execute(self, capability: str, payload: dict) -> ExecutionOutcome:
-        if capability != "image.generate":
+        if capability not in {"image.generate", "image.edit"}:
             raise ValueError(f"{self.definition.provider_name} does not support {capability}")
 
-        prompt = str(payload.get("prompt") or "").strip()
+        prompt = str(payload.get("prompt") or payload.get("edit_prompt") or "").strip()
         if not prompt:
-            raise ValueError("Image generation payload is missing prompt")
+            raise ValueError("Image task payload is missing prompt")
 
         requested_count = _requested_image_count(payload)
         reference_result: dict[str, object] = {}
         prompt_for_generation = prompt
         reference_image = _extract_reference_image(payload)
-        if reference_image:
+        image_edit_bridge_url = ""
+        if _uses_image_edit_bridge(self.profile):
+            image_edit_bridge_url, reference_result = _build_image_edit_bridge_request(
+                profile=self.profile,
+                reference_image=reference_image,
+            )
+        elif reference_image:
             prompt_for_generation, reference_result = _apply_reference_image_to_prompt(
                 profile=self.profile,
                 prompt=prompt,
@@ -116,6 +127,8 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
             "quality": self.profile.quality,
             "output_format": self.profile.output_format,
         }
+        if image_edit_bridge_url:
+            request_body["image_url"] = image_edit_bridge_url
 
         detail = payload.get("prompt_supplement")
         if detail:
@@ -221,6 +234,32 @@ def _extract_reference_image(payload: dict) -> str:
         if value:
             return value
     return ""
+
+
+def _uses_image_edit_bridge(profile: ImageProviderProfile) -> bool:
+    identity = f"{profile.provider_name} {profile.model_name}".lower()
+    return "firered" in identity or "image-edit" in identity
+
+
+def _build_image_edit_bridge_request(
+    *, profile: ImageProviderProfile, reference_image: str
+) -> tuple[str, dict[str, object]]:
+    if reference_image:
+        return _reference_image_to_model_url(reference_image), {
+            "reference_image_used": True,
+            "reference_image_mode": "image_edit_bridge",
+            "image_edit_bridge_used": True,
+            "image_edit_bridge_mode": "reference_image",
+            "image_edit_bridge_provider": profile.provider_name,
+        }
+
+    return WHITE_CANVAS_DATA_URL, {
+        "reference_image_used": False,
+        "reference_image_mode": "image_edit_bridge",
+        "image_edit_bridge_used": True,
+        "image_edit_bridge_mode": "white_canvas",
+        "image_edit_bridge_provider": profile.provider_name,
+    }
 
 
 def _apply_reference_image_to_prompt(

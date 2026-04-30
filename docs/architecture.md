@@ -223,7 +223,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 4. 后端保存真实 API key，但响应只返回 `has_api_key` 与 `masked_api_key`。
 5. Provider profile 管理接口只允许 `admin / owner / ops` 角色访问。
 6. `/api/v1/providers` 会合并静态 provider、环境变量 provider 与已启用的数据库 provider。
-7. 如果存在 ModelScope profile，注册表会自动派生 `Qwen/Qwen-Image-2512`、`Tongyi-MAI/Z-Image`、`Tongyi-MAI/Z-Image-Turbo`、`FireRedTeam/FireRed-Image-Edit-1.1` 等同 token provider。
+7. 如果存在 ModelScope profile，注册表会自动派生 `Qwen/Qwen-Image-2512`、`Tongyi-MAI/Z-Image`、`Tongyi-MAI/Z-Image-Turbo` 等同 token 文生图 provider；`FireRedTeam/FireRed-Image-Edit-1.1` 仅标记为 `image.edit`。
 8. 任务创建与执行都使用合并后的 provider 注册表，保证后台保存后可以真实参与生成。
 
 ### 辅助链路：项目状态

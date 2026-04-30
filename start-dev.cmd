@@ -6,6 +6,9 @@ set "BACKEND_DIR=%ROOT%backend"
 set "FRONTEND_DIR=%ROOT%frontend"
 set "BACKEND_PY=%BACKEND_DIR%\.venv\Scripts\python.exe"
 
+if not defined QMDH_BACKEND_PORT set "QMDH_BACKEND_PORT=18010"
+if not defined QMDH_FRONTEND_PORT set "QMDH_FRONTEND_PORT=18080"
+
 if "%~1"=="--check" goto check
 if "%~1"=="--backend" goto backend
 if "%~1"=="--frontend" goto frontend
@@ -18,16 +21,18 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Starting QMDH backend on http://127.0.0.1:18010 ...
-start "QMDH Backend :18010" /D "%ROOT%" "%ComSpec%" /k ""%~f0" --backend"
+call :choose_backend_port
 
-echo Starting QMDH frontend on http://127.0.0.1:18080 ...
-start "QMDH Frontend :18080" /D "%ROOT%" "%ComSpec%" /k ""%~f0" --frontend"
+echo Starting QMDH backend on http://127.0.0.1:%QMDH_BACKEND_PORT% ...
+start "QMDH Backend :%QMDH_BACKEND_PORT%" /D "%ROOT%" "%ComSpec%" /k ""%~f0" --backend"
+
+echo Starting QMDH frontend on http://127.0.0.1:%QMDH_FRONTEND_PORT% ...
+start "QMDH Frontend :%QMDH_FRONTEND_PORT%" /D "%ROOT%" "%ComSpec%" /k ""%~f0" --frontend"
 
 echo.
 echo QMDH dev servers are starting in two separate windows:
-echo   Backend:  http://127.0.0.1:18010/api/v1/health
-echo   Frontend: http://127.0.0.1:18080
+echo   Backend:  http://127.0.0.1:%QMDH_BACKEND_PORT%/api/v1/health
+echo   Frontend: http://127.0.0.1:%QMDH_FRONTEND_PORT%
 echo.
 echo Close those two windows to stop the dev servers.
 exit /b 0
@@ -48,8 +53,8 @@ if errorlevel 1 (
 cd /d "%BACKEND_DIR%"
 set "PYTHONUTF8=1"
 echo Backend working directory: %CD%
-echo Running: "%BACKEND_PY%" -m uvicorn app.main:app --host 127.0.0.1 --port 18010 --reload
-"%BACKEND_PY%" -m uvicorn app.main:app --host 127.0.0.1 --port 18010 --reload
+echo Running: "%BACKEND_PY%" -m uvicorn app.main:app --host 127.0.0.1 --port %QMDH_BACKEND_PORT% --reload
+"%BACKEND_PY%" -m uvicorn app.main:app --host 127.0.0.1 --port %QMDH_BACKEND_PORT% --reload
 exit /b %errorlevel%
 
 :frontend
@@ -60,11 +65,20 @@ if errorlevel 1 (
   exit /b 1
 )
 cd /d "%FRONTEND_DIR%"
-set "VITE_API_PROXY_TARGET=http://127.0.0.1:18010"
+set "VITE_API_PROXY_TARGET=http://127.0.0.1:%QMDH_BACKEND_PORT%"
 echo Frontend working directory: %CD%
-echo Running: npm run dev -- --host 127.0.0.1
-npm run dev -- --host 127.0.0.1
+echo Running: npm run dev -- --host 127.0.0.1 --port %QMDH_FRONTEND_PORT%
+npm run dev -- --host 127.0.0.1 --port %QMDH_FRONTEND_PORT%
 exit /b %errorlevel%
+
+:choose_backend_port
+if not "%QMDH_BACKEND_PORT%"=="18010" exit /b 0
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; try { $providers = Invoke-RestMethod -Uri 'http://127.0.0.1:18010/api/v1/providers' -TimeoutSec 2; $items = @($providers); if ($items.Count -gt 0 -and $items[0].PSObject.Properties.Name -contains 'adapter_kind') { exit 0 }; exit 1 } catch { $tcp = Test-NetConnection -ComputerName 127.0.0.1 -Port 18010 -InformationLevel Quiet; if ($tcp) { exit 1 }; exit 0 }" >nul 2>nul
+if errorlevel 1 (
+  echo Existing API on 18010 is unavailable or stale; using backend fallback port 18011.
+  set "QMDH_BACKEND_PORT=18011"
+)
+exit /b 0
 
 :check_prerequisites
 call :check_backend

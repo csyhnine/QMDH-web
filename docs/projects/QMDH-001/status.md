@@ -38,7 +38,8 @@
 - 已新增独立后台模型管理入口 `/admin/models`，可维护 provider、model、base URL、API key、能力、启停状态和参考图模式
 - 模型管理已从设计师工作台侧栏拆出，并通过 `admin / owner / ops` 角色限制访问
 - 后端 provider 注册表已支持数据库配置，任务创建和执行都会读取后台保存的真实 provider profile
-- 当存在 ModelScope token 时，设计师模型列表会自动出现 5 个真实魔搭 provider：`MAILAND/majicflus_v1`、`Qwen/Qwen-Image-2512`、`Tongyi-MAI/Z-Image`、`Tongyi-MAI/Z-Image-Turbo`、`FireRedTeam/FireRed-Image-Edit-1.1`
+- 当存在 ModelScope token 时，设计师文生图模型列表会自动出现 `MAILAND/majicflus_v1`、`Qwen/Qwen-Image-2512`、`Tongyi-MAI/Z-Image`、`Tongyi-MAI/Z-Image-Turbo`
+- `FireRedTeam/FireRed-Image-Edit-1.1` 已确认要求图片上传，保留为后续 `image.edit` 能力，不进入当前纯文生图列表
 - 设计师页面已不再显示 `jimeng`、`nano_banana` 等模拟 provider
 
 ## 风险与阻塞
@@ -48,7 +49,7 @@
 - `frontend/src/App.tsx` 还有历史重构遗留，后续需要收口清理
 - 当前热门模板已切到更贴近建筑/景观业务的方向，但模板配置仍在前端代码里，后续可考虑继续后端化
 - 当前 API key 采用数据库明文保存并在前端脱敏展示，生产环境仍需要补密钥加密、轮换和审计策略
-- 新增的魔搭模型仍需逐个实测请求/返回格式和建筑提示词跟随效果；部分 API-Inference 模型可能需要专用 adapter
+- 新增的魔搭文生图模型仍需逐个实测建筑提示词跟随效果；图片编辑类模型需要专用 adapter
 
 ## 最近决策
 

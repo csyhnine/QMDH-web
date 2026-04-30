@@ -10,6 +10,83 @@
 
 ## Latest Handoffs
 
+### [2026-04-30 09:45] Session Handoff
+- 执行角色：Bugfix / Provider Triage
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：Yes（本轮提交后）
+  - 是否有未提交改动：No（本轮提交后）
+  - 是否已 push：Yes（本轮提交后）
+- 本次完成：
+  - 排查 FireRed 生成失败：任务 `18` 返回 `HTTP 400`，错误为 `Qwen Image Edit requires image upload`
+  - 结论：`FireRedTeam/FireRed-Image-Edit-1.1` 是图片编辑/图生图类模型，当前纯文生图 workflow 不应暴露
+  - 将 `modelscope_firered_image_edit` capability 从 `image.generate + image.edit` 收紧为仅 `image.edit`
+  - 设计师当前图像生成模型列表会继续显示文生图模型，不再显示 FireRed edit 模型
+  - 更新测试和文档
+  - 完成验证：
+    - `python -m unittest discover -s tests` 通过
+    - `npm run build` 通过
+- 修改文件：
+  - `backend/app/services/model_registry.py`
+  - `backend/tests/test_model_registry_profiles.py`
+  - `docs/architecture.md`
+  - `docs/deployment.md`
+  - `docs/handoff.md`
+  - `docs/tasks.md`
+  - `docs/projects/QMDH-001/status.md`
+- 当前任务状态：
+  - `task-001`: IN_PROGRESS
+  - `task-002`: DONE
+  - `task-004`: DONE
+  - `task-006`: DONE
+  - `task-007`: DONE
+  - `task-sec-001`: BLOCKED
+- 风险与注意事项：
+  - FireRed 如需使用，需要新增图片编辑 workflow / adapter，不能走当前 `images/generations` 纯文生图路径
+  - 当前本机 18010 仍可能有旧 API 进程或 stale listener；以 `start-dev.cmd` 打印的端口为准
+- 下一位 agent 的第一步：
+  - 先检查 `git status`
+  - 重启本地服务后确认设计师模型列表只保留文生图模型
+  - 继续实测 `Qwen-Image-2512`、`Z-Image`、`Z-Image-Turbo` 的建筑效果图表现
+- 是否可直接接手：Yes
+
+### [2026-04-29 17:55] Session Handoff
+- 执行角色：Bugfix / Local Dev
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：Yes（本轮提交后）
+  - 是否有未提交改动：No（本轮提交后）
+  - 是否已 push：Yes（本轮提交后）
+- 本次完成：
+  - 排查设计师页面只显示 `MAILAND/majicflus_v1` 的原因：当前 `18010` 上运行的是旧后端 API，直接请求 `/api/v1/providers` 仍返回旧结构且没有 `adapter_kind`
+  - 验证当前仓库代码在 `18011` 启动后可正确返回 5 个真实魔搭 provider
+  - 增强 `start-dev.cmd`：如果 `18010` 上已有旧 API 或 stale listener，自动把新后端切到 `18011`，并同步设置前端代理
+  - `start-dev.cmd` 支持 `QMDH_BACKEND_PORT` / `QMDH_FRONTEND_PORT` 显式覆盖
+  - 更新部署文档说明本地 fallback 端口
+  - 完成验证：
+    - `cmd /c start-dev.cmd --check` 通过
+    - `python -m unittest discover -s tests` 通过
+    - `npm run build` 通过
+- 修改文件：
+  - `start-dev.cmd`
+  - `docs/deployment.md`
+  - `docs/handoff.md`
+- 当前任务状态：
+  - `task-001`: IN_PROGRESS
+  - `task-002`: DONE
+  - `task-004`: DONE
+  - `task-006`: DONE
+  - `task-007`: DONE
+  - `task-sec-001`: BLOCKED
+- 风险与注意事项：
+  - 本机当前可能仍有不可通过常规 `taskkill` 清理的旧 18010 listener；重新运行 `start-dev.cmd` 后应以脚本打印端口为准
+  - 如果前端已经在 18080 跑着旧代理，也需要关闭旧前端窗口后重新启动
+- 下一位 agent 的第一步：
+  - 先检查 `git status`
+  - 关闭旧前后端窗口，重新运行 `start-dev.cmd`
+  - 确认 `/api/v1/providers` 返回 5 个真实魔搭 provider 后再继续试跑模型
+- 是否可直接接手：Yes
+
 ### [2026-04-29 17:35] Session Handoff
 - 执行角色：Feature / Integration
 - 当前分支：`main`
@@ -59,104 +136,4 @@
   - 先检查 `git status`
   - 用设计师页面逐个试跑新增的魔搭模型，记录哪些模型能直接生成、哪些需要 adapter
   - 根据实测把默认 provider 切到建筑/景观效果图表现最稳定的模型
-- 是否可直接接手：Yes
-
-### [2026-04-29 17:05] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：Yes（本轮提交后）
-  - 是否有未提交改动：No（本轮提交后）
-  - 是否已 push：Yes（本轮提交后）
-- 本次完成：
-  - 按产品边界调整模型管理：从设计师工作台侧栏移除“模型”入口
-  - 模型与 key 管理保留为独立管理地址 `/admin/models`
-  - 设计师工作台不再主动请求 provider profile 管理接口
-  - 后端 `/api/v1/providers/profiles` CRUD 增加角色校验，仅 `admin / owner / ops` 可访问
-  - 补充 designer 访问 provider profile 返回 403 的后端单测
-  - 同步更新部署、架构、决策、任务和项目状态文档
-  - 完成验证：
-    - `python -m unittest discover -s tests` 通过
-    - `npm run build` 通过
-- 修改文件：
-  - `backend/app/routers/providers.py`
-  - `backend/tests/test_provider_profiles.py`
-  - `frontend/src/App.tsx`
-  - `frontend/src/styles.css`
-  - `docs/architecture.md`
-  - `docs/decisions.md`
-  - `docs/deployment.md`
-  - `docs/handoff.md`
-  - `docs/tasks.md`
-  - `docs/projects/QMDH-001/status.md`
-- 当前任务状态：
-  - `task-001`: IN_PROGRESS
-  - `task-002`: DONE
-  - `task-004`: DONE
-  - `task-006`: DONE
-  - `task-007`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - `/admin/models` 仍复用当前前端应用壳，后续如管理功能继续扩大，应拆独立 admin app 或路由模块
-  - 当前 key 只是在前端脱敏，数据库仍是明文保存；生产环境需要补加密、轮换和操作审计
-  - 本地访问 `/admin/models` 需要把 `QMDH_AUTH_USERS_JSON` 与 Vite token 切到管理角色
-- 下一位 agent 的第一步：
-  - 先检查 `git status`
-  - 使用管理账号访问 `/admin/models` 添加或替换真实生图 provider
-  - 继续 `task-001` 前端收口，避免把管理能力重新混进设计师工作台
-- 是否可直接接手：Yes
-
-### [2026-04-29 16:45] Session Handoff
-- 执行角色：Feature / Integration
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：Yes（本轮提交后）
-  - 是否有未提交改动：No（本轮提交后）
-  - 是否已 push：Yes（本轮提交后）
-- 本次完成：
-  - 新增后台“模型”管理入口，前端侧栏可进入模型配置页
-  - 后端新增 `provider_profiles` 表，用于保存 provider、model、base URL、API key、capability、启停状态和参考图模式
-  - 新增 `/api/v1/providers/profiles` CRUD 接口，前端只接收 `has_api_key` 与 `masked_api_key`，不回显明文 key
-  - `model_registry` 支持合并静态 provider、环境变量 provider 和数据库 provider，同名数据库配置优先
-  - 任务创建校验和任务执行都改为读取数据库会话下的 provider 注册表，后台保存后可真实用于生成
-  - 前端 `api.ts` 增加 provider profile 类型和接口封装
-  - 前端 `App.tsx` 增加 provider profile 新增、编辑、停用、删除表单和列表
-  - 补充 provider profile 后端单测
-  - 更新部署、架构、决策、任务和项目状态文档
-  - 完成验证：
-    - `python -m unittest discover -s tests` 通过
-    - `npm run build` 通过
-- 修改文件：
-  - `backend/app/models.py`
-  - `backend/app/routers/providers.py`
-  - `backend/app/routers/tasks.py`
-  - `backend/app/schemas.py`
-  - `backend/app/services/model_registry.py`
-  - `backend/app/services/task_executor.py`
-  - `backend/tests/test_provider_profiles.py`
-  - `frontend/src/App.tsx`
-  - `frontend/src/api.ts`
-  - `frontend/src/styles.css`
-  - `docs/architecture.md`
-  - `docs/decisions.md`
-  - `docs/deployment.md`
-  - `docs/handoff.md`
-  - `docs/tasks.md`
-  - `docs/projects/QMDH-001/status.md`
-- 当前任务状态：
-  - `task-001`: IN_PROGRESS
-  - `task-002`: DONE
-  - `task-004`: DONE
-  - `task-006`: DONE
-  - `task-007`: DONE
-  - `task-sec-001`: BLOCKED
-- 风险与注意事项：
-  - 当前 key 只是在前端脱敏，数据库仍是明文保存；生产环境需要补加密、轮换和操作审计
-  - 后台面板可以管理 provider，但还没有角色级后台权限隔离；当前依赖 MVP token 认证
-  - 当前使用的 ModelScope 模型对建筑提示词跟随较差，下一步应通过后台面板切换更合适的建筑/景观模型
-  - `frontend/src/App.tsx` 继续变大，后续仍应按组件拆分和文案清理推进 `task-001`
-- 下一位 agent 的第一步：
-  - 先检查 `git status`
-  - 启动本地前后端后进入侧栏“模型”，添加或替换真实生图 provider
-  - 继续 `task-001` 前端收口，或补 provider profile 的密钥安全策略
 - 是否可直接接手：Yes

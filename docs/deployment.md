@@ -40,6 +40,8 @@ Windows 本地开发可以直接在仓库根目录双击或执行：
 - 后端：`http://127.0.0.1:18010`
 - 前端：`http://127.0.0.1:18080`
 
+如果 `18010` 上已经有旧版 API 进程或不可清理的 stale listener，启动脚本会自动把新后端切到 `18011`，并把前端代理同步指向 `18011`。启动窗口里打印的端口为准。
+
 也可以通过 npm 别名启动：
 
 ```powershell
@@ -68,6 +70,14 @@ npm run dev -- --host 127.0.0.1
 
 如需改成本机其他后端地址，可以设置 `VITE_API_PROXY_TARGET`。
 
+也可以显式覆盖本地开发端口：
+
+```powershell
+$env:QMDH_BACKEND_PORT="18011"
+$env:QMDH_FRONTEND_PORT="18080"
+.\start-dev.cmd
+```
+
 ## 生图模型配置
 
 当前生图 provider 可以通过两种方式配置：
@@ -91,7 +101,7 @@ QMDH_IMAGE_PROVIDER_PROFILES_JSON=[{"provider_name":"modelscope_free_image","api
 - `modelscope_qwen_image_2512`：`Qwen/Qwen-Image-2512`
 - `modelscope_z_image`：`Tongyi-MAI/Z-Image`
 - `modelscope_z_image_turbo`：`Tongyi-MAI/Z-Image-Turbo`
-- `modelscope_firered_image_edit`：`FireRedTeam/FireRed-Image-Edit-1.1`
+- `modelscope_firered_image_edit`：`FireRedTeam/FireRed-Image-Edit-1.1`，仅用于后续图片编辑能力，不进入当前纯文生图列表
 
 模型与 key 管理不在设计师创作台暴露。管理人员需要直接访问：
 

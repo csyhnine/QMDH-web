@@ -434,6 +434,39 @@ button {
   align-content: start;
 }
 
+.canvas-area.canvas-studio-layout {
+  min-height: 100vh;
+  max-height: 100vh;
+  padding: 24px 24px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-content: unset;
+  overflow: hidden;
+}
+
+.studio-scroll-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 4px;
+}
+
+.studio-scroll-fallback {
+  display: contents;
+}
+
+.canvas-area.canvas-studio-layout .composer-dock {
+  position: relative;
+  bottom: auto;
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
 .canvas-area-empty {
   align-content: center;
   justify-items: center;
@@ -505,6 +538,87 @@ button {
   border: 1px solid rgba(194, 65, 12, 0.16);
   background: rgba(255, 237, 213, 0.88);
   color: var(--danger);
+}
+
+.media-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.62);
+  backdrop-filter: blur(8px);
+}
+
+.media-lightbox-surface {
+  width: min(1100px, 100%);
+  max-height: min(92vh, 100%);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border-radius: 20px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+
+.media-lightbox-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.media-lightbox-title {
+  font-weight: 600;
+  font-size: 0.94rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-lightbox-close {
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.media-lightbox-body {
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  background: rgba(17, 24, 39, 0.04);
+  min-height: 180px;
+  max-height: 72vh;
+  overflow: auto;
+}
+
+.media-lightbox-body img {
+  max-width: 100%;
+  max-height: min(68vh, 880px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+.media-lightbox-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--line);
 }
 
 .empty-stage {
@@ -719,9 +833,34 @@ button {
 }
 
 .feed-gallery-item {
+  position: relative;
   padding: 0;
+  border: none;
   border-radius: 20px;
   overflow: hidden;
+  cursor: zoom-in;
+  background: transparent;
+  text-align: left;
+}
+
+.feed-gallery-item:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 2px;
+}
+
+.feed-gallery-zoom-hint {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: white;
+  background: rgba(15, 23, 42, 0.45);
+  pointer-events: none;
 }
 
 .asset-tile {
@@ -2609,6 +2748,18 @@ textarea:focus-visible {
 @media (max-width: 980px) {
   .studio-shell {
     grid-template-columns: 1fr;
+  }
+
+  .canvas-area.canvas-studio-layout {
+    max-height: none;
+    min-height: 100vh;
+    overflow: visible;
+    padding-bottom: 24px;
+  }
+
+  .canvas-area.canvas-studio-layout .composer-dock {
+    position: sticky;
+    bottom: 12px;
   }
 
   .global-rail {

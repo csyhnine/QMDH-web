@@ -678,6 +678,7 @@ function FeedCard(props: {
   onReuse: () => void;
   onLike: () => void;
   onShare: () => void;
+  onAssetPreview?: (asset: Asset) => void;
   anchorRef?: RefObject<HTMLElement | null>;
 }) {
   const summary =
@@ -710,8 +711,19 @@ function FeedCard(props: {
       {props.galleryAssets.length > 0 ? (
         <div className="feed-gallery">
           {props.galleryAssets.map((asset, index) => (
-            <button key={asset.id} type="button" className="feed-gallery-item" onClick={props.onReuse}>
+            <button
+              key={asset.id}
+              type="button"
+              className="feed-gallery-item"
+              onClick={() =>
+                props.onAssetPreview?.(asset) ?? props.onReuse()
+              }
+              aria-label="查看大图"
+            >
               <AssetTile asset={asset} emphasis={index === 0 ? "primary" : "secondary"} />
+              <span className="feed-gallery-zoom-hint" aria-hidden>
+                放大
+              </span>
             </button>
           ))}
         </div>
@@ -772,6 +784,7 @@ export default function App() {
   const [savingUser, setSavingUser] = useState(false);
   const [selectedAdminProjectCode, setSelectedAdminProjectCode] = useState("");
   const [dashboardStatsDays, setDashboardStatsDays] = useState(30);
+  const [galleryPreview, setGalleryPreview] = useState<{ task: Task; asset: Asset } | null>(null);
   const isFetchingRef = useRef(false);
   const loadRequestIdRef = useRef(0);
   const composerToolbarRef = useRef<HTMLDivElement | null>(null);
@@ -894,6 +907,20 @@ export default function App() {
     };
   }, [referencePreviewUrl]);
 
+  useEffect(() => {
+    if (!galleryPreview) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setGalleryPreview(null);
+    }
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [galleryPreview]);
+
   const selectedWorkflow = state.workflows.find((workflow) => workflow.key === IMAGE_WORKFLOW_KEY);
 
   const availableProviders = state.providers.filter((provider) =>
@@ -947,6 +974,7 @@ export default function App() {
   const hasProjectHistory = imageTasks.length > 0;
   const hasFilteredHistory = filteredTasks.length > 0;
   const showCenteredComposer = !hasProjectHistory;
+  const isStudioDockLayout = activeView === "studio" && hasProjectHistory;
   const activeTemplate =
     [...featuredAtmosphereTemplates, ...customTemplates].find(
       (template) => template.title === studioForm.title && template.prompt === studioForm.prompt
@@ -1644,7 +1672,17 @@ export default function App() {
         </aside>
       ) : null}
 
-      <main className={isAdminView ? "canvas-area model-admin-area" : showCenteredComposer ? "canvas-area canvas-area-empty" : "canvas-area"}>
+      <main
+        className={
+          isAdminView
+            ? "canvas-area model-admin-area"
+            : isStudioDockLayout
+              ? "canvas-area canvas-studio-layout"
+              : showCenteredComposer
+                ? "canvas-area canvas-area-empty"
+                : "canvas-area"
+        }
+      >
         {activeView === "users" ? (
           <section className="admin-page">
             <header className="admin-page-head">
@@ -2407,6 +2445,7 @@ export default function App() {
           </section>
         ) : (
           <>
+        <div className={isStudioDockLayout ? "studio-scroll-pane" : "studio-scroll-fallback"}>
         {hasProjectHistory ? (
           <header className="canvas-topbar canvas-topbar-history">
             <div className="toolbar-row">
@@ -2470,6 +2509,13 @@ export default function App() {
                     onReuse={() => handleReuseTask(task, linkedAsset ?? galleryAssets[0])}
                     onLike={() => (linkedAsset ? void handleGalleryAction("like", linkedAsset.id) : undefined)}
                     onShare={() => (linkedAsset ? void handleGalleryAction("share", linkedAsset.id) : undefined)}
+                    onAssetPreview={(asset) => {
+                      if (getRenderableUrl(asset)) {
+                        setGalleryPreview({ task, asset });
+                      } else {
+                        handleReuseTask(task, asset);
+                      }
+                    }}
                     anchorRef={isLatestTask ? latestTaskRef : undefined}
                   />
                 );
@@ -2493,6 +2539,7 @@ export default function App() {
             </div>
           </section>
         )}
+        </div>
 
         <form className={showCenteredComposer ? "composer-dock composer-dock-centered" : "composer-dock"} onSubmit={handleSubmit}>
           <div className="composer-leading">
@@ -2773,6 +2820,42 @@ export default function App() {
           </>
         )}
       </main>
+      {galleryPreview && getRenderableUrl(galleryPreview.asset) ? (
+        <div
+          className="media-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="生成图预览"
+          onClick={() => setGalleryPreview(null)}
+        >
+          <div className="media-lightbox-surface" onClick={(event) => event.stopPropagation()}>
+            <header className="media-lightbox-head">
+              <span className="media-lightbox-title">{galleryPreview.asset.name}</span>
+              <button type="button" className="media-lightbox-close" aria-label="关闭" onClick={() => setGalleryPreview(null)}>
+                ×
+              </button>
+            </header>
+            <div className="media-lightbox-body">
+              <img src={getRenderableUrl(galleryPreview.asset)!} alt="" />
+            </div>
+            <footer className="media-lightbox-foot">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  handleReuseTask(galleryPreview.task, galleryPreview.asset);
+                  setGalleryPreview(null);
+                }}
+              >
+                填入创作框
+              </button>
+              <button type="button" className="submit-button" onClick={() => setGalleryPreview(null)}>
+                关闭
+              </button>
+            </footer>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

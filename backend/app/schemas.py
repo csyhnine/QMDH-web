@@ -64,6 +64,26 @@ class AssetOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DashboardDailyPoint(BaseModel):
+    """UTC calendar day bucket for dashboard charts."""
+
+    date: str
+    total_tasks: int = 0
+    successful_tasks: int = 0
+    failed_tasks: int = 0
+    total_cost: float = 0.0
+
+
+class DashboardModelCallSlice(BaseModel):
+    model_name: str
+    count: int
+
+
+class DashboardDayModelCalls(BaseModel):
+    date: str
+    slices: list[DashboardModelCallSlice] = Field(default_factory=list)
+
+
 class DashboardStats(BaseModel):
     active_workflows: int
     total_tasks: int
@@ -85,6 +105,8 @@ class DashboardStats(BaseModel):
     model_rankings: list[dict[str, Any]] = Field(default_factory=list)
     failure_reasons: list[dict[str, Any]] = Field(default_factory=list)
     account_usage: list[dict[str, Any]] = Field(default_factory=list)
+    daily_series: list[DashboardDailyPoint] = Field(default_factory=list)
+    model_calls_by_day: list[DashboardDayModelCalls] = Field(default_factory=list)
 
 
 class AuthLoginIn(BaseModel):

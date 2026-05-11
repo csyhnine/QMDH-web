@@ -1733,6 +1733,10 @@ button {
   gap: 12px;
 }
 
+.ops-line-chart.ops-line-chart-dual {
+  grid-template-columns: 42px minmax(0, 1fr) 38px;
+}
+
 .ops-line-chart svg {
   width: 100%;
   height: 240px;

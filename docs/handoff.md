@@ -10,6 +10,34 @@
 
 ## Latest Handoffs
 
+### [2026-05-11] Session Handoff
+- 执行角色：Integration / Dashboard
+- 当前分支：`main`
+- 仓库状态：工作区已为本轮 `feat(task-009)` 提交整理干净；请以 `git log -1 --oneline` 查看当前提交，推送前与远端核对
+- 本次完成：
+  - 按 `docs/ai-agent-project-docs/docs/takeover_prompt.md` 完成仓库核对并完成 **task-009**：运营看板成本/失败与模型调用趋势改为基于 `/dashboard/stats` 的 `daily_series`、`model_calls_by_day` 真实按日聚合（UTC 自然日窗口，与 `days` 查询参数对齐）
+  - 统计窗口由「纯滚动小时」调整为「最近 N 个 UTC 自然日」起算，与按日序列一致；保留 `?days=7` / `30` 等用法
+  - 前端运营看板：日/周（7 天）/月（30 天）切换并带参刷新；成本与失败双折线、模型堆叠柱使用真实数据；无数据时展示空状态
+  - 完成验证：`python -m unittest discover -s tests`、`npm run build`、`cmd /c start-dev.cmd --check`
+- 修改文件：
+  - `backend/app/schemas.py`
+  - `backend/app/routers/dashboard.py`
+  - `backend/tests/test_database_auth.py`
+  - `frontend/src/api.ts`
+  - `frontend/src/App.tsx`
+  - `frontend/src/styles.css`
+  - `docs/tasks.md`
+  - `docs/handoff.md`
+  - `docs/continuity.md`
+  - `docs/projects/QMDH-001/status.md`
+  - `docs/archive/handoff-2026-04-30-ops-dashboard-nav.md`
+- 风险与注意事项：
+  - 多币种时按日 `total_cost` 仍为各任务 cost 数值相加，与汇总 KPI 一致；跨币种精细折算未做
+  - `docs/continuity.md` 中「功能基线提交哈希」应随主干最新提交更新，勿手写过期 SHA
+- 下一位 agent 的第一步：
+  - `git status`，然后优先 **task-010**（密钥加密、审计、正式 migration）或产品设计确认后的 **task-011**
+- 是否可直接接手：Yes
+
 ### [2026-04-30 17:40] Session Handoff
 - 执行角色：UI / Admin Console
 - 当前分支：`main`
@@ -23,7 +51,7 @@
   - 新增 `/admin/settings` 轻量设置中心，展示系统信息、功能开关说明、资源使用和现有管理入口，不做真实配置写入
   - `/admin/users` 已改为统计卡、工具条、账号表格和右侧创建/编辑面板，保留账号创建、编辑、停用和重置密码能力
   - `/admin/models` 已改为统计卡、工具条、模型表格和右侧配置面板，保留模型新增、编辑、删除、启停和计费配置能力
-  - 本轮未推进 `task-009`；运营看板趋势图仍使用现有汇总数据/示意形态，真实时间序列后续单独做
+  - 本轮未推进 `task-009`（后续已由 2026-05-11 提交接入真实时间序列，见最新交接）
   - 完成验证：
     - `npm run build` 通过
 - 修改文件：
@@ -35,7 +63,7 @@
 - 风险与注意事项：
   - `/admin/projects` 和 `/admin/settings` 是基于现有数据的轻量前端页，不代表后端已有项目 CRUD、设置写入、账单、告警或日志能力
   - `/admin/users` 中停用按钮调用现有 `DELETE /users/{id}`，只能停用账号；重新启用仍需通过编辑账号保存启用状态
-  - 真实时间序列仍是下一步最高优先级之一，`task-009` 状态保持 TODO
+  - 真实时间序列在当次记录时尚未接入；`task-009` 已在后续迭代完成（见 `[2026-05-11] Session Handoff`）
 - 下一位 agent 的第一步：
   - 先检查 `git status`
   - 运行 `cmd /c start-dev.cmd --check`
@@ -66,46 +94,4 @@
   - 先检查 `git status`
   - 阅读 `docs/continuity.md`
   - 如果继续做看板，优先实现真实时间序列数据；如果转回设计师主页，先用外部参考图确定布局再改代码
-- 是否可直接接手：Yes
-
-### [2026-04-30 16:40] Session Handoff
-- 执行角色：Feature / Operations Dashboard
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：Yes（本轮提交后）
-  - 是否有未提交改动：No（本轮提交后）
-  - 是否已 push：Yes（本轮提交后）
-- 本次完成：
-  - 三个管理页面补齐互跳入口：账号管理、使用看板、运维配置可互相跳转
-  - `users` 增加 `monthly_quota`，本地设计师账号预置月度额度
-  - `/dashboard/stats` 补充真实成本口径、币种汇总、说明文案、失败原因上下文、provider 成功/失败拆分
-  - `/admin/dashboard` 增加成本口径说明和账号级监管表，展示额度、任务成功/失败、provider 调用、模型调用
-  - 模型运维配置增加 `pricing_currency / pricing_unit / unit_price`；真实任务按配置单价和实际输出数写入成本
-  - 模拟 provider 不再生成随机成本；历史模拟成本在 schema 刷新时归零
-  - 本地数据库已执行 schema 补列与种子刷新
-  - 完成验证：
-    - `python -m unittest discover -s tests` 通过
-    - `npm run build` 通过
-    - `cmd /c start-dev.cmd --check` 通过
-- 修改文件：
-  - `backend/app/models.py`
-  - `backend/app/services/bootstrap.py`
-  - `backend/app/schemas.py`
-  - `backend/app/routers/auth.py`
-  - `backend/app/routers/users.py`
-  - `backend/app/routers/dashboard.py`
-  - `backend/tests/test_database_auth.py`
-  - `frontend/src/api.ts`
-  - `frontend/src/App.tsx`
-  - `frontend/src/styles.css`
-  - `docs/tasks.md`
-  - `docs/handoff.md`
-  - `docs/projects/QMDH-001/status.md`
-- 风险与注意事项：
-  - 额度目前是软监管，只展示不阻断任务创建
-  - 真实成本依赖运维在模型配置里维护正确单价；免费额度或未计价模型应配置为 0
-  - 正式生产仍需要 migration、密钥加密和操作审计
-- 下一位 agent 的第一步：
-  - 先检查 `git status`
-  - 打开 `/admin/models` 配置真实单价，再用 `/admin/dashboard` 确认真实成本、失败原因 Top 和账号监管表是否符合运营预期
 - 是否可直接接手：Yes

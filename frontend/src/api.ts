@@ -86,6 +86,24 @@ export type UserUpdatePayload = Partial<
   Pick<UserCreatePayload, "display_name" | "role" | "project_codes" | "is_active" | "monthly_quota">
 >;
 
+export type DashboardDailyPoint = {
+  date: string;
+  total_tasks: number;
+  successful_tasks: number;
+  failed_tasks: number;
+  total_cost: number;
+};
+
+export type DashboardModelCallSlice = {
+  model_name: string;
+  count: number;
+};
+
+export type DashboardDayModelCalls = {
+  date: string;
+  slices: DashboardModelCallSlice[];
+};
+
 export type DashboardStats = {
   active_workflows: number;
   total_tasks: number;
@@ -107,6 +125,8 @@ export type DashboardStats = {
   model_rankings: Array<Record<string, unknown>>;
   failure_reasons: Array<Record<string, unknown>>;
   account_usage: Array<Record<string, unknown>>;
+  daily_series: DashboardDailyPoint[];
+  model_calls_by_day: DashboardDayModelCalls[];
 };
 
 export type ProviderProfileRecord = {
@@ -361,7 +381,10 @@ export const api = {
   resetUserPassword: (userId: number, password: string) =>
     postJson<ManagedUser>(`/users/${userId}/reset-password`, { password }),
   deleteUser: (userId: number) => deleteRequest(`/users/${userId}`),
-  dashboardStats: () => request<DashboardStats>("/dashboard/stats"),
+  dashboardStats: (days = 30) => {
+    const d = Math.min(365, Math.max(1, Math.floor(days)));
+    return request<DashboardStats>(`/dashboard/stats?days=${d}`);
+  },
   health: () => request<{ status: string; service: string }>("/health"),
   projects: () => request<Project[]>("/projects"),
   projectStatus: (projectCode: string) => request<ProjectStatus>(`/projects/${projectCode}/status`),

@@ -1,5 +1,5 @@
-from collections import Counter
-from datetime import datetime, timedelta, timezone
+from collections import Counter, defaultdict
+from datetime import datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
@@ -9,13 +9,24 @@ from app.core.auth import get_current_auth_user, require_ops_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import AuditLog, Project, ProviderCall, Task, TaskStatus, User, Workflow
-from app.schemas import DashboardStats
+from app.schemas import (
+    DashboardDailyPoint,
+    DashboardDayModelCalls,
+    DashboardModelCallSlice,
+    DashboardStats,
+)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 def _round(value: float) -> float:
     return round(float(value or 0), 2)
+
+
+def _utc_date_key(dt: datetime) -> str:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).date().isoformat()
 
 
 def _failure_reason(task: Task) -> str:
@@ -50,7 +61,15 @@ def get_dashboard_stats(
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> DashboardStats:
     require_ops_access(auth_user)
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    now = datetime.now(timezone.utc)
+    end_date = now.date()
+    start_date = end_date - timedelta(days=days - 1)
+    since = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+    date_keys: list[str] = []
+    walk = start_date
+    while walk <= end_date:
+        date_keys.append(walk.isoformat())
+        walk += timedelta(days=1)
     filters = [Task.created_at >= since]
     if project_code:
         filters.append(Project.code == project_code)
@@ -193,6 +212,47 @@ def get_dashboard_stats(
             }
         )
 
+    date_key_set = set(date_keys)
+    task_id_to_date = {task.id: _utc_date_key(task.created_at) for task in tasks}
+    daily_tasks_map: dict[str, list[Task]] = defaultdict(list)
+    for task in tasks:
+        dk = task_id_to_date[task.id]
+        if dk in date_key_set:
+            daily_tasks_map[dk].append(task)
+
+    daily_series = [
+        DashboardDailyPoint(
+            date=dk,
+            total_tasks=len(daily_tasks_map.get(dk, [])),
+            successful_tasks=sum(1 for t in daily_tasks_map.get(dk, []) if t.status == TaskStatus.completed),
+            failed_tasks=sum(1 for t in daily_tasks_map.get(dk, []) if t.status == TaskStatus.failed),
+            total_cost=_round(sum(float(t.cost or 0) for t in daily_tasks_map.get(dk, []))),
+        )
+        for dk in date_keys
+    ]
+
+    model_top = [name for name, _ in model_counts.most_common(5)]
+    calls_by_day_model: dict[tuple[str, str], int] = defaultdict(int)
+    for call in provider_calls:
+        dk = task_id_to_date.get(call.task_id)
+        if dk is None or dk not in date_key_set:
+            continue
+        mname = call.model_name or call.provider_name
+        slot = mname if mname in model_top else "__other__"
+        calls_by_day_model[(dk, slot)] += 1
+
+    model_calls_by_day: list[DashboardDayModelCalls] = []
+    for dk in date_keys:
+        slices_list: list[DashboardModelCallSlice] = []
+        for m in model_top:
+            slices_list.append(
+                DashboardModelCallSlice(model_name=m, count=calls_by_day_model.get((dk, m), 0))
+            )
+        other_c = calls_by_day_model.get((dk, "__other__"), 0)
+        if other_c > 0:
+            slices_list.append(DashboardModelCallSlice(model_name="其他", count=other_c))
+        model_calls_by_day.append(DashboardDayModelCalls(date=dk, slices=slices_list))
+
     return DashboardStats(
         active_workflows=active_workflows,
         total_tasks=total_tasks,
@@ -234,4 +294,6 @@ def get_dashboard_stats(
         ],
         failure_reasons=failure_rows,
         account_usage=account_usage,
+        daily_series=daily_series,
+        model_calls_by_day=model_calls_by_day,
     )

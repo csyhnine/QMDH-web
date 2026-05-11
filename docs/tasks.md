@@ -170,19 +170,22 @@
   - `QMDH-SEC` 的数据分级与模型使用规则尚未确认
 
 ### Task: [task-009] 运营看板接入真实时间序列
-- 状态：TODO
+- 状态：DONE
 - 目标：
   - 让 `/admin/dashboard` 中的成本趋势、模型调用趋势、失败趋势从后端真实时间聚合生成
   - 替换当前前端静态示意图形
+- 完成说明：
+  - `GET /dashboard/stats?days=N` 响应新增 `daily_series`（按 UTC 自然日的任务数、成功/失败、成本）与 `model_calls_by_day`（按日 + Top 模型切片的调用次数，含「其他」）；统计窗口与序列同为「自今日起向前 N 个 UTC 自然日」
+  - 前端运营看板用上述字段绘制成本/失败双折线与模型堆叠柱，支持 7/30 天切换与无数据空状态
 - 边界：
   - `backend/app/routers/dashboard.py`
   - `backend/app/schemas.py`
   - `frontend/src/App.tsx`
   - `frontend/src/styles.css`
 - 验收标准：
-  1. 支持按天聚合最近 7 / 30 天的任务、成本、模型调用和失败数据
-  2. 图表为空时有清晰空状态
-  3. 后端单测与前端 build 通过
+  1. 支持按天聚合最近 7 / 30 天的任务、成本、模型调用和失败数据：已完成
+  2. 图表为空时有清晰空状态：已完成
+  3. 后端单测与前端 build 通过：已完成
 
 ### Task: [task-010] 生产化安全与数据迁移补强
 - 状态：TODO
@@ -216,6 +219,6 @@
 
 1. 先稳定提交当前工作区改动
 2. 双击 `open-accounts.cmd` 查看本地账号清单，并用预置设计师账号验证项目权限
-3. 用 `/admin/models` 给真实 provider 填写币种、计费单位和单价，再用 `/admin/dashboard` 检查真实成本、失败原因、账号额度和模型调用统计
+3. 用 `/admin/models` 给真实 provider 填写币种、计费单位和单价，再用 `/admin/dashboard`（切换 7/30 天）核对趋势与汇总是否一致
 4. 如果 AI 额度或上下文不足，先读 `docs/continuity.md` 再继续
-5. 后续生产化补强优先做真实时间序列、密钥加密、操作审计、日志与正式 migration
+5. 后续生产化补强优先：**task-010**（密钥加密、操作审计、正式 migration）、设计师主页 **task-011**

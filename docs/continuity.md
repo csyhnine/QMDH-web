@@ -14,7 +14,7 @@
 ## Current Baseline
 
 - 当前分支：`main`
-- 当前功能基线提交：`67e6246 style: redesign operations dashboard`
+- 当前功能基线提交：请以 `git log -1 --oneline` 为准（勿依赖本节手写哈希；`task-009` 接入看板时间序列后基线已前进）
 - 最新提交以 `git log -1 --oneline` 为准
 - 前端开发地址：`http://127.0.0.1:18080`
 - 后端开发地址：`http://127.0.0.1:18010`
@@ -40,7 +40,7 @@
 - 管理能力已上线：
   - `/admin/users`：账号管理
   - `/admin/models`：模型与 Key 运维配置，包含真实成本单价配置
-  - `/admin/dashboard`：运营看板，已按参考图重做为 KPI + 图表式布局
+  - `/admin/dashboard`：运营看板，KPI + 图表布局；成本/失败曲线与模型调用堆叠柱已使用 `/dashboard/stats` 的 `daily_series`、`model_calls_by_day` 按日真实数据
 - 真实成本口径已接入：provider 配置 `pricing_currency / pricing_unit / unit_price`，任务按实际输出张数或请求次数写入成本。
 - 模拟 provider 的随机成本已移除，历史模拟成本在 schema 刷新时归零。
 
@@ -48,11 +48,10 @@
 
 优先按小提交拆分：
 
-1. `task-009`：让运营看板图表使用更真实的时间序列数据，而不是前端静态趋势形状。
-2. `task-010`：补 provider key 加密、操作审计和正式 migration。
-3. `task-011`：继续按外部参考设计优化设计师工作台主页，而不是继续堆叠历史流文案。
-4. `task-012`：账号额度从软监管升级为可配置预警或硬拦截策略。
-5. `task-sec-001`：确认涉密项目 `QMDH-SEC` 的出域边界和模型可用范围。
+1. `task-010`：补 provider key 加密、操作审计和正式 migration。
+2. `task-011`：设计师工作台主页重设计（需外部参考图对齐）。
+3. `task-012`：账号额度从软监管升级为可配置预警或硬拦截策略。
+4. `task-sec-001`：确认涉密项目 `QMDH-SEC` 的出域边界和模型可用范围。
 
 ## Suggested Commit Rhythm
 

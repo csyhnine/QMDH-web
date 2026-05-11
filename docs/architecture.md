@@ -238,7 +238,8 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 3. `GET /api/v1/auth/me` 返回当前用户、角色、启停状态和项目授权。
 4. `owner / admin` 可访问 `/admin/users`，通过 `/api/v1/users` 创建、编辑、停用账号和重置密码。
 5. `owner / admin / ops` 可访问 `/admin/dashboard`，读取最近任务数、成功率、成本、用户/项目排行、provider/model 分布和失败原因。
-6. `designer` 只使用设计师工作台，仍按 `project_codes` 过滤项目、任务、资产和模板。
+6. `GET /api/v1/dashboard/stats` 在汇总指标之外返回 `daily_series` 与 `model_calls_by_day`（按 UTC 自然日、与查询参数 `days` 对齐），供运营看板绘制成本、失败次数与模型调用按日趋势。
+7. `designer` 只使用设计师工作台，仍按 `project_codes` 过滤项目、任务、资产和模板。
 
 ### 辅助链路：项目状态
 1. `GET /api/v1/projects` 调用 `project_status.py`

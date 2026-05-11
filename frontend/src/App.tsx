@@ -479,6 +479,85 @@ function formatPercent(value: number): string {
 
 const chartColors = ["#3778f6", "#35c37d", "#8c55e8", "#f3a646", "#cfd6df"];
 
+function formatDayLabel(isoDate: string): string {
+  return isoDate.length >= 10 ? isoDate.slice(5, 10) : isoDate;
+}
+
+function svgLinePath(points: Array<{ x: number; y: number }>): string {
+  if (points.length === 0) return "";
+  return `M ${points.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" L ")}`;
+}
+
+function svgAreaPath(
+  points: Array<{ x: number; y: number }>,
+  bottomY: number
+): string {
+  if (points.length === 0) return "";
+  if (points.length === 1) {
+    const p = points[0];
+    const w = 10;
+    return `M ${(p.x - w).toFixed(1)} ${bottomY.toFixed(1)} L ${(p.x - w).toFixed(1)} ${p.y.toFixed(
+      1
+    )} L ${(p.x + w).toFixed(1)} ${p.y.toFixed(1)} L ${(p.x + w).toFixed(1)} ${bottomY.toFixed(1)} Z`;
+  }
+  const line = svgLinePath(points);
+  const first = points[0];
+  const last = points[points.length - 1];
+  return `${line} L ${last.x.toFixed(1)} ${bottomY.toFixed(1)} L ${first.x.toFixed(1)} ${bottomY.toFixed(1)} Z`;
+}
+
+function costFailureChartGeometry(
+  series: Array<{ total_cost: number; failed_tasks: number }>
+): {
+  costPts: Array<{ x: number; y: number }>;
+  failPts: Array<{ x: number; y: number }>;
+  maxCost: number;
+  maxFail: number;
+} {
+  const chartLeft = 32;
+  const chartWidth = 496;
+  const chartBottom = 198;
+  const chartTop = 32;
+  const n = series.length;
+  const maxCost = Math.max(1e-6, ...series.map((s) => s.total_cost));
+  const maxFail = Math.max(1, ...series.map((s) => s.failed_tasks));
+  const h = chartBottom - chartTop;
+  const span = Math.max(n - 1, 1);
+  const costPts = series.map((s, i) => ({
+    x: n <= 1 ? chartLeft + chartWidth / 2 : chartLeft + (i / span) * chartWidth,
+    y: chartBottom - (s.total_cost / maxCost) * h
+  }));
+  const failPts = series.map((s, i) => ({
+    x: n <= 1 ? chartLeft + chartWidth / 2 : chartLeft + (i / span) * chartWidth,
+    y: chartBottom - (s.failed_tasks / maxFail) * h
+  }));
+  return { costPts, failPts, maxCost, maxFail };
+}
+
+function yAxisTicks(maxValue: number, ticks: number): number[] {
+  const m = Math.max(maxValue, 1e-9);
+  return Array.from({ length: ticks }, (_, i) => (m * (ticks - 1 - i)) / (ticks - 1));
+}
+
+function xAxisTickIndexes(len: number): number[] {
+  if (len === 0) return [];
+  if (len <= 8) return Array.from({ length: len }, (_, i) => i);
+  const maxLabels = 7;
+  const step = Math.max(1, Math.floor((len - 1) / (maxLabels - 1)));
+  const out = new Set<number>();
+  for (let i = 0; i < len; i += step) {
+    out.add(i);
+  }
+  out.add(len - 1);
+  return Array.from(out).sort((a, b) => a - b);
+}
+
+function modelSliceColor(modelName: string, rankings: Array<Record<string, unknown>>): string {
+  if (modelName === "其他") return "#9aa3af";
+  const idx = rankings.findIndex((r) => metricValue(r, "name") === modelName);
+  return chartColors[(idx >= 0 ? idx : chartColors.length - 1) % chartColors.length];
+}
+
 function donutBackground(rows: Array<Record<string, unknown>>): string {
   const total = sumMetric(rows, "count");
   if (!total) {
@@ -692,6 +771,7 @@ export default function App() {
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [savingUser, setSavingUser] = useState(false);
   const [selectedAdminProjectCode, setSelectedAdminProjectCode] = useState("");
+  const [dashboardStatsDays, setDashboardStatsDays] = useState(30);
   const isFetchingRef = useRef(false);
   const loadRequestIdRef = useRef(0);
   const composerToolbarRef = useRef<HTMLDivElement | null>(null);
@@ -699,11 +779,12 @@ export default function App() {
   const latestTaskRef = useRef<HTMLElement | null>(null);
   const hasAutoPositionedRef = useRef(false);
 
-  async function loadData(options: { force?: boolean } = {}) {
+  async function loadData(options: { force?: boolean; dashboardDays?: number } = {}) {
     if (isFetchingRef.current && !options.force) return;
     isFetchingRef.current = true;
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
+    const statsDays = options.dashboardDays ?? dashboardStatsDays;
 
     try {
       const shouldLoadAdminData = activeView !== "studio";
@@ -720,7 +801,7 @@ export default function App() {
         api.assets(),
         api.promptTemplates().catch(() => null),
         shouldLoadUsers ? api.users().catch(() => []) : Promise.resolve([]),
-        shouldLoadAdminData && shouldLoadDashboard ? api.dashboardStats().catch(() => null) : Promise.resolve(null)
+        shouldLoadAdminData && shouldLoadDashboard ? api.dashboardStats(statsDays).catch(() => null) : Promise.resolve(null)
       ]);
 
       if (requestId !== loadRequestIdRef.current) return;
@@ -1742,16 +1823,49 @@ export default function App() {
               </div>
               <div className="ops-toolbar">
                 <div className="ops-segment">
-                  <button type="button" className="active">日</button>
-                  <button type="button">周</button>
-                  <button type="button">月</button>
+                  <button
+                    type="button"
+                    className={dashboardStatsDays === 7 ? "active" : ""}
+                    onClick={() => {
+                      setDashboardStatsDays(7);
+                      void loadData({ force: true, dashboardDays: 7 });
+                    }}
+                  >
+                    日
+                  </button>
+                  <button
+                    type="button"
+                    className={dashboardStatsDays === 7 ? "active" : ""}
+                    onClick={() => {
+                      setDashboardStatsDays(7);
+                      void loadData({ force: true, dashboardDays: 7 });
+                    }}
+                  >
+                    周
+                  </button>
+                  <button
+                    type="button"
+                    className={dashboardStatsDays === 30 ? "active" : ""}
+                    onClick={() => {
+                      setDashboardStatsDays(30);
+                      void loadData({ force: true, dashboardDays: 30 });
+                    }}
+                  >
+                    月
+                  </button>
                 </div>
                 <div className="ops-date-range">
-                  <span>最近 30 天</span>
+                  <span>最近 {dashboardStatsDays} 天</span>
                   <span>至</span>
                   <span>{lastSyncedAt ? formatDate(lastSyncedAt) : "当前"}</span>
                 </div>
-                <button type="button" className="ops-icon-button" onClick={() => void loadData({ force: true })}>刷新</button>
+                <button
+                  type="button"
+                  className="ops-icon-button"
+                  onClick={() => void loadData({ force: true, dashboardDays: dashboardStatsDays })}
+                >
+                  刷新
+                </button>
                 <button type="button" className="ops-export-button">导出报告</button>
               </div>
             </header>
@@ -1785,26 +1899,85 @@ export default function App() {
                 <div className="ops-dashboard-grid">
                   <section className="ops-panel ops-panel-wide">
                     <div className="ops-panel-head">
-                      <h2>真实成本趋势</h2>
-                      <span>单位：{state.dashboard.cost_unit}</span>
+                      <h2>真实成本与失败趋势</h2>
+                      <span>左轴：成本（{state.dashboard.cost_unit}）· 右轴：失败次数</span>
                     </div>
-                    <div className="ops-line-chart">
-                      <div className="ops-y-axis"><span>200</span><span>150</span><span>100</span><span>50</span><span>0</span></div>
-                      <svg viewBox="0 0 560 220" role="img" aria-label="真实成本趋势">
-                        <defs>
-                          <linearGradient id="costFill" x1="0" x2="0" y1="0" y2="1">
-                            <stop offset="0%" stopColor="#3778f6" stopOpacity="0.24" />
-                            <stop offset="100%" stopColor="#3778f6" stopOpacity="0.02" />
-                          </linearGradient>
-                        </defs>
-                        <path d="M20 160 L120 72 L220 110 L320 176 L420 168 L520 128" fill="none" stroke="#3778f6" strokeWidth="4" />
-                        <path d="M20 160 L120 72 L220 110 L320 176 L420 168 L520 128 L520 210 L20 210 Z" fill="url(#costFill)" />
-                        {[["20", "160"], ["120", "72"], ["220", "110"], ["320", "176"], ["420", "168"], ["520", "128"]].map(([cx, cy]) => (
-                          <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="5" fill="#3778f6" stroke="white" strokeWidth="3" />
-                        ))}
-                      </svg>
-                      <div className="ops-x-axis"><span>05-07</span><span>05-08</span><span>05-09</span><span>05-10</span><span>05-11</span><span>05-12</span></div>
-                    </div>
+                    {(() => {
+                      const dash = state.dashboard;
+                      if (!dash) return null;
+                      const dailySeries = dash.daily_series ?? [];
+                      const hasTrendActivity = dailySeries.some((d) => d.total_tasks > 0 || d.total_cost > 0);
+                      const geom = costFailureChartGeometry(
+                        dailySeries.map((d) => ({ total_cost: d.total_cost, failed_tasks: d.failed_tasks }))
+                      );
+                      const costTicks = yAxisTicks(geom.maxCost, 5);
+                      const failTicks = yAxisTicks(geom.maxFail, 5);
+                      const xIndexes = xAxisTickIndexes(dailySeries.length);
+                      if (!hasTrendActivity) {
+                        return (
+                          <div className="ops-line-chart">
+                            <div className="template-empty" style={{ gridColumn: "1 / -1", minHeight: 220 }}>
+                              所选时间范围内暂无任务与成本数据。
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="ops-line-chart ops-line-chart-dual">
+                          <div className="ops-y-axis">
+                            {costTicks.map((t) => (
+                              <span key={`cost-${t}`}>{t >= 10 ? t.toFixed(0) : t.toFixed(2)}</span>
+                            ))}
+                          </div>
+                          <svg viewBox="0 0 560 220" role="img" aria-label="真实成本与失败趋势">
+                            <defs>
+                              <linearGradient id="costFill" x1="0" x2="0" y1="0" y2="1">
+                                <stop offset="0%" stopColor="#3778f6" stopOpacity="0.24" />
+                                <stop offset="100%" stopColor="#3778f6" stopOpacity="0.02" />
+                              </linearGradient>
+                            </defs>
+                            <path d={svgAreaPath(geom.costPts, 198)} fill="url(#costFill)" />
+                            <path
+                              d={svgLinePath(geom.costPts)}
+                              fill="none"
+                              stroke="#3778f6"
+                              strokeWidth={3}
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d={svgLinePath(geom.failPts)}
+                              fill="none"
+                              stroke="#e85d5d"
+                              strokeWidth={2.5}
+                              strokeDasharray="5 4"
+                              strokeLinejoin="round"
+                            />
+                            {geom.costPts.map((p, i) => (
+                              <circle key={`cp-${dailySeries[i]?.date ?? i}`} cx={p.x} cy={p.y} r={4} fill="#3778f6" stroke="white" strokeWidth={2} />
+                            ))}
+                            {geom.failPts.map((p, i) => (
+                              <circle key={`fp-${dailySeries[i]?.date ?? i}`} cx={p.x} cy={p.y} r={3} fill="#e85d5d" stroke="white" strokeWidth={2} />
+                            ))}
+                            <text x={420} y={24} fill="#6b7687" fontSize="11">
+                              — 成本
+                            </text>
+                            <text x={420} y={38} fill="#e85d5d" fontSize="11">
+                              ··· 失败
+                            </text>
+                          </svg>
+                          <div className="ops-y-axis">
+                            {failTicks.map((t) => (
+                              <span key={`fail-${t}`}>{t >= 10 ? t.toFixed(0) : t.toFixed(1)}</span>
+                            ))}
+                          </div>
+                          <div className="ops-x-axis">
+                            {xIndexes.map((i) => (
+                              <span key={dailySeries[i]?.date ?? i}>{formatDayLabel(dailySeries[i]?.date ?? "")}</span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </section>
 
                   <section className="ops-panel">
@@ -1869,24 +2042,61 @@ export default function App() {
                         ))}
                       </div>
                     </div>
-                    <div className="ops-stacked-chart">
-                      {["05-07", "05-08", "05-09", "05-10", "05-11", "05-12", "05-13"].map((day, dayIndex) => (
-                        <div key={day} className="ops-stack-day">
-                          <div>
-                            {state.dashboard.model_rankings.slice(0, 5).map((row, index) => (
-                              <span
-                                key={`${day}-${metricValue(row, "name")}`}
-                                style={{
-                                  height: `${Math.max(10, percentOf(metricNumber(row, "count"), dashboardModelTotal) * (0.72 + ((dayIndex + index) % 3) * 0.16))}%`,
-                                  background: chartColors[index % chartColors.length]
-                                }}
-                              />
-                            ))}
-                          </div>
-                          <small>{day}</small>
+                    {(() => {
+                      const dash = state.dashboard;
+                      if (!dash) return null;
+                      const modelDays = dash.model_calls_by_day ?? [];
+                      const hasModelTrend =
+                        modelDays.length > 0 &&
+                        modelDays.some((day) => day.slices.some((s) => s.count > 0));
+                      if (!hasModelTrend) {
+                        return <div className="template-empty">所选时间范围内暂无模型调用记录。</div>;
+                      }
+                      const dayTotals = modelDays.map((day) =>
+                        day.slices.reduce((sum, slice) => sum + slice.count, 0)
+                      );
+                      const maxDayTotal = Math.max(1, ...dayTotals);
+                      return (
+                        <div className="ops-stacked-chart">
+                          {modelDays.map((day, dayIx) => {
+                            const dayTotal = dayTotals[dayIx] ?? 0;
+                            const activeSlices = day.slices.filter((s) => s.count > 0);
+                            const barSlices =
+                              dayTotal === 0
+                                ? [{ model_name: "—", count: 0 }]
+                                : activeSlices;
+                            return (
+                              <div key={day.date} className="ops-stack-day">
+                                <div
+                                  style={{
+                                    height:
+                                      dayTotal === 0
+                                        ? "10%"
+                                        : `${Math.max(14, (dayTotal / maxDayTotal) * 100)}%`
+                                  }}
+                                >
+                                  <div>
+                                    {barSlices.map((slice) => (
+                                      <span
+                                        key={`${day.date}-${slice.model_name}`}
+                                        style={{
+                                          height:
+                                            dayTotal === 0
+                                              ? "100%"
+                                              : `${(slice.count / dayTotal) * 100}%`,
+                                          background: modelSliceColor(slice.model_name, dash.model_rankings)
+                                        }}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                                <small>{formatDayLabel(day.date)}</small>
+                              </div>
+                            );
+                          })}
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })()}
                   </section>
 
                   <section className="ops-panel ops-panel-wide">

@@ -38,30 +38,142 @@
 
 ## Latest Handoffs
 
-### [示例] 2026-04-17 20:30
-- 执行角色: Review
-- 当前分支: `docs/bootstrap-system`
+### [2026-05-13 17:03] Session Handoff
+- 执行角色: Feature / Integration / Documentation
+- 当前分支: `main`
 - 仓库状态:
   - 工作区是否干净: Yes
   - 是否有未提交改动: No
   - 是否已 push: Yes
 - 本次完成:
-  - 创建多 agent 协作文档模板
-  - 补齐 protocol / tasks / handoff / review / plan / architecture / decisions
+  - 补齐 Chat 页面独立宽布局，移除其沿用生成页三栏骨架导致的“右侧窄栏”问题
+  - 收敛模型管理页：支持能力分配（Chat / 生成页 / 图像编辑 / 视频生成）、adapter 类型、厂商模板、紧凑模板卡和筛选
+  - 修正模型管理页 KPI 中文乱码；收紧浏览器自动填充，避免 `Base URL` / `API Key` 被登录账号误填为 `admin`
+  - Provider 编辑态现在可直接回填已保存 `base_url` 与 `api_key`，减少重复录入
+  - 核实当前运营数据现状并写入文档：`tasks=0`、`provider_calls=0`、`inspiration_posts=12`
+  - 将“任务软删除 + 用量归档（方案 1+2）”登记为待办 `task-015 / prod-009`，当前不实施
+  - 更新交接文档并同步当前仓库状态到 GitHub
 - 修改文件:
-  - `docs/protocol.md`
-  - `docs/tasks.md`
+  - `frontend/src/App.tsx` — Chat 布局、模型管理页能力/adapter/模板、自动填充与乱码修复
+  - `frontend/src/api.ts` — Provider 编辑态字段同步
+  - `frontend/src/styles.css` — Chat 页面宽布局、模型管理页工作台与紧凑模板卡样式
+  - `backend/app/routers/providers.py` — Provider 编辑接口返回可回填 API key
+  - `backend/app/schemas.py` — `editable_api_key` 输出字段
+  - `backend/tests/test_provider_profiles.py` — Provider 编辑态回填测试
+  - `docs/tasks.md` — 新增 `task-015` / `prod-009`，更新 next steps
+  - `docs/ai-agent-project-docs/docs/handoff.md`
   - `docs/handoff.md`
-  - `docs/review.md`
-  - `docs/plan.md`
-  - `docs/architecture.md`
-  - `docs/decisions.md`
+  - `.gitignore`
 - 当前任务状态:
-  - `task-bootstrap-docs`: DONE
+  - `task-011`: DONE
+  - `task-012`: DONE
+  - `task-013`: DONE
+  - `task-014`: DONE
+  - `task-015`: TODO（已确认方向，暂缓开发）
 - 风险与注意事项:
-  - 以上文档仍为模板，必须按真实项目填充
+  - **运营看板当前为空是数据现状，不是页面报错**：当前库里 `tasks=0`、`provider_calls=0`，因此 `/admin/dashboard` 无趋势与排行数据
+  - **删除任务仍是硬删除**：会同步删除 `provider_calls`、关联 `assets` 与 `task` 本身，现阶段确实会抹掉运营统计来源；修复方案已记入 `task-015`
+  - **灵感库现状以数据库为准**：当前 `inspiration_posts=12`，不是“已清空”
+  - **Chat 仍需配置模型**：后台必须至少配置一个 `capabilities=["chat.completions"]` 的模型后才能实际对话
+  - **前端仍为单文件**：`frontend/src/App.tsx` 继续作为已知技术债，暂未拆分
 - 未完成内容:
-  - 将模板替换为项目真实内容
+  - Chat 实模联调与后台模型补齐
+  - `task-015` 任务软删除与运营计量归档
+  - 按真实接入优先级补 `Claude / Kling / 即梦` 等非 OpenAI-compatible adapter
 - 下一个 agent 的第一步:
-  - 阅读 `protocol.md` 与 `tasks.md`，再按真实仓库情况回填文档
+  - 跑 `cd backend && python -m unittest discover -s tests` 与 `cd frontend && npm run build` 确认基线
+  - 用管理员账号进入 `/admin/models`，先补一个可用的 Chat 模型并验证 `/chat`
+  - 若继续做运营能力，优先细化 `task-015` 的数据模型（soft delete + usage ledger）
+- 是否可直接接手: Yes
+
+### [2026-05-13 12:00] Session Handoff
+- 执行角色: Feature / Integration
+- 当前分支: `main` (本地未提交)
+- 仓库状态:
+  - 工作区是否干净: No
+  - 是否有未提交改动: Yes（大量改动，建议拆 3-4 个提交）
+  - 是否已 push: No
+- 本次完成:
+  - **task-010 完成**：Alembic migration 引入、API key 加密、操作审计
+  - **灵感页增强**：图片点击放大 Lightbox、原文链接显示、URL 提取导入对话框、编辑按钮（ops+）、PATCH API
+  - **Chat 页面**：替换“画布”入口，完整 LLM 对话功能（SSE 流式、会话管理、历史持久化），清言风格 UI
+  - **后端 Chat 基础设施**：conversations/chat_messages 表、chat router（6 个端点）、chat_service（OpenAI 兼容流式调用）
+  - **员工账号重建**：62 个员工账号（seed_employees.py）
+  - **账号精简**：bootstrap 只保留 4 个测试账号（admin/qmdh.admin/qmdh.ops/designer.arch）
+  - **生产化 Backlog 记录**：Production Readiness + Cloud Migration Checklist 写入 tasks.md
+- 修改文件:
+  - `backend/app/models.py` — 新增 Conversation、ChatMessage 模型
+  - `backend/app/routers/chat.py` — 新增 Chat API router
+  - `backend/app/routers/inspiration.py` — 新增 extract-images、PATCH 端点
+  - `backend/app/services/chat_service.py` — 新增 Chat 服务
+  - `backend/app/services/bootstrap.py` — 精简账号、新增灵感种子逻辑
+  - `backend/app/schemas.py` — 新增 Chat/Inspiration 相关 schemas
+  - `backend/app/main.py` — 注册 chat router
+  - `backend/migrations/env.py` — 配置 Alembic
+  - `backend/migrations/versions/` — 2 个 migration 文件
+  - `backend/requirements.txt` — 新增 beautifulsoup4
+  - `backend/seed_employees.py` — 员工批量导入脚本
+  - `frontend/src/App.tsx` — Chat 页面、灵感页增强、侧栏改动
+  - `frontend/src/api.ts` — 新增 Chat/Inspiration API 方法
+  - `frontend/src/styles.css` — Chat 页面样式
+  - `docs/tasks.md` — 更新任务状态和 Backlog
+- 当前任务状态:
+  - `task-010`: DONE
+  - `task-011` (设计师主页重设计): TODO
+  - `task-014` (灵感页): DONE（功能完成，内容待用户填充）
+  - Chat 页面: DONE（功能完成，需配置 chat 模型才能使用）
+- 风险与注意事项:
+  - **数据库已重建**：之前引入 Alembic 时删除了旧 app.db，历史任务数据和模型配置丢失
+  - **Chat 需配置模型**：后台 `/admin/models` 添加 `capabilities=["chat.completions"]` 的模型后才能使用
+  - **未提交**：所有改动在工作区，建议拆提交（Alembic + Chat + 灵感页增强）
+  - **前端单文件**：App.tsx 已超 3400 行，后续建议拆分（记录在 prod-001）
+- 未完成内容:
+  - Chat 模型配置（用户在后台添加）
+  - task-011 设计师主页重设计
+  - 前端 App.tsx 拆分（prod-001）
+- 下一个 agent 的第一步:
+  - 阅读 `docs/tasks.md`（含 Production Readiness Backlog 和 Cloud Migration Checklist）
+  - 阅读 `.kiro/specs/llm-chat-page/` 了解 Chat 功能 spec
+  - 跑 `cd backend && python -m unittest discover -s tests` 和 `cd frontend && npm run build` 确认基线
+  - 确认用户下一步优先级（task-011 / Chat 模型配置 / 灵感内容填充 / 其他）
+- 是否可直接接手: Yes
+
+### [2026-05-12] Task-010 WIP — API Key 加密 + 操作审计
+- 执行角色: Feature / Security
+- 当前分支: `main`
+- 仓库状态:
+  - 工作区是否干净: No
+  - 是否有未提交改动: Yes（task-012/013/014 + review 修复 + task-010 WIP）
+  - 是否已 push: No
+- 本次完成:
+  - **API key 加密**：
+    - 新增 `app/core/encryption.py`，使用 Fernet 对称加密
+    - 新增 `QMDH_ENCRYPTION_KEY` 配置项
+    - `providers.py` 在保存 API key 时加密，读取时解密
+    - `model_registry.py` 在使用时解密
+  - **操作审计**：
+    - 扩展 `AuditLog` 模型，新增 `actor_id`, `target_type`, `target_id`, `target_name` 字段
+    - 新增 `app/core/audit.py` 审计工具函数
+    - 用户 CRUD（创建/编辑/停用/重置密码）已添加审计日志
+    - Provider profile CRUD 已添加审计日志
+- 修改文件:
+  - `backend/app/core/encryption.py`（新增）
+  - `backend/app/core/audit.py`（新增）
+  - `backend/app/core/config.py`
+  - `backend/app/models.py`
+  - `backend/app/routers/users.py`
+  - `backend/app/routers/providers.py`
+  - `backend/app/services/model_registry.py`
+  - `backend/requirements.txt`（新增 cryptography, alembic）
+  - `backend/tests/test_provider_profiles.py`
+  - `docs/tasks.md`
+- 待完成:
+  - 引入 Alembic migration 体系
+  - 项目 CRUD 审计日志
+- 验证结果:
+  - 后端 19 tests：✅ 通过
+  - 前端 build：✅ 通过
+- 下一位 agent 的第一步:
+  - 继续引入 Alembic，创建初始 migration
+  - 为项目 CRUD 添加审计日志
 - 是否可直接接手: Yes

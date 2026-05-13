@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_auth_user, require_user_admin
+from app.core.audit import AuditEventType, write_audit_log
+from app.core.auth import get_current_auth_user, require_ops_access, require_user_admin
 from app.core.config import AuthUserProfile
 from app.core.security import hash_password
 from app.database import get_db
@@ -17,7 +19,7 @@ VALID_ROLES = {"owner", "admin", "ops", "designer"}
 
 def _normalize_project_codes(project_codes: list[str]) -> list[str]:
     normalized = [code.strip() for code in project_codes if code.strip()]
-    return normalized or ["QMDH-001"]
+    return normalized
 
 
 def _validate_role(role: str) -> str:
@@ -37,9 +39,38 @@ def _to_user_out(user: User) -> UserOut:
         is_active=user.is_active,
         monthly_quota=user.monthly_quota,
         created_at=user.created_at,
-        updated_at=user.updated_at,
+        updated_at=user.updated_at or user.created_at,
         last_login_at=user.last_login_at,
     )
+
+
+class UserBrief(BaseModel):
+    """Lightweight user info for member selection (ops+ accessible)."""
+    id: int
+    name: str
+    display_name: str
+    role: str
+    is_active: bool
+
+
+@router.get("/brief", response_model=list[UserBrief])
+def list_users_brief(
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> list[UserBrief]:
+    """Return minimal user list for member selection. Requires ops access."""
+    require_ops_access(auth_user)
+    users = db.scalars(select(User).order_by(User.role, User.name)).all()
+    return [
+        UserBrief(
+            id=user.id,
+            name=user.name,
+            display_name=user.display_name or user.name,
+            role=user.role,
+            is_active=user.is_active,
+        )
+        for user in users
+    ]
 
 
 @router.get("", response_model=list[UserOut])
@@ -75,6 +106,19 @@ def create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    write_audit_log(
+        db,
+        event_type=AuditEventType.USER_CREATED,
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="user",
+        target_id=user.id,
+        target_name=user.name,
+        details={"role": user.role, "project_codes": user.project_codes},
+    )
+    db.commit()
+
     return _to_user_out(user)
 
 
@@ -106,6 +150,19 @@ def update_user(
 
     db.commit()
     db.refresh(user)
+
+    write_audit_log(
+        db,
+        event_type=AuditEventType.USER_UPDATED,
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="user",
+        target_id=user.id,
+        target_name=user.name,
+        details={"changes": updates},
+    )
+    db.commit()
+
     return _to_user_out(user)
 
 
@@ -123,6 +180,18 @@ def reset_user_password(
     user.password_hash = hash_password(payload.password)
     db.commit()
     db.refresh(user)
+
+    write_audit_log(
+        db,
+        event_type=AuditEventType.USER_PASSWORD_RESET,
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="user",
+        target_id=user.id,
+        target_name=user.name,
+    )
+    db.commit()
+
     return _to_user_out(user)
 
 
@@ -139,5 +208,16 @@ def deactivate_user(
     if auth_user.user_id == user.id:
         raise HTTPException(status_code=400, detail="Cannot disable the current user")
     user.is_active = False
+
+    write_audit_log(
+        db,
+        event_type=AuditEventType.USER_DISABLED,
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="user",
+        target_id=user.id,
+        target_name=user.name,
+    )
     db.commit()
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)

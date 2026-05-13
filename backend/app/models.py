@@ -133,6 +133,46 @@ class Asset(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     project: Mapped[Project | None] = relationship(back_populates="assets")
+    bookmarks: Mapped[list["AssetBookmark"]] = relationship(back_populates="asset", cascade="all, delete-orphan")
+
+
+class AssetBookmark(Base):
+    __tablename__ = "asset_bookmarks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped[User] = relationship()
+    asset: Mapped[Asset] = relationship(back_populates="bookmarks")
+
+
+class InspirationPost(Base):
+    __tablename__ = "inspiration_posts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    image_path: Mapped[str] = mapped_column(String(255))
+    category: Mapped[str] = mapped_column(String(50), default="全部", index=True)
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    source_type: Mapped[str] = mapped_column(String(20), default="user")  # "user" or "external"
+    source_name: Mapped[str] = mapped_column(String(100), default="")
+    source_url: Mapped[str] = mapped_column(String(500), default="")
+    # For user-shared posts
+    source_asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
+    prompt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model_name: Mapped[str] = mapped_column(String(100), default="")
+    # Engagement
+    like_count: Mapped[int] = mapped_column(Integer, default=0)
+    view_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Meta
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped[User | None] = relationship()
+    source_asset: Mapped[Asset | None] = relationship()
 
 
 class ProviderCall(Base):
@@ -157,12 +197,17 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    event_type: Mapped[str] = mapped_column(String(100))
-    actor_name: Mapped[str] = mapped_column(String(100))
-    project_code: Mapped[str] = mapped_column(String(50))
-    workflow_key: Mapped[str] = mapped_column(String(100))
-    provider_name: Mapped[str] = mapped_column(String(50))
-    classification: Mapped[DataClassification] = mapped_column(SqlEnum(DataClassification))
+    event_type: Mapped[str] = mapped_column(String(100), index=True)
+    actor_name: Mapped[str] = mapped_column(String(100), index=True)
+    actor_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Database user ID if available
+    target_type: Mapped[str | None] = mapped_column(String(50), nullable=True)  # "user", "provider", "project", "task"
+    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    target_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    # Legacy fields (retained for backwards compatibility)
+    project_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    workflow_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    provider_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    classification: Mapped[DataClassification | None] = mapped_column(SqlEnum(DataClassification), nullable=True)
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -207,3 +252,31 @@ class ProviderProfile(Base):
     reference_caption_model: Mapped[str | None] = mapped_column(String(150), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200), default="新对话")
+    model_provider_id: Mapped[int | None] = mapped_column(ForeignKey("provider_profiles.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user: Mapped[User] = relationship()
+    provider: Mapped[ProviderProfile | None] = relationship()
+    messages: Mapped[list["ChatMessage"]] = relationship(back_populates="conversation", cascade="all, delete-orphan")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    role: Mapped[str] = mapped_column(String(20))  # "user", "assistant", "system"
+    content: Mapped[str] = mapped_column(Text)
+    token_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    conversation: Mapped[Conversation] = relationship(back_populates="messages")

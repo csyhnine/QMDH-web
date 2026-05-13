@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     bootstrap_admin_name: str = "admin"
     bootstrap_admin_password: str = "dev-admin-password"
     auth_session_days: int = 7
+    encryption_key: str = ""  # Fernet key for encrypting sensitive data like API keys
 
     model_config = SettingsConfigDict(
         env_file=(str(BACKEND_DIR / ".env"), str(REPO_ROOT_DIR / ".env")),

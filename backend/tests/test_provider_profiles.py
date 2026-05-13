@@ -8,6 +8,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.encryption import encrypt_value
+
 from app.core.config import settings
 from app.database import Base, get_db
 from app.models import ProviderProfile
@@ -91,10 +93,10 @@ class ProviderProfileTests(unittest.TestCase):
         payload = response.json()
         self.assertTrue(payload["has_api_key"])
         self.assertEqual(payload["masked_api_key"], "sk-t...cret")
+        self.assertEqual(payload["editable_api_key"], "sk-test-secret")
         self.assertEqual(payload["pricing_currency"], "CNY")
         self.assertEqual(payload["pricing_unit"], "per_image")
         self.assertEqual(payload["unit_price"], 0.35)
-        self.assertNotIn("sk-test-secret", json.dumps(payload))
 
         providers_response = self.client.get("/providers")
         self.assertEqual(providers_response.status_code, 200)
@@ -109,6 +111,7 @@ class ProviderProfileTests(unittest.TestCase):
         self.assertEqual(update_response.status_code, 200)
         self.assertEqual(update_response.json()["model_name"], "arch-render-v2")
         self.assertEqual(update_response.json()["masked_api_key"], "sk-t...cret")
+        self.assertEqual(update_response.json()["editable_api_key"], "sk-test-secret")
 
     def test_designer_cannot_manage_provider_profiles(self) -> None:
         response = self.client.get("/providers/profiles", headers=self.designer_headers())
@@ -119,7 +122,7 @@ class ProviderProfileTests(unittest.TestCase):
             db.add(
                 ProviderProfile(
                     provider_name="db_image",
-                    api_key="db-secret",
+                    api_key=encrypt_value("db-secret"),
                     base_url="https://api.example.test/v1",
                     model_name="db-model",
                     adapter_kind="openai_compatible",

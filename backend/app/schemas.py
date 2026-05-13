@@ -58,6 +58,8 @@ class AssetOut(BaseModel):
     prompt_text: str | None
     like_count: int
     share_count: int
+    bookmark_count: int = 0
+    is_bookmarked: bool = False
     tags: list[str]
     created_at: datetime
 
@@ -206,6 +208,7 @@ class ProviderProfileOut(ProviderProfileBase):
     id: int
     has_api_key: bool
     masked_api_key: str
+    editable_api_key: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -222,6 +225,14 @@ class ProjectOut(BaseModel):
     next_action: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class ProjectMemberOut(BaseModel):
+    id: int
+    name: str
+    display_name: str
+    role: str
+    is_global: bool = False
 
 
 class ProjectMilestoneOut(BaseModel):
@@ -291,3 +302,122 @@ class ReferenceUploadIn(BaseModel):
 class ReferenceUploadOut(BaseModel):
     file_name: str
     storage_path: str
+
+
+class ProviderDiscoverIn(BaseModel):
+    base_url: str = Field(min_length=5, max_length=255)
+    api_key: str = Field(min_length=1)
+
+
+class DiscoveredModel(BaseModel):
+    model_id: str
+    owned_by: str = ""
+    already_exists: bool = False
+
+
+class ProviderDiscoverOut(BaseModel):
+    base_url: str
+    models: list[DiscoveredModel]
+
+
+class ProviderBulkImportItem(BaseModel):
+    model_id: str
+    provider_name: str = Field(min_length=2, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$")
+    capabilities: list[str] = Field(default_factory=lambda: ["image.generate"])
+    adapter_kind: str = "openai_compatible"
+    reference_mode: str = "disabled"
+
+
+class ProviderBulkImportIn(BaseModel):
+    base_url: str = Field(min_length=5, max_length=255)
+    api_key: str = Field(min_length=1)
+    models: list[ProviderBulkImportItem]
+
+
+class ProviderBulkImportOut(BaseModel):
+    created: list[str]
+    skipped: list[str]
+
+
+class InspirationPostOut(BaseModel):
+    id: int
+    title: str
+    description: str
+    image_path: str
+    category: str
+    tags: list[str]
+    source_type: str
+    source_name: str
+    source_url: str
+    prompt_text: str | None = None
+    model_name: str
+    like_count: int
+    view_count: int
+    user_name: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class InspirationPostCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    image_path: str = ""
+    category: str = "建筑"
+    tags: list[str] = Field(default_factory=list)
+    source_type: str = "external"
+    source_name: str = ""
+    source_url: str = ""
+    source_asset_id: int | None = None
+    prompt_text: str | None = None
+    model_name: str = ""
+
+
+class InspirationPostUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    image_path: str | None = None
+    category: str | None = None
+    tags: list[str] | None = None
+    source_url: str | None = None
+    source_name: str | None = None
+
+
+class ExtractImagesIn(BaseModel):
+    url: str = Field(min_length=10, max_length=2000)
+
+
+class ExtractImagesOut(BaseModel):
+    images: list[str] = Field(default_factory=list)
+    title: str = ""
+
+
+class ChatModelOut(BaseModel):
+    provider_id: int
+    provider_name: str
+    model_name: str
+    base_url: str
+
+
+class ConversationCreate(BaseModel):
+    model_provider_id: int
+    title: str = ""
+
+
+class ConversationOut(BaseModel):
+    id: int
+    title: str
+    model_provider_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ChatMessageCreate(BaseModel):
+    content: str = Field(min_length=1)
+
+
+class ChatMessageOut(BaseModel):
+    id: int
+    role: str
+    content: str
+    created_at: datetime

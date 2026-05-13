@@ -237,19 +237,19 @@ class DatabaseAuthTests(unittest.TestCase):
     def test_seed_initial_data_creates_local_dev_accounts_without_overwriting_passwords(self) -> None:
         with self.SessionLocal() as db:
             seed_initial_data(db)
-            owner = db.query(User).filter_by(name="qmdh.owner").one()
+            admin_user = db.query(User).filter_by(name="qmdh.admin").one()
             designer = db.query(User).filter_by(name="designer.arch").one()
 
-        self.assertEqual(owner.role, "owner")
-        self.assertEqual(owner.project_codes, ["*"])
+        self.assertEqual(admin_user.role, "admin")
+        self.assertEqual(admin_user.project_codes, ["*"])
         self.assertEqual(designer.role, "designer")
         self.assertEqual(designer.project_codes, ["QMDH-001"])
 
-        owner_token = self.login("qmdh.owner", "qmdh-owner-2026")
+        admin_token = self.login("qmdh.admin", "qmdh-admin-2026")
         designer_token = self.login("designer.arch", "qmdh-arch-2026")
 
-        owner_users = self.client.get("/users", headers={"Authorization": f"Bearer {owner_token}"})
-        self.assertEqual(owner_users.status_code, 200)
+        admin_users = self.client.get("/users", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(admin_users.status_code, 200)
 
         designer_users = self.client.get("/users", headers={"Authorization": f"Bearer {designer_token}"})
         self.assertEqual(designer_users.status_code, 403)

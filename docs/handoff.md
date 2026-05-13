@@ -10,88 +10,136 @@
 
 ## Latest Handoffs
 
-### [2026-05-11] Session Handoff
-- 执行角色：Integration / Dashboard
+### [2026-05-13 17:03] Session Handoff
+- 执行角色：Feature / Integration / Documentation
 - 当前分支：`main`
-- 仓库状态：工作区已为本轮 `feat(task-009)` 提交整理干净；请以 `git log -1 --oneline` 查看当前提交，推送前与远端核对
+- 仓库状态：
+  - 工作区是否干净：Yes
+  - 是否有未提交改动：No
+  - 是否已 push：Yes
 - 本次完成：
-  - 按 `docs/ai-agent-project-docs/docs/takeover_prompt.md` 完成仓库核对并完成 **task-009**：运营看板成本/失败与模型调用趋势改为基于 `/dashboard/stats` 的 `daily_series`、`model_calls_by_day` 真实按日聚合（UTC 自然日窗口，与 `days` 查询参数对齐）
-  - 统计窗口由「纯滚动小时」调整为「最近 N 个 UTC 自然日」起算，与按日序列一致；保留 `?days=7` / `30` 等用法
-  - 前端运营看板：日/周（7 天）/月（30 天）切换并带参刷新；成本与失败双折线、模型堆叠柱使用真实数据；无数据时展示空状态
-  - 完成验证：`python -m unittest discover -s tests`、`npm run build`、`cmd /c start-dev.cmd --check`
+  - 完成 Chat 页面宽布局修正，消息区不再沿用生成页三栏骨架而被压窄
+  - 完成模型管理页收敛：能力分配、adapter 类型、厂商模板、紧凑模板卡、筛选和编辑态回填
+  - 修正模型管理页 KPI 中文乱码，并降低浏览器自动填充把 `admin` 误写进 `Base URL / API Key` 的概率
+  - 核实库内现状：`tasks=0`、`provider_calls=0`、`assets=4`、`inspiration_posts=12`、`users=66`、`projects=1`
+  - 确认现状风险：任务删除仍为硬删除，会连带抹掉运营统计来源；已按用户确认方向登记 `task-015 / prod-009`
+  - 更新交接文档、任务文档，并同步当前仓库状态到 GitHub
 - 修改文件：
-  - `backend/app/schemas.py`
-  - `backend/app/routers/dashboard.py`
-  - `backend/tests/test_database_auth.py`
+  - `frontend/src/App.tsx`
   - `frontend/src/api.ts`
-  - `frontend/src/App.tsx`
   - `frontend/src/styles.css`
+  - `backend/app/routers/providers.py`
+  - `backend/app/schemas.py`
+  - `backend/tests/test_provider_profiles.py`
   - `docs/tasks.md`
+  - `docs/ai-agent-project-docs/docs/handoff.md`
   - `docs/handoff.md`
-  - `docs/continuity.md`
-  - `docs/projects/QMDH-001/status.md`
-  - `docs/archive/handoff-2026-04-30-ops-dashboard-nav.md`
+  - `.gitignore`
+- 当前任务状态：
+  - `task-011`: DONE
+  - `task-012`: DONE
+  - `task-013`: DONE
+  - `task-014`: DONE
+  - `task-015`: TODO（方向已定，暂不开发）
 - 风险与注意事项：
-  - 多币种时按日 `total_cost` 仍为各任务 cost 数值相加，与汇总 KPI 一致；跨币种精细折算未做
-  - `docs/continuity.md` 中「功能基线提交哈希」应随主干最新提交更新，勿手写过期 SHA
+  - 运营看板为空是当前数据库里没有任务与 provider 调用，不是前端渲染故障
+  - 任务删除会删除 `provider_calls`、关联 `assets` 与 `task`，现阶段确实会让看板/账号用量回退
+  - Chat 需要先在 `/admin/models` 配好 `chat.completions` 模型才能实际使用
+  - `frontend/src/App.tsx` 仍是超长单文件技术债
+- 未完成内容：
+  - Chat 模型联调
+  - `task-015` 任务软删除 + 用量归档
+  - 非 OpenAI-compatible adapter 的真实后端接入
 - 下一位 agent 的第一步：
-  - `git status`，然后优先 **task-010**（密钥加密、审计、正式 migration）或产品设计确认后的 **task-011**
+  - 先跑后端单测和前端 build 确认基线
+  - 再去 `/admin/models` 配一个可用 Chat 模型，验证对话链路
+  - 若继续处理运营能力，先设计 `task-015` 的归档口径和删除态
 - 是否可直接接手：Yes
 
-### [2026-04-30 17:40] Session Handoff
-- 执行角色：UI / Admin Console
-- 当前分支：`main`
+### [2026-05-13 12:00] Session Handoff
+- 执行角色：Feature / Integration
+- 当前分支：`main`（本地未提交）
 - 仓库状态：
-  - 工作区是否干净：Yes（本轮提交并推送后）
-  - 是否有未提交改动：No（本轮提交并推送后）
-  - 是否已 push：Yes（本轮提交并推送后）
+  - 工作区是否干净：No
+  - 是否有未提交改动：Yes（大量改动，建议拆 3-4 个提交）
+  - 是否已 push：No
 - 本次完成：
-  - 已按参考后台面板方向统一后台侧栏，入口收敛为运营看板、项目管理、模型管理、账号管理、设置中心
-  - 新增 `/admin/projects` 只读项目管理页，使用现有项目、任务和看板数据展示项目卡片与右侧详情，不做项目 CRUD
-  - 新增 `/admin/settings` 轻量设置中心，展示系统信息、功能开关说明、资源使用和现有管理入口，不做真实配置写入
-  - `/admin/users` 已改为统计卡、工具条、账号表格和右侧创建/编辑面板，保留账号创建、编辑、停用和重置密码能力
-  - `/admin/models` 已改为统计卡、工具条、模型表格和右侧配置面板，保留模型新增、编辑、删除、启停和计费配置能力
-  - 本轮未推进 `task-009`（后续已由 2026-05-11 提交接入真实时间序列，见最新交接）
-  - 完成验证：
-    - `npm run build` 通过
+  - **task-010 完成**：Alembic migration 引入、API key 加密、操作审计
+  - **灵感页增强**：图片点击放大 Lightbox、原文链接显示、URL 提取导入对话框、编辑按钮（ops+）、PATCH API
+  - **Chat 页面**：替换“画布”入口，完整 LLM 对话功能（SSE 流式、会话管理、历史持久化），清言风格 UI
+  - **后端 Chat 基础设施**：conversations/chat_messages 表、chat router（6 个端点）、chat_service（OpenAI 兼容流式调用）
+  - **员工账号重建**：62 个员工账号（seed_employees.py）
+  - **生产化 Backlog 记录**：Production Readiness + Cloud Migration Checklist 写入 tasks.md
 - 修改文件：
+  - `backend/app/models.py`
+  - `backend/app/routers/chat.py`
+  - `backend/app/routers/inspiration.py`
+  - `backend/app/services/chat_service.py`
+  - `backend/app/services/bootstrap.py`
+  - `backend/app/schemas.py`
+  - `backend/app/main.py`
+  - `backend/migrations/env.py`
+  - `backend/migrations/versions/`
+  - `backend/requirements.txt`
+  - `backend/seed_employees.py`
   - `frontend/src/App.tsx`
+  - `frontend/src/api.ts`
   - `frontend/src/styles.css`
   - `docs/tasks.md`
-  - `docs/handoff.md`
-  - `docs/projects/QMDH-001/status.md`
+- 当前任务状态：
+  - `task-010`: DONE
+  - `task-011`: TODO
+  - `task-014`: DONE
+  - Chat 页面：DONE（需配置 chat 模型才能使用）
 - 风险与注意事项：
-  - `/admin/projects` 和 `/admin/settings` 是基于现有数据的轻量前端页，不代表后端已有项目 CRUD、设置写入、账单、告警或日志能力
-  - `/admin/users` 中停用按钮调用现有 `DELETE /users/{id}`，只能停用账号；重新启用仍需通过编辑账号保存启用状态
-  - 真实时间序列在当次记录时尚未接入；`task-009` 已在后续迭代完成（见 `[2026-05-11] Session Handoff`）
+  - 数据库已重建，旧任务数据已丢失
+  - Chat 需配置模型后才能实际使用
+  - 前端 `App.tsx` 已超 3400 行
+- 未完成内容：
+  - Chat 模型配置
+  - task-011 设计师主页重设计
 - 下一位 agent 的第一步：
-  - 先检查 `git status`
-  - 运行 `cmd /c start-dev.cmd --check`
-  - 手动打开 `/admin/dashboard`、`/admin/projects`、`/admin/models`、`/admin/users`、`/admin/settings` 检查后台页面布局
+  - 阅读 `docs/tasks.md`
+  - 跑 `python -m unittest discover -s tests` 与 `npm run build`
+  - 确认用户下一步优先级
 - 是否可直接接手：Yes
 
-### [2026-04-30 16:35] Session Handoff
-- 执行角色：UI / Continuity Archive
+### [2026-05-12] Task-010 WIP — API Key 加密 + 操作审计
+- 执行角色：Feature / Security
 - 当前分支：`main`
 - 仓库状态：
-  - 工作区是否干净：Yes（本轮提交后）
-  - 是否有未提交改动：No（本轮提交后）
-  - 是否已 push：Yes（本轮提交后）
+  - 工作区是否干净：No
+  - 是否有未提交改动：Yes（task-012/013/014 + review 修复 + task-010 WIP）
+  - 是否已 push：No
 - 本次完成：
-  - 已按参考图结构重做 `/admin/dashboard`：宽侧栏管理导航、顶部时间/导出工具栏、KPI 卡片、成本趋势、模型分布、项目排行、失败分析、模型调用趋势和账号额度监管
-  - 该次 UI 改造只改前端 `frontend/src/App.tsx` 与 `frontend/src/styles.css`，没有新增接口
-  - 已新增 `docs/continuity.md`，用于 AI 额度不足、上下文不足或换 agent 时快速接手
-  - 完成验证：
-    - `python -m unittest discover -s tests` 通过
-    - `npm run build` 通过
-    - `cmd /c start-dev.cmd --check` 通过
-- 最新提交：
-  - `67e6246 style: redesign operations dashboard`
-- 风险与注意事项：
-  - 当前看板视觉已接近参考图，但趋势图和堆叠柱仍主要是前端静态形状结合汇总数据；后续应补真实时间序列接口
-  - 后续开发量较大，建议按 `docs/continuity.md` 的小提交节奏推进，避免额度或上下文不足时丢失现场
+  - **API key 加密**：
+    - 新增 `app/core/encryption.py`，使用 Fernet 对称加密
+    - 新增 `QMDH_ENCRYPTION_KEY` 配置项
+    - `providers.py` 在保存 API key 时加密，读取时解密
+    - `model_registry.py` 在使用时解密
+  - **操作审计**：
+    - 扩展 `AuditLog` 模型，新增 `actor_id`, `target_type`, `target_id`, `target_name` 字段
+    - 新增 `app/core/audit.py` 审计工具函数
+    - 用户 CRUD（创建/编辑/停用/重置密码）已添加审计日志
+    - Provider profile CRUD 已添加审计日志
+- 修改文件：
+  - `backend/app/core/encryption.py`（新增）
+  - `backend/app/core/audit.py`（新增）
+  - `backend/app/core/config.py`
+  - `backend/app/models.py`
+  - `backend/app/routers/users.py`
+  - `backend/app/routers/providers.py`
+  - `backend/app/services/model_registry.py`
+  - `backend/requirements.txt`（新增 cryptography, alembic）
+  - `backend/tests/test_provider_profiles.py`
+  - `docs/tasks.md`
+- 待完成：
+  - 引入 Alembic migration 体系
+  - 项目 CRUD 审计日志
+- 验证结果：
+  - 后端 19 tests：✅ 通过
+  - 前端 build：✅ 通过
 - 下一位 agent 的第一步：
-  - 先检查 `git status`
-  - 阅读 `docs/continuity.md`
-  - 如果继续做看板，优先实现真实时间序列数据；如果转回设计师主页，先用外部参考图确定布局再改代码
+  - 继续引入 Alembic，创建初始 migration
+  - 为项目 CRUD 添加审计日志
 - 是否可直接接手：Yes

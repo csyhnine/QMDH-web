@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import can_access_project, ensure_project_access, get_current_auth_user
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import Asset
+from app.models import Asset, AssetBookmark
 from app.schemas import AssetOut, ReferenceUploadIn, ReferenceUploadOut
 from app.services.media_storage import write_binary_asset
 
@@ -48,13 +48,37 @@ def _decode_reference_upload(data_url: str) -> bytes:
 def list_assets(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
-) -> list[Asset]:
+    bookmarked: bool | None = None,
+) -> list[AssetOut]:
     assets = db.scalars(select(Asset).order_by(Asset.created_at.desc())).all()
-    return [
+    accessible = [
         asset
         for asset in assets
         if asset.project is None or can_access_project(auth_user, asset.project.code)
     ]
+
+    # Get current user's bookmarked asset IDs
+    user_id = auth_user.user_id
+    bookmarked_ids: set[int] = set()
+    if user_id:
+        bookmarked_ids = set(
+            db.scalars(
+                select(AssetBookmark.asset_id).where(AssetBookmark.user_id == user_id)
+            ).all()
+        )
+
+    results = []
+    for asset in accessible:
+        is_bookmarked = asset.id in bookmarked_ids
+        if bookmarked is True and not is_bookmarked:
+            continue
+        if bookmarked is False and is_bookmarked:
+            continue
+        out = AssetOut.model_validate(asset)
+        out.is_bookmarked = is_bookmarked
+        out.bookmark_count = len(asset.bookmarks)
+        results.append(out)
+    return results
 
 
 @router.post("/reference-upload", response_model=ReferenceUploadOut, status_code=status.HTTP_201_CREATED)
@@ -103,3 +127,41 @@ def share_asset(
     db.commit()
     db.refresh(asset)
     return asset
+
+
+@router.post("/{asset_id}/bookmark", response_model=AssetOut, status_code=status.HTTP_200_OK)
+def toggle_bookmark(
+    asset_id: int,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> AssetOut:
+    """Toggle bookmark for the current user. Returns updated asset with bookmark state."""
+    asset = db.get(Asset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    if asset.project:
+        ensure_project_access(auth_user, asset.project.code)
+
+    user_id = auth_user.user_id
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Bookmark requires a database user session")
+
+    existing = db.scalar(
+        select(AssetBookmark).where(
+            AssetBookmark.user_id == user_id,
+            AssetBookmark.asset_id == asset_id,
+        )
+    )
+    if existing:
+        db.delete(existing)
+        is_bookmarked = False
+    else:
+        db.add(AssetBookmark(user_id=user_id, asset_id=asset_id))
+        is_bookmarked = True
+
+    db.commit()
+    db.refresh(asset)
+    out = AssetOut.model_validate(asset)
+    out.is_bookmarked = is_bookmarked
+    out.bookmark_count = len(asset.bookmarks)
+    return out

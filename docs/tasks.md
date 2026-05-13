@@ -164,11 +164,6 @@
   2. 新增 `/admin/projects` 和 `/admin/settings` 前端路由：已完成
   3. 不推进 `task-009`，真实时间序列仍保持 TODO：已确认
 
-### Task: [task-sec-001] 明确涉密项目的可出域边界
-- 状态：BLOCKED
-- 阻塞原因：
-  - `QMDH-SEC` 的数据分级与模型使用规则尚未确认
-
 ### Task: [task-009] 运营看板接入真实时间序列
 - 状态：DONE
 - 目标：
@@ -188,37 +183,140 @@
   3. 后端单测与前端 build 通过：已完成
 
 ### Task: [task-010] 生产化安全与数据迁移补强
-- 状态：TODO
+- 状态：DONE
 - 目标：
   - 补 provider key 加密、操作审计和正式 migration
 - 边界：
   - 后端配置、数据库 schema、provider profiles、审计日志
+- 完成说明：
+  - **API key 加密**：已使用 `cryptography.fernet` 对称加密，`ProviderProfile.api_key` 存储加密值
+  - **操作审计**：已扩展 `AuditLog` 模型支持管理操作，为用户 CRUD 和 provider CRUD 添加审计日志
+  - **正式 migration**：已引入 Alembic，配置 `migrations/env.py`，生成初始 schema migration
+  - 已移除 `bootstrap.py` 中的 `ensure_schema` ALTER TABLE 逻辑，schema 变更改由 Alembic 管理
 - 验收标准：
-  1. API key 不再以明文业务字段保存
-  2. 用户、模型、价格配置等管理操作有审计记录
-  3. schema 变更不再只依赖启动时 `ALTER TABLE`
+  1. API key 不再以明文业务字段保存：已完成
+  2. 用户、模型、价格配置等管理操作有审计记录：已完成（用户/Provider）
+  3. schema 变更不再只依赖启动时 `ALTER TABLE`：已完成
 
 ### Task: [task-011] 设计师工作台主页重设计
-- 状态：TODO
+- 状态：DONE
 - 目标：
   - 参考外部设计图，重新整理设计师主页的信息结构
   - 减少历史流长提示词占屏，强化图片结果、复用、当前创作输入区
 - 边界：
   - `frontend/src/App.tsx`
   - `frontend/src/styles.css`
+- 完成说明：
+  - 生成页已回收过度扩张的信息卡片，恢复为以生成结果与创作输入为主的更简洁结构
+  - 保留并强化了历史记录中的长提示词摘要/折叠能力，避免单条记录占满首屏
+  - 生成区、历史流和输入区的层级已重新收敛，不再额外引入“历史摘要 / 创作资源 / 当前输入”大卡片
 - 验收标准：
-  1. 1920x1080 下首屏可清楚看到项目、历史摘要和创作入口
-  2. 长提示词折叠或摘要化
-  3. 前端 build 通过
+  1. 1920x1080 下首屏保持生成结果与创作输入优先，不出现多余总览卡片：已完成
+  2. 长提示词折叠或摘要化：已完成
+  3. 前端 build 通过：已完成
+
+### Task: [task-012] 模型管理页"探测并批量导入"功能
+- 状态：DONE
+- 完成说明：
+  - 探测/批量导入功能已实现并验证
+  - 已移除 ModelScope 自动派生逻辑（`_add_modelscope_image_variants`），改为所见即所得：管理页有什么模型，设计师工作台就展示什么模型
+
+### Task: [task-013] 账号批量导入与项目成员管理
+- 状态：DONE
+- 完成说明：
+  - 批量创建 62 个员工账号（拼音首字母用户名 + 手机号后4位密码）
+  - 角色映射：联席院长/负责人→admin，所长/主任/项目负责人→ops，设计师/行政→designer
+  - 项目成员管理：`GET/PATCH /projects/{code}/members`，支持批量添加/移除
+  - 前端项目面板显示成员列表，ops+ 可编辑成员（左侧全体成员勾选 + 右侧浮动参与人面板 + 保存）
+  - 项目 CRUD：`POST /projects`（创建）、`PATCH /projects/{code}`（重命名）、`DELETE /projects/{code}`（删除，含任务清理）
+  - 管理后台 `/admin/projects` 支持重命名和删除项目
+  - 从 bootstrap 种子数据中移除 QMDH-SEC 项目
+
+### Task: [task-014] 灵感页与标记功能
+- 状态：DONE
+- 完成说明：
+  - 新增 `asset_bookmarks` 表和 `POST /assets/{id}/bookmark` toggle 接口
+  - FeedCard "点赞"改为"标记"（收藏），支持标记/取消标记
+  - 新增 `inspiration_posts` 表和 `/api/v1/inspiration` CRUD 接口
+  - 灵感页独立视图：分类标签栏（建筑/景观/室内/城市/构图/材质/光影/色彩）+ 卡片网格
+  - 支持管理员导入外部参考和用户分享生成结果
+  - 灵感页全屏布局，隐藏项目面板和生成输入框
+  - FeedCard 新增"删除"按钮，支持删除单条生成记录（含关联资产和 provider 调用）
+  - **已填充 12 条建筑参考案例**：Moriyama House、Villa Savoye、宁波博物馆、Luum Temple、红砖美术馆、Fallingwater、绩溪博物馆、Tama Library、龙美术馆、Thermal Baths Vals、阿那亚艺术中心、House NA（来源标注 ArchDaily / 古德设计网）
+
+### Task: [task-015] 任务删除留痕与运营计量归档
+- 状态：TODO
+- 目标：
+  - 避免设计师删除任务后直接抹掉运营看板、账号用量和模型调用统计
+  - 为后续 PostgreSQL/生产化部署保留稳定的数据留痕口径
+- 边界：
+  - `backend/app/routers/tasks.py`
+  - `backend/app/routers/dashboard.py`
+  - 新增或扩展任务归档 / 用量计量数据表
+  - 必要的前端删除态与后台统计说明
+- 拟定方案：
+  - 方案 1：任务改为软删除，设计师前台默认隐藏，运营统计继续基于未清算的历史记录
+  - 方案 2：新增 `usage_ledger / task_archive` 一类归档表，在删除或清理前固化成本、调用、操作者与项目快照
+  - 当前用户已确认采用 `1 + 2` 方向，但暂不开发，先进入待办
+- 验收标准：
+  1. 删除已完成任务后，`/admin/dashboard` 与账号用量不回退
+  2. 运营侧能追溯任务删除前的 provider/model/cost 口径
+  3. 前后端单测与 build 通过
 
 ---
 
 ## Next Suggested Step
 
-如果换账号后继续开发，建议直接从下面这条开始：
+1. 在后台为 Chat 补至少 1 个 `chat.completions` 模型，并做一次真实对话联调
+2. 继续收敛模型管理页，补“探测结果 -> 页面分配 -> adapter 支持范围”的使用说明与筛选体验
+3. 等用户重新排期后，再推进 **task-015**（任务软删除 + 用量归档）
 
-1. 先稳定提交当前工作区改动
-2. 双击 `open-accounts.cmd` 查看本地账号清单，并用预置设计师账号验证项目权限
-3. 用 `/admin/models` 给真实 provider 填写币种、计费单位和单价，再用 `/admin/dashboard`（切换 7/30 天）核对趋势与汇总是否一致
-4. 如果 AI 额度或上下文不足，先读 `docs/continuity.md` 再继续
-5. 后续生产化补强优先：**task-010**（密钥加密、操作审计、正式 migration）、设计师主页 **task-011**
+---
+
+## Production Readiness Backlog
+
+以下为生产化部署前应完成的准备工作，按优先级排列。
+
+### 近期可做（低风险、不影响现有数据）
+
+| ID | 任务 | 说明 | 优先级 |
+|----|------|------|--------|
+| prod-001 | 前端 App.tsx 拆分 | 3000+ 行单文件拆为路由组件，降低维护成本 | P1 |
+| prod-002 | 环境变量规范化 | 新增 `.env.production.example`，标注必填/可选/默认值 | P1 |
+| prod-003 | 后端日志结构化 | 统一 JSON 格式日志输出，方便 ELK/Loki 采集 | P2 |
+| prod-004 | 健康检查增强 | `/health` 检查 DB 连接、Redis 连接，支持 k8s 存活探针 | P2 |
+
+### 上生产前完成
+
+| ID | 任务 | 说明 | 优先级 |
+|----|------|------|--------|
+| prod-005 | CORS 多域名白名单 | 支持生产环境多前端域名 | P2 |
+| prod-006 | API Rate Limiting | 防刷保护，内测阶段可跳过 | P3 |
+| prod-007 | Session 过期清理 | 定时任务清理 `auth_sessions` 过期记录 | P3 |
+| prod-008 | 静态资源存储方案 | 用户上传图片迁移到 OSS/S3，配合 CDN 分发 | P2 |
+| prod-009 | 任务软删除与用量归档 | 删除设计任务后仍保留运营统计、账号用量和审计追溯 | P1 |
+
+### 不建议当前阶段做
+
+- 微服务拆分（体量不需要）
+- 消息队列替换 Redis（Redis 够用）
+- 多租户（无此需求）
+
+---
+
+## Cloud Migration Checklist（上云切换清单）
+
+以下为正式上云部署时需要做的切换工作，当前阶段无需提前改动，架构已预留切换口。
+
+| 组件 | 现在（本地开发） | 上云时切换为 | 改动量 | 切换方式 |
+|------|-----------------|-------------|--------|----------|
+| 数据库 | SQLite 文件 (`app.db`) | PostgreSQL (RDS) | 极小 | 改环境变量 `QMDH_DATABASE_URL`，运行 `alembic upgrade head` |
+| 图片存储 | 本地 `storage/` 目录 | 阿里云 OSS + CDN | 小 | 改 `media_storage.py` 写入逻辑，读取走 CDN 域名 |
+| 任务队列 | Redis (本地) | Redis (云托管) | 极小 | 改环境变量 `QMDH_REDIS_URL` |
+| API Key 加密 | Fernet key 在 `.env` | 云 KMS 或保持 Fernet | 可选 | 如需更高安全等级再升级 |
+| Session 存储 | 数据库表 `auth_sessions` | 同上（跟 PostgreSQL 走） | 无 | 无额外改动 |
+| 日志 | 控制台输出 | JSON 格式 → 日志服务 (ELK/Loki) | 小 | 加 logging 配置 |
+| 前端部署 | Vite dev server / 本地 dist | Nginx 静态托管 / CDN | 小 | 已有 Dockerfile 和 Nginx 配置 |
+| 域名与 HTTPS | localhost | 正式域名 + 证书 | 配置级 | Nginx 或云 LB 配置 |
+
+**原则**：所有切换都是环境变量或单文件改动，不需要提前重构代码。等确定云服务商和部署方案时一起做。

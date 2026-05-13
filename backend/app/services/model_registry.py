@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import ImageProviderProfile, settings
+from app.core.encryption import decrypt_value
 from app.models import ProviderProfile
 
 
@@ -34,22 +35,18 @@ STATIC_PROVIDERS: dict[str, ProviderDefinition] = {
     "runway": ProviderDefinition("runway", "gen-4-turbo", ["video.generate"], configurable=False, outbound=False),
 }
 
-MODELSCOPE_IMAGE_VARIANTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("modelscope_qwen_image_2512", "Qwen/Qwen-Image-2512", ("image.generate",)),
-    ("modelscope_z_image", "Tongyi-MAI/Z-Image", ("image.generate",)),
-    ("modelscope_z_image_turbo", "Tongyi-MAI/Z-Image-Turbo", ("image.generate",)),
-    ("modelscope_firered_image_edit", "FireRedTeam/FireRed-Image-Edit-1.1", ("image.generate", "image.edit")),
-)
-
 
 def _profile_from_record(record: ProviderProfile) -> ImageProviderProfile:
     reference_mode = record.reference_mode.strip() if record.reference_mode else ""
     if not reference_mode:
         reference_mode = "caption_prompt" if "modelscope.cn" in record.base_url else "disabled"
 
+    # Decrypt API key (returns empty string if decryption fails)
+    decrypted_key = decrypt_value(record.api_key)
+
     return ImageProviderProfile(
         provider_name=record.provider_name,
-        api_key=record.api_key,
+        api_key=decrypted_key,
         base_url=record.base_url.rstrip("/"),
         model_name=record.model_name,
         timeout_seconds=record.timeout_seconds,
@@ -67,28 +64,8 @@ def _profile_from_record(record: ProviderProfile) -> ImageProviderProfile:
     )
 
 
-def _add_modelscope_image_variants(profiles: dict[str, ImageProviderProfile]) -> dict[str, ImageProviderProfile]:
-    seed_profile = profiles.get("modelscope_free_image")
-    if seed_profile is None:
-        seed_profile = next((profile for profile in profiles.values() if "modelscope.cn" in profile.base_url), None)
-    if seed_profile is None:
-        return profiles
-
-    for provider_name, model_name, capabilities in MODELSCOPE_IMAGE_VARIANTS:
-        profiles.setdefault(
-            provider_name,
-            replace(
-                seed_profile,
-                provider_name=provider_name,
-                model_name=model_name,
-                capabilities=capabilities,
-            ),
-        )
-    return profiles
-
-
 def get_image_provider_profiles(db: Session | None = None) -> dict[str, ImageProviderProfile]:
-    profiles = _add_modelscope_image_variants(settings.get_image_provider_profiles())
+    profiles = settings.get_image_provider_profiles()
     if db is None:
         return profiles
 

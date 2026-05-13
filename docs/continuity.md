@@ -41,6 +41,7 @@
   - `/admin/users`：账号管理
   - `/admin/models`：模型与 Key 运维配置，包含真实成本单价配置
   - `/admin/dashboard`：运营看板，KPI + 图表布局；成本/失败曲线与模型调用堆叠柱已使用 `/dashboard/stats` 的 `daily_series`、`model_calls_by_day` 按日真实数据
+- `task-012` 已在当前工作区实现模型探测与批量导入能力：`/admin/models` 可探测 `/v1/models` 并批量导入 provider profile，但在提交归档前应视为 WIP
 - 真实成本口径已接入：provider 配置 `pricing_currency / pricing_unit / unit_price`，任务按实际输出张数或请求次数写入成本。
 - 模拟 provider 的随机成本已移除，历史模拟成本在 schema 刷新时归零。
 
@@ -50,7 +51,7 @@
 
 1. `task-010`：补 provider key 加密、操作审计和正式 migration。
 2. `task-011`：设计师工作台主页重设计（需外部参考图对齐）。
-3. `task-012`：账号额度从软监管升级为可配置预警或硬拦截策略。
+3. `task-012`：完成并归档模型管理页“探测并批量导入”功能提交，然后用管理页验证导入结果。
 4. `task-sec-001`：确认涉密项目 `QMDH-SEC` 的出域边界和模型可用范围。
 
 ## Suggested Commit Rhythm

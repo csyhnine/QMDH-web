@@ -11,4 +11,5 @@ backend/storage/
 *-dev.out.log
 *-dev.err.log
 local/
+.vscode/
 

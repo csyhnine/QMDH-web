@@ -6,9 +6,13 @@ import {
   type Asset,
   type AuthUser,
   type DashboardStats,
+  type DiscoveredModel,
+  type InspirationPost,
+  type ProviderBulkImportItem,
   getStoredAuthToken,
   type ManagedUser,
   type Project,
+  type ProjectMember,
   type PromptTemplateRecord,
   type Provider,
   type ProviderProfileCreatePayload,
@@ -28,6 +32,7 @@ type LoadState = {
   tasks: Task[];
   assets: Asset[];
   users: ManagedUser[];
+  projectMembers: ProjectMember[];
   dashboard: DashboardStats | null;
   error: string;
   ready: boolean;
@@ -81,6 +86,7 @@ type ProviderProfileDraft = {
   apiKey: string;
   baseUrl: string;
   modelName: string;
+  adapterKind: string;
   capabilities: string;
   quality: string;
   outputFormat: string;
@@ -103,6 +109,49 @@ type UserDraft = {
   isActive: boolean;
 };
 
+type DiscoveredModelAssignment = {
+  generate: boolean;
+  chat: boolean;
+};
+
+type ModelFilterState = {
+  search: string;
+  capability: string;
+  adapterKind: string;
+  status: "all" | "enabled" | "disabled";
+};
+
+type SupportLevel = "ready" | "partial" | "planned";
+
+type CapabilityDefinition = {
+  key: string;
+  label: string;
+  description: string;
+  support: SupportLevel;
+};
+
+type AdapterOption = {
+  key: string;
+  label: string;
+  support: SupportLevel;
+  note: string;
+};
+
+type ProviderPreset = {
+  key: string;
+  label: string;
+  adapterKind: string;
+  baseUrl: string;
+  recommendedCapabilities: string[];
+  pricingUnit: string;
+  quality?: string;
+  outputFormat?: string;
+  referenceMode?: string;
+  referenceCaptionModel?: string;
+  support: "ready" | "partial" | "planned";
+  note: string;
+};
+
 const IMAGE_WORKFLOW_KEY = "image-generate";
 
 const initialState: LoadState = {
@@ -114,6 +163,7 @@ const initialState: LoadState = {
   tasks: [],
   assets: [],
   users: [],
+  projectMembers: [],
   dashboard: null,
   error: "",
   ready: false
@@ -124,6 +174,7 @@ const defaultProviderProfileDraft: ProviderProfileDraft = {
   apiKey: "",
   baseUrl: "",
   modelName: "",
+  adapterKind: "openai_compatible",
   capabilities: "image.generate",
   quality: "medium",
   outputFormat: "png",
@@ -154,6 +205,66 @@ const stylePresets = [
 ];
 
 const aspectRatioOptions = ["智能", "21:9", "16:9", "3:2", "4:3", "1:1", "3:4", "2:3", "9:16"];
+
+const capabilityDefinitions: CapabilityDefinition[] = [
+  {
+    key: "chat.completions",
+    label: "Chat",
+    description: "分配到 Chat 页面",
+    support: "ready"
+  },
+  {
+    key: "image.generate",
+    label: "生成页",
+    description: "分配到图像生成页面",
+    support: "ready"
+  },
+  {
+    key: "image.edit",
+    label: "图像编辑",
+    description: "保留图像编辑能力",
+    support: "ready"
+  },
+  {
+    key: "video.generate",
+    label: "视频生成",
+    description: "用于 Kling / 即梦 / Seedance 等视频链路",
+    support: "partial"
+  }
+];
+
+const adapterOptions: AdapterOption[] = [
+  {
+    key: "openai_compatible",
+    label: "OpenAI Compatible",
+    support: "ready",
+    note: "当前后端已支持这一适配器的 Chat、图像生成和图像编辑。"
+  },
+  {
+    key: "anthropic_native",
+    label: "Anthropic Native",
+    support: "planned",
+    note: "可以先保存配置，但后端还没有 Claude 原生 adapter。"
+  },
+  {
+    key: "kling_native",
+    label: "Kling Native",
+    support: "partial",
+    note: "适合快手 Kling 系列；当前仅保留配置结构，视频执行 adapter 待补。"
+  },
+  {
+    key: "jimeng_native",
+    label: "即梦 / Seedance Native",
+    support: "partial",
+    note: "适合即梦 / Seedance 视频链路；当前仅能配置，后端尚未执行。"
+  },
+  {
+    key: "custom_http",
+    label: "Custom HTTP",
+    support: "planned",
+    note: "用于后续接入非标准厂商接口，当前前后端都还没有通用执行器。"
+  }
+];
 
 const resolutionOptions = [
   { id: "2k", label: "高清 2K" },
@@ -195,8 +306,97 @@ const featuredAtmosphereTemplates: PromptTemplate[] = [
     aspectRatio: "16:9",
     resolution: "4k",
     deliverable: "景观专用 / 层次与通透增强",
-    notes: "面向景观效果图，重点强化植物层次、空间通透感、地面材质和公共活动氛围。"
+  notes: "面向景观效果图，重点强化植物层次、空间通透感、地面材质和公共活动氛围。"
   }
+];
+
+const providerPresets: ProviderPreset[] = [
+  {
+    key: "deepseek-chat",
+    label: "DeepSeek / Chat",
+    adapterKind: "openai_compatible",
+    baseUrl: "https://api.deepseek.com/v1",
+    recommendedCapabilities: ["chat.completions"],
+    pricingUnit: "per_request",
+    support: "ready",
+    note: "适合 DeepSeek-R1、V3 等聊天模型，当前后端可直接走 OpenAI-compatible Chat。",
+  },
+  {
+    key: "glm-chat",
+    label: "GLM / Chat",
+    adapterKind: "openai_compatible",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    recommendedCapabilities: ["chat.completions"],
+    pricingUnit: "per_request",
+    support: "ready",
+    note: "适合 GLM-4.x / GLM-5 系列，直接分配到 Chat 页面。",
+  },
+  {
+    key: "qwen-chat",
+    label: "Qwen / Chat",
+    adapterKind: "openai_compatible",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    recommendedCapabilities: ["chat.completions"],
+    pricingUnit: "per_request",
+    support: "ready",
+    note: "适合通义千问聊天模型；如果是视觉/推理模型，也建议先分配到 Chat。",
+  },
+  {
+    key: "modelscope-image",
+    label: "ModelScope / 图像生成",
+    adapterKind: "openai_compatible",
+    baseUrl: "https://api-inference.modelscope.cn/v1",
+    recommendedCapabilities: ["image.generate"],
+    pricingUnit: "per_image",
+    quality: "medium",
+    outputFormat: "png",
+    referenceMode: "caption_prompt",
+    referenceCaptionModel: "Qwen/Qwen3-VL-8B-Instruct",
+    support: "ready",
+    note: "适合 Qwen-Image、Z-Image、FLUX 类图像模型，当前生成页可直接使用。",
+  },
+  {
+    key: "openai-image",
+    label: "OpenAI / 图像",
+    adapterKind: "openai_compatible",
+    baseUrl: "https://api.openai.com/v1",
+    recommendedCapabilities: ["image.generate", "image.edit"],
+    pricingUnit: "per_image",
+    quality: "high",
+    outputFormat: "png",
+    support: "ready",
+    note: "适合 GPT-Image 系列；图像生成与图像编辑都可以通过现有图片链路接入。",
+  },
+  {
+    key: "anthropic-native",
+    label: "Claude / 原生 API",
+    adapterKind: "anthropic_native",
+    baseUrl: "https://api.anthropic.com/v1",
+    recommendedCapabilities: ["chat.completions"],
+    pricingUnit: "per_request",
+    support: "planned",
+    note: "当前页面可配置，但后端还没有原生 Anthropic adapter；需后端补适配后才能真连 Claude。",
+  },
+  {
+    key: "kling-video",
+    label: "Kling / 视频",
+    adapterKind: "kling_native",
+    baseUrl: "https://api.klingai.com",
+    recommendedCapabilities: ["video.generate"],
+    pricingUnit: "per_video",
+    support: "partial",
+    note: "视频能力在数据结构里已预留，但当前任务执行器还没有真实视频 adapter。",
+  },
+  {
+    key: "seedance-video",
+    label: "即梦 / Seedance",
+    adapterKind: "jimeng_native",
+    baseUrl: "https://api.jimeng.ai",
+    recommendedCapabilities: ["video.generate"],
+    pricingUnit: "per_video",
+    support: "partial",
+    note: "适合即梦视频链路；当前只能做配置占位，需后端补视频执行 adapter。",
+  },
 ];
 
 const defaultStudioForm: StudioFormState = {
@@ -296,6 +496,21 @@ function summarizeStoragePath(path: string): string {
   return `...${path.slice(-39)}`;
 }
 
+function truncateText(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength).trimEnd()}…`;
+}
+
+function taskSummary(task: Task, asset?: Asset): string {
+  return asset?.prompt_text ??
+    (task.result["summary"]
+      ? String(task.result["summary"])
+      : task.result["error"]
+        ? String(task.result["error"])
+        : "等待结果返回。");
+}
+
 function buildImagePayload(form: StudioFormState): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     prompt: form.prompt,
@@ -366,6 +581,24 @@ function parseCapabilities(value: string): string[] {
     .split(/[\n,]+/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function formatCapabilities(value: string[]): string {
+  return value.join(", ");
+}
+
+function hasCapability(value: string, capability: string): boolean {
+  return parseCapabilities(value).includes(capability);
+}
+
+function toggleCapability(value: string, capability: string, enabled: boolean): string {
+  const capabilities = new Set(parseCapabilities(value));
+  if (enabled) {
+    capabilities.add(capability);
+  } else {
+    capabilities.delete(capability);
+  }
+  return formatCapabilities(Array.from(capabilities));
 }
 
 function parseProjectCodes(value: string): string[] {
@@ -593,9 +826,10 @@ function metricQuota(item: Record<string, unknown>): string {
 function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfileDraft {
   return {
     providerName: profile.provider_name,
-    apiKey: "",
+    apiKey: profile.editable_api_key ?? "",
     baseUrl: profile.base_url,
     modelName: profile.model_name,
+    adapterKind: profile.adapter_kind,
     capabilities: profile.capabilities.join(", "),
     quality: profile.quality,
     outputFormat: profile.output_format,
@@ -615,7 +849,7 @@ function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileC
     api_key: draft.apiKey.trim(),
     base_url: draft.baseUrl.trim(),
     model_name: draft.modelName.trim(),
-    adapter_kind: "openai_compatible",
+    adapter_kind: draft.adapterKind.trim() || "openai_compatible",
     capabilities: parseCapabilities(draft.capabilities),
     quality: draft.quality.trim() || "medium",
     output_format: draft.outputFormat.trim() || "png",
@@ -636,6 +870,120 @@ function providerGroupLabel(provider: Provider): string {
   if (name.includes("qwen")) return "魔搭 / Qwen";
   if (name.includes("modelscope")) return "魔搭 / 其他";
   return "其他真实模型";
+}
+
+function modelLooksLikeImageGeneration(modelId: string, ownedBy: string, baseUrl: string): boolean {
+  const text = `${modelId} ${ownedBy} ${baseUrl}`.toLowerCase();
+  const imageKeywords = [
+    "image",
+    "flux",
+    "diffusion",
+    "sdxl",
+    "stable-diffusion",
+    "kolors",
+    "cogview",
+    "recraft",
+    "seedream",
+    "wanx",
+    "mj",
+    "midjourney",
+    "画",
+    "生图",
+    "z-image",
+  ];
+  return imageKeywords.some((keyword) => text.includes(keyword));
+}
+
+function modelLooksLikeImageEdit(modelId: string, ownedBy: string): boolean {
+  const text = `${modelId} ${ownedBy}`.toLowerCase();
+  const editKeywords = ["image-edit", "img-edit", "edit", "inpaint", "outpaint", "img2img"];
+  return editKeywords.some((keyword) => text.includes(keyword));
+}
+
+function guessDiscoveredModelAssignment(
+  modelId: string,
+  ownedBy: string,
+  baseUrl: string
+): DiscoveredModelAssignment {
+  const looksLikeImage = modelLooksLikeImageGeneration(modelId, ownedBy, baseUrl);
+  return looksLikeImage
+    ? { generate: true, chat: false }
+    : { generate: false, chat: true };
+}
+
+function assignmentToCapabilities(
+  modelId: string,
+  ownedBy: string,
+  assignment: DiscoveredModelAssignment
+): string[] {
+  const capabilities: string[] = [];
+  if (assignment.generate) {
+    capabilities.push("image.generate");
+    if (modelLooksLikeImageEdit(modelId, ownedBy)) {
+      capabilities.push("image.edit");
+    }
+  }
+  if (assignment.chat) {
+    capabilities.push("chat.completions");
+  }
+  return capabilities;
+}
+
+function assignmentLabel(assignment: DiscoveredModelAssignment): string {
+  if (assignment.generate && assignment.chat) return "生成页 + Chat";
+  if (assignment.generate) return "生成页";
+  if (assignment.chat) return "Chat";
+  return "未分配";
+}
+
+function supportLevelLabel(level: SupportLevel): string {
+  if (level === "ready") return "已支持";
+  if (level === "partial") return "待补适配";
+  return "规划中";
+}
+
+function getAdapterOption(adapterKind: string): AdapterOption {
+  return (
+    adapterOptions.find((item) => item.key === adapterKind) ?? {
+      key: adapterKind,
+      label: adapterKind,
+      support: "planned",
+      note: "未知适配器，请先确认后端是否已经实现执行逻辑。"
+    }
+  );
+}
+
+function getCapabilityDefinition(capability: string): CapabilityDefinition {
+  return (
+    capabilityDefinitions.find((item) => item.key === capability) ?? {
+      key: capability,
+      label: capability,
+      description: "自定义能力",
+      support: "planned"
+    }
+  );
+}
+
+function summarizeProfileSupport(adapterKind: string, capabilities: string[]): SupportLevel {
+  const adapter = getAdapterOption(adapterKind);
+  if (adapter.support === "planned") {
+    return "planned";
+  }
+
+  const capabilitySupports = capabilities.map((capability) => getCapabilityDefinition(capability).support);
+  if (capabilitySupports.length === 0) {
+    return adapter.support;
+  }
+
+  if (capabilitySupports.every((level) => level === "ready") && adapter.support === "ready") {
+    return "ready";
+  }
+
+  if (capabilitySupports.some((level) => level === "ready") || capabilitySupports.some((level) => level === "partial")) {
+    return "partial";
+  }
+
+  return adapter.support;
 }
 
 function groupProviders(providers: Provider[]): Array<{ label: string; providers: Provider[] }> {
@@ -676,18 +1024,15 @@ function FeedCard(props: {
   asset?: Asset;
   galleryAssets: Asset[];
   onReuse: () => void;
-  onLike: () => void;
+  onBookmark: () => void;
   onShare: () => void;
+  onDelete: () => void;
   onAssetPreview?: (asset: Asset) => void;
   anchorRef?: RefObject<HTMLElement | null>;
 }) {
-  const summary =
-    props.asset?.prompt_text ??
-    (props.task.result["summary"]
-      ? String(props.task.result["summary"])
-      : props.task.result["error"]
-        ? String(props.task.result["error"])
-        : "等待结果返回。");
+  const summary = taskSummary(props.task, props.asset);
+  const summaryPreview = truncateText(summary, 160);
+  const hasLongSummary = summaryPreview !== summary;
 
   return (
     <article className="feed-card" ref={props.anchorRef}>
@@ -698,7 +1043,13 @@ function FeedCard(props: {
             <strong>{props.task.title}</strong>
             <span className={`status-pill status-${props.task.status}`}>{formatStatus(props.task.status)}</span>
           </div>
-          <p>{summary}</p>
+          <p className="feed-card-summary-preview">{summaryPreview}</p>
+          {hasLongSummary ? (
+            <details className="feed-card-summary-details">
+              <summary>展开完整提示词</summary>
+              <p>{summary}</p>
+            </details>
+          ) : null}
           <div className="feed-card-meta">
             <span>{props.task.project_code}</span>
             <span>{props.task.requested_provider}</span>
@@ -739,11 +1090,14 @@ function FeedCard(props: {
           <button type="button" className="ghost-button" onClick={props.onReuse}>
             再次生成
           </button>
-          <button type="button" className="ghost-button" onClick={props.onLike} disabled={!props.asset}>
-            点赞 {props.asset?.like_count ?? 0}
+          <button type="button" className={`ghost-button${props.asset?.is_bookmarked ? " bookmarked" : ""}`} onClick={props.onBookmark} disabled={!props.asset}>
+            {props.asset?.is_bookmarked ? "★ 已标记" : "☆ 标记"}
           </button>
           <button type="button" className="ghost-button" onClick={props.onShare} disabled={!props.asset}>
             分享 {props.asset?.share_count ?? 0}
+          </button>
+          <button type="button" className="ghost-button danger-text" onClick={props.onDelete}>
+            删除
           </button>
         </div>
         <span className="feed-card-time">{formatDate(props.task.created_at)}</span>
@@ -761,6 +1115,23 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [studioForm, setStudioForm] = useState<StudioFormState>(defaultStudioForm);
+  const [studioTab, setStudioTab] = useState<"generate" | "inspiration" | "chat">("generate");
+  const [inspirationPosts, setInspirationPosts] = useState<InspirationPost[]>([]);
+  const [inspirationCategory, setInspirationCategory] = useState("全部");
+  const [inspirationLightbox, setInspirationLightbox] = useState<InspirationPost | null>(null);
+  const [importDialog, setImportDialog] = useState<{ open: boolean; url: string; loading: boolean; images: string[]; selectedImage: string; title: string; category: string; tags: string; error: string; manualMode: boolean }>({ open: false, url: "", loading: false, images: [], selectedImage: "", title: "", category: "建筑", tags: "", error: "", manualMode: false });
+  const [inspirationEdit, setInspirationEdit] = useState<{ postId: number; title: string; image_path: string; source_url: string } | null>(null);
+  // Chat state
+  const [chatConversations, setChatConversations] = useState<{ id: number; title: string; model_provider_id: number | null; created_at: string; updated_at: string }[]>([]);
+  const [activeChatId, setActiveChatId] = useState<number | null>(null);
+  const [chatMessages, setChatMessages] = useState<{ id?: number; role: string; content: string; created_at?: string }[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatModels, setChatModels] = useState<{ provider_id: number; provider_name: string; model_name: string; base_url: string }[]>([]);
+  const [selectedChatModel, setSelectedChatModel] = useState<number | null>(() => {
+    const saved = localStorage.getItem("qmdh_chat_model");
+    return saved ? parseInt(saved, 10) : null;
+  });
+  const [chatStreaming, setChatStreaming] = useState(false);
   const [filters, setFilters] = useState<FeedFilterState>({
     sort: "oldest",
     status: "all",
@@ -779,9 +1150,37 @@ export default function App() {
   const [providerDraft, setProviderDraft] = useState<ProviderProfileDraft>(defaultProviderProfileDraft);
   const [editingProviderProfileId, setEditingProviderProfileId] = useState<number | null>(null);
   const [savingProviderProfile, setSavingProviderProfile] = useState(false);
+  const [modelFilters, setModelFilters] = useState<ModelFilterState>({
+    search: "",
+    capability: "all",
+    adapterKind: "all",
+    status: "all"
+  });
+  // discover panel state
+  const [discoverPanelOpen, setDiscoverPanelOpen] = useState(false);
+  const [discoverBaseUrl, setDiscoverBaseUrl] = useState("");
+  const [discoverApiKey, setDiscoverApiKey] = useState("");
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [discoverError, setDiscoverError] = useState("");
+  const [discoveredModels, setDiscoveredModels] = useState<DiscoveredModel[]>([]);
+  const [discoveredAssignments, setDiscoveredAssignments] = useState<Record<string, DiscoveredModelAssignment>>({});
+  const [discoverBaseUrlForImport, setDiscoverBaseUrlForImport] = useState("");
+  const [discoverApiKeyForImport, setDiscoverApiKeyForImport] = useState("");
+  const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
+  const [importingModels, setImportingModels] = useState(false);
+  const [importResult, setImportResult] = useState<{ created: string[]; skipped: string[] } | null>(null);
   const [userDraft, setUserDraft] = useState<UserDraft>(defaultUserDraft);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [savingUser, setSavingUser] = useState(false);
+  const [showMemberEditor, setShowMemberEditor] = useState(false);
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
+  const [memberDraftIds, setMemberDraftIds] = useState<Set<number>>(new Set());
+  const [allUsersBrief, setAllUsersBrief] = useState<{ id: number; name: string; display_name: string; role: string; is_active: boolean }[]>([]);
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectCode, setNewProjectCode] = useState("");
+  const [renamingProjectCode, setRenamingProjectCode] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [selectedAdminProjectCode, setSelectedAdminProjectCode] = useState("");
   const [dashboardStatsDays, setDashboardStatsDays] = useState(30);
   const [galleryPreview, setGalleryPreview] = useState<{ task: Task; asset: Asset } | null>(null);
@@ -802,7 +1201,7 @@ export default function App() {
     try {
       const shouldLoadAdminData = activeView !== "studio";
       const shouldLoadProviderProfiles = activeView === "models" || activeView === "settings";
-      const shouldLoadUsers = activeView === "users" || activeView === "settings";
+      const shouldLoadUsers = (activeView === "users" || activeView === "settings") && canManageUsers(currentUser);
       const shouldLoadDashboard = activeView === "dashboard" || activeView === "projects" || activeView === "settings";
       const [health, projects, providers, providerProfiles, workflows, tasks, assets, templates, users, dashboard] = await Promise.all([
         api.health(),
@@ -828,6 +1227,7 @@ export default function App() {
         tasks,
         assets,
         users,
+        projectMembers: state.projectMembers,
         dashboard,
         error: "",
         ready: true
@@ -973,8 +1373,7 @@ export default function App() {
       : null;
   const hasProjectHistory = imageTasks.length > 0;
   const hasFilteredHistory = filteredTasks.length > 0;
-  const showCenteredComposer = !hasProjectHistory;
-  const isStudioDockLayout = activeView === "studio" && hasProjectHistory;
+  const isStudioDockLayout = activeView === "studio" && studioTab === "generate";
   const activeTemplate =
     [...featuredAtmosphereTemplates, ...customTemplates].find(
       (template) => template.title === studioForm.title && template.prompt === studioForm.prompt
@@ -1036,6 +1435,12 @@ export default function App() {
       projectCode: project.code,
       classification: project.classification
     }));
+    // Load project members
+    api.projectMembers(project.code).then((members) => {
+      setState((current) => ({ ...current, projectMembers: members }));
+    }).catch(() => {
+      setState((current) => ({ ...current, projectMembers: [] }));
+    });
   }
 
   function clearReferenceUpload() {
@@ -1268,6 +1673,20 @@ export default function App() {
     setProviderDraft(defaultProviderProfileDraft);
   }
 
+  function applyProviderPreset(preset: ProviderPreset) {
+    setProviderDraft((current) => ({
+      ...current,
+      adapterKind: preset.adapterKind,
+      baseUrl: preset.baseUrl,
+      capabilities: formatCapabilities(preset.recommendedCapabilities),
+      pricingUnit: preset.pricingUnit,
+      quality: preset.quality ?? current.quality,
+      outputFormat: preset.outputFormat ?? current.outputFormat,
+      referenceMode: preset.referenceMode ?? current.referenceMode,
+      referenceCaptionModel: preset.referenceCaptionModel ?? current.referenceCaptionModel
+    }));
+  }
+
   function handleEditProviderProfile(profile: ProviderProfileRecord) {
     setEditingProviderProfileId(profile.id);
     setProviderDraft(toProviderProfileDraft(profile));
@@ -1358,6 +1777,104 @@ export default function App() {
     }
   }
 
+  async function handleDiscoverModels(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setDiscoverError("");
+    setDiscoveredModels([]);
+    setDiscoveredAssignments({});
+    setSelectedModelIds(new Set());
+    setImportResult(null);
+    setDiscoverLoading(true);
+    try {
+      const result = await api.discoverProviderModels(discoverBaseUrl.trim(), discoverApiKey.trim());
+      setDiscoveredModels(result.models);
+      setDiscoveredAssignments(
+        Object.fromEntries(
+          result.models.map((model) => [
+            model.model_id,
+            guessDiscoveredModelAssignment(model.model_id, model.owned_by, result.base_url),
+          ])
+        )
+      );
+      setDiscoverBaseUrlForImport(result.base_url);
+      setDiscoverApiKeyForImport(discoverApiKey.trim());
+      // pre-select models that don't already exist
+      setSelectedModelIds(new Set(result.models.filter((m) => !m.already_exists).map((m) => m.model_id)));
+    } catch (error) {
+      setDiscoverError(error instanceof Error ? error.message : "探测失败");
+    } finally {
+      setDiscoverLoading(false);
+    }
+  }
+
+  function toggleModelSelection(modelId: string) {
+    setSelectedModelIds((current) => {
+      const next = new Set(current);
+      if (next.has(modelId)) {
+        next.delete(modelId);
+      } else {
+        next.add(modelId);
+      }
+      return next;
+    });
+  }
+
+  function updateDiscoveredAssignment(modelId: string, patch: Partial<DiscoveredModelAssignment>) {
+    setDiscoveredAssignments((current) => ({
+      ...current,
+      [modelId]: {
+        ...(current[modelId] ?? { generate: false, chat: false }),
+        ...patch,
+      },
+    }));
+  }
+
+  function buildProviderName(baseUrl: string, modelId: string): string {
+    // derive a safe provider_name from model_id: replace / and spaces with _
+    const slug = modelId.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "").toLowerCase();
+    const isModelscope = baseUrl.includes("modelscope.cn");
+    return isModelscope ? `ms_${slug}` : slug;
+  }
+
+  async function handleBulkImport() {
+    if (selectedModelIds.size === 0) return;
+    setImportingModels(true);
+    setImportResult(null);
+    try {
+      const items: ProviderBulkImportItem[] = discoveredModels
+        .filter((m) => selectedModelIds.has(m.model_id))
+        .map((m) => {
+          const assignment = discoveredAssignments[m.model_id] ?? { generate: false, chat: false };
+          return {
+            model_id: m.model_id,
+            provider_name: buildProviderName(discoverBaseUrlForImport, m.model_id),
+            capabilities: assignmentToCapabilities(m.model_id, m.owned_by, assignment),
+            adapter_kind: "openai_compatible",
+            reference_mode:
+              assignment.generate && discoverBaseUrlForImport.includes("modelscope.cn") ? "caption_prompt" : "disabled",
+          };
+        });
+      const unassigned = items.filter((item) => item.capabilities.length === 0).map((item) => item.model_id);
+      if (unassigned.length > 0) {
+        setDiscoverError(`以下模型尚未分配到生成页或 Chat：${unassigned.join(", ")}`);
+        setImportingModels(false);
+        return;
+      }
+      const result = await api.bulkImportProviderProfiles({
+        base_url: discoverBaseUrlForImport,
+        api_key: discoverApiKeyForImport,
+        models: items,
+      });
+      setImportResult(result);
+      setSelectedModelIds(new Set());
+      await loadData({ force: true });
+    } catch (error) {
+      setDiscoverError(error instanceof Error ? error.message : "批量导入失败");
+    } finally {
+      setImportingModels(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setActiveComposerMenu(null);
@@ -1393,10 +1910,10 @@ export default function App() {
     }
   }
 
-  async function handleGalleryAction(action: "like" | "share", assetId: number) {
+  async function handleGalleryAction(action: "bookmark" | "share", assetId: number) {
     try {
-      if (action === "like") {
-        await api.likeAsset(assetId);
+      if (action === "bookmark") {
+        await api.bookmarkAsset(assetId);
       } else {
         await api.shareAsset(assetId);
       }
@@ -1541,6 +2058,29 @@ export default function App() {
   const adminUsers = state.users.filter((user) => ["owner", "admin"].includes(user.role));
   const enabledProviderProfiles = state.providerProfiles.filter((profile) => profile.enabled);
   const disabledProviderProfiles = state.providerProfiles.filter((profile) => !profile.enabled);
+  const isChatStudioLayout = activeView === "studio" && studioTab === "chat";
+  const filteredProviderProfiles = state.providerProfiles.filter((profile) => {
+    const searchText = `${profile.provider_name} ${profile.model_name}`.toLowerCase();
+    const searchMatches = !modelFilters.search.trim() || searchText.includes(modelFilters.search.trim().toLowerCase());
+    const capabilityMatches =
+      modelFilters.capability === "all" || profile.capabilities.includes(modelFilters.capability);
+    const adapterMatches =
+      modelFilters.adapterKind === "all" || profile.adapter_kind === modelFilters.adapterKind;
+    const statusMatches =
+      modelFilters.status === "all" ||
+      (modelFilters.status === "enabled" ? profile.enabled : !profile.enabled);
+    return searchMatches && capabilityMatches && adapterMatches && statusMatches;
+  });
+  const chatProviderProfileCount = state.providerProfiles.filter((profile) => profile.capabilities.includes("chat.completions")).length;
+  const imageProviderProfileCount = state.providerProfiles.filter((profile) =>
+    profile.capabilities.some((capability) => capability === "image.generate" || capability === "image.edit")
+  ).length;
+  const experimentalProviderProfileCount = state.providerProfiles.filter((profile) => {
+    const support = summarizeProfileSupport(profile.adapter_kind, profile.capabilities);
+    return support !== "ready" || profile.capabilities.includes("video.generate");
+  }).length;
+  const activeProviderSupport = summarizeProfileSupport(providerDraft.adapterKind, parseCapabilities(providerDraft.capabilities));
+  const activeAdapterOption = getAdapterOption(providerDraft.adapterKind);
   const selectedAdminProject =
     state.projects.find((project) => project.code === selectedAdminProjectCode) ?? state.projects[0] ?? null;
   const selectedAdminProjectTasks = selectedAdminProject
@@ -1551,7 +2091,17 @@ export default function App() {
   const selectedAdminProjectSuccesses = selectedAdminProjectTasks.filter((task) => task.status === "completed").length;
 
   return (
-    <div className={isAdminView ? "studio-shell admin-shell" : "studio-shell"}>
+    <div
+      className={
+        isAdminView
+          ? "studio-shell admin-shell"
+          : studioTab === "inspiration"
+            ? "studio-shell inspiration-shell"
+            : isChatStudioLayout
+              ? "studio-shell chat-shell"
+              : "studio-shell"
+      }
+    >
       <aside className="global-rail">
         <div className="rail-logo">Q</div>
         <nav className="rail-nav">
@@ -1600,14 +2150,21 @@ export default function App() {
             </>
           ) : (
             <>
-              <button type="button" className="rail-item">
+              <button type="button" className={studioTab === "inspiration" ? "rail-item active" : "rail-item"} onClick={() => {
+                setStudioTab("inspiration");
+                api.inspiration().then(setInspirationPosts).catch(() => {});
+              }}>
                 <span>灵感</span>
               </button>
-              <button type="button" className="rail-item active">
+              <button type="button" className={studioTab === "generate" ? "rail-item active" : "rail-item"} onClick={() => setStudioTab("generate")}>
                 <span>生成</span>
               </button>
-              <button type="button" className="rail-item">
-                <span>画布</span>
+              <button type="button" className={studioTab === "chat" ? "rail-item active" : "rail-item"} onClick={() => {
+                setStudioTab("chat");
+                api.getChatModels().then(setChatModels).catch(() => {});
+                api.getChatConversations().then(setChatConversations).catch(() => {});
+              }}>
+                <span>Chat</span>
               </button>
             </>
           )}
@@ -1640,7 +2197,7 @@ export default function App() {
         </div>
       </aside>
 
-      {activeView === "studio" ? (
+      {activeView === "studio" && studioTab === "generate" ? (
         <aside className="workspace-pane">
         <div className="workspace-header">
           <div>
@@ -1650,26 +2207,258 @@ export default function App() {
           </div>
         </div>
 
-        <button type="button" className="workspace-primary" onClick={handleResetComposer}>
-          新对话
+        <button type="button" className="workspace-primary" onClick={() => setShowNewProjectForm(true)}>
+          + 新项目
         </button>
+
+        {showNewProjectForm ? (
+          <div className="new-project-form">
+            <input
+              type="text"
+              placeholder="项目名称"
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              className="member-search-input"
+            />
+            <input
+              type="text"
+              placeholder="项目代码（大写英文+数字）"
+              value={newProjectCode}
+              onChange={(e) => setNewProjectCode(e.target.value.toUpperCase())}
+              className="member-search-input"
+            />
+            <div className="new-project-actions">
+              <button type="button" className="ghost-button" onClick={() => { setShowNewProjectForm(false); setNewProjectName(""); setNewProjectCode(""); }}>取消</button>
+              <button
+                type="button"
+                className="workspace-primary member-save-btn"
+                disabled={!newProjectName.trim() || !newProjectCode.trim()}
+                onClick={async () => {
+                  try {
+                    await api.createProject(newProjectName.trim(), newProjectCode.trim());
+                    setShowNewProjectForm(false);
+                    setNewProjectName("");
+                    setNewProjectCode("");
+                    await loadData();
+                  } catch (err) {
+                    setState((cur) => ({ ...cur, error: err instanceof Error ? err.message : "创建项目失败" }));
+                  }
+                }}
+              >创建</button>
+            </div>
+          </div>
+        ) : null}
 
         <div className="workspace-list">
           {state.projects.map((project) => (
-            <button
+            <div
               key={project.id}
-              type="button"
               className={project.code === studioForm.projectCode ? "workspace-item active" : "workspace-item"}
-              onClick={() => handleProjectSelect(project)}
             >
-              <strong>{project.name}</strong>
-              <span>
-                {project.code} / {project.classification}
-              </span>
-            </button>
+              {renamingProjectCode === project.code ? (
+                <div className="project-rename-form">
+                  <input
+                    type="text"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    className="member-search-input"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && renameValue.trim()) {
+                        api.renameProject(project.code, renameValue.trim()).then(() => {
+                          setRenamingProjectCode(null);
+                          setRenameValue("");
+                          loadData();
+                        });
+                      } else if (e.key === "Escape") {
+                        setRenamingProjectCode(null);
+                        setRenameValue("");
+                      }
+                    }}
+                  />
+                  <button type="button" className="ghost-button ghost-button-sm" onClick={() => {
+                    if (renameValue.trim()) {
+                      api.renameProject(project.code, renameValue.trim()).then(() => {
+                        setRenamingProjectCode(null);
+                        setRenameValue("");
+                        loadData();
+                      });
+                    }
+                  }}>✓</button>
+                  <button type="button" className="ghost-button ghost-button-sm" onClick={() => { setRenamingProjectCode(null); setRenameValue(""); }}>✕</button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="workspace-item-btn"
+                  onClick={() => handleProjectSelect(project)}
+                >
+                  <strong>{project.name}</strong>
+                  <span>{project.code} / {project.classification}</span>
+                </button>
+              )}
+              {renamingProjectCode !== project.code && (canManageUsers(currentUser) || canUseOpsViews(currentUser)) ? (
+                <button
+                  type="button"
+                  className="project-rename-trigger"
+                  onClick={(e) => { e.stopPropagation(); setRenamingProjectCode(project.code); setRenameValue(project.name); }}
+                  title="重命名"
+                >✎</button>
+              ) : null}
+            </div>
           ))}
         </div>
+
+        {state.projectMembers.length > 0 ? (
+          <div className="workspace-members">
+            <div className="workspace-members-header">
+              <h4>项目成员 ({state.projectMembers.length})</h4>
+              {canManageUsers(currentUser) || canUseOpsViews(currentUser) ? (
+                <button type="button" className="ghost-button ghost-button-sm" onClick={() => {
+                  setMemberDraftIds(new Set(state.projectMembers.filter((m) => !m.is_global).map((m) => m.id)));
+                  setShowMemberEditor(true);
+                  api.usersBrief().then(setAllUsersBrief).catch(() => {});
+                }}>
+                  编辑
+                </button>
+              ) : null}
+            </div>
+            <div className="member-list">
+              {state.projectMembers.map((member) => (
+                <div key={member.id} className="member-chip">
+                  <span className="member-avatar">{member.display_name.slice(0, 1)}</span>
+                  <span className="member-name">{member.display_name}</span>
+                  <em className="member-role">{member.role}</em>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {showMemberEditor ? (
+          <div className="member-editor-overlay">
+            <div className="member-editor-left">
+              <div className="member-editor-header">
+                <h4>全体成员</h4>
+                <button type="button" className="ghost-button" onClick={() => { setShowMemberEditor(false); setMemberSearchQuery(""); }}>✕</button>
+              </div>
+              <input
+                type="text"
+                className="member-search-input"
+                placeholder="搜索用户..."
+                value={memberSearchQuery}
+                onChange={(e) => setMemberSearchQuery(e.target.value)}
+              />
+              <div className="member-editor-list">
+                {allUsersBrief
+                  .filter((u) => u.is_active)
+                  .filter((u) => {
+                    if (!memberSearchQuery.trim()) return true;
+                    const q = memberSearchQuery.toLowerCase();
+                    return u.name.toLowerCase().includes(q) || u.display_name.toLowerCase().includes(q);
+                  })
+                  .map((u) => {
+                    const isGlobal = state.projectMembers.some((m) => m.id === u.id && m.is_global);
+                    const isInDraft = memberDraftIds.has(u.id);
+                    return (
+                      <label key={u.id} className={`member-editor-row${isInDraft || isGlobal ? " is-member" : ""}`}>
+                        <input
+                          type="checkbox"
+                          checked={isInDraft || isGlobal}
+                          disabled={isGlobal}
+                          onChange={() => {
+                            if (isGlobal) return;
+                            setMemberDraftIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(u.id)) {
+                                next.delete(u.id);
+                              } else {
+                                next.add(u.id);
+                              }
+                              return next;
+                            });
+                          }}
+                        />
+                        <span className="member-avatar">{u.display_name.slice(0, 1)}</span>
+                        <span className="member-editor-name">{u.display_name} <small>@{u.name}</small></span>
+                        <em className="member-role">{isGlobal ? "全局" : u.role}</em>
+                      </label>
+                    );
+                  })}
+              </div>
+            </div>
+          </div>
+        ) : null}
         </aside>
+      ) : null}
+
+      {showMemberEditor ? (
+        <div className="member-participants-floating">
+          <h4>项目参与人</h4>
+          <div className="member-selected-list">
+            {state.projectMembers.filter((m) => m.is_global).map((m) => (
+              <div key={m.id} className="member-selected-item">
+                <span className="member-avatar">{m.display_name.slice(0, 1)}</span>
+                <span className="member-selected-name">{m.display_name}</span>
+                <em className="member-role">全局</em>
+              </div>
+            ))}
+            {[...memberDraftIds].map((uid) => {
+              const u = allUsersBrief.find((x) => x.id === uid);
+              if (!u) return null;
+              return (
+                <div key={u.id} className="member-selected-item">
+                  <span className="member-avatar">{u.display_name.slice(0, 1)}</span>
+                  <span className="member-selected-name">{u.display_name}</span>
+                  <button
+                    type="button"
+                    className="member-remove-btn"
+                    onClick={() => {
+                      setMemberDraftIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(uid);
+                        return next;
+                      });
+                    }}
+                  >✕</button>
+                </div>
+              );
+            })}
+          </div>
+          {(() => {
+            const originalIds = new Set(state.projectMembers.filter((m) => !m.is_global).map((m) => m.id));
+            const toAdd = [...memberDraftIds].filter((id) => !originalIds.has(id));
+            const toRemove = [...originalIds].filter((id) => !memberDraftIds.has(id));
+            const hasChanges = toAdd.length > 0 || toRemove.length > 0;
+            return (
+              <div className="member-editor-footer">
+                <span className="member-editor-summary">
+                  {hasChanges
+                    ? `${toAdd.length > 0 ? `+${toAdd.length}` : ""}${toAdd.length > 0 && toRemove.length > 0 ? " " : ""}${toRemove.length > 0 ? `-${toRemove.length}` : ""}`
+                    : "未修改"}
+                </span>
+                <button
+                  type="button"
+                  className="workspace-primary member-save-btn"
+                  disabled={!hasChanges}
+                  onClick={() => {
+                    const projectCode = studioForm.projectCode;
+                    if (!projectCode) return;
+                    api.updateProjectMembers(projectCode, toAdd, toRemove).then((members) => {
+                      setState((cur) => ({ ...cur, projectMembers: members }));
+                      setShowMemberEditor(false);
+                      setMemberSearchQuery("");
+                    }).catch((err) => {
+                      setState((cur) => ({ ...cur, error: err instanceof Error ? err.message : "成员操作失败" }));
+                    });
+                  }}
+                >
+                  保存
+                </button>
+              </div>
+            );
+          })()}
+        </div>
       ) : null}
 
       <main
@@ -1678,9 +2467,9 @@ export default function App() {
             ? "canvas-area model-admin-area"
             : isStudioDockLayout
               ? "canvas-area canvas-studio-layout"
-              : showCenteredComposer
-                ? "canvas-area canvas-area-empty"
-                : "canvas-area"
+              : isChatStudioLayout
+                ? "canvas-area canvas-chat-layout"
+              : "canvas-area"
         }
       >
         {activeView === "users" ? (
@@ -1843,6 +2632,35 @@ export default function App() {
                       <section className="admin-mini-panel">
                         <h3>下一步</h3>
                         <p>{selectedAdminProject.next_action ?? "暂无下一步记录。"}</p>
+                      </section>
+                      <section className="admin-mini-panel admin-project-actions">
+                        <h3>项目操作</h3>
+                        <div className="admin-project-action-row">
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => {
+                              const newName = prompt("输入新的项目名称：", selectedAdminProject.name);
+                              if (newName && newName.trim() && newName.trim() !== selectedAdminProject.name) {
+                                api.renameProject(selectedAdminProject.code, newName.trim()).then(() => loadData());
+                              }
+                            }}
+                          >✎ 重命名</button>
+                          <button
+                            type="button"
+                            className="ghost-button danger-button"
+                            onClick={async () => {
+                              if (!confirm(`确定要删除项目「${selectedAdminProject.name}」(${selectedAdminProject.code})？\n\n此操作不可撤销，项目下的任务将迁移到默认项目。`)) return;
+                              try {
+                                await api.deleteProject(selectedAdminProject.code);
+                                setSelectedAdminProjectCode("");
+                                await loadData();
+                              } catch (err) {
+                                alert(err instanceof Error ? err.message : "删除项目失败");
+                              }
+                            }}
+                          >🗑 删除项目</button>
+                        </div>
                       </section>
                     </>
                   ) : (
@@ -2165,28 +2983,249 @@ export default function App() {
                 <h1>模型管理</h1>
                 <p>管理可用模型，查看使用情况、成本与配置</p>
               </div>
-              <button type="button" className="admin-primary-button" onClick={resetProviderProfileDraft}>+ 添加模型</button>
+              <div className="admin-head-actions">
+                <button type="button" className="ghost-button" onClick={() => { setDiscoverPanelOpen((v) => !v); setDiscoverError(""); setImportResult(null); }}>
+                  {discoverPanelOpen ? "关闭探测" : "🔍 探测模型"}
+                </button>
+                <button type="button" className="admin-primary-button" onClick={resetProviderProfileDraft}>+ 添加模型</button>
+              </div>
             </header>
 
             {state.error ? <div className="floating-error">{state.error}</div> : null}
 
-            <div className="admin-kpi-grid admin-kpi-grid-4">
+            <div className="admin-kpi-grid admin-kpi-grid-4 admin-model-kpi-modern">
+              <article className="admin-kpi-card admin-blue">
+                <span>{"\u6a21\u578b\u603b\u6570"}</span>
+                <strong>{state.providerProfiles.length}</strong>
+                <small>{"\u540e\u53f0\u5df2\u4fdd\u5b58\u914d\u7f6e"}</small>
+                <i>M</i>
+              </article>
+              <article className="admin-kpi-card admin-green">
+                <span>{"Chat \u6a21\u578b"}</span>
+                <strong>{chatProviderProfileCount}</strong>
+                <small>{"\u5206\u914d\u5230 Chat \u9875\u9762"}</small>
+                <i>C</i>
+              </article>
+              <article className="admin-kpi-card admin-orange">
+                <span>{"\u56fe\u50cf\u6a21\u578b"}</span>
+                <strong>{imageProviderProfileCount}</strong>
+                <small>{"\u751f\u6210 / \u7f16\u8f91\u80fd\u529b"}</small>
+                <i>I</i>
+              </article>
+              <article className="admin-kpi-card admin-red">
+                <span>{"\u5b9e\u9a8c / \u5f85\u9002\u914d"}</span>
+                <strong>{experimentalProviderProfileCount}</strong>
+                <small>{"\u89c6\u9891\u6216\u539f\u751f adapter"}</small>
+                <i>!</i>
+              </article>
+            </div>
+
+            <div className="admin-kpi-grid admin-kpi-grid-4 admin-model-kpi-legacy">
               <article className="admin-kpi-card admin-blue"><span>模型总数</span><strong>{state.providerProfiles.length}</strong><small>后台配置</small><i>⬡</i></article>
               <article className="admin-kpi-card admin-green"><span>启用模型</span><strong>{enabledProviderProfiles.length}</strong><small>{formatPercent(percentOf(enabledProviderProfiles.length, state.providerProfiles.length))}</small><i>✓</i></article>
               <article className="admin-kpi-card admin-orange"><span>停用模型</span><strong>{disabledProviderProfiles.length}</strong><small>不参与任务选择</small><i>Ⅱ</i></article>
               <article className="admin-kpi-card admin-red"><span>运行时模型</span><strong>{state.providers.length}</strong><small>当前 provider</small><i>!</i></article>
             </div>
 
-            <div className="admin-split-layout">
+            {discoverPanelOpen ? (
+              <section className="discover-panel">
+                <form className="discover-form" autoComplete="off" onSubmit={(e) => void handleDiscoverModels(e)}>
+                  <h3>探测模型列表</h3>
+                  <p className="discover-hint">填入 Base URL 和 API Key，自动拉取该服务支持的模型列表。探测接口只会返回“这个服务有哪些模型”，不会告诉我们它们属于 Chat 还是图像生成，所以导入前需要在这里明确分配到生成页或 Chat。</p>
+                  <div className="discover-form-row">
+                    <label className="composer-menu-field discover-url-field">
+                      <span>Base URL</span>
+                      <input
+                        value={discoverBaseUrl}
+                        onChange={(e) => setDiscoverBaseUrl(e.target.value)}
+                        placeholder="https://api-inference.modelscope.cn/v1"
+                        autoComplete="off"
+                        required
+                      />
+                    </label>
+                    <label className="composer-menu-field discover-key-field">
+                      <span>API Key</span>
+                      <input
+                        type="password"
+                        value={discoverApiKey}
+                        onChange={(e) => setDiscoverApiKey(e.target.value)}
+                        placeholder="sk-..."
+                        autoComplete="new-password"
+                        required
+                      />
+                    </label>
+                    <button type="submit" className="submit-button discover-submit-btn" disabled={discoverLoading}>
+                      {discoverLoading ? "探测中..." : "探测"}
+                    </button>
+                  </div>
+                  {discoverError ? <p className="discover-error">{discoverError}</p> : null}
+                </form>
+
+                {discoveredModels.length > 0 ? (
+                  <div className="discover-results">
+                    <div className="discover-results-head">
+                      <span>共发现 {discoveredModels.length} 个模型，已选 {selectedModelIds.size} 个</span>
+                      <div className="discover-results-actions">
+                        <button type="button" className="ghost-button" onClick={() => setSelectedModelIds(new Set(discoveredModels.filter((m) => !m.already_exists).map((m) => m.model_id)))}>
+                          全选未导入
+                        </button>
+                        <button type="button" className="ghost-button" onClick={() => setSelectedModelIds(new Set())}>
+                          取消全选
+                        </button>
+                        <button
+                          type="button"
+                          className="submit-button"
+                          disabled={selectedModelIds.size === 0 || importingModels}
+                          onClick={() => void handleBulkImport()}
+                        >
+                          {importingModels ? "导入中..." : `导入选中 (${selectedModelIds.size})`}
+                        </button>
+                      </div>
+                    </div>
+                    {importResult ? (
+                      <p className="discover-import-result">
+                        ✓ 已导入 {importResult.created.length} 个：{importResult.created.join(", ") || "无"}
+                        {importResult.skipped.length > 0 ? `；跳过已存在 ${importResult.skipped.length} 个` : ""}
+                      </p>
+                    ) : null}
+                    <div className="discover-model-list">
+                      {discoveredModels.map((model) => (
+                        <div key={model.model_id} className={`discover-model-item${model.already_exists ? " discover-model-exists" : ""}`}>
+                          <input
+                            type="checkbox"
+                            checked={selectedModelIds.has(model.model_id)}
+                            disabled={model.already_exists}
+                            onChange={() => toggleModelSelection(model.model_id)}
+                          />
+                          <div className="discover-model-main">
+                            <span className="discover-model-id">{model.model_id}</span>
+                            <div className="discover-model-meta">
+                              {model.owned_by ? <span className="discover-model-owner">{model.owned_by}</span> : null}
+                              <span className="discover-model-tag discover-model-tag-assignment">
+                                分配：{assignmentLabel(discoveredAssignments[model.model_id] ?? { generate: false, chat: false })}
+                              </span>
+                              {model.already_exists ? <em className="discover-model-tag">已导入</em> : null}
+                            </div>
+                          </div>
+                          <div className="discover-assignment" onClick={(event) => event.stopPropagation()}>
+                            <label className="discover-assignment-option">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(discoveredAssignments[model.model_id]?.generate)}
+                                disabled={model.already_exists}
+                                onChange={(event) => updateDiscoveredAssignment(model.model_id, { generate: event.target.checked })}
+                              />
+                              <span>生成页</span>
+                            </label>
+                            <label className="discover-assignment-option">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(discoveredAssignments[model.model_id]?.chat)}
+                                disabled={model.already_exists}
+                                onChange={(event) => updateDiscoveredAssignment(model.model_id, { chat: event.target.checked })}
+                              />
+                              <span>Chat</span>
+                            </label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+
+            <div className="admin-split-layout admin-model-layout">
               <section className="admin-table-panel">
-                <div className="admin-toolbar">
+                <div className="admin-toolbar model-toolbar">
+                  <div className="model-toolbar-grid">
+                    <input
+                      aria-label="搜索模型"
+                      placeholder="搜索 provider / model"
+                      value={modelFilters.search}
+                      onChange={(event) => setModelFilters((current) => ({ ...current, search: event.target.value }))}
+                    />
+                    <select
+                      aria-label="页面分配"
+                      value={modelFilters.capability}
+                      onChange={(event) => setModelFilters((current) => ({ ...current, capability: event.target.value }))}
+                    >
+                      <option value="all">全部能力</option>
+                      {capabilityDefinitions.map((definition) => (
+                        <option key={definition.key} value={definition.key}>{definition.label}</option>
+                      ))}
+                    </select>
+                    <select
+                      aria-label="适配器"
+                      value={modelFilters.adapterKind}
+                      onChange={(event) => setModelFilters((current) => ({ ...current, adapterKind: event.target.value }))}
+                    >
+                      <option value="all">全部适配器</option>
+                      {adapterOptions.map((option) => (
+                        <option key={option.key} value={option.key}>{option.label}</option>
+                      ))}
+                    </select>
+                    <select
+                      aria-label="状态"
+                      value={modelFilters.status}
+                      onChange={(event) => setModelFilters((current) => ({ ...current, status: event.target.value as ModelFilterState["status"] }))}
+                    >
+                      <option value="all">全部状态</option>
+                      <option value="enabled">启用</option>
+                      <option value="disabled">停用</option>
+                    </select>
+                    <button type="button" onClick={() => void loadData({ force: true })}>刷新</button>
+                  </div>
                   <input aria-label="搜索模型" placeholder="搜索模型名称或 ID" />
                   <select aria-label="模型类型"><option>全部类型</option><option>图像生成</option><option>图像编辑</option></select>
                   <select aria-label="模型状态"><option>状态</option><option>启用</option><option>停用</option></select>
                   <select aria-label="计费方式"><option>计费方式</option><option>按张图片</option><option>按次请求</option></select>
                   <button type="button" onClick={() => void loadData({ force: true })}>刷新</button>
                 </div>
-                <div className="admin-data-table admin-model-table">
+                <div className="model-table-summary">
+                  <span>筛选后 {filteredProviderProfiles.length} 个配置</span>
+                  <small>这里先管“分配到哪个页面”和“走哪种 adapter”，真实执行范围以右侧支持说明为准。</small>
+                </div>
+                <div className="admin-data-table admin-model-table model-table-modern">
+                  <div className="admin-table-row admin-table-head">
+                    <span>模型名称</span><span>页面分配</span><span>适配器</span><span>计费</span><span>Key</span><span>状态</span><span>操作</span>
+                  </div>
+                  {filteredProviderProfiles.length > 0 ? filteredProviderProfiles.map((profile) => {
+                    const support = summarizeProfileSupport(profile.adapter_kind, profile.capabilities);
+                    const adapter = getAdapterOption(profile.adapter_kind);
+                    return (
+                      <div key={profile.id} className="admin-table-row">
+                        <span><strong>{profile.provider_name}</strong><small>{profile.model_name}</small></span>
+                        <span className="model-capability-list">
+                          {profile.capabilities.map((capability) => {
+                            const definition = getCapabilityDefinition(capability);
+                            return (
+                              <em key={capability} className={`model-capability-chip support-${definition.support}`}>
+                                {definition.label}
+                              </em>
+                            );
+                          })}
+                        </span>
+                        <span>
+                          <strong>{adapter.label}</strong>
+                          <small className={`model-support-badge support-${support}`}>{supportLevelLabel(support)}</small>
+                        </span>
+                        <span><strong>{profile.unit_price} {profile.pricing_currency}</strong><small>{profile.pricing_unit}</small></span>
+                        <span>{profile.masked_api_key || (profile.has_api_key ? "已保存" : "no key")}</span>
+                        <span><em className={`status-pill ${profile.enabled ? "status-completed" : "status-failed"}`}>{profile.enabled ? "启用" : "停用"}</em></span>
+                        <span className="admin-row-actions">
+                          <button type="button" onClick={() => handleEditProviderProfile(profile)}>编辑</button>
+                          <button type="button" onClick={() => handleDeleteProviderProfile(profile.id)}>删除</button>
+                        </span>
+                      </div>
+                    );
+                  }) : (
+                    <div className="template-empty">
+                      {state.providerProfiles.length > 0 ? "当前筛选条件下没有匹配的模型配置。" : "还没有后台模型配置；当前仍会读取 .env 中的 provider。"}
+                    </div>
+                  )}
+                </div>
+                <div className="admin-data-table admin-model-table admin-model-table-legacy">
                   <div className="admin-table-row admin-table-head">
                     <span>模型名称</span><span>状态</span><span>能力</span><span>计费方式</span><span>单价</span><span>Key</span><span>操作</span>
                   </div>
@@ -2208,10 +3247,10 @@ export default function App() {
               </section>
 
               <aside className="admin-detail-panel">
-                <form className="admin-side-form" onSubmit={handleSaveProviderProfile}>
+                <form className="admin-side-form" autoComplete="off" onSubmit={handleSaveProviderProfile}>
                   <div className="admin-detail-head">
                     <h2>{editingProviderProfileId === null ? "新增模型配置" : "编辑模型配置"}</h2>
-                    <p>保存后会立即进入生成模型列表，停用后不会再参与任务选择。</p>
+                    <p>保存后会按 capabilities 出现在对应页面中；停用后不会再参与任务选择。</p>
                   </div>
                   <div className="model-form-grid model-form-grid-tight">
                   <label className="composer-menu-field">
@@ -2221,6 +3260,7 @@ export default function App() {
                       disabled={editingProviderProfileId !== null}
                       onChange={(event) => setProviderDraft((current) => ({ ...current, providerName: event.target.value }))}
                       placeholder="modelscope_arch"
+                      autoComplete="off"
                     />
                   </label>
                   <label className="composer-menu-field">
@@ -2229,31 +3269,105 @@ export default function App() {
                       value={providerDraft.modelName}
                       onChange={(event) => setProviderDraft((current) => ({ ...current, modelName: event.target.value }))}
                       placeholder="Qwen/Qwen-Image"
+                      autoComplete="off"
                     />
+                  </label>
+                  <label className="composer-menu-field composer-menu-field-full">
+                    <span>Adapter</span>
+                    <select
+                      value={providerDraft.adapterKind}
+                      onChange={(event) => setProviderDraft((current) => ({ ...current, adapterKind: event.target.value }))}
+                    >
+                      {adapterOptions.map((option) => (
+                        <option key={option.key} value={option.key}>{option.label}</option>
+                      ))}
+                    </select>
                   </label>
                   <label className="composer-menu-field composer-menu-field-full">
                     <span>Base URL</span>
                     <input
+                      name="provider-base-url"
                       value={providerDraft.baseUrl}
                       onChange={(event) => setProviderDraft((current) => ({ ...current, baseUrl: event.target.value }))}
                       placeholder="https://api-inference.modelscope.cn/v1"
+                      autoComplete="off"
                     />
                   </label>
                   <label className="composer-menu-field composer-menu-field-full">
                     <span>API Key</span>
                     <input
+                      name="provider-api-key"
                       type="password"
                       value={providerDraft.apiKey}
+                      autoComplete="new-password"
                       onChange={(event) => setProviderDraft((current) => ({ ...current, apiKey: event.target.value }))}
                       placeholder={editingProviderProfileId === null ? "新增时必填" : "留空则保留已保存 key"}
                     />
                   </label>
                   <label className="composer-menu-field">
                     <span>Capabilities</span>
+                    <div className="capability-toggle-list">
+                      <label className="capability-toggle">
+                        <input
+                          type="checkbox"
+                          checked={hasCapability(providerDraft.capabilities, "image.generate")}
+                          onChange={(event) =>
+                            setProviderDraft((current) => ({
+                              ...current,
+                              capabilities: toggleCapability(current.capabilities, "image.generate", event.target.checked),
+                            }))
+                          }
+                        />
+                        <span>生成页</span>
+                        <small>`image.generate`</small>
+                      </label>
+                      <label className="capability-toggle">
+                        <input
+                          type="checkbox"
+                          checked={hasCapability(providerDraft.capabilities, "chat.completions")}
+                          onChange={(event) =>
+                            setProviderDraft((current) => ({
+                              ...current,
+                              capabilities: toggleCapability(current.capabilities, "chat.completions", event.target.checked),
+                            }))
+                          }
+                        />
+                        <span>Chat</span>
+                        <small>`chat.completions`</small>
+                      </label>
+                      <label className="capability-toggle">
+                        <input
+                          type="checkbox"
+                          checked={hasCapability(providerDraft.capabilities, "image.edit")}
+                          onChange={(event) =>
+                            setProviderDraft((current) => ({
+                              ...current,
+                              capabilities: toggleCapability(current.capabilities, "image.edit", event.target.checked),
+                            }))
+                          }
+                        />
+                        <span>图像编辑</span>
+                        <small>`image.edit`</small>
+                      </label>
+                      <label className="capability-toggle">
+                        <input
+                          type="checkbox"
+                          checked={hasCapability(providerDraft.capabilities, "video.generate")}
+                          onChange={(event) =>
+                            setProviderDraft((current) => ({
+                              ...current,
+                              capabilities: toggleCapability(current.capabilities, "video.generate", event.target.checked),
+                            }))
+                          }
+                        />
+                        <span>视频生成</span>
+                        <small>`video.generate`</small>
+                      </label>
+                    </div>
                     <input
                       value={providerDraft.capabilities}
                       onChange={(event) => setProviderDraft((current) => ({ ...current, capabilities: event.target.value }))}
-                      placeholder="image.generate"
+                      placeholder="image.generate, chat.completions"
                     />
                   </label>
                   <label className="composer-menu-field">
@@ -2273,6 +3387,7 @@ export default function App() {
                       <option value="png">png</option>
                       <option value="jpeg">jpeg</option>
                       <option value="webp">webp</option>
+                      <option value="mp4">mp4</option>
                     </select>
                   </label>
                   <label className="composer-menu-field">
@@ -2339,6 +3454,11 @@ export default function App() {
                   </label>
                 </div>
 
+                <div className={`model-runtime-note support-${activeProviderSupport}`}>
+                  <strong>{activeAdapterOption.label} · {supportLevelLabel(activeProviderSupport)}</strong>
+                  <p>{activeAdapterOption.note}</p>
+                </div>
+
                 <label className="model-toggle">
                   <input
                     type="checkbox"
@@ -2359,6 +3479,64 @@ export default function App() {
                   ) : null}
                 </div>
               </form>
+              <section className="admin-mini-panel">
+                <div className="admin-detail-head">
+                  <h2>厂商模板</h2>
+                  <p>先套模板，再补 provider 唯一标识、model 名称和 API Key，会比从空白表单开始更稳。</p>
+                </div>
+                <div className="provider-preset-list">
+                  {providerPresets.map((preset) => (
+                    <button
+                      key={preset.key}
+                      type="button"
+                      className="provider-preset-card"
+                      title={`${preset.baseUrl}\n${preset.note}`}
+                      onClick={() => applyProviderPreset(preset)}
+                    >
+                      <div className="provider-preset-head">
+                        <strong>{preset.label}</strong>
+                        <em className={`model-support-badge support-${preset.support}`}>{supportLevelLabel(preset.support)}</em>
+                      </div>
+                      <div className="provider-preset-meta">
+                        <span>{getAdapterOption(preset.adapterKind).label}</span>
+                        <small>{preset.pricingUnit}</small>
+                      </div>
+                      <div className="model-capability-list">
+                        {preset.recommendedCapabilities.map((capability) => (
+                          <em key={capability} className={`model-capability-chip support-${getCapabilityDefinition(capability).support}`}>
+                            {getCapabilityDefinition(capability).label}
+                          </em>
+                        ))}
+                      </div>
+                      <b>点击套用</b>
+                    </button>
+                  ))}
+                </div>
+              </section>
+              <section className="admin-mini-panel">
+                <div className="admin-detail-head">
+                  <h2>当前支持说明</h2>
+                  <p>配置页已经按厂商和能力拆开，但后端真实可运行范围还没有全部铺开。</p>
+                </div>
+                <div className="model-support-list">
+                  <div className="model-support-item">
+                    <strong>DeepSeek / GLM / Qwen / GPT 聊天</strong>
+                    <span>选 OpenAI Compatible + Chat，可直接用于 Chat 页面。</span>
+                  </div>
+                  <div className="model-support-item">
+                    <strong>Qwen-Image / GPT-Image / Nano Banana 类图像模型</strong>
+                    <span>分配到生成页；如支持局部编辑，再额外勾选图像编辑。</span>
+                  </div>
+                  <div className="model-support-item">
+                    <strong>Claude 原生 API</strong>
+                    <span>现在可以先存配置，但后端还没有 Anthropic native adapter。</span>
+                  </div>
+                  <div className="model-support-item">
+                    <strong>Kling / 即梦 / Seedance 视频模型</strong>
+                    <span>先保存为视频能力占位，等后端补视频 adapter 后再真正执行。</span>
+                  </div>
+                </div>
+              </section>
               </aside>
             </div>
           </section>
@@ -2445,6 +3623,326 @@ export default function App() {
           </section>
         ) : (
           <>
+        {studioTab === "inspiration" ? (
+          <section className="inspiration-page">
+            <header className="inspiration-header">
+              <div>
+                <h1>灵感</h1>
+                <p>探索参考案例、材质与构图，激发设计灵感</p>
+              </div>
+              <div className="inspiration-actions">
+                {(canManageUsers(currentUser) || canUseOpsViews(currentUser)) ? (
+                  <button type="button" className="admin-primary-button" onClick={() => {
+                    setImportDialog({ open: true, url: "", loading: false, images: [], selectedImage: "", title: "", category: inspirationCategory !== "全部" ? inspirationCategory : "建筑", tags: "", error: "", manualMode: false });
+                  }}>+ 导入参考</button>
+                ) : null}
+              </div>
+            </header>
+            <nav className="inspiration-categories">
+              {["全部", "建筑", "景观", "室内", "城市", "构图", "材质", "光影", "色彩"].map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  className={inspirationCategory === cat ? "active" : ""}
+                  onClick={() => {
+                    setInspirationCategory(cat);
+                    api.inspiration(cat).then(setInspirationPosts).catch(() => {});
+                  }}
+                >{cat}</button>
+              ))}
+            </nav>
+            <div className="inspiration-grid">
+              {inspirationPosts.length > 0 ? inspirationPosts.map((post) => (
+                <article key={post.id} className="inspiration-card">
+                  <div className="inspiration-card-image" onClick={() => setInspirationLightbox(post)} style={{ cursor: "pointer" }}>
+                    {post.image_path ? (
+                      <img src={post.image_path} alt={post.title} loading="lazy" />
+                    ) : (
+                      <div className="inspiration-card-placeholder" />
+                    )}
+                    {post.category !== "全部" ? <span className="inspiration-card-badge">{post.category}</span> : null}
+                  </div>
+                  <div className="inspiration-card-body">
+                    <h3>{post.title}</h3>
+                    {post.tags.length > 0 ? (
+                      <div className="inspiration-card-tags">
+                        {post.tags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}
+                      </div>
+                    ) : null}
+                    <div className="inspiration-card-meta">
+                      <span className="inspiration-source">
+                        {post.source_url ? (
+                          <a href={post.source_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                            来自 {(() => { try { return new URL(post.source_url).hostname.replace(/^www\./, ""); } catch { return post.source_name || "外部"; } })()}
+                          </a>
+                        ) : (
+                          post.source_type === "user" ? `由 ${post.user_name || "设计师"} 分享` : `来自 ${post.source_name || "外部"}`
+                        )}
+                      </span>
+                      <span className="inspiration-stats">
+                        <button type="button" className="ghost-button" onClick={() => {
+                          api.likeInspiration(post.id).then(() => api.inspiration(inspirationCategory).then(setInspirationPosts));
+                        }}>♡ {post.like_count}</button>
+                        {canUseOpsViews(currentUser) ? (
+                          <button type="button" className="ghost-button" title="编辑" onClick={() => {
+                            setInspirationEdit({ postId: post.id, title: post.title, image_path: post.image_path, source_url: post.source_url });
+                          }}>✎</button>
+                        ) : null}
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              )) : (
+                <div className="inspiration-empty">
+                  <p>暂无灵感内容。管理员可以导入外部参考，设计师可以分享生成成果。</p>
+                </div>
+              )}
+            </div>
+            {/* Lightbox */}
+            {inspirationLightbox ? (
+              <div className="media-lightbox" onClick={() => setInspirationLightbox(null)} onKeyDown={(e) => { if (e.key === "Escape") setInspirationLightbox(null); }} tabIndex={0} ref={(el) => el?.focus()}>
+                <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()}>
+                  <button type="button" className="media-lightbox-close" onClick={() => setInspirationLightbox(null)}>×</button>
+                  <img src={inspirationLightbox.image_path} alt={inspirationLightbox.title} style={{ maxWidth: "90vw", maxHeight: "80vh", objectFit: "contain" }} />
+                  <div style={{ textAlign: "center", marginTop: "12px", color: "#fff" }}>
+                    <h3 style={{ margin: "0 0 8px", fontSize: "18px" }}>{inspirationLightbox.title}</h3>
+                    {inspirationLightbox.source_url ? (
+                      <a href={inspirationLightbox.source_url} target="_blank" rel="noopener noreferrer" style={{ color: "#8bb4ff", fontSize: "14px" }}>
+                        查看原文 →
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {/* Import Dialog */}
+            {importDialog.open ? (
+              <div className="media-lightbox" onClick={() => setImportDialog({ ...importDialog, open: false })}>
+                <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: "12px", padding: "24px", maxWidth: "680px", width: "90vw", maxHeight: "85vh", overflow: "auto", color: "#333" }}>
+                  <h2 style={{ margin: "0 0 16px", fontSize: "18px" }}>导入灵感参考</h2>
+                  <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+                    <input type="text" placeholder="粘贴文章链接（ArchDaily / 古德 / 小红书 / 微信公众号）" value={importDialog.url} onChange={(e) => setImportDialog({ ...importDialog, url: e.target.value, error: "" })} style={{ flex: 1, padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px" }} />
+                    <button type="button" className="admin-primary-button" disabled={importDialog.loading || !importDialog.url.trim()} onClick={async () => {
+                      setImportDialog({ ...importDialog, loading: true, error: "", images: [] });
+                      try {
+                        const result = await api.extractImages(importDialog.url.trim());
+                        setImportDialog({ ...importDialog, loading: false, images: result.images, title: result.title || importDialog.title, selectedImage: result.images[0] || "" });
+                      } catch (err: any) {
+                        setImportDialog({ ...importDialog, loading: false, error: err?.message || "提取失败", manualMode: true });
+                      }
+                    }}>{importDialog.loading ? "提取中..." : "提取图片"}</button>
+                  </div>
+                  {importDialog.error ? <p style={{ color: "#e53e3e", fontSize: "13px", margin: "0 0 12px" }}>{importDialog.error}</p> : null}
+                  {importDialog.images.length > 0 ? (
+                    <div style={{ marginBottom: "16px" }}>
+                      <p style={{ fontSize: "13px", color: "#666", margin: "0 0 8px" }}>选择封面图片（共 {importDialog.images.length} 张）：</p>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "8px", maxHeight: "240px", overflow: "auto" }}>
+                        {importDialog.images.map((img) => (
+                          <div key={img} onClick={() => setImportDialog({ ...importDialog, selectedImage: img })} style={{ border: importDialog.selectedImage === img ? "3px solid #3b82f6" : "2px solid #eee", borderRadius: "8px", overflow: "hidden", cursor: "pointer", aspectRatio: "4/3" }}>
+                            <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {importDialog.manualMode ? (
+                    <div style={{ marginBottom: "12px" }}>
+                      <input type="text" placeholder="手动输入图片 URL" value={importDialog.selectedImage} onChange={(e) => setImportDialog({ ...importDialog, selectedImage: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px" }} />
+                    </div>
+                  ) : null}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+                    <div>
+                      <label style={{ fontSize: "13px", color: "#666" }}>标题</label>
+                      <input type="text" value={importDialog.title} onChange={(e) => setImportDialog({ ...importDialog, title: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "13px", color: "#666" }}>分类</label>
+                      <select value={importDialog.category} onChange={(e) => setImportDialog({ ...importDialog, category: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }}>
+                        {["建筑", "景观", "室内", "城市", "构图", "材质", "光影", "色彩"].map((c) => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: "16px" }}>
+                    <label style={{ fontSize: "13px", color: "#666" }}>标签（逗号分隔）</label>
+                    <input type="text" value={importDialog.tags} onChange={(e) => setImportDialog({ ...importDialog, tags: e.target.value })} placeholder="如：住宅, 日本, 混凝土" style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} />
+                  </div>
+                  <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                    <button type="button" className="ghost-button" onClick={() => setImportDialog({ ...importDialog, open: false })}>取消</button>
+                    <button type="button" className="admin-primary-button" disabled={!importDialog.title.trim() || !importDialog.selectedImage.trim()} onClick={async () => {
+                      const tags = importDialog.tags.split(",").map(t => t.trim()).filter(Boolean);
+                      let sourceName = "";
+                      try { sourceName = new URL(importDialog.url).hostname.replace(/^www\./, ""); } catch {}
+                      await api.createInspiration({
+                        title: importDialog.title.trim(),
+                        image_path: importDialog.selectedImage.trim(),
+                        category: importDialog.category,
+                        source_type: "external",
+                        source_name: sourceName,
+                        source_url: importDialog.url.trim(),
+                        tags
+                      });
+                      setImportDialog({ ...importDialog, open: false });
+                      api.inspiration(inspirationCategory).then(setInspirationPosts);
+                    }}>确认导入</button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {/* Edit Dialog */}
+            {inspirationEdit ? (
+              <div className="media-lightbox" onClick={() => setInspirationEdit(null)}>
+                <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: "12px", padding: "24px", maxWidth: "480px", width: "90vw", color: "#333" }}>
+                  <h2 style={{ margin: "0 0 16px", fontSize: "18px" }}>编辑灵感</h2>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <div>
+                      <label style={{ fontSize: "13px", color: "#666" }}>标题</label>
+                      <input type="text" value={inspirationEdit.title} onChange={(e) => setInspirationEdit({ ...inspirationEdit, title: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "13px", color: "#666" }}>图片 URL</label>
+                      <input type="text" value={inspirationEdit.image_path} onChange={(e) => setInspirationEdit({ ...inspirationEdit, image_path: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "13px", color: "#666" }}>原文链接</label>
+                      <input type="text" value={inspirationEdit.source_url} onChange={(e) => setInspirationEdit({ ...inspirationEdit, source_url: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} />
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", marginTop: "16px" }}>
+                    <button type="button" className="ghost-button" onClick={() => setInspirationEdit(null)}>取消</button>
+                    <button type="button" className="admin-primary-button" onClick={async () => {
+                      await api.updateInspiration(inspirationEdit.postId, { title: inspirationEdit.title, image_path: inspirationEdit.image_path, source_url: inspirationEdit.source_url });
+                      setInspirationEdit(null);
+                      api.inspiration(inspirationCategory).then(setInspirationPosts);
+                    }}>保存</button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : studioTab === "chat" ? (
+          <section className="chat-page">
+            {/* Left sidebar - conversations */}
+            <aside className="chat-sidebar">
+              <button type="button" className="chat-new-btn" onClick={async () => {
+                if (!selectedChatModel) { alert("请先选择模型"); return; }
+                const conv = await api.createChatConversation(selectedChatModel);
+                setChatConversations((prev) => [conv, ...prev]);
+                setActiveChatId(conv.id);
+                setChatMessages([]);
+              }}>
+                <span>＋</span> 新对话
+              </button>
+              <div className="chat-conv-list">
+                {chatConversations.map((conv) => (
+                  <div key={conv.id} className={`chat-conv-item ${activeChatId === conv.id ? "active" : ""}`} onClick={() => { setActiveChatId(conv.id); api.getChatMessages(conv.id).then(setChatMessages).catch(() => {}); }}>
+                    <span className="chat-conv-title">{conv.title}</span>
+                    <button type="button" className="chat-conv-del" onClick={(e) => { e.stopPropagation(); api.deleteChatConversation(conv.id).then(() => { setChatConversations((prev) => prev.filter((c) => c.id !== conv.id)); if (activeChatId === conv.id) { setActiveChatId(null); setChatMessages([]); } }); }}>×</button>
+                  </div>
+                ))}
+              </div>
+            </aside>
+            {/* Main chat area */}
+            <div className="chat-main">
+              {/* Top bar with model selector */}
+              <header className="chat-topbar">
+                <select className="chat-model-select" value={selectedChatModel || ""} onChange={(e) => { const v = parseInt(e.target.value, 10); setSelectedChatModel(v); localStorage.setItem("qmdh_chat_model", String(v)); }}>
+                  <option value="" disabled>选择模型</option>
+                  {chatModels.map((m) => <option key={m.provider_id} value={m.provider_id}>{m.model_name}</option>)}
+                </select>
+                {activeChatId ? <span className="chat-topbar-title">{chatConversations.find((c) => c.id === activeChatId)?.title || ""}</span> : null}
+              </header>
+              {activeChatId ? (
+                <>
+                  {/* Messages */}
+                  <div className="chat-messages" ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}>
+                    {chatMessages.map((msg, i) => (
+                      <div key={msg.id || i} className={`chat-msg ${msg.role}`}>
+                        {msg.role === "assistant" ? <div className="chat-msg-avatar">AI</div> : null}
+                        <div className="chat-msg-bubble">
+                          <div className="chat-msg-content">{msg.content || (chatStreaming && i === chatMessages.length - 1 ? "●" : "")}</div>
+                        </div>
+                        {msg.role === "user" ? <div className="chat-msg-avatar chat-msg-avatar-user">{(currentUser?.display_name || "U").slice(0, 1)}</div> : null}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Input area */}
+                  <div className="chat-input-area">
+                    <div className="chat-input-box">
+                      <textarea className="chat-textarea" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); document.getElementById("chat-send-btn")?.click(); } }} placeholder="和我聊聊天吧" rows={1} disabled={chatStreaming} />
+                      <button id="chat-send-btn" type="button" className="chat-send-btn" disabled={chatStreaming || !chatInput.trim()} onClick={async () => {
+                        if (!chatInput.trim() || !activeChatId) return;
+                        const content = chatInput.trim();
+                        setChatInput("");
+                        setChatMessages((prev) => [...prev, { role: "user", content }]);
+                        setChatStreaming(true);
+                        setChatMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+                        try {
+                          const token = localStorage.getItem("qmdh_token") || "";
+                          const resp = await fetch(`/api/v1/chat/conversations/${activeChatId}/messages`, {
+                            method: "POST",
+                            headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                            body: JSON.stringify({ content }),
+                          });
+                          if (!resp.ok) { throw new Error("请求失败"); }
+                          const reader = resp.body!.getReader();
+                          const decoder = new TextDecoder();
+                          let buffer = "";
+                          while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            buffer += decoder.decode(value, { stream: true });
+                            const lines = buffer.split("\n");
+                            buffer = lines.pop() || "";
+                            for (const line of lines) {
+                              if (!line.startsWith("data: ")) continue;
+                              const data = line.slice(6);
+                              if (data === "[DONE]") break;
+                              try {
+                                const parsed = JSON.parse(data);
+                                if (parsed.delta) {
+                                  setChatMessages((prev) => {
+                                    const updated = [...prev];
+                                    const last = updated[updated.length - 1];
+                                    if (last && last.role === "assistant") { updated[updated.length - 1] = { ...last, content: last.content + parsed.delta }; }
+                                    return updated;
+                                  });
+                                }
+                                if (parsed.error) {
+                                  setChatMessages((prev) => { const updated = [...prev]; updated[updated.length - 1] = { role: "assistant", content: `⚠️ ${parsed.error}` }; return updated; });
+                                }
+                              } catch {}
+                            }
+                          }
+                        } catch (err: any) {
+                          setChatMessages((prev) => { const updated = [...prev]; updated[updated.length - 1] = { role: "assistant", content: `⚠️ 请求失败: ${err?.message || "未知错误"}` }; return updated; });
+                        }
+                        setChatStreaming(false);
+                        api.getChatConversations().then(setChatConversations).catch(() => {});
+                      }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="chat-empty">
+                  {chatModels.length === 0 ? (
+                    <div className="chat-empty-inner">
+                      <h2>暂无可用模型</h2>
+                      <p>请在后台模型管理中添加 capabilities 包含 "chat.completions" 的模型</p>
+                    </div>
+                  ) : (
+                    <div className="chat-empty-inner">
+                      <h2>QMDH Chat</h2>
+                      <p>选择模型，创建新对话开始聊天</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+        ) : (
+        <>
         <div className={isStudioDockLayout ? "studio-scroll-pane" : "studio-scroll-fallback"}>
         {hasProjectHistory ? (
           <header className="canvas-topbar canvas-topbar-history">
@@ -2492,7 +3990,7 @@ export default function App() {
 
         {state.error ? <div className="floating-error">{state.error}</div> : null}
 
-        {hasProjectHistory ? (
+        {activeView === "studio" && studioTab === "generate" && hasProjectHistory ? (
           <section className="feed-stream">
             {hasFilteredHistory ? (
               filteredTasks.map((task) => {
@@ -2507,8 +4005,17 @@ export default function App() {
                     asset={linkedAsset}
                     galleryAssets={galleryAssets}
                     onReuse={() => handleReuseTask(task, linkedAsset ?? galleryAssets[0])}
-                    onLike={() => (linkedAsset ? void handleGalleryAction("like", linkedAsset.id) : undefined)}
+                    onBookmark={() => (linkedAsset ? void handleGalleryAction("bookmark", linkedAsset.id) : undefined)}
                     onShare={() => (linkedAsset ? void handleGalleryAction("share", linkedAsset.id) : undefined)}
+                    onDelete={async () => {
+                      if (!confirm("确定删除这条生成记录？")) return;
+                      try {
+                        await api.deleteTask(task.id);
+                        await loadData();
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : "删除失败");
+                      }
+                    }}
                     onAssetPreview={(asset) => {
                       if (getRenderableUrl(asset)) {
                         setGalleryPreview({ task, asset });
@@ -2521,27 +4028,28 @@ export default function App() {
                 );
               })
             ) : (
-              <section className="empty-stage empty-stage-filtered">
+              <section className="empty-stage empty-stage-inline empty-stage-filtered">
                 <div className="empty-stage-copy">
-                  <p className="canvas-kicker">QMDH / IMAGE STUDIO</p>
+                  <p className="canvas-kicker">当前筛选</p>
                   <h1>没有匹配的生成记录</h1>
                   <p>调整时间、模型或状态筛选后，可以继续查看这个项目的历史任务。</p>
                 </div>
               </section>
             )}
           </section>
-        ) : (
-          <section className="empty-stage">
+        ) : activeView === "studio" && studioTab === "generate" ? (
+          <section className="empty-stage empty-stage-inline">
             <div className="empty-stage-copy">
-              <p className="canvas-kicker">QMDH / IMAGE STUDIO</p>
-              <h1>你好，想创作什么？</h1>
-              <p>上传参考图，输入主体、场景和氛围方向，生成记录会在这里按时间沉淀下来。</p>
+              <p className="canvas-kicker">当前项目</p>
+              <h1>{workspaceName} 还没有生成记录</h1>
+              <p>先从下方输入区发起第一轮生成，结果会在这里按时间沉淀下来。</p>
             </div>
           </section>
-        )}
+        ) : null}
         </div>
 
-        <form className={showCenteredComposer ? "composer-dock composer-dock-centered" : "composer-dock"} onSubmit={handleSubmit}>
+        {activeView === "studio" && studioTab === "generate" ? (
+        <form className="composer-dock" onSubmit={handleSubmit}>
           <div className="composer-leading">
             <div>
               <span className="composer-label">当前创作</span>
@@ -2817,6 +4325,9 @@ export default function App() {
             </div>
           </div>
         </form>
+        ) : null}
+        </>
+        )}
           </>
         )}
       </main>

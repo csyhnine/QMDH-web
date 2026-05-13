@@ -142,3 +142,39 @@ def create_task(
 
     db.refresh(task)
     return _to_task_out(task)
+
+
+@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+):
+    """Delete a task and its associated assets. Only task owner or ops+ can delete."""
+    from fastapi import Response
+    from app.models import Asset, ProviderCall
+
+    task = db.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    ensure_project_access(auth_user, task.project.code)
+
+    # Permission check: must be task owner or ops+
+    is_owner = (auth_user.user_id and task.user_id == auth_user.user_id) or (auth_user.name == task.user.name)
+    is_ops = auth_user.role in ("owner", "admin", "ops")
+    if not is_owner and not is_ops:
+        raise HTTPException(status_code=403, detail="Only task owner or ops+ can delete tasks")
+
+    # Delete associated provider calls
+    calls = db.scalars(select(ProviderCall).where(ProviderCall.task_id == task_id)).all()
+    for call in calls:
+        db.delete(call)
+
+    # Delete assets from this task
+    assets = db.scalars(select(Asset).where(Asset.source_task_id == task_id)).all()
+    for asset in assets:
+        db.delete(asset)
+
+    db.delete(task)
+    db.commit()
+    return Response(status_code=204)

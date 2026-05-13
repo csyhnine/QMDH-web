@@ -1,15 +1,26 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import ensure_project_access, get_current_auth_user
+from app.core.auth import ensure_project_access, get_current_auth_user, require_ops_access, require_user_admin
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import Project
-from app.schemas import ProjectOut, ProjectStatusOut
+from app.models import Asset, Project, ProviderCall, Task, User
+from app.schemas import ProjectMemberOut, ProjectOut, ProjectStatusOut
 from app.services.project_status import build_project_status_detail, build_project_status_map
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+
+class ProjectCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+    code: str = Field(min_length=2, max_length=50, pattern=r"^[A-Z0-9_-]+$")
+    classification: str = "B"
+
+
+class ProjectRename(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
 
 
 @router.get("", response_model=list[ProjectOut])
@@ -42,6 +53,90 @@ def list_projects(
     return response
 
 
+@router.post("", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
+def create_project(
+    payload: ProjectCreate,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> dict:
+    """Create a new project. Requires ops access."""
+    require_ops_access(auth_user)
+    existing = db.scalar(select(Project).where(Project.code == payload.code.strip().upper()))
+    if existing:
+        raise HTTPException(status_code=409, detail="项目代码已存在")
+
+    from app.models import DataClassification
+    classification = DataClassification.b
+    if payload.classification.upper() == "A":
+        classification = DataClassification.a
+    elif payload.classification.upper() == "C":
+        classification = DataClassification.c
+
+    project = Project(
+        name=payload.name.strip(),
+        code=payload.code.strip().upper(),
+        classification=classification,
+    )
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+
+    # Add current user to the project
+    if auth_user.user_id:
+        user = db.get(User, auth_user.user_id)
+        if user:
+            codes = list(user.project_codes or [])
+            if "*" not in codes and project.code not in codes:
+                codes.append(project.code)
+                user.project_codes = codes
+                db.commit()
+
+    return {
+        "id": project.id,
+        "name": project.name,
+        "code": project.code,
+        "classification": project.classification,
+        "current_phase": None,
+        "phase_status": None,
+        "last_updated": None,
+        "summary": None,
+        "next_action": None,
+    }
+
+
+@router.patch("/{project_code}", response_model=ProjectOut)
+def rename_project(
+    project_code: str,
+    payload: ProjectRename,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> dict:
+    """Rename a project. Requires ops access."""
+    require_ops_access(auth_user)
+    ensure_project_access(auth_user, project_code)
+    project = db.scalar(select(Project).where(Project.code == project_code))
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project.name = payload.name.strip()
+    db.commit()
+    db.refresh(project)
+
+    status_map = build_project_status_map()
+    summary = status_map.get(project.code, {})
+    return {
+        "id": project.id,
+        "name": project.name,
+        "code": project.code,
+        "classification": project.classification,
+        "current_phase": summary.get("current_phase"),
+        "phase_status": summary.get("phase_status"),
+        "last_updated": summary.get("last_updated"),
+        "summary": summary.get("summary"),
+        "next_action": summary.get("next_action"),
+    }
+
+
 @router.get("/{project_code}/status", response_model=ProjectStatusOut)
 def get_project_status(
     project_code: str,
@@ -52,3 +147,134 @@ def get_project_status(
     if not detail:
         raise HTTPException(status_code=404, detail="Project status not found")
     return detail
+
+
+@router.get("/{project_code}/members", response_model=list[ProjectMemberOut])
+def list_project_members(
+    project_code: str,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> list[ProjectMemberOut]:
+    """Return active users who have access to this project."""
+    ensure_project_access(auth_user, project_code)
+    users = db.scalars(select(User).where(User.is_active.is_(True)).order_by(User.role, User.name)).all()
+    members = []
+    for user in users:
+        codes = user.project_codes or []
+        if "*" in codes or project_code in codes:
+            members.append(
+                ProjectMemberOut(
+                    id=user.id,
+                    name=user.name,
+                    display_name=user.display_name or user.name,
+                    role=user.role,
+                    is_global="*" in codes,
+                )
+            )
+    return members
+
+
+class ProjectMemberUpdate(BaseModel):
+    """Payload to add or remove members from a project."""
+    add_user_ids: list[int] = []
+    remove_user_ids: list[int] = []
+
+
+@router.patch("/{project_code}/members", response_model=list[ProjectMemberOut])
+def update_project_members(
+    project_code: str,
+    payload: ProjectMemberUpdate,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> list[ProjectMemberOut]:
+    """Add or remove members from a project. Requires ops access."""
+    require_ops_access(auth_user)
+    ensure_project_access(auth_user, project_code)
+
+    # Verify project exists
+    project = db.scalar(select(Project).where(Project.code == project_code))
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Add users to project
+    if payload.add_user_ids:
+        users_to_add = db.scalars(
+            select(User).where(User.id.in_(payload.add_user_ids), User.is_active.is_(True))
+        ).all()
+        for user in users_to_add:
+            codes = list(user.project_codes or [])
+            if "*" not in codes and project_code not in codes:
+                codes.append(project_code)
+                user.project_codes = codes
+
+    # Remove users from project
+    if payload.remove_user_ids:
+        users_to_remove = db.scalars(
+            select(User).where(User.id.in_(payload.remove_user_ids))
+        ).all()
+        for user in users_to_remove:
+            codes = list(user.project_codes or [])
+            if project_code in codes:
+                codes.remove(project_code)
+                user.project_codes = codes
+
+    db.commit()
+
+    # Return updated member list
+    all_users = db.scalars(select(User).where(User.is_active.is_(True)).order_by(User.role, User.name)).all()
+    members = []
+    for user in all_users:
+        codes = user.project_codes or []
+        if "*" in codes or project_code in codes:
+            members.append(
+                ProjectMemberOut(
+                    id=user.id,
+                    name=user.name,
+                    display_name=user.display_name or user.name,
+                    role=user.role,
+                    is_global="*" in codes,
+                )
+            )
+    return members
+
+
+@router.delete("/{project_code}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_project(
+    project_code: str,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+):
+    """Delete a project. Requires admin access. Removes project code from all users."""
+    require_user_admin(auth_user)
+    project = db.scalar(select(Project).where(Project.code == project_code))
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Delete tasks belonging to this project (and their provider_calls)
+    tasks = db.scalars(select(Task).where(Task.project_id == project.id)).all()
+    for task in tasks:
+        # Delete associated provider calls first (FK constraint)
+        calls = db.scalars(select(ProviderCall).where(ProviderCall.task_id == task.id)).all()
+        for call in calls:
+            db.delete(call)
+        db.delete(task)
+
+    # Unlink assets
+    assets = db.scalars(select(Asset).where(Asset.project_id == project.id)).all()
+    for asset in assets:
+        asset.project_id = None
+
+    # Flush before deleting the project
+    db.flush()
+
+    # Remove project code from all users' project_codes
+    users = db.scalars(select(User).where(User.is_active.is_(True))).all()
+    for user in users:
+        codes = list(user.project_codes or [])
+        if project_code in codes:
+            codes.remove(project_code)
+            user.project_codes = codes
+
+    db.delete(project)
+    db.commit()
+    return Response(status_code=204)

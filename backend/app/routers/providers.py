@@ -1,12 +1,25 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.audit import AuditEventType, write_audit_log
 from app.core.auth import get_current_auth_user, require_ops_access
 from app.core.config import AuthUserProfile
+from app.core.encryption import decrypt_value, encrypt_value
 from app.database import get_db
 from app.models import ProviderProfile
-from app.schemas import ProviderCapability, ProviderProfileCreate, ProviderProfileOut, ProviderProfileUpdate
+from app.schemas import (
+    DiscoveredModel,
+    ProviderBulkImportIn,
+    ProviderBulkImportOut,
+    ProviderCapability,
+    ProviderDiscoverIn,
+    ProviderDiscoverOut,
+    ProviderProfileCreate,
+    ProviderProfileOut,
+    ProviderProfileUpdate,
+)
 from app.services.model_registry import list_provider_capabilities
 
 router = APIRouter(prefix="/providers", tags=["providers"])
@@ -37,6 +50,8 @@ def _mask_api_key(api_key: str) -> str:
 
 
 def _to_profile_out(profile: ProviderProfile) -> ProviderProfileOut:
+    # Decrypt API key for masking (returns empty string if decryption fails)
+    decrypted_key = decrypt_value(profile.api_key)
     return ProviderProfileOut(
         id=profile.id,
         provider_name=profile.provider_name,
@@ -53,8 +68,9 @@ def _to_profile_out(profile: ProviderProfile) -> ProviderProfileOut:
         enabled=profile.enabled,
         reference_mode=profile.reference_mode,
         reference_caption_model=profile.reference_caption_model,
-        has_api_key=bool(profile.api_key),
-        masked_api_key=_mask_api_key(profile.api_key),
+        has_api_key=bool(decrypted_key),
+        masked_api_key=_mask_api_key(decrypted_key),
+        editable_api_key=decrypted_key or None,
         created_at=profile.created_at,
         updated_at=profile.updated_at,
     )
@@ -88,7 +104,7 @@ def create_provider_profile(
 
     profile = ProviderProfile(
         provider_name=payload.provider_name.strip(),
-        api_key=payload.api_key.strip(),
+        api_key=encrypt_value(payload.api_key.strip()),
         base_url=payload.base_url.strip().rstrip("/"),
         model_name=payload.model_name.strip(),
         adapter_kind=payload.adapter_kind.strip() or "openai_compatible",
@@ -106,6 +122,19 @@ def create_provider_profile(
     db.add(profile)
     db.commit()
     db.refresh(profile)
+
+    write_audit_log(
+        db,
+        event_type=AuditEventType.PROVIDER_CREATED,
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="provider",
+        target_id=profile.id,
+        target_name=profile.provider_name,
+        details={"model_name": profile.model_name, "base_url": profile.base_url},
+    )
+    db.commit()
+
     return _to_profile_out(profile)
 
 
@@ -125,7 +154,7 @@ def update_provider_profile(
     if "api_key" in updates:
         api_key = (updates.pop("api_key") or "").strip()
         if api_key:
-            profile.api_key = api_key
+            profile.api_key = encrypt_value(api_key)
 
     for field, value in updates.items():
         if isinstance(value, str):
@@ -144,6 +173,19 @@ def update_provider_profile(
 
     db.commit()
     db.refresh(profile)
+
+    write_audit_log(
+        db,
+        event_type=AuditEventType.PROVIDER_UPDATED,
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="provider",
+        target_id=profile.id,
+        target_name=profile.provider_name,
+        details={"updated_fields": list(updates.keys())},
+    )
+    db.commit()
+
     return _to_profile_out(profile)
 
 
@@ -157,6 +199,126 @@ def delete_provider_profile(
     profile = db.get(ProviderProfile, profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Provider profile not found")
+
+    provider_name = profile.provider_name
+    provider_id = profile.id
+
+    write_audit_log(
+        db,
+        event_type=AuditEventType.PROVIDER_DELETED,
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="provider",
+        target_id=provider_id,
+        target_name=provider_name,
+    )
     db.delete(profile)
     db.commit()
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/discover", response_model=ProviderDiscoverOut)
+async def discover_provider_models(
+    payload: ProviderDiscoverIn,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> ProviderDiscoverOut:
+    """Call GET {base_url}/models with the given API key and return the model list."""
+    _require_provider_admin(auth_user)
+
+    base_url = payload.base_url.rstrip("/")
+    headers = {"Authorization": f"Bearer {payload.api_key}"}
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(f"{base_url}/models", headers=headers)
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="请求超时，请检查 Base URL 是否可访问")
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"无法连接到 {base_url}：{exc}")
+
+    if response.status_code == 401:
+        raise HTTPException(status_code=401, detail="API Key 无效或无权限")
+    if not response.is_success:
+        raise HTTPException(status_code=502, detail=f"上游返回 {response.status_code}：{response.text[:200]}")
+
+    try:
+        data = response.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="上游返回非 JSON 响应")
+
+    # OpenAI-compatible: {"data": [{"id": "...", "owned_by": "..."}, ...]}
+    raw_models: list[dict] = []
+    if isinstance(data, dict) and "data" in data:
+        raw_models = data["data"] if isinstance(data["data"], list) else []
+    elif isinstance(data, list):
+        raw_models = data
+
+    # Check which model_names already exist in DB for this base_url
+    existing_names: set[str] = set(
+        db.scalars(
+            select(ProviderProfile.model_name).where(ProviderProfile.base_url == base_url)
+        ).all()
+    )
+
+    models = [
+        DiscoveredModel(
+            model_id=str(item.get("id") or item.get("model_id") or ""),
+            owned_by=str(item.get("owned_by") or ""),
+            already_exists=str(item.get("id") or item.get("model_id") or "") in existing_names,
+        )
+        for item in raw_models
+        if item.get("id") or item.get("model_id")
+    ]
+
+    return ProviderDiscoverOut(base_url=base_url, models=models)
+
+
+@router.post("/bulk-import", response_model=ProviderBulkImportOut, status_code=status.HTTP_201_CREATED)
+def bulk_import_provider_profiles(
+    payload: ProviderBulkImportIn,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> ProviderBulkImportOut:
+    """Bulk-create provider profiles from a discover result."""
+    _require_provider_admin(auth_user)
+
+    base_url = payload.base_url.rstrip("/")
+    created: list[str] = []
+    skipped: list[str] = []
+
+    for item in payload.models:
+        existing = db.scalar(
+            select(ProviderProfile).where(ProviderProfile.provider_name == item.provider_name)
+        )
+        if existing:
+            skipped.append(item.provider_name)
+            continue
+
+        reference_mode = item.reference_mode
+        if not reference_mode or reference_mode == "disabled":
+            reference_mode = "caption_prompt" if "modelscope.cn" in base_url else "disabled"
+
+        profile = ProviderProfile(
+            provider_name=item.provider_name,
+            api_key=encrypt_value(payload.api_key),
+            base_url=base_url,
+            model_name=item.model_id,
+            adapter_kind=item.adapter_kind,
+            capabilities=item.capabilities or ["image.generate"],
+            quality="medium",
+            output_format="png",
+            timeout_seconds=90.0,
+            pricing_currency="CNY",
+            pricing_unit="per_image",
+            unit_price=0.0,
+            enabled=True,
+            reference_mode=reference_mode,
+            reference_caption_model=None,
+        )
+        db.add(profile)
+        created.append(item.provider_name)
+
+    db.commit()
+    return ProviderBulkImportOut(created=created, skipped=skipped)

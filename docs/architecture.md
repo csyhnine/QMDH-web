@@ -179,6 +179,41 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 - 当前相关任务：
   - 保持状态文档与真实项目进展同步
 
+### Module: Inspiration / 灵感页
+- 路径：
+  - `backend/app/routers/inspiration.py`
+  - `backend/app/models.py` 中的 `InspirationPost`
+  - `frontend/src/App.tsx` 中的灵感页视图
+- 职责：
+  - 灵感内容 CRUD（外部参考导入 + 用户分享生成结果）
+  - 分类标签、卡片网格、点赞计数
+- 依赖：
+  - `backend/app/routers/assets.py`（资产关联）
+  - `backend/app/core/auth.py`（ops 权限校验）
+- 不应负责：
+  - 直接调用外部图片源
+  - 复杂推荐算法
+- 当前相关任务：
+  - 完善分享到灵感库的前端交互
+  - 灵感页内容填充
+
+### Module: Project Management / 项目管理
+- 路径：
+  - `backend/app/routers/projects.py`
+  - `frontend/src/App.tsx` 中的项目面板和成员编辑
+- 职责：
+  - 项目 CRUD（创建/重命名/删除）
+  - 项目成员管理（添加/移除）
+  - 项目级访问控制
+- 依赖：
+  - `backend/app/core/auth.py`（ops/admin 权限校验）
+  - `backend/app/models.py` 中的 `Project`, `User`
+- 不应负责：
+  - 任务执行逻辑
+  - 资产生命周期
+- 当前相关任务：
+  - 无（基础能力已完成）
+
 ### Module: Agent Governance Docs
 - 路径：
   - `docs/protocol.md`

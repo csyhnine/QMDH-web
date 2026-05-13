@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.database import Base, SessionLocal, engine
-from app.routers import assets, auth, dashboard, health, projects, prompt_templates, providers, tasks, users, workflows
+from app.routers import assets, auth, chat, dashboard, health, inspiration, projects, prompt_templates, providers, tasks, users, workflows
 from app.services.bootstrap import ensure_schema, seed_initial_data
 from app.services.media_storage import media_root_path
 
@@ -41,3 +41,5 @@ app.include_router(assets.router, prefix=settings.api_prefix)
 app.include_router(dashboard.router, prefix=settings.api_prefix)
 app.include_router(prompt_templates.router, prefix=settings.api_prefix)
 app.include_router(users.router, prefix=settings.api_prefix)
+app.include_router(inspiration.router, prefix=settings.api_prefix)
+app.include_router(chat.router, prefix=settings.api_prefix)

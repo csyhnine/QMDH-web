@@ -37,6 +37,8 @@ export type Asset = {
   prompt_text: string | null;
   like_count: number;
   share_count: number;
+  bookmark_count: number;
+  is_bookmarked: boolean;
   tags: string[];
   created_at: string;
 };
@@ -147,6 +149,7 @@ export type ProviderProfileRecord = {
   reference_caption_model: string | null;
   has_api_key: boolean;
   masked_api_key: string;
+  editable_api_key?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -171,6 +174,36 @@ export type ProviderProfileCreatePayload = {
 
 export type ProviderProfileUpdatePayload = Partial<Omit<ProviderProfileCreatePayload, "provider_name">>;
 
+export type DiscoveredModel = {
+  model_id: string;
+  owned_by: string;
+  already_exists: boolean;
+};
+
+export type ProviderDiscoverResult = {
+  base_url: string;
+  models: DiscoveredModel[];
+};
+
+export type ProviderBulkImportItem = {
+  model_id: string;
+  provider_name: string;
+  capabilities: string[];
+  adapter_kind: string;
+  reference_mode: string;
+};
+
+export type ProviderBulkImportPayload = {
+  base_url: string;
+  api_key: string;
+  models: ProviderBulkImportItem[];
+};
+
+export type ProviderBulkImportResult = {
+  created: string[];
+  skipped: string[];
+};
+
 export type Project = {
   id: number;
   name: string;
@@ -181,6 +214,32 @@ export type Project = {
   last_updated: string | null;
   summary: string | null;
   next_action: string | null;
+};
+
+export type ProjectMember = {
+  id: number;
+  name: string;
+  display_name: string;
+  role: string;
+  is_global: boolean;
+};
+
+export type InspirationPost = {
+  id: number;
+  title: string;
+  description: string;
+  image_path: string;
+  category: string;
+  tags: string[];
+  source_type: string;
+  source_name: string;
+  source_url: string;
+  prompt_text: string | null;
+  model_name: string;
+  like_count: number;
+  view_count: number;
+  user_name: string | null;
+  created_at: string;
 };
 
 export type ProjectMilestone = {
@@ -376,6 +435,7 @@ export const api = {
   logout: () => postJson<void>("/auth/logout"),
   me: () => request<AuthUser>("/auth/me"),
   users: () => request<ManagedUser[]>("/users"),
+  usersBrief: () => request<{ id: number; name: string; display_name: string; role: string; is_active: boolean }[]>("/users/brief"),
   createUser: (payload: UserCreatePayload) => postJson<ManagedUser>("/users", payload),
   updateUser: (userId: number, payload: UserUpdatePayload) => patchJson<ManagedUser>(`/users/${userId}`, payload),
   resetUserPassword: (userId: number, password: string) =>
@@ -387,9 +447,22 @@ export const api = {
   },
   health: () => request<{ status: string; service: string }>("/health"),
   projects: () => request<Project[]>("/projects"),
+  createProject: (name: string, code: string, classification?: string) =>
+    postJson<Project>("/projects", { name, code, classification: classification || "B" }),
+  renameProject: (projectCode: string, name: string) =>
+    patchJson<Project>(`/projects/${projectCode}`, { name }),
+  deleteProject: (projectCode: string) =>
+    deleteRequest(`/projects/${projectCode}`),
   projectStatus: (projectCode: string) => request<ProjectStatus>(`/projects/${projectCode}/status`),
+  projectMembers: (projectCode: string) => request<ProjectMember[]>(`/projects/${projectCode}/members`),
+  updateProjectMembers: (projectCode: string, addUserIds: number[], removeUserIds: number[]) =>
+    patchJson<ProjectMember[]>(`/projects/${projectCode}/members`, { add_user_ids: addUserIds, remove_user_ids: removeUserIds }),
   providers: () => request<Provider[]>("/providers"),
   providerProfiles: () => request<ProviderProfileRecord[]>("/providers/profiles"),
+  discoverProviderModels: (baseUrl: string, apiKey: string) =>
+    postJson<ProviderDiscoverResult>("/providers/discover", { base_url: baseUrl, api_key: apiKey }),
+  bulkImportProviderProfiles: (payload: ProviderBulkImportPayload) =>
+    postJson<ProviderBulkImportResult>("/providers/bulk-import", payload),
   createProviderProfile: (payload: ProviderProfileCreatePayload) =>
     postJson<ProviderProfileRecord>("/providers/profiles", payload),
   updateProviderProfile: (profileId: number, payload: ProviderProfileUpdatePayload) =>
@@ -410,6 +483,22 @@ export const api = {
   uploadReferenceImage: (payload: ReferenceUploadPayload) =>
     postJson<ReferenceUploadResponse>("/assets/reference-upload", payload),
   createTask: (payload: TaskCreatePayload) => postJson<Task>("/tasks", payload),
+  deleteTask: (taskId: number) => deleteRequest(`/tasks/${taskId}`),
   likeAsset: (assetId: number) => postJson<Asset>(`/assets/${assetId}/like`),
-  shareAsset: (assetId: number) => postJson<Asset>(`/assets/${assetId}/share`)
+  bookmarkAsset: (assetId: number) => postJson<Asset>(`/assets/${assetId}/bookmark`),
+  shareAsset: (assetId: number) => postJson<Asset>(`/assets/${assetId}/share`),
+  inspiration: (category?: string) => request<InspirationPost[]>(category && category !== "全部" ? `/inspiration?category=${encodeURIComponent(category)}` : "/inspiration"),
+  createInspiration: (payload: { title: string; description?: string; image_path?: string; category?: string; tags?: string[]; source_type: string; source_name?: string; source_url?: string; source_asset_id?: number; prompt_text?: string; model_name?: string }) =>
+    postJson<InspirationPost>("/inspiration", payload),
+  likeInspiration: (postId: number) => postJson<InspirationPost>(`/inspiration/${postId}/like`),
+  deleteInspiration: (postId: number) => deleteRequest(`/inspiration/${postId}`),
+  updateInspiration: (postId: number, data: { title?: string; description?: string; image_path?: string; category?: string; tags?: string[]; source_url?: string; source_name?: string }) =>
+    request<InspirationPost>(`/inspiration/${postId}`, { method: "PATCH", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify(data) }),
+  extractImages: (url: string) => postJson<{ images: string[]; title: string }>("/inspiration/extract-images", { url }),
+  // Chat
+  getChatModels: () => request<{ provider_id: number; provider_name: string; model_name: string; base_url: string }[]>("/chat/models"),
+  getChatConversations: () => request<{ id: number; title: string; model_provider_id: number | null; created_at: string; updated_at: string }[]>("/chat/conversations"),
+  createChatConversation: (model_provider_id: number, title?: string) => postJson<{ id: number; title: string; model_provider_id: number | null; created_at: string; updated_at: string }>("/chat/conversations", { model_provider_id, title: title || "" }),
+  getChatMessages: (convId: number) => request<{ id: number; role: string; content: string; created_at: string }[]>(`/chat/conversations/${convId}/messages`),
+  deleteChatConversation: (convId: number) => deleteRequest(`/chat/conversations/${convId}`),
 };

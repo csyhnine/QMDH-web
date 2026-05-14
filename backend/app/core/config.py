@@ -198,3 +198,28 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def validate_required_for_production() -> None:
+    """Validate that REQUIRED environment variables are set for production.
+
+    Call this at startup. If any required variable is missing, prints an error
+    to stderr and exits with code 1 before the server binds a port.
+    """
+    import sys
+
+    # Only enforce in production (non-sqlite database URL indicates production)
+    if settings.database_url.startswith("sqlite"):
+        return
+
+    required = {
+        "QMDH_DATABASE_URL": settings.database_url,
+        "QMDH_REDIS_URL": settings.redis_url,
+        "QMDH_ENCRYPTION_KEY": settings.encryption_key,
+    }
+
+    missing = [name for name, value in required.items() if not value or not value.strip()]
+    if missing:
+        for name in missing:
+            print(f"ERROR: Required environment variable {name} is missing or empty.", file=sys.stderr)
+        sys.exit(1)

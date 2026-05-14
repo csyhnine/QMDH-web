@@ -55,7 +55,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Create `frontend/src/components/shared/LoadingFallback.tsx` (Suspense fallback)
     - _Requirements: 1.1, 1.4, 1.6_
 
-  - [ ] 3.2 Create AuthContext for centralized auth state
+  - [x] 3.2 Create AuthContext for centralized auth state
     - Create `frontend/src/context/AuthContext.tsx`
     - Expose current user, login/logout actions, loading state
     - Replace all prop-drilling of user/auth state from App.tsx
@@ -95,7 +95,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
 - [ ] 4. Checkpoint - Ensure frontend refactor builds cleanly
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Environment Variable Standardization
+- [x] 5. Environment Variable Standardization
   - [x] 5.1 Create `.env.production.example` with full variable reference
     - Create `.env.production.example` at repository root
     - Group variables under section headers: `# === database ===`, `# === redis ===`, `# === auth ===`, `# === storage ===`, `# === providers ===`, `# === application ===`
@@ -104,13 +104,13 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Mark `QMDH_DATABASE_URL`, `QMDH_REDIS_URL`, `QMDH_ENCRYPTION_KEY`, `QMDH_AUTH_SECRET` as REQUIRED
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.6_
 
-  - [ ] 5.2 Add startup validation for required environment variables
+  - [x] 5.2 Add startup validation for required environment variables
     - Modify `backend/app/core/config.py` to add `validate_required()` method to Settings class
     - Add startup event in `backend/app/main.py` that calls validation before port binding
     - On missing REQUIRED variable: write error to stderr naming the variable, then `sys.exit(1)`
     - _Requirements: 2.5_
 
-  - [ ] 5.3 Reconcile existing `.env.example` files
+  - [x] 5.3 Reconcile existing `.env.example` files
     - Update root `.env.example` and `backend/.env.example` to be consistent with `.env.production.example`
     - Ensure no variable is documented in only one location
     - _Requirements: 2.7_

@@ -76,11 +76,41 @@ class Settings(BaseSettings):
     bootstrap_admin_password: str = "dev-admin-password"
     auth_session_days: int = 7
     encryption_key: str = ""  # Fernet key for encrypting sensitive data like API keys
+    cors_origins: str = ""  # Comma-separated list of allowed origins; falls back to frontend_origin if empty
+    rate_limit_enabled: bool = False
+    rate_limit_general_per_minute: int = 60
+    rate_limit_generation_per_minute: int = 10
+    rate_limit_login_per_minute: int = 10
 
     model_config = SettingsConfigDict(
         env_file=(str(BACKEND_DIR / ".env"), str(REPO_ROOT_DIR / ".env")),
         env_prefix="QMDH_",
     )
+
+    def get_cors_origins(self) -> list[str]:
+        """Parse QMDH_CORS_ORIGINS as a comma-separated list of allowed origins.
+
+        Rules:
+        - Strip whitespace, ignore empty entries
+        - Max 20 entries, max 253 chars each (longer entries skipped)
+        - Falls back to [frontend_origin] when QMDH_CORS_ORIGINS is empty
+        - When QMDH_CORS_ORIGINS is set, ignores frontend_origin
+        """
+        raw = (self.cors_origins or "").strip()
+        if not raw:
+            return [self.frontend_origin] if self.frontend_origin else []
+
+        entries: list[str] = []
+        for entry in raw.split(","):
+            cleaned = entry.strip()
+            if not cleaned:
+                continue
+            if len(cleaned) > 253:
+                continue  # Skip entries that are too long
+            entries.append(cleaned)
+            if len(entries) >= 20:
+                break  # Cap at 20 entries
+        return entries
 
     def get_image_provider_profiles(self) -> dict[str, ImageProviderProfile]:
         profiles: dict[str, ImageProviderProfile] = {}

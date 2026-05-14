@@ -61,7 +61,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Replace all prop-drilling of user/auth state from App.tsx
     - _Requirements: 1.5_
 
-  - [ ] 3.3 Extract page components from App.tsx into dedicated files
+  - [x] 3.3 Extract page components from App.tsx into dedicated files
     - Create `frontend/src/pages/auth/LoginPage.tsx`
     - Create `frontend/src/pages/studio/GeneratePage.tsx`
     - Create `frontend/src/pages/inspiration/InspirationPage.tsx`
@@ -74,7 +74,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Each file ≤600 lines, contains only its own page logic and local state
     - _Requirements: 1.1, 1.3_
 
-  - [ ] 3.4 Create central router configuration with lazy loading
+  - [x] 3.4 Create central router configuration with lazy loading
     - Create `frontend/src/router.tsx` with `react-router-dom` v6 route config
     - Use `React.lazy()` for all page component imports
     - Map all 9 URL paths to their respective page components
@@ -116,7 +116,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - _Requirements: 2.7_
 
 - [ ] 6. Backend Structured Logging
-  - [ ] 6.1 Create structured logging module with JSON formatter
+  - [x] 6.1 Create structured logging module with JSON formatter
     - Create `backend/app/core/logging.py`
     - Implement custom formatter using `python-json-logger` JsonFormatter
     - Output single-line JSON per entry with: `timestamp` (ISO 8601 UTC ms), `level`, `logger`, `message`, context fields
@@ -125,26 +125,26 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Accept optional context fields: `user_id`, `project_code`, `task_id` via `extra`
     - _Requirements: 3.1, 3.6, 3.8, 3.9_
 
-  - [ ] 6.2 Implement CorrelationId middleware
+  - [x] 6.2 Implement CorrelationId middleware
     - Create `CorrelationIdMiddleware` in `backend/app/core/logging.py`
     - Read `X-Request-ID` header or generate UUID4
     - Store in `contextvars.ContextVar` for async propagation
     - Add logging filter that injects `correlation_id` into every log record
     - _Requirements: 3.2_
 
-  - [ ] 6.3 Implement access log middleware and disable uvicorn default
+  - [x] 6.3 Implement access log middleware and disable uvicorn default
     - Create `AccessLogMiddleware` in `backend/app/core/logging.py`
     - Emit one INFO entry on request: `method`, `path`, `client_ip` (no body, no auth headers)
     - Emit one INFO entry on response: `status_code`, `latency_ms`
     - Disable uvicorn's default access logger in `backend/app/main.py`
     - _Requirements: 3.3, 3.4, 3.7_
 
-  - [ ] 6.4 Add unhandled exception logging
+  - [x] 6.4 Add unhandled exception logging
     - Add exception handler in `backend/app/main.py` or middleware
     - Emit one ERROR entry with: exception class, message, full traceback, correlation_id
     - _Requirements: 3.5_
 
-  - [ ] 6.5 Wire middleware stack in correct order in main.py
+  - [x] 6.5 Wire middleware stack in correct order in main.py
     - Add middleware in order: CORS → CorrelationId → AccessLog → RateLimit
     - Update `backend/app/main.py` with the new middleware registrations
     - _Requirements: 3.2, 3.3, 3.4_
@@ -157,7 +157,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - _Requirements: 3.1, 3.2, 3.6, 3.8_
 
 - [ ] 7. Health Check Enhancement
-  - [ ] 7.1 Implement enhanced health check endpoint with dependency checks
+  - [x] 7.1 Implement enhanced health check endpoint with dependency checks
     - Modify `backend/app/routers/health.py`
     - Run DB `SELECT 1` and Redis `PING` concurrently with 2s per-check timeout
     - Return component status map with values from `{healthy, degraded, timeout, not_configured}`
@@ -167,7 +167,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Ensure full response completes within 5s global budget
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8_
 
-  - [ ] 7.2 Add liveness probe endpoint
+  - [x] 7.2 Add liveness probe endpoint
     - Add `GET /api/v1/health/live` endpoint in `backend/app/routers/health.py`
     - Always return HTTP 200 with `{"status": "alive"}`, no auth, no dependency checks
     - Ensure both health endpoints are exempt from authentication
@@ -183,14 +183,14 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - **Validates: Requirements 4.4, 4.5, 4.6**
 
 - [ ] 8. CORS Multi-Domain Whitelist
-  - [ ] 8.1 Implement CORS origin parsing and configuration
+  - [x] 8.1 Implement CORS origin parsing and configuration
     - Modify `backend/app/core/config.py` to parse `QMDH_CORS_ORIGINS` as comma-separated list
     - Enforce max 20 entries, max 253 chars each, strip whitespace, ignore empty entries
     - Fall back to `QMDH_FRONTEND_ORIGIN` as single origin when `QMDH_CORS_ORIGINS` is empty
     - When both set, use `QMDH_CORS_ORIGINS` and ignore `QMDH_FRONTEND_ORIGIN`
     - _Requirements: 5.1, 5.5, 5.6_
 
-  - [ ] 8.2 Update CORSMiddleware configuration in main.py
+  - [x] 8.2 Update CORSMiddleware configuration in main.py
     - Pass parsed origins list to `CORSMiddleware(allow_origins=...)` in `backend/app/main.py`
     - Ensure `allow_credentials=True` for matched origins
     - Verify case-sensitive exact matching (scheme + hostname + port)
@@ -202,7 +202,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - **Validates: Requirements 5.2**
 
 - [ ] 9. API Rate Limiting
-  - [ ] 9.1 Implement sliding window rate limiter with Redis
+  - [x] 9.1 Implement sliding window rate limiter with Redis
     - Create `backend/app/core/rate_limit.py`
     - Implement sliding window using Redis sorted sets (ZADD, ZREMRANGEBYSCORE, ZCARD)
     - Key pattern: `ratelimit:{user_id}:{endpoint_group}` with TTL = window size
@@ -210,7 +210,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Fail-open: allow request if Redis operation exceeds 100ms or raises error
     - _Requirements: 6.1, 6.2, 6.4, 6.7_
 
-  - [ ] 9.2 Create RateLimitMiddleware and wire into FastAPI
+  - [x] 9.2 Create RateLimitMiddleware and wire into FastAPI
     - Create middleware class in `backend/app/core/rate_limit.py`
     - Return HTTP 429 with `Retry-After` header (1-60 seconds) when limit exceeded
     - Include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` headers on allowed requests

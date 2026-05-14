@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings, validate_required_for_production
+from app.core.middleware import AccessLogMiddleware, CorrelationIdMiddleware, UnhandledExceptionMiddleware
+from app.core.rate_limit import RateLimitMiddleware
 from app.database import Base, SessionLocal, engine
 from app.routers import assets, auth, chat, dashboard, health, inspiration, projects, prompt_templates, providers, tasks, users, workflows
 from app.services.bootstrap import ensure_schema, seed_initial_data
@@ -13,9 +15,16 @@ validate_required_for_production()
 
 app = FastAPI(title=settings.app_name)
 
+# Middleware stack order (outermost first):
+# CORS → CorrelationId → AccessLog → RateLimit → UnhandledException
+# Note: FastAPI applies middleware in reverse add order, so add innermost first.
+app.add_middleware(UnhandledExceptionMiddleware)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(AccessLogMiddleware)
+app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_origin],
+    allow_origins=settings.get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

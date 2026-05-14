@@ -54,7 +54,7 @@ def list_tasks(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> list[TaskOut]:
-    query = select(Task).join(Task.project).order_by(Task.created_at.desc())
+    query = select(Task).join(Task.project).where(Task.deleted_at.is_(None)).order_by(Task.created_at.desc())
     if "*" not in auth_user.project_codes:
         query = query.where(Project.code.in_(auth_user.project_codes))
     tasks = db.scalars(query).all()
@@ -68,7 +68,7 @@ def get_task(
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> TaskOut:
     task = db.get(Task, task_id)
-    if not task:
+    if not task or task.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Task not found")
     ensure_project_access(auth_user, task.project.code)
     return _to_task_out(task)
@@ -150,12 +150,13 @@ def delete_task(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ):
-    """Delete a task and its associated assets. Only task owner or ops+ can delete."""
+    """Soft-delete a task. Sets deleted_at timestamp instead of removing the row.
+    Only task owner or ops+ can delete. Associated ProviderCall and Asset records are retained."""
+    from datetime import datetime, timezone
     from fastapi import Response
-    from app.models import Asset, ProviderCall
 
     task = db.get(Task, task_id)
-    if not task:
+    if not task or task.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Task not found")
     ensure_project_access(auth_user, task.project.code)
 
@@ -165,16 +166,22 @@ def delete_task(
     if not is_owner and not is_ops:
         raise HTTPException(status_code=403, detail="Only task owner or ops+ can delete tasks")
 
-    # Delete associated provider calls
-    calls = db.scalars(select(ProviderCall).where(ProviderCall.task_id == task_id)).all()
-    for call in calls:
-        db.delete(call)
+    # Soft-delete: set deleted_at timestamp
+    task.deleted_at = datetime.now(timezone.utc)
 
-    # Delete assets from this task
-    assets = db.scalars(select(Asset).where(Asset.source_task_id == task_id)).all()
-    for asset in assets:
-        db.delete(asset)
+    # Audit log entry
+    db.add(
+        AuditLog(
+            event_type="task.soft_deleted",
+            actor_name=auth_user.name,
+            actor_id=auth_user.user_id,
+            target_type="task",
+            target_id=task.id,
+            target_name=task.title,
+            project_code=task.project.code,
+            details={"task_id": task.id, "reason": ""},
+        )
+    )
 
-    db.delete(task)
     db.commit()
     return Response(status_code=204)

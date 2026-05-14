@@ -108,6 +108,7 @@ class Task(Base):
     cost: Mapped[float] = mapped_column(Float, default=0.0)
     cost_currency: Mapped[str] = mapped_column(String(12), default="CNY")
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

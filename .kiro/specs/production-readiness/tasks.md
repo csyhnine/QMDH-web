@@ -6,27 +6,27 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
 
 ## Tasks
 
-- [ ] 1. Task Soft-Delete (Database Migration & Query Layer)
-  - [ ] 1.1 Create Alembic migration to add `deleted_at` column to `tasks` table
+- [x] 1. Task Soft-Delete (Database Migration & Query Layer)
+  - [x] 1.1 Create Alembic migration to add `deleted_at` column to `tasks` table
     - Create new migration file in `backend/migrations/versions/`
     - Add `deleted_at: DateTime(timezone=True), nullable=True, default=None` column
     - Add index on `deleted_at` for query performance
     - _Requirements: 9.1_
 
-  - [ ] 1.2 Update Task model and query filters for soft-delete
+  - [x] 1.2 Update Task model and query filters for soft-delete
     - Modify `backend/app/models.py` to add `deleted_at` field to Task model
     - Update `backend/app/routers/tasks.py` list/detail queries to filter `WHERE deleted_at IS NULL`
     - Return HTTP 404 when a requested task has `deleted_at` set
     - _Requirements: 9.1, 9.2_
 
-  - [ ] 1.3 Modify DELETE endpoint to perform soft-delete with audit logging
+  - [x] 1.3 Modify DELETE endpoint to perform soft-delete with audit logging
     - Change `DELETE /api/v1/tasks/{id}` in `backend/app/routers/tasks.py` to set `deleted_at = utcnow()` instead of deleting the row
     - Accept optional `reason` field in request body (default empty string)
     - Write `task.soft_deleted` audit log entry via `backend/app/core/audit.py`
     - Return HTTP 204 on success, HTTP 403 for unauthorized, HTTP 404 for missing/already-deleted
     - _Requirements: 9.1, 9.6, 9.8, 9.9, 9.10_
 
-  - [ ] 1.4 Update dashboard statistics to include soft-deleted tasks
+  - [x] 1.4 Update dashboard statistics to include soft-deleted tasks
     - Modify `backend/app/routers/dashboard.py` aggregation queries to NOT filter by `deleted_at`
     - Ensure total cost, task count, and per-provider usage include soft-deleted records
     - Update per-user monthly quota calculation to include soft-deleted tasks created within the month
@@ -48,7 +48,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 3. Frontend Component Architecture
-  - [ ] 3.1 Create directory structure and shared components
+  - [x] 3.1 Create directory structure and shared components
     - Create `frontend/src/pages/admin/`, `frontend/src/pages/studio/`, `frontend/src/pages/inspiration/`, `frontend/src/pages/chat/`, `frontend/src/pages/auth/`
     - Create `frontend/src/components/shared/Layout.tsx` (nav rail + content area shell)
     - Create `frontend/src/components/shared/AuthGuard.tsx` (redirect to /login if unauthenticated, preserve original path)
@@ -96,7 +96,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 5. Environment Variable Standardization
-  - [ ] 5.1 Create `.env.production.example` with full variable reference
+  - [x] 5.1 Create `.env.production.example` with full variable reference
     - Create `.env.production.example` at repository root
     - Group variables under section headers: `# === database ===`, `# === redis ===`, `# === auth ===`, `# === storage ===`, `# === providers ===`, `# === application ===`
     - Annotate each variable with `# REQUIRED:` or `# OPTIONAL (default: <value>):`

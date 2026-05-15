@@ -9,3 +9,5 @@ cryptography==45.0.0
 alembic==1.16.0
 beautifulsoup4==4.13.4
 python-json-logger==3.3.0
+apscheduler==3.10.4
+oss2==2.19.1

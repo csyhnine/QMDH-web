@@ -110,6 +110,11 @@ button {
   grid-template-columns: 76px minmax(0, 1fr);
 }
 
+.inspiration-shell .canvas-area,
+.chat-shell .canvas-area {
+  padding: 0;
+}
+
 .admin-shell .global-rail {
   padding: 22px 16px;
   background: rgba(255, 255, 255, 0.84);
@@ -2423,8 +2428,14 @@ button {
   padding: 28px 32px 80px;
 }
 
+.admin-shell .canvas-area > .admin-page,
+.admin-shell .canvas-area > .ops-dashboard {
+  margin-inline: auto;
+}
+
 .admin-page {
   width: min(1700px, 100%);
+  margin-inline: auto;
   display: grid;
   gap: 22px;
 }
@@ -3925,8 +3936,9 @@ textarea:focus-visible {
 /* ─── Inspiration Page ─── */
 .inspiration-page {
   padding: 2rem 3rem;
-  width: 100%;
+  width: min(1600px, 100%);
   max-width: 100%;
+  margin-inline: auto;
   box-sizing: border-box;
   overflow-y: auto;
 }
@@ -4078,6 +4090,7 @@ textarea:focus-visible {
   display: flex;
   height: 100%;
   min-height: 100vh;
+  width: 100%;
   background: #f7f8fa;
 }
 

@@ -30,6 +30,7 @@ type ProviderProfileDraft = {
 
 type DiscoveredModelAssignment = {
   generate: boolean;
+  edit: boolean;
   chat: boolean;
 };
 
@@ -221,18 +222,35 @@ function modelLooksLikeImageGeneration(modelId: string, ownedBy: string, baseUrl
   return false;
 }
 
+function modelLooksLikeImageEdit(modelId: string, ownedBy: string): boolean {
+  const lower = modelId.toLowerCase();
+  const ownerLower = ownedBy.toLowerCase();
+  return (
+    lower.includes("image-edit") ||
+    lower.includes("img-edit") ||
+    lower.includes("inpaint") ||
+    lower.includes("outpaint") ||
+    lower.includes("img2img") ||
+    (lower.includes("edit") && lower.includes("image")) ||
+    ownerLower.includes("edit")
+  );
+}
+
 function guessDiscoveredModelAssignment(modelId: string, ownedBy: string, baseUrl: string): DiscoveredModelAssignment {
-  if (modelLooksLikeImageGeneration(modelId, ownedBy, baseUrl)) return { generate: true, chat: false };
-  return { generate: false, chat: true };
+  if (modelLooksLikeImageEdit(modelId, ownedBy)) return { generate: false, edit: true, chat: false };
+  if (modelLooksLikeImageGeneration(modelId, ownedBy, baseUrl)) return { generate: true, edit: false, chat: false };
+  return { generate: false, edit: false, chat: true };
 }
 
 function assignmentToCapabilities(modelId: string, ownedBy: string, assignment: DiscoveredModelAssignment): string[] {
   const caps: string[] = [];
   if (assignment.generate) caps.push("image.generate");
+  if (assignment.edit) caps.push("image.edit");
   if (assignment.chat) caps.push("chat.completions");
   if (caps.length === 0) {
     const guess = guessDiscoveredModelAssignment(modelId, ownedBy, "");
     if (guess.generate) caps.push("image.generate");
+    if (guess.edit) caps.push("image.edit");
     if (guess.chat) caps.push("chat.completions");
   }
   return caps;
@@ -241,6 +259,7 @@ function assignmentToCapabilities(modelId: string, ownedBy: string, assignment: 
 function assignmentLabel(assignment: DiscoveredModelAssignment): string {
   const parts: string[] = [];
   if (assignment.generate) parts.push("生成页");
+  if (assignment.edit) parts.push("图像编辑");
   if (assignment.chat) parts.push("Chat");
   return parts.length > 0 ? parts.join(" + ") : "未分配";
 }
@@ -368,7 +387,10 @@ export default function ModelsPage({ providerProfiles, providers, error, onRefre
   }
 
   function updateDiscoveredAssignment(modelId: string, patch: Partial<DiscoveredModelAssignment>) {
-    setDiscoveredAssignments((current) => ({ ...current, [modelId]: { ...(current[modelId] ?? { generate: false, chat: false }), ...patch } }));
+    setDiscoveredAssignments((current) => ({
+      ...current,
+      [modelId]: { ...(current[modelId] ?? { generate: false, edit: false, chat: false }), ...patch },
+    }));
   }
 
   function buildProviderName(baseUrl: string, modelId: string): string {
@@ -381,7 +403,7 @@ export default function ModelsPage({ providerProfiles, providers, error, onRefre
     setImportingModels(true); setImportResult(null);
     try {
       const items: ProviderBulkImportItem[] = discoveredModels.filter((m) => selectedModelIds.has(m.model_id)).map((m) => {
-        const assignment = discoveredAssignments[m.model_id] ?? { generate: false, chat: false };
+        const assignment = discoveredAssignments[m.model_id] ?? { generate: false, edit: false, chat: false };
         return { model_id: m.model_id, provider_name: buildProviderName(discoverBaseUrlForImport, m.model_id), capabilities: assignmentToCapabilities(m.model_id, m.owned_by, assignment), adapter_kind: "openai_compatible", reference_mode: assignment.generate && discoverBaseUrlForImport.includes("modelscope.cn") ? "caption_prompt" : "disabled" };
       });
       const unassigned = items.filter((item) => item.capabilities.length === 0).map((item) => item.model_id);
@@ -442,12 +464,13 @@ export default function ModelsPage({ providerProfiles, providers, error, onRefre
                       <span className="discover-model-id">{model.model_id}</span>
                       <div className="discover-model-meta">
                         {model.owned_by ? <span className="discover-model-owner">{model.owned_by}</span> : null}
-                        <span className="discover-model-tag discover-model-tag-assignment">分配：{assignmentLabel(discoveredAssignments[model.model_id] ?? { generate: false, chat: false })}</span>
+                        <span className="discover-model-tag discover-model-tag-assignment">分配：{assignmentLabel(discoveredAssignments[model.model_id] ?? { generate: false, edit: false, chat: false })}</span>
                         {model.already_exists ? <em className="discover-model-tag">已导入</em> : null}
                       </div>
                     </div>
                     <div className="discover-assignment" onClick={(e) => e.stopPropagation()}>
                       <label className="discover-assignment-option"><input type="checkbox" checked={Boolean(discoveredAssignments[model.model_id]?.generate)} disabled={model.already_exists} onChange={(e) => updateDiscoveredAssignment(model.model_id, { generate: e.target.checked })} /><span>生成页</span></label>
+                      <label className="discover-assignment-option"><input type="checkbox" checked={Boolean(discoveredAssignments[model.model_id]?.edit)} disabled={model.already_exists} onChange={(e) => updateDiscoveredAssignment(model.model_id, { edit: e.target.checked })} /><span>图像编辑</span></label>
                       <label className="discover-assignment-option"><input type="checkbox" checked={Boolean(discoveredAssignments[model.model_id]?.chat)} disabled={model.already_exists} onChange={(e) => updateDiscoveredAssignment(model.model_id, { chat: e.target.checked })} /><span>Chat</span></label>
                     </div>
                   </div>

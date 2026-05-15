@@ -12,9 +12,26 @@ from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import Asset, AssetBookmark
 from app.schemas import AssetOut, ReferenceUploadIn, ReferenceUploadOut
-from app.services.media_storage import write_binary_asset
+from app.services.media_storage import resolve_storage_path, write_binary_asset
 
 router = APIRouter(prefix="/assets", tags=["assets"])
+
+
+def _to_asset_out(db: Session, asset: Asset, auth_user: AuthUserProfile) -> AssetOut:
+    is_bookmarked = False
+    if auth_user.user_id:
+        is_bookmarked = db.scalar(
+            select(AssetBookmark).where(
+                AssetBookmark.user_id == auth_user.user_id,
+                AssetBookmark.asset_id == asset.id,
+            )
+        ) is not None
+
+    out = AssetOut.model_validate(asset)
+    out.storage_path = resolve_storage_path(asset.storage_path)
+    out.is_bookmarked = is_bookmarked
+    out.bookmark_count = len(asset.bookmarks)
+    return out
 
 
 def _extension_for_reference_upload(file_name: str, data_url: str) -> str:
@@ -74,9 +91,8 @@ def list_assets(
             continue
         if bookmarked is False and is_bookmarked:
             continue
-        out = AssetOut.model_validate(asset)
+        out = _to_asset_out(db, asset, auth_user)
         out.is_bookmarked = is_bookmarked
-        out.bookmark_count = len(asset.bookmarks)
         results.append(out)
     return results
 
@@ -92,7 +108,7 @@ def upload_reference_image(
     safe_stub = "".join(char if char.isalnum() else "-" for char in payload.file_name.lower()).strip("-") or "reference"
     relative_path = f"references/{timestamp}-{safe_stub[:40]}-{randint(1000, 9999)}.{extension}"
     storage_path = write_binary_asset(relative_path, content)
-    return ReferenceUploadOut(file_name=payload.file_name, storage_path=storage_path)
+    return ReferenceUploadOut(file_name=payload.file_name, storage_path=resolve_storage_path(storage_path))
 
 
 @router.post("/{asset_id}/like", response_model=AssetOut, status_code=status.HTTP_200_OK)
@@ -100,7 +116,7 @@ def like_asset(
     asset_id: int,
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
-) -> Asset:
+) -> AssetOut:
     asset = db.get(Asset, asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
@@ -109,7 +125,7 @@ def like_asset(
     asset.like_count += 1
     db.commit()
     db.refresh(asset)
-    return asset
+    return _to_asset_out(db, asset, auth_user)
 
 
 @router.post("/{asset_id}/share", response_model=AssetOut, status_code=status.HTTP_200_OK)
@@ -117,7 +133,7 @@ def share_asset(
     asset_id: int,
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
-) -> Asset:
+) -> AssetOut:
     asset = db.get(Asset, asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
@@ -126,7 +142,7 @@ def share_asset(
     asset.share_count += 1
     db.commit()
     db.refresh(asset)
-    return asset
+    return _to_asset_out(db, asset, auth_user)
 
 
 @router.post("/{asset_id}/bookmark", response_model=AssetOut, status_code=status.HTTP_200_OK)
@@ -161,7 +177,6 @@ def toggle_bookmark(
 
     db.commit()
     db.refresh(asset)
-    out = AssetOut.model_validate(asset)
+    out = _to_asset_out(db, asset, auth_user)
     out.is_bookmarked = is_bookmarked
-    out.bookmark_count = len(asset.bookmarks)
     return out

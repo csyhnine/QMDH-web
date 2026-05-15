@@ -40,7 +40,12 @@ Windows 本地开发可以直接在仓库根目录双击或执行：
 - 后端：`http://127.0.0.1:18010`
 - 前端：`http://127.0.0.1:18080`
 
-如果 `18010` 上已经有旧版 API 进程或不可清理的 stale listener，启动脚本会自动把新后端切到 `18011`，并把前端代理同步指向 `18011`。启动窗口里打印的端口为准。
+`start-dev.cmd` now uses exactly one local dev chain: `http://127.0.0.1:18080 -> http://127.0.0.1:18010`.
+Before startup it stops stale QMDH dev processes from this repo; if `18010` or `18080` is still occupied by some other process, it aborts instead of silently switching to `18011`.
+For server deployment behind Baota or another host-level Nginx, keep local dev and server ports separate:
+- local dev: `18080 -> 18010`
+- Docker frontend host port: `8080 -> container:80`
+- host-level reverse proxy: `80/443 -> 127.0.0.1:8080`
 
 也可以通过 npm 别名启动：
 
@@ -72,11 +77,8 @@ npm run dev -- --host 127.0.0.1
 
 也可以显式覆盖本地开发端口：
 
-```powershell
-$env:QMDH_BACKEND_PORT="18011"
-$env:QMDH_FRONTEND_PORT="18080"
-.\start-dev.cmd
-```
+For one-off debugging against another backend, set `VITE_API_PROXY_TARGET`.
+For normal local development, always return to the standard `18080/18010` ports.
 
 ## 生图模型配置
 
@@ -90,6 +92,9 @@ $env:QMDH_FRONTEND_PORT="18080"
 ```env
 QMDH_IMAGE_PROVIDER_PROFILES_JSON=[{"provider_name":"modelscope_free_image","api_key":"your-token","base_url":"https://api-inference.modelscope.cn/v1","model_name":"MAILAND/majicflus_v1","adapter_kind":"openai_compatible","capabilities":["image.generate"],"reference_mode":"caption_prompt","reference_caption_model":"Qwen/Qwen3-VL-8B-Instruct"}]
 ```
+
+Runtime model selection is now standardized on the database-backed model management page at `/admin/models`.
+Treat `QMDH_IMAGE_PROVIDER_PROFILES_JSON` as bootstrap or emergency-only input, not as the normal source of truth for feature pages.
 
 建议在服务器上通过 shell 环境变量或 `.env` 文件注入，不要直接把真实 token 写进仓库。
 

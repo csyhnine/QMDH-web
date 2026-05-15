@@ -2,13 +2,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: qmdh
-      POSTGRES_USER: qmdh
-      POSTGRES_PASSWORD: qmdh_change_me
+      POSTGRES_DB: ${POSTGRES_DB:-qmdh}
+      POSTGRES_USER: ${POSTGRES_USER:-qmdh}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qmdh_change_me}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U qmdh -d qmdh"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -27,14 +27,26 @@ services:
   backend:
     build:
       context: ./backend
+    env_file:
+      - ./.env
     environment:
-      QMDH_DATABASE_URL: postgresql+psycopg://qmdh:qmdh_change_me@postgres:5432/qmdh
-      QMDH_FRONTEND_ORIGIN: http://localhost
+      QMDH_DATABASE_URL: ${QMDH_DATABASE_URL:-postgresql+psycopg://qmdh:qmdh_change_me@postgres:5432/qmdh}
+      QMDH_FRONTEND_ORIGIN: ${QMDH_FRONTEND_ORIGIN:-http://localhost}
+      QMDH_ENCRYPTION_KEY: ${QMDH_ENCRYPTION_KEY:-}
+      QMDH_BOOTSTRAP_ADMIN_NAME: ${QMDH_BOOTSTRAP_ADMIN_NAME:-admin}
+      QMDH_BOOTSTRAP_ADMIN_PASSWORD: ${QMDH_BOOTSTRAP_ADMIN_PASSWORD:-dev-admin-password}
+      QMDH_CORS_ORIGINS: ${QMDH_CORS_ORIGINS:-}
       QMDH_MEDIA_ROOT: /app/storage/assets
       QMDH_MEDIA_URL_PREFIX: /media
+      QMDH_STORAGE_BACKEND: ${QMDH_STORAGE_BACKEND:-local}
+      QMDH_CDN_BASE_URL: ${QMDH_CDN_BASE_URL:-}
+      QMDH_OSS_ENDPOINT: ${QMDH_OSS_ENDPOINT:-}
+      QMDH_OSS_BUCKET_NAME: ${QMDH_OSS_BUCKET_NAME:-}
+      QMDH_OSS_ACCESS_KEY_ID: ${QMDH_OSS_ACCESS_KEY_ID:-}
+      QMDH_OSS_ACCESS_KEY_SECRET: ${QMDH_OSS_ACCESS_KEY_SECRET:-}
       QMDH_TASK_EXECUTION_MODE: redis
-      QMDH_REDIS_URL: redis://redis:6379/0
-      QMDH_REDIS_QUEUE_NAME: qmdh:tasks
+      QMDH_REDIS_URL: ${QMDH_REDIS_URL:-redis://redis:6379/0}
+      QMDH_REDIS_QUEUE_NAME: ${QMDH_REDIS_QUEUE_NAME:-qmdh:tasks}
       QMDH_OPENAI_IMAGE_API_KEY: ${QMDH_OPENAI_IMAGE_API_KEY:-}
       QMDH_OPENAI_IMAGE_BASE_URL: ${QMDH_OPENAI_IMAGE_BASE_URL:-https://api.openai.com/v1}
       QMDH_OPENAI_IMAGE_MODEL: ${QMDH_OPENAI_IMAGE_MODEL:-gpt-image-1}
@@ -42,13 +54,16 @@ services:
       QMDH_OPENAI_IMAGE_QUALITY: ${QMDH_OPENAI_IMAGE_QUALITY:-medium}
       QMDH_OPENAI_IMAGE_OUTPUT_FORMAT: ${QMDH_OPENAI_IMAGE_OUTPUT_FORMAT:-png}
       QMDH_IMAGE_PROVIDER_PROFILES_JSON: ${QMDH_IMAGE_PROVIDER_PROFILES_JSON:-[]}
+      QMDH_RATE_LIMIT_ENABLED: ${QMDH_RATE_LIMIT_ENABLED:-false}
+      QMDH_RATE_LIMIT_GENERAL_PER_MINUTE: ${QMDH_RATE_LIMIT_GENERAL_PER_MINUTE:-60}
+      QMDH_RATE_LIMIT_GENERATION_PER_MINUTE: ${QMDH_RATE_LIMIT_GENERATION_PER_MINUTE:-10}
+      QMDH_RATE_LIMIT_LOGIN_PER_MINUTE: ${QMDH_RATE_LIMIT_LOGIN_PER_MINUTE:-10}
+      QMDH_SESSION_CLEANUP_INTERVAL_SECONDS: ${QMDH_SESSION_CLEANUP_INTERVAL_SECONDS:-3600}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    ports:
-      - "8000:8000"
     volumes:
       - backend_media:/app/storage/assets
     healthcheck:
@@ -61,13 +76,22 @@ services:
     build:
       context: ./backend
     command: ["python", "-m", "app.worker"]
+    env_file:
+      - ./.env
     environment:
-      QMDH_DATABASE_URL: postgresql+psycopg://qmdh:qmdh_change_me@postgres:5432/qmdh
+      QMDH_DATABASE_URL: ${QMDH_DATABASE_URL:-postgresql+psycopg://qmdh:qmdh_change_me@postgres:5432/qmdh}
+      QMDH_ENCRYPTION_KEY: ${QMDH_ENCRYPTION_KEY:-}
       QMDH_MEDIA_ROOT: /app/storage/assets
       QMDH_MEDIA_URL_PREFIX: /media
+      QMDH_STORAGE_BACKEND: ${QMDH_STORAGE_BACKEND:-local}
+      QMDH_CDN_BASE_URL: ${QMDH_CDN_BASE_URL:-}
+      QMDH_OSS_ENDPOINT: ${QMDH_OSS_ENDPOINT:-}
+      QMDH_OSS_BUCKET_NAME: ${QMDH_OSS_BUCKET_NAME:-}
+      QMDH_OSS_ACCESS_KEY_ID: ${QMDH_OSS_ACCESS_KEY_ID:-}
+      QMDH_OSS_ACCESS_KEY_SECRET: ${QMDH_OSS_ACCESS_KEY_SECRET:-}
       QMDH_TASK_EXECUTION_MODE: redis
-      QMDH_REDIS_URL: redis://redis:6379/0
-      QMDH_REDIS_QUEUE_NAME: qmdh:tasks
+      QMDH_REDIS_URL: ${QMDH_REDIS_URL:-redis://redis:6379/0}
+      QMDH_REDIS_QUEUE_NAME: ${QMDH_REDIS_QUEUE_NAME:-qmdh:tasks}
       QMDH_OPENAI_IMAGE_API_KEY: ${QMDH_OPENAI_IMAGE_API_KEY:-}
       QMDH_OPENAI_IMAGE_BASE_URL: ${QMDH_OPENAI_IMAGE_BASE_URL:-https://api.openai.com/v1}
       QMDH_OPENAI_IMAGE_MODEL: ${QMDH_OPENAI_IMAGE_MODEL:-gpt-image-1}
@@ -92,7 +116,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "80:80"
+      - "${QMDH_FRONTEND_HOST_PORT:-8080}:80"
 
 volumes:
   postgres_data:

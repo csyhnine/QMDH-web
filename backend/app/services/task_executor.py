@@ -9,6 +9,7 @@ from pathlib import Path
 from random import randint
 from time import perf_counter, sleep
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from redis import Redis
@@ -18,7 +19,12 @@ from sqlalchemy.orm import Session
 from app.core.config import ImageProviderProfile, settings
 from app.database import SessionLocal
 from app.models import Asset, AssetType, Project, ProviderCall, Task, TaskStatus, Workflow
-from app.services.media_storage import media_root_path, write_base64_asset, write_preview_svg
+from app.services.media_storage import (
+    media_root_path,
+    write_base64_asset,
+    write_binary_asset,
+    write_preview_svg,
+)
 from app.services.model_registry import ProviderDefinition, get_image_provider_profile, get_provider_definition
 
 WHITE_CANVAS_DATA_URL = (
@@ -118,7 +124,12 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
         prompt_for_generation = prompt
         reference_image = _extract_reference_image(payload)
         image_edit_bridge_url = ""
-        if _uses_image_edit_bridge(self.profile):
+        if capability == "image.edit":
+            image_edit_bridge_url, reference_result = _build_image_edit_bridge_request(
+                profile=self.profile,
+                reference_image=reference_image,
+            )
+        elif _uses_image_edit_bridge(self.profile):
             image_edit_bridge_url, reference_result = _build_image_edit_bridge_request(
                 profile=self.profile,
                 reference_image=reference_image,
@@ -189,6 +200,7 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
                         image_payload=item,
                         prompt=prompt,
                         output_format=self.profile.output_format,
+                        timeout_seconds=self.profile.timeout_seconds,
                     )
                 )
                 if len(storage_paths) >= requested_count:
@@ -510,20 +522,61 @@ def _submit_image_generation_request(*, base_url: str, body: dict, headers: dict
         raise ValueError(f"Image generation request failed: {exc.reason}") from exc
 
 
-def _persist_generated_image(*, provider_name: str, image_payload: dict, prompt: str, output_format: str) -> str:
+def _extension_for_downloaded_image(image_url: str, content_type: str | None, fallback: str) -> str:
+    if content_type:
+        guessed = mimetypes.guess_extension(content_type.split(";", 1)[0].strip().lower(), strict=False)
+        if guessed:
+            extension = guessed.lstrip(".")
+            return "jpeg" if extension == "jpg" else extension
+
+    suffix = Path(urlparse(image_url).path).suffix.lower().lstrip(".")
+    if suffix:
+        return "jpeg" if suffix == "jpg" else suffix
+
+    normalized = fallback.lower().strip() or "png"
+    return "jpeg" if normalized == "jpg" else normalized
+
+
+def _download_generated_image(image_url: str, *, timeout_seconds: float) -> tuple[bytes, str | None]:
+    try:
+        with urlopen(image_url, timeout=timeout_seconds) as response:
+            payload = response.read()
+            content_type = None
+            if hasattr(response, "headers") and response.headers is not None:
+                content_type = response.headers.get("Content-Type")
+            return payload, content_type
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise ValueError(f"Generated image download failed with HTTP {exc.code}: {detail}") from exc
+    except URLError as exc:
+        raise ValueError(f"Generated image download failed: {exc.reason}") from exc
+
+
+def _persist_generated_image(
+    *,
+    provider_name: str,
+    image_payload: dict,
+    prompt: str,
+    output_format: str,
+    timeout_seconds: float,
+) -> str:
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    safe_stub = "".join(char if char.isalnum() else "-" for char in prompt.lower())[:40].strip("-") or "image"
+
     if image_url := image_payload.get("url"):
-        return str(image_url)
+        image_bytes, content_type = _download_generated_image(str(image_url), timeout_seconds=timeout_seconds)
+        extension = _extension_for_downloaded_image(str(image_url), content_type, output_format)
+        relative_path = f"generated/{provider_name}/{timestamp}-{safe_stub}-{randint(1000, 9999)}.{extension}"
+        return write_binary_asset(relative_path, image_bytes)
 
     b64_json = image_payload.get("b64_json")
     if not b64_json:
         raise ValueError("Image generation response did not include url or b64_json")
 
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     extension = output_format.lower().strip() or "png"
     if extension == "jpg":
         extension = "jpeg"
 
-    safe_stub = "".join(char if char.isalnum() else "-" for char in prompt.lower())[:40].strip("-") or "image"
     relative_path = f"generated/{provider_name}/{timestamp}-{safe_stub}-{randint(1000, 9999)}.{extension}"
     return write_base64_asset(relative_path, str(b64_json))
 

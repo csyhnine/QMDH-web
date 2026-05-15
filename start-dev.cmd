@@ -21,7 +21,21 @@ if errorlevel 1 (
   exit /b 1
 )
 
-call :choose_backend_port
+call :cleanup_qmdh_dev_processes
+if errorlevel 1 (
+  echo.
+  echo Unable to clean stale QMDH dev processes.
+  pause
+  exit /b 1
+)
+
+call :ensure_target_ports_available
+if errorlevel 1 (
+  echo.
+  echo Start aborted. Free the occupied ports above, then run start-dev.cmd again.
+  pause
+  exit /b 1
+)
 
 echo Starting QMDH backend on http://127.0.0.1:%QMDH_BACKEND_PORT% ...
 start "QMDH Backend :%QMDH_BACKEND_PORT%" /D "%ROOT%" "%ComSpec%" /k ""%~f0" --backend"
@@ -33,6 +47,7 @@ echo.
 echo QMDH dev servers are starting in two separate windows:
 echo   Backend:  http://127.0.0.1:%QMDH_BACKEND_PORT%/api/v1/health
 echo   Frontend: http://127.0.0.1:%QMDH_FRONTEND_PORT%
+echo   Canonical local dev chain: http://127.0.0.1:%QMDH_FRONTEND_PORT% -> http://127.0.0.1:%QMDH_BACKEND_PORT%
 echo.
 echo Close those two windows to stop the dev servers.
 exit /b 0
@@ -70,15 +85,6 @@ echo Frontend working directory: %CD%
 echo Running: npm run dev -- --host 127.0.0.1 --port %QMDH_FRONTEND_PORT%
 npm run dev -- --host 127.0.0.1 --port %QMDH_FRONTEND_PORT%
 exit /b %errorlevel%
-
-:choose_backend_port
-if not "%QMDH_BACKEND_PORT%"=="18010" exit /b 0
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; try { $providers = Invoke-RestMethod -Uri 'http://127.0.0.1:18010/api/v1/providers' -TimeoutSec 2; $items = @($providers); if ($items.Count -gt 0 -and $items[0].PSObject.Properties.Name -contains 'adapter_kind') { exit 0 }; exit 1 } catch { $tcp = Test-NetConnection -ComputerName 127.0.0.1 -Port 18010 -InformationLevel Quiet; if ($tcp) { exit 1 }; exit 0 }" >nul 2>nul
-if errorlevel 1 (
-  echo Existing API on 18010 is unavailable or stale; using backend fallback port 18011.
-  set "QMDH_BACKEND_PORT=18011"
-)
-exit /b 0
 
 :check_prerequisites
 call :check_backend
@@ -133,3 +139,60 @@ if not exist "%FRONTEND_DIR%\node_modules" (
 )
 
 exit /b 0
+
+:cleanup_qmdh_dev_processes
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$ErrorActionPreference='Stop';" ^
+  "$repo = [System.IO.Path]::GetFullPath('%ROOT%').TrimEnd('\');" ^
+  "$backend = [System.IO.Path]::GetFullPath('%BACKEND_DIR%').TrimEnd('\');" ^
+  "$frontend = [System.IO.Path]::GetFullPath('%FRONTEND_DIR%').TrimEnd('\');" ^
+  "$repoPaths = @($repo, $backend, $frontend);" ^
+  "$candidatePorts = @(5180, 8000, 18010, 18011, 18080, 19010);" ^
+  "$listeners = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $candidatePorts -contains $_.LocalPort };" ^
+  "$targets = foreach ($listener in $listeners) {" ^
+  "  $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $listener.OwningProcess) -ErrorAction SilentlyContinue;" ^
+  "  if (-not $process) { continue }" ^
+  "  $commandLine = if ($process.CommandLine) { $process.CommandLine } else { '' };" ^
+  "  $exePath = if ($process.ExecutablePath) { $process.ExecutablePath } else { '' };" ^
+  "  $repoOwned = $false;" ^
+  "  foreach ($path in $repoPaths) {" ^
+  "    if ($commandLine -like ('*' + $path + '*') -or $exePath -like ('*' + $path + '*')) { $repoOwned = $true; break }" ^
+  "  }" ^
+  "  if (-not $repoOwned) { continue }" ^
+  "  $isDevServer = ($commandLine -match 'uvicorn\s+app\.main:app') -or ($commandLine -match 'vite(\.js)?') -or ($commandLine -match 'npm(\.cmd)?\s+run\s+dev');" ^
+  "  if (-not $isDevServer) { continue }" ^
+  "  [PSCustomObject]@{ ProcessId = $process.ProcessId; Name = $process.Name; LocalPort = $listener.LocalPort }" ^
+  "};" ^
+  "$targets = @($targets | Sort-Object ProcessId -Unique | Sort-Object ProcessId -Descending);" ^
+  "if ($targets.Count -eq 0) { exit 0 }" ^
+  "foreach ($target in $targets) {" ^
+  "  Write-Host ('Stopping stale QMDH dev process PID ' + $target.ProcessId + ' on port ' + $target.LocalPort + ' (' + $target.Name + ') ...');" ^
+  "  Stop-Process -Id $target.ProcessId -Force -ErrorAction Stop;" ^
+  "}" ^
+  "Start-Sleep -Milliseconds 750;" ^
+  "exit 0"
+exit /b %errorlevel%
+
+:ensure_target_ports_available
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$ErrorActionPreference='Stop';" ^
+  "$ports = @(%QMDH_BACKEND_PORT%, %QMDH_FRONTEND_PORT%);" ^
+  "$blocked = foreach ($port in $ports) {" ^
+  "  $listener = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue | Select-Object -First 1;" ^
+  "  if (-not $listener) { continue }" ^
+  "  $process = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $listener.OwningProcess) -ErrorAction SilentlyContinue;" ^
+  "  [PSCustomObject]@{" ^
+  "    Port = $port;" ^
+  "    ProcessId = $listener.OwningProcess;" ^
+  "    Name = if ($process) { $process.Name } else { 'unknown' };" ^
+  "    CommandLine = if ($process -and $process.CommandLine) { $process.CommandLine } else { '' }" ^
+  "  }" ^
+  "};" ^
+  "$blocked = @($blocked);" ^
+  "if ($blocked.Count -eq 0) { exit 0 }" ^
+  "foreach ($item in $blocked) {" ^
+  "  Write-Host ('Port ' + $item.Port + ' is already in use by PID ' + $item.ProcessId + ' (' + $item.Name + ').');" ^
+  "  if ($item.CommandLine) { Write-Host ('  ' + $item.CommandLine) }" ^
+  "}" ^
+  "exit 1"
+exit /b %errorlevel%

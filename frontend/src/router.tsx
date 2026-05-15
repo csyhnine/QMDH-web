@@ -1,11 +1,10 @@
-/**
- * Central router configuration with lazy loading.
- * Task 3.4 - Maps all URL paths to their respective page components.
- */
-import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-// Lazy-loaded page components
+import { api, type DashboardStats, type InspirationPost, type ManagedUser, type Project, type Provider, type ProviderProfileRecord, type Task } from "./api";
+import { AppShell, AuthGuard, LoadingFallback } from "./components/shared";
+import { useAuth } from "./context/AuthContext";
+
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/admin/DashboardPage"));
 const UsersPage = lazy(() => import("./pages/admin/UsersPage"));
@@ -16,40 +15,206 @@ const InspirationPage = lazy(() => import("./pages/inspiration/InspirationPage")
 const ChatPage = lazy(() => import("./pages/chat/ChatPage"));
 const GeneratePage = lazy(() => import("./pages/studio/GeneratePage"));
 
-function LoadingFallback() {
-  return <div className="auth-shell">加载中...</div>;
+function ProtectedRoute({ children }: { children: JSX.Element }) {
+  return <AuthGuard>{children}</AuthGuard>;
 }
 
-/**
- * AppRouter - wraps all routes in BrowserRouter with Suspense fallback.
- *
- * Note: This router is defined but NOT yet wired into App.tsx.
- * Task 3.5 will replace the current inline view switching in App.tsx
- * with this router component. Until then, App.tsx continues to handle
- * routing via window.location.pathname and conditional rendering.
- */
+function OpsRoute({ children }: { children: JSX.Element }) {
+  const { canUseOpsViews } = useAuth();
+  return canUseOpsViews ? children : <Navigate to="/studio/generate" replace />;
+}
+
+function AdminRoute({ children }: { children: JSX.Element }) {
+  const { canManageUsers } = useAuth();
+  return canManageUsers ? children : <Navigate to="/studio/generate" replace />;
+}
+
+function InspirationRoute() {
+  const { canManageUsers, canUseOpsViews } = useAuth();
+  const [posts, setPosts] = useState<InspirationPost[]>([]);
+
+  useEffect(() => {
+    api.inspiration().then(setPosts).catch(() => setPosts([]));
+  }, []);
+
+  return (
+    <AppShell kind="studio" active="inspiration">
+      <InspirationPage posts={posts} onPostsChange={setPosts} canManage={canManageUsers || canUseOpsViews} />
+    </AppShell>
+  );
+}
+
+function DashboardRoute() {
+  const [dashboard, setDashboard] = useState<DashboardStats | null>(null);
+  const [dashboardStatsDays, setDashboardStatsDays] = useState(30);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+
+  async function refresh(days = dashboardStatsDays) {
+    const nextDashboard = await api.dashboardStats(days);
+    setDashboard(nextDashboard);
+    setLastSyncedAt(new Date().toISOString());
+  }
+
+  useEffect(() => {
+    void refresh(dashboardStatsDays);
+  }, [dashboardStatsDays]);
+
+  return (
+    <AppShell kind="admin" active="dashboard">
+      <DashboardPage
+        dashboard={dashboard}
+        userCanUseOpsViews={true}
+        dashboardStatsDays={dashboardStatsDays}
+        lastSyncedAt={lastSyncedAt}
+        onChangeDays={setDashboardStatsDays}
+        onRefresh={() => void refresh()}
+      />
+    </AppShell>
+  );
+}
+
+function UsersRoute() {
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    try {
+      setUsers(await api.users());
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "加载用户失败");
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  return (
+    <AppShell kind="admin" active="users">
+      <UsersPage users={users} userCanManageUsers={true} error={error} onRefresh={() => void refresh()} onSetError={setError} />
+    </AppShell>
+  );
+}
+
+function ModelsRoute() {
+  const [providerProfiles, setProviderProfiles] = useState<ProviderProfileRecord[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    try {
+      const [nextProviders, nextProfiles] = await Promise.all([api.providers(), api.providerProfiles()]);
+      setProviders(nextProviders);
+      setProviderProfiles(nextProfiles);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "加载模型配置失败");
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  return (
+    <AppShell kind="admin" active="models">
+      <ModelsPage
+        providerProfiles={providerProfiles}
+        providers={providers}
+        error={error}
+        onRefresh={() => void refresh()}
+        onSetError={setError}
+      />
+    </AppShell>
+  );
+}
+
+function ProjectsRoute() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+
+  async function refresh() {
+    const [nextProjects, nextTasks] = await Promise.all([api.projects(), api.tasks()]);
+    setProjects(nextProjects);
+    setTasks(nextTasks);
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  return (
+    <AppShell kind="admin" active="projects">
+      <ProjectsPage projects={projects} tasks={tasks} userCanUseOpsViews={true} onRefresh={() => void refresh()} />
+    </AppShell>
+  );
+}
+
+function SettingsRoute() {
+  const { canManageUsers } = useAuth();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [providerProfiles, setProviderProfiles] = useState<ProviderProfileRecord[]>([]);
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  async function refresh() {
+    const [nextTasks, nextProfiles, nextProjects, nextUsers] = await Promise.all([
+      api.tasks(),
+      api.providerProfiles(),
+      api.projects(),
+      canManageUsers ? api.users() : Promise.resolve([]),
+    ]);
+    setTasks(nextTasks);
+    setProviderProfiles(nextProfiles);
+    setProjects(nextProjects);
+    setUsers(nextUsers);
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, [canManageUsers]);
+
+  return (
+    <AppShell kind="admin" active="settings">
+      <SettingsPage
+        userCanManageUsers={canManageUsers}
+        userCanUseOpsViews={true}
+        tasks={tasks}
+        providerProfiles={providerProfiles}
+        users={users}
+        projects={projects}
+        onRefresh={() => void refresh()}
+      />
+    </AppShell>
+  );
+}
+
 export default function AppRouter() {
   return (
     <BrowserRouter>
       <Suspense fallback={<LoadingFallback />}>
         <Routes>
-          {/* Auth */}
+          <Route path="/" element={<Navigate to="/studio/generate" replace />} />
           <Route path="/login" element={<LoginPage />} />
-
-          {/* Studio tabs */}
-          <Route path="/" element={<GeneratePage />} />
-          <Route path="/inspiration" element={<InspirationPage posts={[]} onPostsChange={() => {}} canManage={false} />} />
-          <Route path="/chat" element={<ChatPage />} />
-
-          {/* Admin */}
-          <Route path="/admin/dashboard" element={<DashboardPage dashboard={null} userCanUseOpsViews={false} dashboardStatsDays={30} lastSyncedAt={null} onChangeDays={() => {}} onRefresh={() => {}} />} />
-          <Route path="/admin/users" element={<UsersPage users={[]} userCanManageUsers={false} error="" onRefresh={() => {}} onSetError={() => {}} />} />
-          <Route path="/admin/models" element={<ModelsPage providerProfiles={[]} providers={[]} error="" onRefresh={() => {}} onSetError={() => {}} />} />
-          <Route path="/admin/projects" element={<ProjectsPage projects={[]} tasks={[]} userCanUseOpsViews={false} onRefresh={() => {}} />} />
-          <Route path="/admin/settings" element={<SettingsPage userCanManageUsers={false} userCanUseOpsViews={false} tasks={[]} providerProfiles={[]} users={[]} projects={[]} onRefresh={() => {}} />} />
-
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/studio/generate" element={<ProtectedRoute><GeneratePage /></ProtectedRoute>} />
+          <Route path="/studio/inspiration" element={<ProtectedRoute><InspirationRoute /></ProtectedRoute>} />
+          <Route
+            path="/studio/chat"
+            element={
+              <ProtectedRoute>
+                <AppShell kind="studio" active="chat">
+                  <ChatPage />
+                </AppShell>
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/admin/dashboard" element={<ProtectedRoute><OpsRoute><DashboardRoute /></OpsRoute></ProtectedRoute>} />
+          <Route path="/admin/users" element={<ProtectedRoute><AdminRoute><UsersRoute /></AdminRoute></ProtectedRoute>} />
+          <Route path="/admin/models" element={<ProtectedRoute><OpsRoute><ModelsRoute /></OpsRoute></ProtectedRoute>} />
+          <Route path="/admin/projects" element={<ProtectedRoute><OpsRoute><ProjectsRoute /></OpsRoute></ProtectedRoute>} />
+          <Route path="/admin/settings" element={<ProtectedRoute><AdminRoute><SettingsRoute /></AdminRoute></ProtectedRoute>} />
+          <Route path="*" element={<Navigate to="/studio/generate" replace />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

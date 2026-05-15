@@ -1,7 +1,6 @@
 """Encryption utilities for sensitive data like API keys."""
 from __future__ import annotations
 
-import os
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -9,12 +8,21 @@ from cryptography.fernet import Fernet, InvalidToken
 from app.core.config import settings
 
 
+class EncryptionKeyUnavailableError(RuntimeError):
+    """Raised when persistent secrets are used without a configured encryption key."""
+
+
+class EncryptedValueDecodeError(RuntimeError):
+    """Raised when a stored encrypted value can no longer be decrypted."""
+
+
 def _get_encryption_key() -> bytes:
-    """Get or generate the encryption key from settings."""
+    """Get the configured encryption key from settings."""
     key = settings.encryption_key
     if not key:
-        # Generate a new key if not configured (development only)
-        key = Fernet.generate_key().decode()
+        raise EncryptionKeyUnavailableError(
+            "QMDH_ENCRYPTION_KEY is required to encrypt or decrypt provider API keys."
+        )
     return key.encode() if isinstance(key, str) else key
 
 
@@ -39,7 +47,17 @@ def encrypt_value(plaintext: str) -> str:
 
 
 def decrypt_value(encrypted: str) -> str:
-    """Decrypt an encrypted string and return the plaintext value."""
+    """Best-effort decryption for compatibility with legacy call sites."""
+    if not encrypted:
+        return ""
+    try:
+        return decrypt_value_or_raise(encrypted)
+    except (EncryptionKeyUnavailableError, EncryptedValueDecodeError):
+        return ""
+
+
+def decrypt_value_or_raise(encrypted: str) -> str:
+    """Decrypt an encrypted string and raise if the secret cannot be used."""
     if not encrypted:
         return ""
     fernet = get_fernet()
@@ -47,8 +65,11 @@ def decrypt_value(encrypted: str) -> str:
         decrypted = fernet.decrypt(encrypted.encode())
         return decrypted.decode()
     except InvalidToken:
-        # Return empty string if decryption fails (legacy plaintext or invalid key)
-        return ""
+        if is_encrypted(encrypted):
+            raise EncryptedValueDecodeError(
+                "Stored provider API key could not be decrypted with the current QMDH_ENCRYPTION_KEY."
+            )
+        return encrypted
 
 
 def is_encrypted(value: str) -> bool:

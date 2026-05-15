@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,7 +19,13 @@ from app.schemas import (
     ConversationCreate,
     ConversationOut,
 )
-from app.services.chat_service import build_chat_messages, get_chat_models, stream_chat_completion
+from app.services.chat_service import (
+    build_chat_messages,
+    get_chat_models,
+    provider_profile_has_usable_api_key,
+    snapshot_chat_provider_config,
+    stream_chat_completion,
+)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -27,9 +33,9 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 def _verify_owner(db: Session, conversation_id: int, user_id: int) -> Conversation:
     conv = db.get(Conversation, conversation_id)
     if not conv:
-        raise HTTPException(status_code=404, detail="对话不存在")
+        raise HTTPException(status_code=404, detail="Conversation not found")
     if conv.user_id != user_id:
-        raise HTTPException(status_code=403, detail="无权访问该对话")
+        raise HTTPException(status_code=403, detail="Conversation access denied")
     return conv
 
 
@@ -38,15 +44,16 @@ def list_chat_models(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> list[ChatModelOut]:
+    del auth_user
     models = get_chat_models(db)
     return [
         ChatModelOut(
-            provider_id=m.id,
-            provider_name=m.provider_name,
-            model_name=m.model_name,
-            base_url=m.base_url,
+            provider_id=model.id,
+            provider_name=model.provider_name,
+            model_name=model.model_name,
+            base_url=model.base_url,
         )
-        for m in models
+        for model in models
     ]
 
 
@@ -78,20 +85,20 @@ def list_conversations(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> list[ConversationOut]:
-    convs = db.scalars(
+    conversations = db.scalars(
         select(Conversation)
         .where(Conversation.user_id == auth_user.user_id)
         .order_by(Conversation.updated_at.desc())
     ).all()
     return [
         ConversationOut(
-            id=c.id,
-            title=c.title,
-            model_provider_id=c.model_provider_id,
-            created_at=c.created_at,
-            updated_at=c.updated_at,
+            id=conversation.id,
+            title=conversation.title,
+            model_provider_id=conversation.model_provider_id,
+            created_at=conversation.created_at,
+            updated_at=conversation.updated_at,
         )
-        for c in convs
+        for conversation in conversations
     ]
 
 
@@ -108,8 +115,8 @@ def get_messages(
         .order_by(ChatMessage.created_at.asc())
     ).all()
     return [
-        ChatMessageOut(id=m.id, role=m.role, content=m.content, created_at=m.created_at)
-        for m in messages
+        ChatMessageOut(id=message.id, role=message.role, content=message.content, created_at=message.created_at)
+        for message in messages
     ]
 
 
@@ -118,9 +125,9 @@ def delete_conversation(
     conversation_id: int,
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
-):
-    conv = _verify_owner(db, conversation_id, auth_user.user_id)
-    db.delete(conv)
+) -> Response:
+    conversation = _verify_owner(db, conversation_id, auth_user.user_id)
+    db.delete(conversation)
     db.commit()
     return Response(status_code=204)
 
@@ -132,50 +139,45 @@ async def send_message(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ):
-    conv = _verify_owner(db, conversation_id, auth_user.user_id)
+    conversation = _verify_owner(db, conversation_id, auth_user.user_id)
 
-    # Get provider
-    if not conv.model_provider_id:
-        raise HTTPException(status_code=400, detail="对话未关联模型")
-    provider = db.get(ProviderProfile, conv.model_provider_id)
+    if not conversation.model_provider_id:
+        raise HTTPException(status_code=400, detail="Conversation is not linked to a model")
+    provider = db.get(ProviderProfile, conversation.model_provider_id)
     if not provider or not provider.enabled:
-        raise HTTPException(status_code=400, detail="模型已禁用或不存在")
+        raise HTTPException(status_code=400, detail="Model is disabled or missing")
+    if not provider_profile_has_usable_api_key(provider):
+        raise HTTPException(
+            status_code=503,
+            detail="该模型的 API Key 当前不可用，请检查 QMDH_ENCRYPTION_KEY 或在模型管理页重新录入密钥。",
+        )
+    provider_config = snapshot_chat_provider_config(provider)
 
-    # Persist user message
-    user_msg = ChatMessage(
+    user_message = ChatMessage(
         conversation_id=conversation_id,
         role="user",
         content=payload.content.strip(),
     )
-    db.add(user_msg)
+    db.add(user_message)
 
-    # Update conversation title if first message
-    existing_count = db.scalar(
-        select(ChatMessage.id).where(ChatMessage.conversation_id == conversation_id).limit(2)
-    )
-    if conv.title == "新对话":
-        conv.title = payload.content.strip()[:50]
+    if conversation.title == "新对话":
+        conversation.title = payload.content.strip()[:50]
 
     db.commit()
 
-    # Build messages for API call
-    messages = build_chat_messages(db, conversation_id, "")
-    # Remove the empty last message (we already added user_msg to DB)
-    # Actually rebuild without appending since user msg is already in DB
-    all_msgs = db.scalars(
+    _ = build_chat_messages(db, conversation_id, "")
+    all_messages = db.scalars(
         select(ChatMessage)
         .where(ChatMessage.conversation_id == conversation_id)
         .order_by(ChatMessage.created_at.asc())
     ).all()
-    recent = all_msgs[-50:] if len(all_msgs) > 50 else all_msgs
-    api_messages = [{"role": m.role, "content": m.content} for m in recent]
+    recent = all_messages[-50:] if len(all_messages) > 50 else all_messages
+    api_messages = [{"role": message.role, "content": message.content} for message in recent]
 
-    # Stream response
     full_content_parts: list[str] = []
 
     async def generate():
-        async for chunk in stream_chat_completion(provider, api_messages):
-            # Collect content for persistence
+        async for chunk in stream_chat_completion(provider_config, api_messages):
             if chunk.startswith("data: ") and "[DONE]" not in chunk:
                 try:
                     data = json.loads(chunk[6:])
@@ -185,15 +187,14 @@ async def send_message(
                     pass
             yield chunk
 
-        # Persist assistant message after streaming completes
         full_content = "".join(full_content_parts)
         if full_content:
-            assistant_msg = ChatMessage(
+            assistant_message = ChatMessage(
                 conversation_id=conversation_id,
                 role="assistant",
                 content=full_content,
             )
-            db.add(assistant_msg)
+            db.add(assistant_message)
             db.commit()
 
     return StreamingResponse(

@@ -32,22 +32,22 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Update per-user monthly quota calculation to include soft-deleted tasks created within the month
     - _Requirements: 9.3, 9.4_
 
-  - [ ]* 1.5 Write property test for soft-delete idempotence
+  - [x]* 1.5 Write property test for soft-delete idempotence
     - **Property 3: Soft-Delete Idempotence**
     - Verify: calling soft-delete on already-deleted task returns 404, does not modify `deleted_at`, does not create duplicate audit entry
     - **Validates: Requirements 9.1, 9.9**
 
-  - [ ]* 1.6 Write unit tests for soft-delete behavior
+  - [x]* 1.6 Write unit tests for soft-delete behavior
     - Test permission check (403 for unauthorized users)
     - Test 404 for non-existent task ID
     - Test dashboard stats include soft-deleted tasks
     - Test audit log entry creation with and without reason
     - _Requirements: 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8_
 
-- [ ] 2. Checkpoint - Ensure soft-delete migration and tests pass
+- [x] 2. Checkpoint - Ensure soft-delete migration and tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 3. Frontend Component Architecture
+- [x] 3. Frontend Component Architecture
   - [x] 3.1 Create directory structure and shared components
     - Create `frontend/src/pages/admin/`, `frontend/src/pages/studio/`, `frontend/src/pages/inspiration/`, `frontend/src/pages/chat/`, `frontend/src/pages/auth/`
     - Create `frontend/src/components/shared/Layout.tsx` (nav rail + content area shell)
@@ -81,18 +81,18 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Wrap lazy routes in `<Suspense fallback={<LoadingFallback />}>`
     - _Requirements: 1.2, 1.3_
 
-  - [ ] 3.5 Refactor App.tsx to router shell only
+- [x] 3.5 Refactor App.tsx to router shell only
     - Reduce `frontend/src/App.tsx` to ≤200 lines
     - Keep only: AuthContext provider, router shell, global error boundary
     - Remove all inline page logic, move to page components
     - _Requirements: 1.7, 1.8_
 
-  - [ ]* 3.6 Verify frontend build and smoke test
+  - [x]* 3.6 Verify frontend build and smoke test
     - Run `npm run build` and confirm zero TypeScript errors
     - Verify each of the 9 routes renders without new console errors
     - _Requirements: 1.7_
 
-- [ ] 4. Checkpoint - Ensure frontend refactor builds cleanly
+- [x] 4. Checkpoint - Ensure frontend refactor builds cleanly
   - Ensure all tests pass, ask the user if questions arise.
 
 - [x] 5. Environment Variable Standardization
@@ -115,7 +115,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Ensure no variable is documented in only one location
     - _Requirements: 2.7_
 
-- [ ] 6. Backend Structured Logging
+- [x] 6. Backend Structured Logging
   - [x] 6.1 Create structured logging module with JSON formatter
     - Create `backend/app/core/logging.py`
     - Implement custom formatter using `python-json-logger` JsonFormatter
@@ -149,14 +149,14 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Update `backend/app/main.py` with the new middleware registrations
     - _Requirements: 3.2, 3.3, 3.4_
 
-  - [ ]* 6.6 Write unit tests for structured logging
+  - [x]* 6.6 Write unit tests for structured logging
     - Test JSON output format contains required fields
     - Test correlation_id propagation across request lifecycle
     - Test log level configuration and fallback behavior
     - Test console format output when `QMDH_LOG_FORMAT=console`
     - _Requirements: 3.1, 3.2, 3.6, 3.8_
 
-- [ ] 7. Health Check Enhancement
+- [x] 7. Health Check Enhancement
   - [x] 7.1 Implement enhanced health check endpoint with dependency checks
     - Modify `backend/app/routers/health.py`
     - Run DB `SELECT 1` and Redis `PING` concurrently with 2s per-check timeout
@@ -173,7 +173,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Ensure both health endpoints are exempt from authentication
     - _Requirements: 4.9, 4.10_
 
-  - [ ]* 7.3 Write unit tests for health check responses
+  - [x]* 7.3 Write unit tests for health check responses
     - Test healthy response when all dependencies up
     - Test degraded response when DB or Redis down
     - Test timeout handling
@@ -182,7 +182,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - **Property 5: Health Check Status Enum Closure**
     - **Validates: Requirements 4.4, 4.5, 4.6**
 
-- [ ] 8. CORS Multi-Domain Whitelist
+- [x] 8. CORS Multi-Domain Whitelist
   - [x] 8.1 Implement CORS origin parsing and configuration
     - Modify `backend/app/core/config.py` to parse `QMDH_CORS_ORIGINS` as comma-separated list
     - Enforce max 20 entries, max 253 chars each, strip whitespace, ignore empty entries
@@ -196,12 +196,12 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Verify case-sensitive exact matching (scheme + hostname + port)
     - _Requirements: 5.2, 5.3, 5.4_
 
-  - [ ]* 8.3 Write property test for CORS origin matching
+  - [x]* 8.3 Write property test for CORS origin matching
     - **Property 1: CORS Origin Matching**
     - Verify: `match_origin(origin, whitelist)` returns True iff origin is byte-for-byte equal to some entry in whitelist
     - **Validates: Requirements 5.2**
 
-- [ ] 9. API Rate Limiting
+- [x] 9. API Rate Limiting
   - [x] 9.1 Implement sliding window rate limiter with Redis
     - Create `backend/app/core/rate_limit.py`
     - Implement sliding window using Redis sorted sets (ZADD, ZREMRANGEBYSCORE, ZCARD)
@@ -219,13 +219,13 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Register middleware in `backend/app/main.py` in correct stack position
     - _Requirements: 6.1, 6.2, 6.3, 6.5, 6.6, 6.8_
 
-  - [ ]* 9.3 Write property test for rate limit sliding window
+  - [x]* 9.3 Write property test for rate limit sliding window
     - **Property 2: Rate Limit Sliding Window**
     - Verify: given N requests at timestamps T1..TN within 60s window, counter equals exactly N; requests older than 60s are not counted
     - **Validates: Requirements 6.1**
 
-- [ ] 10. Session Expiry Cleanup
-  - [ ] 10.1 Implement session cleanup service
+- [x] 10. Session Expiry Cleanup
+  - [x] 10.1 Implement session cleanup service
     - Create `backend/app/services/session_cleanup.py`
     - Delete expired sessions (`expires_at < utcnow()` AND `revoked_at IS NULL`)
     - Delete old revoked sessions (`revoked_at` > 30 days ago)
@@ -234,30 +234,30 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Log completion with `expired_deleted_count`, `revoked_purged_count`, `duration_ms`, `status`
     - _Requirements: 7.1, 7.2, 7.4, 7.5, 7.7_
 
-  - [ ] 10.2 Add APScheduler integration with Redis lock
+  - [x] 10.2 Add APScheduler integration with Redis lock
     - Configure APScheduler `BackgroundScheduler` in FastAPI `lifespan` event
     - Interval from `QMDH_SESSION_CLEANUP_INTERVAL_SECONDS` (range 60-86400, default 3600)
     - Acquire Redis lock (`SET cleanup_lock NX EX 300`) before running; skip if lock exists
     - _Requirements: 7.3, 7.6_
 
-  - [ ] 10.3 Create CLI command for manual cleanup
+  - [x] 10.3 Create CLI command for manual cleanup
     - Create `backend/app/cli.py` with `cleanup_sessions` command
     - Run cleanup logic synchronously and exit
     - Invoked via `python -m app.cli cleanup_sessions`
     - _Requirements: 7.8_
 
-  - [ ]* 10.4 Write unit tests for session cleanup
+  - [x]* 10.4 Write unit tests for session cleanup
     - Test expired session deletion
     - Test revoked session purge (>30 days)
     - Test batch processing and transaction rollback on error
     - Test Redis lock prevents concurrent execution
     - _Requirements: 7.1, 7.2, 7.4, 7.6, 7.7_
 
-- [ ] 11. Checkpoint - Ensure backend services pass all tests
+- [x] 11. Checkpoint - Ensure backend services pass all tests
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 12. Static Asset Storage Strategy
-  - [ ] 12.1 Refactor MediaStorageService with StorageBackend protocol
+- [x] 12. Static Asset Storage Strategy
+  - [x] 12.1 Refactor MediaStorageService with StorageBackend protocol
     - Modify `backend/app/services/media_storage.py`
     - Define `StorageBackend` protocol with `write(relative_path, data)` and `url_for(relative_path)` methods
     - Extract current local storage logic into `LocalStorage` class
@@ -265,7 +265,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Fail fast at startup if invalid value provided
     - _Requirements: 8.1, 8.5_
 
-  - [ ] 12.2 Implement OSSStorage backend with retry logic
+  - [x] 12.2 Implement OSSStorage backend with retry logic
     - Add `OSSStorage` class in `backend/app/services/media_storage.py` using `oss2` SDK
     - Upload to configured bucket with 30s timeout
     - Retry transient errors (network, 5xx) up to 3 times with exponential backoff (1s, 2s, 4s)
@@ -273,19 +273,19 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Fail fast at startup if OSS config vars (bucket, endpoint, access key, secret) are missing
     - _Requirements: 8.2, 8.3, 8.7, 8.8_
 
-  - [ ] 12.3 Implement URL resolution with CDN support
+  - [x] 12.3 Implement URL resolution with CDN support
     - Store relative paths in DB (e.g., `generated/<provider>/<filename>`)
     - `url_for()` prepends `QMDH_CDN_BASE_URL` when set, or `/media` prefix for local
     - Legacy absolute paths (starting with `http://`, `https://`, `/`) returned as-is
     - Preserve existing path structure regardless of backend
     - _Requirements: 8.4, 8.6, 8.9_
 
-  - [ ]* 12.4 Write property test for storage backend interface contract
+  - [x]* 12.4 Write property test for storage backend interface contract
     - **Property 4: Storage Backend Interface Contract**
     - Verify: for any valid relative_path, `backend.write(path, data)` followed by `backend.url_for(path)` returns a URL containing the original relative_path as a suffix
     - **Validates: Requirements 8.1, 8.5**
 
-  - [ ]* 12.5 Write unit tests for storage backends
+  - [x]* 12.5 Write unit tests for storage backends
     - Test local storage write and URL resolution
     - Test OSS storage retry on transient errors
     - Test OSS storage immediate failure on non-transient errors
@@ -293,7 +293,7 @@ Production hardening of the QMDH-web platform across 9 areas: task soft-delete, 
     - Test startup failure on missing OSS config
     - _Requirements: 8.2, 8.3, 8.7, 8.8, 8.9_
 
-- [ ] 13. Final Checkpoint - Full integration verification
+- [x] 13. Final Checkpoint - Full integration verification
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

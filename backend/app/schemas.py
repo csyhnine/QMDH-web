@@ -31,6 +31,10 @@ class TaskCreate(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class TaskDeleteIn(BaseModel):
+    reason: str = ""
+
+
 class TaskOut(BaseModel):
     id: int
     title: str

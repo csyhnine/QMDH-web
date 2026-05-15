@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.auth import ensure_project_access, get_current_auth_user
+from app.core.audit import write_audit_log
 from app.core.config import AuthUserProfile
 from app.core.config import settings
 from app.database import get_db
 from app.models import AuditLog, Project, Task, TaskStatus, User, Workflow
-from app.schemas import TaskCreate, TaskOut
+from app.schemas import TaskCreate, TaskDeleteIn, TaskOut
+from app.services.media_storage import resolve_storage_payload
 from app.services.model_registry import get_provider_definition, get_provider_map
 from app.services.task_executor import enqueue_task, execute_task
 
@@ -43,7 +47,7 @@ def _to_task_out(task: Task) -> TaskOut:
         cost=task.cost,
         cost_currency=task.cost_currency or "CNY",
         latency_ms=task.latency_ms,
-        result=task.result,
+        result=resolve_storage_payload(task.result),
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
@@ -147,12 +151,12 @@ def create_task(
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_task(
     task_id: int,
+    payload: TaskDeleteIn | None = Body(default=None),
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ):
     """Soft-delete a task. Sets deleted_at timestamp instead of removing the row.
     Only task owner or ops+ can delete. Associated ProviderCall and Asset records are retained."""
-    from datetime import datetime, timezone
     from fastapi import Response
 
     task = db.get(Task, task_id)
@@ -167,20 +171,24 @@ def delete_task(
         raise HTTPException(status_code=403, detail="Only task owner or ops+ can delete tasks")
 
     # Soft-delete: set deleted_at timestamp
-    task.deleted_at = datetime.now(timezone.utc)
+    deleted_at = datetime.now(timezone.utc)
+    task.deleted_at = deleted_at
 
     # Audit log entry
-    db.add(
-        AuditLog(
-            event_type="task.soft_deleted",
-            actor_name=auth_user.name,
-            actor_id=auth_user.user_id,
-            target_type="task",
-            target_id=task.id,
-            target_name=task.title,
-            project_code=task.project.code,
-            details={"task_id": task.id, "reason": ""},
-        )
+    write_audit_log(
+        db=db,
+        event_type="task.soft_deleted",
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="task",
+        target_id=task.id,
+        target_name=task.title,
+        project_code=task.project.code,
+        details={
+            "task_id": task.id,
+            "deleted_at": deleted_at.isoformat(),
+            "reason": (payload.reason if payload else "") or "",
+        },
     )
 
     db.commit()

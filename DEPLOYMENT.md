@@ -23,8 +23,11 @@ QMDH-web 的 MVP 1.0 服务器部署基线采用单机 Docker Compose 方案：
 在仓库根目录创建 `.env`，至少填写：
 
 ```env
+QMDH_ENCRYPTION_KEY=replace_with_a_stable_fernet_key
+QMDH_FRONTEND_ORIGIN=https://your-domain.example.com
 QMDH_OPENAI_IMAGE_API_KEY=your_real_key
 QMDH_OPENAI_IMAGE_MODEL=gpt-image-1
+QMDH_BOOTSTRAP_ADMIN_PASSWORD=replace_with_a_strong_password
 ```
 
 如需覆盖默认值，也可额外填写：
@@ -48,6 +51,10 @@ QMDH_OPENAI_IMAGE_OUTPUT_FORMAT=png
 ```bash
 docker compose up -d --build
 ```
+Production note:
+- Docker frontend host port defaults to `8080`
+- backend health is reachable through `http://<server-ip>:8080/api/v1/health`
+- if you use Baota or another host-level Nginx, reverse-proxy `80/443` to `127.0.0.1:8080`
 
 启动后默认访问：
 

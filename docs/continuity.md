@@ -19,6 +19,7 @@
 - 前端开发地址：`http://127.0.0.1:18080`
 - 后端开发地址：`http://127.0.0.1:18010`
 - 本地一键检查：`cmd /c start-dev.cmd --check`
+- `start-dev.cmd` will clean stale repo-owned dev processes first and will not silently drift to `18011`, `5180`, or `19010`
 - 本地账号清单：双击 `open-accounts.cmd`
 
 ## If AI Quota Or Context Runs Out

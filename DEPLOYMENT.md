@@ -89,5 +89,63 @@ docker compose down -v
   - HTTPS 证书自动化
   - 细粒度权限控制
   - 对象存储
-  - 正式 migration 体系
   - 集中式日志与监控
+
+## 7. Production Update Checklist
+
+For a live server update, use this sequence instead of rebuilding blindly:
+
+```bash
+cd /www/wwwroot/qmdh-web
+cp .env .env.backup-YYYYMMDD
+docker compose exec postgres pg_dump -U qmdh -d qmdh > qmdh-YYYYMMDD.sql
+git pull origin main
+docker compose run --rm backend alembic upgrade head
+docker compose up -d --build
+docker compose ps
+curl http://127.0.0.1:8080/api/v1/health
+```
+
+## 8. Data Safety Rules
+
+Never do these on the live server unless you intentionally want to wipe data:
+
+- `docker compose down -v`
+- deleting Docker volumes `postgres_data`, `redis_data`, or `backend_media`
+- replacing `QMDH_ENCRYPTION_KEY` after provider API keys have already been stored
+- bringing up a fresh empty PostgreSQL database without running a migration / import plan
+
+Persistence boundary reminder:
+
+- PostgreSQL stores users, provider profiles, chat history, task history, inspiration posts, and other business records
+- `backend_media` stores generated images and managed media assets
+- model keys are stored in PostgreSQL, but they remain readable only if the matching `QMDH_ENCRYPTION_KEY` is preserved in `.env`
+
+## 9. Company Account Recovery
+
+This repo includes a repeatable recovery entry for company member accounts:
+
+```bash
+cd /www/wwwroot/qmdh-web
+docker compose run --rm backend python -m app.cli seed_users
+```
+
+Behavior:
+
+- keeps bootstrap admin and local dev accounts
+- adds missing company members from the maintained roster
+- does not overwrite existing passwords, roles, or active accounts
+- uses the roster default password rule for newly created users; users should change it after first login
+
+## 10. Server Runbook
+
+The detailed server-side runbook lives in:
+
+- `docs/server-operations.md`
+
+Read it before:
+
+- first deployment
+- domain / Baota changes
+- live updates
+- backup / restore work

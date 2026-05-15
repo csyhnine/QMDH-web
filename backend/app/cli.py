@@ -6,12 +6,14 @@ import json
 from app.core.logging import setup_logging
 from app.database import SessionLocal
 from app.services.session_cleanup import run_session_cleanup_once
+from seed_users import seed_staff_users
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("cleanup_sessions", help="Delete expired and stale revoked auth sessions")
+    subparsers.add_parser("seed_users", help="Restore company member accounts from the staff roster")
     return parser
 
 
@@ -33,6 +35,11 @@ def main(argv: list[str] | None = None) -> int:
                 }
             )
         )
+        return 0
+
+    if args.command == "seed_users":
+        result = seed_staff_users(SessionLocal)
+        print(json.dumps({"created": result.created, "skipped": result.skipped}))
         return 0
 
     parser.error(f"Unknown command: {args.command}")

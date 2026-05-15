@@ -12,6 +12,8 @@ from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import InspirationPost
 from app.schemas import ExtractImagesIn, ExtractImagesOut, InspirationPostCreate, InspirationPostOut, InspirationPostUpdate
+from app.services.inspiration_media import prepare_inspiration_image
+from app.services.media_storage import resolve_storage_path
 
 router = APIRouter(prefix="/inspiration", tags=["inspiration"])
 
@@ -26,7 +28,7 @@ def _to_out(post: InspirationPost) -> InspirationPostOut:
         id=post.id,
         title=post.title,
         description=post.description,
-        image_path=post.image_path,
+        image_path=resolve_storage_path(post.image_path) if post.image_path else "",
         category=post.category,
         tags=post.tags or [],
         source_type=post.source_type,
@@ -64,10 +66,17 @@ def create_inspiration(
     if payload.source_type == "external":
         require_ops_access(auth_user)
 
+    managed_image_path = prepare_inspiration_image(
+        payload.image_path,
+        title=payload.title.strip(),
+        source_url=payload.source_url.strip(),
+        namespace="imports",
+    )
+
     post = InspirationPost(
         title=payload.title.strip(),
         description=payload.description.strip(),
-        image_path=payload.image_path.strip(),
+        image_path=managed_image_path,
         category=payload.category.strip() or "建筑",
         tags=[tag.strip() for tag in payload.tags if tag.strip()],
         source_type=payload.source_type,
@@ -131,6 +140,13 @@ def update_inspiration(
     for field, value in update_data.items():
         if field == "tags" and value is not None:
             value = [tag.strip() for tag in value if tag.strip()]
+        elif field == "image_path" and value is not None:
+            value = prepare_inspiration_image(
+                str(value),
+                title=update_data.get("title") or post.title,
+                source_url=update_data.get("source_url") or post.source_url,
+                namespace="imports",
+            )
         setattr(post, field, value)
 
     db.commit()

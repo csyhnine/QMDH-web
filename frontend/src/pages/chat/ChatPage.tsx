@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, getStoredAuthToken } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 
@@ -40,11 +40,56 @@ export default function ChatPage() {
     return saved ? parseInt(saved, 10) : null;
   });
   const [streaming, setStreaming] = useState(false);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const messagesBottomRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
+  const previousMessageCountRef = useRef(0);
+  const pendingInitialScrollRef = useRef(false);
+
+  function updateAutoScrollState() {
+    const element = messagesRef.current;
+    if (!element) {
+      return;
+    }
+    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    shouldAutoScrollRef.current = distanceFromBottom <= 96;
+  }
+
+  function scrollMessagesToBottom(behavior: ScrollBehavior = "auto") {
+    messagesBottomRef.current?.scrollIntoView({ block: "end", behavior });
+  }
 
   useEffect(() => {
     api.getChatModels().then(setChatModels).catch(() => {});
     api.getChatConversations().then(setConversations).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    shouldAutoScrollRef.current = true;
+    pendingInitialScrollRef.current = true;
+    previousMessageCountRef.current = 0;
+  }, [activeChatId]);
+
+  const lastMessageContent = messages[messages.length - 1]?.content ?? "";
+
+  useEffect(() => {
+    const messageCount = messages.length;
+    if (messageCount === 0) {
+      previousMessageCountRef.current = 0;
+      return;
+    }
+
+    const hasNewMessage = messageCount > previousMessageCountRef.current;
+    const shouldScroll = pendingInitialScrollRef.current || shouldAutoScrollRef.current;
+
+    if (shouldScroll) {
+      const behavior: ScrollBehavior = hasNewMessage ? "smooth" : "auto";
+      requestAnimationFrame(() => scrollMessagesToBottom(behavior));
+      pendingInitialScrollRef.current = false;
+    }
+
+    previousMessageCountRef.current = messageCount;
+  }, [activeChatId, lastMessageContent, messages.length]);
 
   return (
     <section className="chat-page">
@@ -81,7 +126,7 @@ export default function ChatPage() {
 
         {activeChatId ? (
           <>
-            <div className="chat-messages" ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}>
+            <div className="chat-messages" ref={messagesRef} onScroll={updateAutoScrollState}>
               {messages.map((msg, i) => (
                 <div key={msg.id || i} className={`chat-msg ${msg.role}`}>
                   {msg.role === "assistant" ? <div className="chat-msg-avatar">AI</div> : null}
@@ -91,6 +136,7 @@ export default function ChatPage() {
                   {msg.role === "user" ? <div className="chat-msg-avatar chat-msg-avatar-user">{(currentUser?.display_name || "U").slice(0, 1)}</div> : null}
                 </div>
               ))}
+              <div ref={messagesBottomRef} aria-hidden="true" />
             </div>
 
             <div className="chat-input-area">

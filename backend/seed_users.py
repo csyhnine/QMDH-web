@@ -8,7 +8,9 @@ Requires the database to be initialized (app must have been started at least onc
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 # Ensure app package is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -164,24 +166,41 @@ def get_role(title: str) -> str:
     return "designer"
 
 
-def main() -> None:
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    created = 0
-    skipped = 0
+@dataclass
+class SeedUsersResult:
+    created: int = 0
+    skipped: int = 0
+
+
+def seed_staff_users(
+    session_factory=SessionLocal,
+    *,
+    engine_to_init=engine,
+    stdout: Callable[[str], None] | None = print,
+) -> SeedUsersResult:
+    Base.metadata.create_all(bind=engine_to_init)
+    db = session_factory()
+    result = SeedUsersResult()
 
     try:
         for display_name, phone, title in ROSTER:
             username = PINYIN_MAP.get(display_name)
             if not username:
-                print(f"  [SKIP] No pinyin mapping for {display_name}")
-                skipped += 1
+                if stdout:
+                    stdout(f"  [SKIP] No pinyin mapping for {display_name}")
+                result.skipped += 1
                 continue
 
             existing = db.scalar(select(User).where(User.name == username))
             if existing:
-                print(f"  [EXISTS] {username} ({display_name})")
-                skipped += 1
+                if not existing.display_name:
+                    existing.display_name = display_name
+                if not existing.project_codes:
+                    existing.project_codes = ["*"] if existing.role in ("owner", "admin", "ops") else ["QMDH-001"]
+                existing.is_active = True
+                if stdout:
+                    stdout(f"  [EXISTS] {username} ({display_name})")
+                result.skipped += 1
                 continue
 
             password = phone[-4:]
@@ -196,13 +215,20 @@ def main() -> None:
                 project_codes=["*"] if role in ("admin", "ops") else ["QMDH-001"],
             )
             db.add(user)
-            created += 1
-            print(f"  [CREATE] {username} / {display_name} / {role} / pw={password}")
+            result.created += 1
+            if stdout:
+                stdout(f"  [CREATE] {username} / {display_name} / {role} / pw={password}")
 
         db.commit()
-        print(f"\nDone: {created} created, {skipped} skipped.")
+        if stdout:
+            stdout(f"\nDone: {result.created} created, {result.skipped} skipped.")
+        return result
     finally:
         db.close()
+
+
+def main() -> None:
+    seed_staff_users()
 
 
 if __name__ == "__main__":

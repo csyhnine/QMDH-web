@@ -1141,6 +1141,11 @@ export default function GenerateStudioShell() {
     return saved ? parseInt(saved, 10) : null;
   });
   const [chatStreaming, setChatStreaming] = useState(false);
+  const chatMessagesRef = useRef<HTMLDivElement | null>(null);
+  const chatMessagesBottomRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollChatRef = useRef(true);
+  const previousChatMessageCountRef = useRef(0);
+  const pendingInitialChatScrollRef = useRef(false);
   const [filters, setFilters] = useState<FeedFilterState>({
     sort: "oldest",
     status: "all",
@@ -1188,6 +1193,19 @@ export default function GenerateStudioShell() {
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectCode, setNewProjectCode] = useState("");
+
+  function updateChatAutoScrollState() {
+    const element = chatMessagesRef.current;
+    if (!element) {
+      return;
+    }
+    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    shouldAutoScrollChatRef.current = distanceFromBottom <= 96;
+  }
+
+  function scrollChatToBottom(behavior: ScrollBehavior = "auto") {
+    chatMessagesBottomRef.current?.scrollIntoView({ block: "end", behavior });
+  }
   const [renamingProjectCode, setRenamingProjectCode] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [selectedAdminProjectCode, setSelectedAdminProjectCode] = useState("");
@@ -1329,6 +1347,33 @@ export default function GenerateStudioShell() {
       document.body.style.overflow = prev;
     };
   }, [galleryPreview]);
+
+  useEffect(() => {
+    shouldAutoScrollChatRef.current = true;
+    pendingInitialChatScrollRef.current = true;
+    previousChatMessageCountRef.current = 0;
+  }, [activeChatId]);
+
+  const lastChatMessageContent = chatMessages[chatMessages.length - 1]?.content ?? "";
+
+  useEffect(() => {
+    const messageCount = chatMessages.length;
+    if (messageCount === 0) {
+      previousChatMessageCountRef.current = 0;
+      return;
+    }
+
+    const hasNewMessage = messageCount > previousChatMessageCountRef.current;
+    const shouldScroll = pendingInitialChatScrollRef.current || shouldAutoScrollChatRef.current;
+
+    if (shouldScroll) {
+      const behavior: ScrollBehavior = hasNewMessage ? "smooth" : "auto";
+      window.requestAnimationFrame(() => scrollChatToBottom(behavior));
+      pendingInitialChatScrollRef.current = false;
+    }
+
+    previousChatMessageCountRef.current = messageCount;
+  }, [activeChatId, chatMessages.length, lastChatMessageContent]);
 
   const availableProviders = state.providers.filter(
     (provider) =>
@@ -3854,7 +3899,7 @@ export default function GenerateStudioShell() {
               {activeChatId ? (
                 <>
                   {/* Messages */}
-                  <div className="chat-messages" ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}>
+                  <div className="chat-messages" ref={chatMessagesRef} onScroll={updateChatAutoScrollState}>
                     {chatMessages.map((msg, i) => (
                       <div key={msg.id || i} className={`chat-msg ${msg.role}`}>
                         {msg.role === "assistant" ? <div className="chat-msg-avatar">AI</div> : null}
@@ -3864,6 +3909,7 @@ export default function GenerateStudioShell() {
                         {msg.role === "user" ? <div className="chat-msg-avatar chat-msg-avatar-user">{(currentUser?.display_name || "U").slice(0, 1)}</div> : null}
                       </div>
                     ))}
+                    <div ref={chatMessagesBottomRef} aria-hidden="true" />
                   </div>
                   {/* Input area */}
                   <div className="chat-input-area">

@@ -44,6 +44,57 @@
 - 风险与注意事项：
   - 运营看板为空是当前数据库里没有任务与 provider 调用，不是前端渲染故障
   - 任务删除会删除 `provider_calls`、关联 `assets` 与 `task`，现阶段确实会让看板/账号用量回退
+
+## Server Handoff Update (2026-05-15)
+
+- Live-like server has been deployed on Alibaba Cloud:
+  - IP: `120.79.227.11`
+  - domain: `cityusbdisk.cn`
+  - Baota: `https://120.79.227.11:26215`
+  - repo path: `/www/wwwroot/qmdh-web`
+- App runtime is healthy through Docker Compose:
+  - `frontend`, `backend`, `worker`, `postgres`, `redis`
+  - Baota proxies `80/443` to `127.0.0.1:8080`
+- Domain access is currently blocked by Alibaba filing / access-filing constraints.
+  - IP access works
+  - domain failure is not an application regression until filing is complete
+
+## Current Server Data State
+
+- This server started from a fresh PostgreSQL database.
+- Historic company member accounts were **not** migrated automatically.
+- Default state only includes:
+  - bootstrap admin from `.env`
+  - 3 local dev accounts seeded by bootstrap
+- Company member recovery entry is now:
+  - `docker compose run --rm backend python -m app.cli seed_users`
+
+## Data Preservation Rules
+
+- Persistent business data lives in Docker volumes:
+  - `postgres_data`
+  - `backend_media`
+  - `redis_data`
+- Model keys depend on both:
+  - PostgreSQL contents
+  - the unchanged server `.env` value for `QMDH_ENCRYPTION_KEY`
+
+Do not do these on the live server without an intentional wipe plan:
+
+- `docker compose down -v`
+- deleting `postgres_data` or `backend_media`
+- replacing `QMDH_ENCRYPTION_KEY`
+
+## Inspiration Library Note
+
+- Earlier inspiration cards could appear without images because seed posts stored third-party hotlinks directly.
+- Stabilization work now localizes seed/imported inspiration images into platform-managed storage, with a managed fallback placeholder when remote downloads fail.
+
+## Primary Runbook
+
+For future agents, the server source of truth is now:
+
+- `docs/server-operations.md`
   - Chat 需要先在 `/admin/models` 配好 `chat.completions` 模型才能实际使用
   - `frontend/src/App.tsx` 仍是超长单文件技术债
 - 未完成内容：

@@ -9,7 +9,8 @@
 3. `docs/handoff.md`
 4. `docs/projects/QMDH-001/status.md`
 5. `docs/deployment.md`
-6. 本文件
+6. `docs/server-operations.md`
+7. 本文件
 
 ## Current Baseline
 
@@ -70,3 +71,44 @@ cmd /c start-dev.cmd --check
 cd backend; python -m unittest discover -s tests
 cd frontend; npm run build
 ```
+
+## Server Snapshot (2026-05-15)
+
+- Current server IP: `120.79.227.11`
+- Domain: `cityusbdisk.cn`
+- Baota panel: `https://120.79.227.11:26215`
+- Deploy path: `/www/wwwroot/qmdh-web`
+- Runtime entry:
+  - Baota `80/443` reverse-proxy to `127.0.0.1:8080`
+  - direct IP access works
+  - domain access is still blocked by Alibaba filing / access-filing requirements
+
+## Server Data Persistence Notes
+
+- `postgres_data` volume: users, provider profiles, chats, tasks, inspiration posts, audit data
+- `backend_media` volume: generated images, managed inspiration images, other uploaded media
+- `redis_data` volume: queue/runtime persistence only
+- `.env` on the server contains `QMDH_ENCRYPTION_KEY`; this key must stay paired with the database backups
+
+Never do these casually on the live server:
+
+- `docker compose down -v`
+- deleting Docker volumes
+- changing `QMDH_ENCRYPTION_KEY`
+
+## Server Recovery / Handoff Pointers
+
+- Detailed runbook: `docs/server-operations.md`
+- Live update flow must include:
+  1. backup `.env`
+  2. backup PostgreSQL
+  3. backup `backend_media`
+  4. `git pull`
+  5. `docker compose run --rm backend alembic upgrade head`
+  6. `docker compose up -d --build`
+
+## Current Operational Conclusions
+
+- Company member accounts on the current server were not migrated from the historic DB; the server started from a fresh PostgreSQL database
+- Use `docker compose run --rm backend python -m app.cli seed_users` to restore the maintained company roster
+- Inspiration library default images should now be treated as managed storage assets, not long-term third-party hotlinks

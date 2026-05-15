@@ -213,3 +213,20 @@ QMDH_AUTH_USERS_JSON=[{"name":"reviewer","token":"dev-reviewer-token","role":"re
 - 为 provider profile 增加密钥加密、轮换和操作审计
 - 将热门提示词也改成后端可配置
 - 为参考图和生成图补清理策略与容量监控
+
+## 生产服务器补充说明（2026-05-15）
+
+- 真实服务器信息、备份/恢复、日常更新、备案状态请以 `docs/server-operations.md` 为准。
+- 当前服务器已经部署在阿里云，域名 `cityusbdisk.cn` 已解析到 `120.79.227.11`，但因为备案/接入备案未完成，域名访问会被阿里云拦截；IP 访问是正常的。
+- 服务器更新时不要只做 `git pull && docker compose up -d --build`，还必须：
+  1. 备份 `.env`
+  2. 备份 PostgreSQL
+  3. 备份 `backend_media`
+  4. 运行 `docker compose run --rm backend alembic upgrade head`
+- 严禁在正式服务器上随意执行 `docker compose down -v`。
+- 严禁更换 `QMDH_ENCRYPTION_KEY`，否则数据库里的 provider API key 会失效。
+- 公司成员账号恢复入口已经定为：
+
+```bash
+docker compose run --rm backend python -m app.cli seed_users
+```

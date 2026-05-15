@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.security import hash_password
 from app.models import Asset, AssetType, DataClassification, InspirationPost, Project, User, Workflow
+from app.services.inspiration_media import prepare_inspiration_image
 from app.services.media_storage import write_preview_svg
 
 LOCAL_DEV_ACCOUNTS = [
@@ -382,13 +383,25 @@ def seed_initial_data(db: Session) -> None:
     for title, description, category, image_url, tags, source_name, source_url in inspiration_posts:
         existing = db.scalar(select(InspirationPost).where(InspirationPost.title == title))
         if existing:
+            if existing.source_type == "external":
+                existing.image_path = prepare_inspiration_image(
+                    existing.image_path,
+                    title=existing.title,
+                    source_url=existing.source_url,
+                    namespace="seed",
+                )
             continue
 
         db.add(
             InspirationPost(
                 title=title,
                 description=description,
-                image_path=image_url,
+                image_path=prepare_inspiration_image(
+                    image_url,
+                    title=title,
+                    source_url=source_url,
+                    namespace="seed",
+                ),
                 category=category,
                 tags=tags,
                 source_type="external",

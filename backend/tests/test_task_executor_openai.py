@@ -18,6 +18,7 @@ from app.services.task_executor import OpenAIImageProviderAdapter
 class _FakeResponse:
     def __init__(self, payload: dict):
         self.payload = payload
+        self.headers = {}
 
     def __enter__(self):
         return self
@@ -27,6 +28,21 @@ class _FakeResponse:
 
     def read(self) -> bytes:
         return json.dumps(self.payload).encode("utf-8")
+
+
+class _FakeBinaryResponse:
+    def __init__(self, payload: bytes, content_type: str = "image/png"):
+        self.payload = payload
+        self.headers = {"Content-Type": content_type}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def read(self) -> bytes:
+        return self.payload
 
 
 class OpenAIImageProviderAdapterTests(unittest.TestCase):
@@ -59,12 +75,13 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
             side_effect=[_FakeResponse(payload), _FakeResponse(payload)],
         ):
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
-                with patch("app.services.task_executor.settings.media_url_prefix", "/media"):
-                    with patch("app.services.task_executor.settings.openai_image_model", "gpt-image-1"):
-                        outcome = self.adapter.execute(
-                            "image.generate",
-                            {"prompt": "Tower by the river", "aspect_ratio": "16:9", "image_count": 2},
-                        )
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    with patch("app.services.task_executor.settings.media_url_prefix", "/media"):
+                        with patch("app.services.task_executor.settings.openai_image_model", "gpt-image-1"):
+                            outcome = self.adapter.execute(
+                                "image.generate",
+                                {"prompt": "Tower by the river", "aspect_ratio": "16:9", "image_count": 2},
+                            )
 
         self.assertEqual(outcome.result["adapter_mode"], "openai")
         self.assertEqual(outcome.result["usage"]["total_tokens"], 123)
@@ -74,11 +91,10 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         self.assertEqual(outcome.cost_currency, "CNY")
         self.assertEqual(outcome.result["billing"]["billable_units"], 2)
         self.assertEqual(len(outcome.result["storage_paths"]), 2)
-        self.assertTrue(outcome.result["storage_path"].startswith("/media/generated/openai_image/"))
+        self.assertTrue(outcome.result["storage_path"].startswith("generated/openai_image/"))
 
         for storage_path in outcome.result["storage_paths"]:
-            relative_path = storage_path.replace("/media/", "", 1).replace("/", os.sep)
-            file_path = os.path.join(self.tempdir, relative_path)
+            file_path = os.path.join(self.tempdir, storage_path.replace("/", os.sep))
             self.assertTrue(os.path.exists(file_path))
             self.assertGreater(os.path.getsize(file_path), 0)
 
@@ -106,23 +122,29 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(caption_payload), _FakeResponse(generation_payload)],
+            side_effect=[
+                _FakeResponse(caption_payload),
+                _FakeResponse(generation_payload),
+                _FakeBinaryResponse(b"generated-image"),
+            ],
         ) as mocked_urlopen:
-            outcome = adapter.execute(
-                "image.generate",
-                {
-                    "prompt": "Design a waterfront commercial entrance",
-                    "aspect_ratio": "16:9",
-                    "reference_image": "data:image/png;base64,aGVsbG8=",
-                },
-            )
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {
+                            "prompt": "Design a waterfront commercial entrance",
+                            "aspect_ratio": "16:9",
+                            "reference_image": "data:image/png;base64,aGVsbG8=",
+                        },
+                    )
 
         generation_request = mocked_urlopen.call_args_list[1].args[0]
         generation_body = json.loads(generation_request.data.decode("utf-8"))
 
         self.assertIn("Reference image analysis", generation_body["prompt"])
         self.assertIn("A calm glass riverfront facade at sunrise.", generation_body["prompt"])
-        self.assertEqual(outcome.result["storage_path"], "https://cdn.example.test/generated.png")
+        self.assertTrue(outcome.result["storage_path"].startswith("generated/modelscope_free_image/"))
         self.assertTrue(outcome.result["reference_image_used"])
         self.assertEqual(outcome.result["reference_caption_model"], "Qwen/Test-VL")
 
@@ -147,18 +169,23 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         )
         generation_payload = {"images": ["https://cdn.example.test/firered.png"]}
 
-        with patch("app.services.task_executor.urlopen", side_effect=[_FakeResponse(generation_payload)]) as mocked_urlopen:
-            outcome = adapter.execute(
-                "image.generate",
-                {"prompt": "A minimal white gallery with polished concrete floor", "aspect_ratio": "16:9"},
-            )
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"firered-image")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {"prompt": "A minimal white gallery with polished concrete floor", "aspect_ratio": "16:9"},
+                    )
 
         generation_request = mocked_urlopen.call_args_list[0].args[0]
         generation_body = json.loads(generation_request.data.decode("utf-8"))
 
         self.assertEqual(generation_body["model"], "FireRedTeam/FireRed-Image-Edit-1.1")
         self.assertTrue(generation_body["image_url"].startswith("data:image/png;base64,"))
-        self.assertEqual(outcome.result["storage_path"], "https://cdn.example.test/firered.png")
+        self.assertTrue(outcome.result["storage_path"].startswith("generated/modelscope_firered_image_edit/"))
         self.assertTrue(outcome.result["image_edit_bridge_used"])
         self.assertEqual(outcome.result["image_edit_bridge_mode"], "white_canvas")
 
@@ -184,23 +211,71 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         reference_image = "data:image/png;base64,cmVmZXJlbmNl"
         generation_payload = {"images": ["https://cdn.example.test/firered-reference.png"]}
 
-        with patch("app.services.task_executor.urlopen", side_effect=[_FakeResponse(generation_payload)]) as mocked_urlopen:
-            outcome = adapter.execute(
-                "image.edit",
-                {
-                    "edit_prompt": "Enhance the architectural atmosphere",
-                    "aspect_ratio": "16:9",
-                    "source_image": reference_image,
-                },
-            )
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"firered-reference-image")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.edit",
+                        {
+                            "edit_prompt": "Enhance the architectural atmosphere",
+                            "aspect_ratio": "16:9",
+                            "source_image": reference_image,
+                        },
+                    )
 
         generation_request = mocked_urlopen.call_args_list[0].args[0]
         generation_body = json.loads(generation_request.data.decode("utf-8"))
 
         self.assertEqual(generation_body["image_url"], reference_image)
-        self.assertEqual(outcome.result["storage_path"], "https://cdn.example.test/firered-reference.png")
+        self.assertTrue(outcome.result["storage_path"].startswith("generated/modelscope_firered_image_edit/"))
         self.assertTrue(outcome.result["reference_image_used"])
         self.assertEqual(outcome.result["image_edit_bridge_mode"], "reference_image")
+
+    def test_image_edit_models_use_white_canvas_fallback_without_uploaded_image(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="ms_qwen_qwen-image-edit",
+            api_key="test-key",
+            base_url="https://api-inference.modelscope.cn/v1",
+            model_name="Qwen/Qwen-Image-Edit",
+            timeout_seconds=1,
+            reference_mode="disabled",
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "ms_qwen_qwen-image-edit",
+                "Qwen/Qwen-Image-Edit",
+                ["image.edit"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {"images": ["https://cdn.example.test/qwen-image-edit.png"]}
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"qwen-image-edit")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.edit",
+                        {
+                            "edit_prompt": "Turn the scene into a rainy cinematic night shot",
+                            "aspect_ratio": "16:9",
+                        },
+                    )
+
+        generation_request = mocked_urlopen.call_args_list[0].args[0]
+        generation_body = json.loads(generation_request.data.decode("utf-8"))
+
+        self.assertEqual(generation_body["model"], "Qwen/Qwen-Image-Edit")
+        self.assertTrue(generation_body["image_url"].startswith("data:image/png;base64,"))
+        self.assertTrue(outcome.result["storage_path"].startswith("generated/ms_qwen_qwen-image-edit/"))
+        self.assertFalse(outcome.result["reference_image_used"])
+        self.assertEqual(outcome.result["image_edit_bridge_mode"], "white_canvas")
 
 
 if __name__ == "__main__":

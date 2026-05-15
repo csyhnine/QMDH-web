@@ -1,19 +1,98 @@
+from contextlib import asynccontextmanager
+import logging
+import uuid
+
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from redis import Redis
 
 from app.core.config import settings, validate_required_for_production
-from app.core.middleware import AccessLogMiddleware, CorrelationIdMiddleware, UnhandledExceptionMiddleware
+from app.core.logging import setup_logging
+from app.core.middleware import (
+    AccessLogMiddleware,
+    CorrelationIdMiddleware,
+    StrictCORSMiddleware,
+    UnhandledExceptionMiddleware,
+)
 from app.core.rate_limit import RateLimitMiddleware
 from app.database import Base, SessionLocal, engine
 from app.routers import assets, auth, chat, dashboard, health, inspiration, projects, prompt_templates, providers, tasks, users, workflows
 from app.services.bootstrap import ensure_schema, seed_initial_data
-from app.services.media_storage import media_root_path
+from app.services.media_storage import media_root_path, validate_storage_backend_configuration
+from app.services.session_cleanup import run_session_cleanup_once
+
+# Configure structured logging before startup validation.
+setup_logging()
 
 # Validate required env vars before binding port (exits if missing in production)
 validate_required_for_production()
+validate_storage_backend_configuration()
 
-app = FastAPI(title=settings.app_name)
+SESSION_CLEANUP_LOCK_KEY = "qmdh:session-cleanup-lock"
+SESSION_CLEANUP_LOCK_TTL_SECONDS = 300
+SESSION_CLEANUP_UNLOCK_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("del", KEYS[1])
+end
+return 0
+"""
+
+
+def _run_session_cleanup_job() -> None:
+    logger = logging.getLogger(__name__)
+    lock_token = uuid.uuid4().hex
+    client = Redis.from_url(settings.redis_url, decode_responses=True)
+    acquired = False
+
+    try:
+        acquired = bool(client.set(
+            SESSION_CLEANUP_LOCK_KEY,
+            lock_token,
+            nx=True,
+            ex=SESSION_CLEANUP_LOCK_TTL_SECONDS,
+        ))
+        if not acquired:
+            logger.info("Session cleanup skipped because lock is already held")
+            return
+        run_session_cleanup_once(SessionLocal)
+    except Exception:
+        logger.exception("Scheduled session cleanup failed")
+    finally:
+        if acquired:
+            try:
+                client.eval(SESSION_CLEANUP_UNLOCK_SCRIPT, 1, SESSION_CLEANUP_LOCK_KEY, lock_token)
+            except Exception:
+                logger.exception("Failed to release session cleanup lock")
+        client.close()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    ensure_schema(engine)
+    media_root_path()
+    with SessionLocal() as db:
+        seed_initial_data(db)
+
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(
+        _run_session_cleanup_job,
+        "interval",
+        seconds=settings.get_session_cleanup_interval_seconds(),
+        id="session_cleanup",
+        replace_existing=True,
+        max_instances=1,
+    )
+    scheduler.start()
+
+    try:
+        yield
+    finally:
+        scheduler.shutdown(wait=False)
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 # Middleware stack order (outermost first):
 # CORS → CorrelationId → AccessLog → RateLimit → UnhandledException
@@ -23,21 +102,12 @@ app.add_middleware(RateLimitMiddleware)
 app.add_middleware(AccessLogMiddleware)
 app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(
-    CORSMiddleware,
+    StrictCORSMiddleware,
     allow_origins=settings.get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def startup() -> None:
-    Base.metadata.create_all(bind=engine)
-    ensure_schema(engine)
-    media_root_path()
-    with SessionLocal() as db:
-        seed_initial_data(db)
 
 
 app.mount(settings.media_url_prefix, StaticFiles(directory=media_root_path()), name="media")

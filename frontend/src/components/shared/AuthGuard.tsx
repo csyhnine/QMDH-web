@@ -1,19 +1,19 @@
 import { type ReactNode } from "react";
+import { Navigate, useLocation } from "react-router-dom";
 
-interface AuthGuardProps {
-  isAuthenticated: boolean;
-  children: ReactNode;
-  onRedirectToLogin?: () => void;
-}
+import { useAuth } from "../../context/AuthContext";
 
-/**
- * Wraps protected routes. If not authenticated, triggers redirect to login.
- * Will be connected to react-router-dom in task 3.4.
- */
-export default function AuthGuard({ isAuthenticated, children, onRedirectToLogin }: AuthGuardProps) {
-  if (!isAuthenticated) {
-    onRedirectToLogin?.();
+export default function AuthGuard({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const { authReady, currentUser } = useAuth();
+
+  if (!authReady) {
     return null;
   }
+
+  if (!currentUser) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
   return <>{children}</>;
 }

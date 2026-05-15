@@ -56,9 +56,16 @@ class ProviderProfileTests(unittest.TestCase):
         self.client = TestClient(self.app)
         self.auth_patcher = patch.object(settings, "auth_users_json", AUTH_USERS_JSON)
         self.auth_patcher.start()
+        self.encryption_key_patcher = patch.object(
+            settings,
+            "encryption_key",
+            "2xL8HVx6K0mQq6g-2v0fH6Q4Wyy8CjN6i8h9sQ3Wc6Y=",
+        )
+        self.encryption_key_patcher.start()
 
     def tearDown(self) -> None:
         self.auth_patcher.stop()
+        self.encryption_key_patcher.stop()
         Base.metadata.drop_all(bind=self.engine)
         self.engine.dispose()
 
@@ -116,6 +123,54 @@ class ProviderProfileTests(unittest.TestCase):
     def test_designer_cannot_manage_provider_profiles(self) -> None:
         response = self.client.get("/providers/profiles", headers=self.designer_headers())
         self.assertEqual(response.status_code, 403)
+
+    def test_provider_profile_create_requires_configured_encryption_key(self) -> None:
+        with patch.object(settings, "encryption_key", ""):
+            response = self.client.post(
+                "/providers/profiles",
+                headers=self.auth_headers(),
+                json={
+                    "provider_name": "arch_image",
+                    "api_key": "sk-test-secret",
+                    "base_url": "https://api.example.test/v1/",
+                    "model_name": "arch-render-v1",
+                    "capabilities": ["image.generate"],
+                    "quality": "high",
+                    "output_format": "png",
+                    "timeout_seconds": 60,
+                    "pricing_currency": "CNY",
+                    "pricing_unit": "per_image",
+                    "unit_price": 0.35,
+                    "enabled": True,
+                    "reference_mode": "disabled",
+                },
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("QMDH_ENCRYPTION_KEY", response.json()["detail"])
+
+    def test_bulk_import_requires_configured_encryption_key(self) -> None:
+        with patch.object(settings, "encryption_key", ""):
+            response = self.client.post(
+                "/providers/bulk-import",
+                headers=self.auth_headers(),
+                json={
+                    "base_url": "https://api.example.test/v1",
+                    "api_key": "sk-test-secret",
+                    "models": [
+                        {
+                            "model_id": "image-edit-pro",
+                            "provider_name": "image_edit_pro",
+                            "capabilities": ["image.edit"],
+                            "adapter_kind": "openai_compatible",
+                            "reference_mode": "disabled",
+                        }
+                    ],
+                },
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("QMDH_ENCRYPTION_KEY", response.json()["detail"])
 
     def test_registry_uses_enabled_database_profile(self) -> None:
         with self.SessionLocal() as db:

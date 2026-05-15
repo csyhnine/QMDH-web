@@ -1,11 +1,11 @@
 import { type FormEvent, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+
 import { useAuth } from "../../context/AuthContext";
 
-/**
- * Login page - handles user authentication.
- * Self-contained with its own local state for form fields.
- */
 export default function LoginPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { login } = useAuth();
   const [loginName, setLoginName] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -14,8 +14,11 @@ export default function LoginPage() {
   async function handleLogin(event: FormEvent) {
     event.preventDefault();
     setLoginError("");
+
     try {
       await login(loginName, loginPassword);
+      const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+      navigate(from || "/studio/generate", { replace: true });
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "登录失败");
     }
@@ -28,11 +31,7 @@ export default function LoginPage() {
         <h1>登录 QMDH</h1>
         <label className="composer-menu-field">
           <span>用户名</span>
-          <input
-            value={loginName}
-            onChange={(event) => setLoginName(event.target.value)}
-            autoComplete="username"
-          />
+          <input value={loginName} onChange={(event) => setLoginName(event.target.value)} autoComplete="username" />
         </label>
         <label className="composer-menu-field">
           <span>密码</span>

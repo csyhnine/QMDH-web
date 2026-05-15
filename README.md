@@ -44,6 +44,9 @@ npm run dev:all
 
 如果只想检查依赖是否准备好：
 
+> Local dev is standardized on `http://127.0.0.1:18080 -> http://127.0.0.1:18010`.
+> Treat `5180`, `8000`, and `19010` as legacy/manual debugging ports, and do not run them alongside `start-dev.cmd`.
+
 ```bash
 npm run dev:check
 ```

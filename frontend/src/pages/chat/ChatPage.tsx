@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { api } from "../../api";
+import { api, getStoredAuthToken } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 
 /* ─── Types ─── */
@@ -104,13 +104,20 @@ export default function ChatPage() {
                   setStreaming(true);
                   setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
                   try {
-                    const token = localStorage.getItem("qmdh_token") || "";
+                    const token = getStoredAuthToken();
                     const resp = await fetch(`/api/v1/chat/conversations/${activeChatId}/messages`, {
                       method: "POST",
                       headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
                       body: JSON.stringify({ content }),
                     });
-                    if (!resp.ok) throw new Error("请求失败");
+                    if (!resp.ok) {
+                      let detail = "请求失败";
+                      try {
+                        const payload = await resp.json();
+                        detail = payload?.detail || detail;
+                      } catch {}
+                      throw new Error(detail);
+                    }
                     const reader = resp.body!.getReader();
                     const decoder = new TextDecoder();
                     let buffer = "";

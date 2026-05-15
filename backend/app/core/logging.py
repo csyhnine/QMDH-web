@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import uuid
 from contextvars import ContextVar
+from datetime import datetime, timezone
 
 from pythonjsonlogger import jsonlogger
 
@@ -35,7 +37,7 @@ def set_correlation_id(value: str) -> None:
 
 def generate_correlation_id() -> str:
     """Generate a new UUID4 correlation ID."""
-    return uuid.uuid4().hex[:16]
+    return str(uuid.uuid4())
 
 
 # --- Correlation ID Filter ---
@@ -57,15 +59,16 @@ class QMDHJsonFormatter(JsonFormatter):
         super().__init__(
             fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
             rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"},
-            datefmt="%Y-%m-%dT%H:%M:%S.%fZ",
         )
+
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+        timestamp = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        return timestamp.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
     def add_fields(self, log_record: dict, record: logging.LogRecord, message_dict: dict) -> None:
         super().add_fields(log_record, record, message_dict)
-        # Ensure correlation_id is always present
         if not log_record.get("correlation_id"):
             log_record["correlation_id"] = getattr(record, "correlation_id", "") or ""
-        # Include optional context fields if provided via extra
         for field in ("user_id", "project_code", "task_id"):
             value = getattr(record, field, None)
             if value is not None:
@@ -95,43 +98,28 @@ _VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
 
 def setup_logging() -> None:
-    """Configure the root logger based on environment variables.
-
-    Reads:
-    - QMDH_LOG_LEVEL: DEBUG|INFO|WARNING|ERROR|CRITICAL (default: INFO)
-    - QMDH_LOG_FORMAT: json|console (default: json)
-    """
+    """Configure the root logger based on environment variables."""
     level_str = os.environ.get("QMDH_LOG_LEVEL", "INFO").upper()
     if level_str not in _VALID_LEVELS:
         level_str = "INFO"
-        # Will log a warning after setup completes
 
     log_format = os.environ.get("QMDH_LOG_FORMAT", "json").lower()
+    formatter: logging.Formatter = QMDHConsoleFormatter() if log_format == "console" else QMDHJsonFormatter()
 
-    # Choose formatter
-    if log_format == "console":
-        formatter = QMDHConsoleFormatter()
-    else:
-        formatter = QMDHJsonFormatter()  # type: ignore[assignment]
-
-    # Configure root logger
     root = logging.getLogger()
     root.setLevel(level_str)
-
-    # Remove existing handlers to avoid duplication
     root.handlers.clear()
 
-    # Add stdout handler
-    handler = logging.StreamHandler()
+    handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
     handler.addFilter(CorrelationIdFilter())
     root.addHandler(handler)
 
-    # Suppress noisy loggers
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    logging.getLogger("uvicorn.error").propagate = False
+    access_logger = logging.getLogger("uvicorn.access")
+    access_logger.handlers.clear()
+    access_logger.propagate = False
+    access_logger.disabled = True
 
-    # Warn about invalid log level
     raw_level = os.environ.get("QMDH_LOG_LEVEL", "")
     if raw_level and raw_level.upper() not in _VALID_LEVELS:
         logging.getLogger(__name__).warning(

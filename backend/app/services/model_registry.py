@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import ImageProviderProfile, settings
-from app.core.encryption import decrypt_value
+from app.core.encryption import (
+    EncryptedValueDecodeError,
+    EncryptionKeyUnavailableError,
+    decrypt_value_or_raise,
+)
 from app.models import ProviderProfile
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -41,8 +48,7 @@ def _profile_from_record(record: ProviderProfile) -> ImageProviderProfile:
     if not reference_mode:
         reference_mode = "caption_prompt" if "modelscope.cn" in record.base_url else "disabled"
 
-    # Decrypt API key (returns empty string if decryption fails)
-    decrypted_key = decrypt_value(record.api_key)
+    decrypted_key = decrypt_value_or_raise(record.api_key)
 
     return ImageProviderProfile(
         provider_name=record.provider_name,
@@ -65,14 +71,22 @@ def _profile_from_record(record: ProviderProfile) -> ImageProviderProfile:
 
 
 def get_image_provider_profiles(db: Session | None = None) -> dict[str, ImageProviderProfile]:
-    profiles = settings.get_image_provider_profiles()
+    profiles = settings.get_image_provider_profiles() if db is None else {}
     if db is None:
         return profiles
 
     records = db.scalars(select(ProviderProfile).order_by(ProviderProfile.provider_name)).all()
     for record in records:
-        if record.enabled and record.api_key and record.base_url and record.model_name:
+        if not (record.enabled and record.api_key and record.base_url and record.model_name):
+            continue
+        try:
             profiles[record.provider_name] = _profile_from_record(record)
+        except (EncryptionKeyUnavailableError, EncryptedValueDecodeError) as exc:
+            logger.warning(
+                "Skipping provider profile %s because its API key is unavailable: %s",
+                record.provider_name,
+                exc,
+            )
     return profiles
 
 

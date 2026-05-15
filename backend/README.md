@@ -13,7 +13,7 @@ uvicorn app.main:app --reload
 
 - Development defaults to `sqlite:///./app.db`
 - Production should point `QMDH_DATABASE_URL` to PostgreSQL
-- Default frontend origin is `http://localhost:5180`
+- Default frontend origin is `http://127.0.0.1:18080`
 - `QMDH_TASK_EXECUTION_MODE` supports `sync`, `background`, `redis`
 - API base path: `/api/v1`
 - Media previews are served from `QMDH_MEDIA_ROOT` under `QMDH_MEDIA_URL_PREFIX`

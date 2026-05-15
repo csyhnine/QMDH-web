@@ -56,9 +56,16 @@ class Settings(BaseSettings):
     app_name: str = "QMDH Internal AI Platform"
     api_prefix: str = "/api/v1"
     database_url: str = "sqlite:///./app.db"
-    frontend_origin: str = "http://localhost:5180"
+    frontend_origin: str = "http://127.0.0.1:18080"
     media_root: str = "./storage/assets"
     media_url_prefix: str = "/media"
+    storage_backend: str = "local"
+    cdn_base_url: str = ""
+    oss_endpoint: str = ""
+    oss_bucket_name: str = ""
+    oss_access_key_id: str = ""
+    oss_access_key_secret: str = ""
+    oss_connect_timeout_seconds: float = 30.0
     task_execution_mode: str = "background"
     redis_url: str = "redis://localhost:6379/0"
     redis_queue_name: str = "qmdh:tasks"
@@ -81,6 +88,7 @@ class Settings(BaseSettings):
     rate_limit_general_per_minute: int = 60
     rate_limit_generation_per_minute: int = 10
     rate_limit_login_per_minute: int = 10
+    session_cleanup_interval_seconds: int = 3600
 
     model_config = SettingsConfigDict(
         env_file=(str(BACKEND_DIR / ".env"), str(REPO_ROOT_DIR / ".env")),
@@ -189,6 +197,12 @@ class Settings(BaseSettings):
             )
 
         return profiles
+
+    def get_session_cleanup_interval_seconds(self) -> int:
+        interval = int(self.session_cleanup_interval_seconds)
+        if not 60 <= interval <= 86400:
+            raise ValueError("QMDH_SESSION_CLEANUP_INTERVAL_SECONDS must be between 60 and 86400")
+        return interval
 
     def get_image_provider_profile(self, provider_name: str) -> ImageProviderProfile:
         profiles = self.get_image_provider_profiles()

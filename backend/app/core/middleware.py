@@ -4,6 +4,8 @@ from __future__ import annotations
 import logging
 import time
 
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
@@ -11,6 +13,46 @@ from starlette.responses import Response
 from app.core.logging import generate_correlation_id, get_correlation_id, set_correlation_id
 
 logger = logging.getLogger("qmdh.access")
+
+
+class StrictCORSMiddleware(CORSMiddleware):
+    """CORS middleware that omits credentials headers for non-whitelisted origins."""
+
+    def preflight_response(self, request_headers: Headers) -> Response:
+        response = super().preflight_response(request_headers)
+        if (
+            response.status_code >= 400
+            and "origin" in request_headers
+            and not self.is_allowed_origin(request_headers["origin"])
+        ):
+            if "Access-Control-Allow-Origin" in response.headers:
+                del response.headers["Access-Control-Allow-Origin"]
+            if "Access-Control-Allow-Credentials" in response.headers:
+                del response.headers["Access-Control-Allow-Credentials"]
+        return response
+
+    async def send(self, message, send, request_headers: Headers) -> None:
+        if message["type"] != "http.response.start":
+            await send(message)
+            return
+
+        message.setdefault("headers", [])
+        headers = MutableHeaders(scope=message)
+        headers.update(self.simple_headers)
+        origin = request_headers["Origin"]
+        has_cookie = "cookie" in request_headers
+
+        if self.allow_all_origins and has_cookie:
+            self.allow_explicit_origin(headers, origin)
+        elif not self.allow_all_origins and self.is_allowed_origin(origin=origin):
+            self.allow_explicit_origin(headers, origin)
+        elif not self.allow_all_origins:
+            if "Access-Control-Allow-Origin" in headers:
+                del headers["Access-Control-Allow-Origin"]
+            if "Access-Control-Allow-Credentials" in headers:
+                del headers["Access-Control-Allow-Credentials"]
+
+        await send(message)
 
 
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
@@ -23,9 +65,12 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         cid = request.headers.get("x-request-id") or generate_correlation_id()
         set_correlation_id(cid)
-        response = await call_next(request)
-        response.headers["X-Request-ID"] = cid
-        return response
+        try:
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = cid
+            return response
+        finally:
+            set_correlation_id("")
 
 
 class AccessLogMiddleware(BaseHTTPMiddleware):
@@ -37,10 +82,6 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        # Skip health endpoints to reduce noise
-        if request.url.path in ("/api/v1/health", "/api/v1/health/live"):
-            return await call_next(request)
-
         client_ip = request.client.host if request.client else "unknown"
         logger.info(
             "request %s %s",

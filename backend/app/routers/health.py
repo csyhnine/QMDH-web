@@ -1,70 +1,65 @@
-"""Health check endpoints for QMDH backend.
-
-Provides:
-- GET /health - Full readiness check with DB & Redis dependency probes
-- GET /health/live - Lightweight liveness probe (no auth, no dependency checks)
-
-Both endpoints are exempt from authentication.
-"""
+"""Health check endpoints for QMDH backend."""
 from __future__ import annotations
 
 import asyncio
 import time
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 from fastapi import APIRouter, Query
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 
 router = APIRouter(tags=["health"])
 
-# Process start time for uptime calculation
 _PROCESS_START = time.time()
-APP_VERSION = "1.0.0"  # TODO: read from package metadata when packaging is set up
-
-# Per-check timeout in seconds
 _CHECK_TIMEOUT = 2.0
-# Global response budget in seconds
 _GLOBAL_BUDGET = 5.0
 
 
-async def _check_database() -> tuple[str, float]:
-    """Run SELECT 1 against the database.
+def _resolve_application_version() -> str:
+    for dist_name in ("qmdh-web", "qmdh-web-backend", "QMDH-web"):
+        try:
+            return version(dist_name)
+        except PackageNotFoundError:
+            continue
+    return "unknown"
 
-    Returns: (status, latency_ms) where status is one of: healthy, degraded, timeout
-    """
+
+async def _check_database() -> dict[str, Any]:
     start = time.perf_counter()
     try:
         from sqlalchemy import text
+
         from app.database import SessionLocal
 
         async def _run_query() -> None:
-            # SQLAlchemy session operations are sync; run in default thread pool
             def _sync_check() -> None:
                 with SessionLocal() as db:
                     db.execute(text("SELECT 1"))
 
-            await asyncio.get_event_loop().run_in_executor(None, _sync_check)
+            await asyncio.to_thread(_sync_check)
 
         await asyncio.wait_for(_run_query(), timeout=_CHECK_TIMEOUT)
-        latency_ms = (time.perf_counter() - start) * 1000
-        return "healthy", latency_ms
+        return {"status": "healthy", "latency_ms": int(round((time.perf_counter() - start) * 1000))}
     except asyncio.TimeoutError:
-        latency_ms = (time.perf_counter() - start) * 1000
-        return "timeout", latency_ms
-    except Exception:
-        latency_ms = (time.perf_counter() - start) * 1000
-        return "degraded", latency_ms
+        return {
+            "status": "timeout",
+            "latency_ms": int(round((time.perf_counter() - start) * 1000)),
+            "reason": f"database check exceeded {_CHECK_TIMEOUT:.0f}s timeout",
+        }
+    except Exception as exc:
+        return {
+            "status": "degraded",
+            "latency_ms": int(round((time.perf_counter() - start) * 1000)),
+            "reason": str(exc) or exc.__class__.__name__,
+        }
 
 
-async def _check_redis() -> tuple[str, float]:
-    """Run PING against Redis.
-
-    Returns: (status, latency_ms) where status is one of: healthy, degraded, timeout, not_configured
-    """
-    # Skip Redis check when not configured for redis task execution
+async def _check_redis() -> dict[str, Any]:
     if settings.task_execution_mode != "redis":
-        return "not_configured", 0.0
+        return {"status": "not_configured", "latency_ms": 0}
 
     start = time.perf_counter()
     try:
@@ -78,72 +73,60 @@ async def _check_redis() -> tuple[str, float]:
                 await client.aclose()
 
         await asyncio.wait_for(_run_ping(), timeout=_CHECK_TIMEOUT)
-        latency_ms = (time.perf_counter() - start) * 1000
-        return "healthy", latency_ms
+        return {"status": "healthy", "latency_ms": int(round((time.perf_counter() - start) * 1000))}
     except asyncio.TimeoutError:
-        latency_ms = (time.perf_counter() - start) * 1000
-        return "timeout", latency_ms
-    except Exception:
-        latency_ms = (time.perf_counter() - start) * 1000
-        return "degraded", latency_ms
+        return {
+            "status": "timeout",
+            "latency_ms": int(round((time.perf_counter() - start) * 1000)),
+            "reason": f"redis check exceeded {_CHECK_TIMEOUT:.0f}s timeout",
+        }
+    except Exception as exc:
+        return {
+            "status": "degraded",
+            "latency_ms": int(round((time.perf_counter() - start) * 1000)),
+            "reason": str(exc) or exc.__class__.__name__,
+        }
 
 
 @router.get("/health/live")
 def liveness() -> dict[str, str]:
-    """Liveness probe - always returns 200 if the process is alive.
-
-    No auth, no dependency checks. Used by Kubernetes liveness probes.
-    """
     return {"status": "alive"}
 
 
 @router.get("/health")
 async def healthcheck(detail: str = Query("", description="Use 'full' for detailed component info")) -> Any:
-    """Readiness check with DB & Redis dependency probes.
-
-    Returns HTTP 200 when all components are healthy or not_configured.
-    Returns HTTP 503 when any required component is degraded or timed out.
-
-    Query params:
-    - detail=full: include version, uptime, and per-component latency
-    """
-    from fastapi.responses import JSONResponse
-
-    # Run checks concurrently with global budget
-    async def _run_checks() -> tuple[tuple[str, float], tuple[str, float]]:
+    async def _run_checks() -> tuple[dict[str, Any], dict[str, Any]]:
         return await asyncio.gather(_check_database(), _check_redis())
 
     try:
-        (db_status, db_latency), (redis_status, redis_latency) = await asyncio.wait_for(
-            _run_checks(), timeout=_GLOBAL_BUDGET
-        )
+        database, redis = await asyncio.wait_for(_run_checks(), timeout=_GLOBAL_BUDGET)
     except asyncio.TimeoutError:
-        # Global budget exceeded - mark all as timeout
-        db_status, db_latency = "timeout", _GLOBAL_BUDGET * 1000
-        redis_status, redis_latency = "timeout", _GLOBAL_BUDGET * 1000
+        timeout_reason = f"health checks exceeded {_GLOBAL_BUDGET:.0f}s global budget"
+        database = {"status": "timeout", "latency_ms": int(_GLOBAL_BUDGET * 1000), "reason": timeout_reason}
+        redis = {"status": "timeout", "latency_ms": int(_GLOBAL_BUDGET * 1000), "reason": timeout_reason}
 
-    # Determine overall status: degraded/timeout in any required component → 503
-    component_statuses = [db_status, redis_status]
-    is_unhealthy = any(s in ("degraded", "timeout") for s in component_statuses)
+    is_unhealthy = any(
+        component["status"] in {"degraded", "timeout"} for component in (database, redis)
+    )
 
-    components = {
-        "database": db_status,
-        "redis": redis_status,
+    components: dict[str, dict[str, Any]] = {
+        "database": {"status": database["status"]},
+        "redis": {"status": redis["status"]},
     }
+    for name, component in (("database", database), ("redis", redis)):
+        if component.get("reason"):
+            components[name]["reason"] = component["reason"]
+        if detail == "full":
+            components[name]["latency_ms"] = int(component["latency_ms"])
 
     payload: dict[str, Any] = {
-        "status": "ok" if not is_unhealthy else "degraded",
+        "status": "healthy" if not is_unhealthy else "degraded",
         "service": "qmdh-api",
         "components": components,
     }
-
     if detail == "full":
-        payload["version"] = APP_VERSION
+        payload["version"] = _resolve_application_version()
         payload["uptime_seconds"] = int(time.time() - _PROCESS_START)
-        payload["latency_ms"] = {
-            "database": round(db_latency, 2),
-            "redis": round(redis_latency, 2),
-        }
 
     if is_unhealthy:
         return JSONResponse(status_code=503, content=payload)

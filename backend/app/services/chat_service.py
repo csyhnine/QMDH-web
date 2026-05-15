@@ -3,13 +3,40 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.encryption import decrypt_value
+from app.core.encryption import (
+    EncryptedValueDecodeError,
+    EncryptionKeyUnavailableError,
+    decrypt_value_or_raise,
+)
 from app.models import ChatMessage, Conversation, ProviderProfile
+
+
+@dataclass(frozen=True)
+class ChatProviderConfig:
+    api_key: str
+    base_url: str
+    model_name: str
+
+
+def provider_profile_has_usable_api_key(profile: ProviderProfile) -> bool:
+    try:
+        return bool(decrypt_value_or_raise(profile.api_key))
+    except (EncryptionKeyUnavailableError, EncryptedValueDecodeError):
+        return False
+
+
+def snapshot_chat_provider_config(profile: ProviderProfile) -> ChatProviderConfig:
+    return ChatProviderConfig(
+        api_key=profile.api_key,
+        base_url=profile.base_url,
+        model_name=profile.model_name,
+    )
 
 
 def get_chat_models(db: Session) -> list[ProviderProfile]:
@@ -17,7 +44,11 @@ def get_chat_models(db: Session) -> list[ProviderProfile]:
     profiles = db.scalars(
         select(ProviderProfile).where(ProviderProfile.enabled == True)  # noqa: E712
     ).all()
-    return [p for p in profiles if "chat.completions" in (p.capabilities or [])]
+    return [
+        p
+        for p in profiles
+        if "chat.completions" in (p.capabilities or []) and provider_profile_has_usable_api_key(p)
+    ]
 
 
 def build_chat_messages(db: Session, conversation_id: int, new_content: str) -> list[dict]:
@@ -37,7 +68,7 @@ def build_chat_messages(db: Session, conversation_id: int, new_content: str) -> 
 
 
 async def stream_chat_completion(
-    provider: ProviderProfile,
+    provider: ChatProviderConfig,
     messages: list[dict],
 ) -> AsyncGenerator[str, None]:
     """
@@ -45,7 +76,7 @@ async def stream_chat_completion(
     Yields SSE-formatted strings: 'data: {"delta": "..."}\n\n'
     """
     # Decrypt API key
-    api_key = decrypt_value(provider.api_key)
+    api_key = decrypt_value_or_raise(provider.api_key)
 
     base_url = provider.base_url.rstrip("/")
     url = f"{base_url}/chat/completions"

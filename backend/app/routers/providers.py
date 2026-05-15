@@ -5,8 +5,13 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditEventType, write_audit_log
 from app.core.auth import get_current_auth_user, require_ops_access
-from app.core.config import AuthUserProfile
-from app.core.encryption import decrypt_value, encrypt_value
+from app.core.config import AuthUserProfile, settings
+from app.core.encryption import (
+    EncryptedValueDecodeError,
+    EncryptionKeyUnavailableError,
+    decrypt_value_or_raise,
+    encrypt_value,
+)
 from app.database import get_db
 from app.models import ProviderProfile
 from app.schemas import (
@@ -49,9 +54,33 @@ def _mask_api_key(api_key: str) -> str:
     return f"{api_key[:4]}...{api_key[-4:]}"
 
 
+def _require_provider_admin(auth_user: AuthUserProfile) -> None:
+    if auth_user.role not in PROVIDER_ADMIN_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Provider profile admin access required")
+
+
+def _require_encryption_key_configured(action: str) -> None:
+    if settings.encryption_key.strip():
+        return
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=f"QMDH_ENCRYPTION_KEY is not configured, so provider API keys cannot be {action}.",
+    )
+
+
 def _to_profile_out(profile: ProviderProfile) -> ProviderProfileOut:
-    # Decrypt API key for masking (returns empty string if decryption fails)
-    decrypted_key = decrypt_value(profile.api_key)
+    decrypted_key = ""
+    has_stored_key = bool(profile.api_key)
+
+    try:
+        decrypted_key = decrypt_value_or_raise(profile.api_key)
+    except (EncryptionKeyUnavailableError, EncryptedValueDecodeError):
+        decrypted_key = ""
+
+    masked_api_key = _mask_api_key(decrypted_key)
+    if has_stored_key and not decrypted_key:
+        masked_api_key = "[需重新录入]"
+
     return ProviderProfileOut(
         id=profile.id,
         provider_name=profile.provider_name,
@@ -68,17 +97,12 @@ def _to_profile_out(profile: ProviderProfile) -> ProviderProfileOut:
         enabled=profile.enabled,
         reference_mode=profile.reference_mode,
         reference_caption_model=profile.reference_caption_model,
-        has_api_key=bool(decrypted_key),
-        masked_api_key=_mask_api_key(decrypted_key),
+        has_api_key=has_stored_key,
+        masked_api_key=masked_api_key,
         editable_api_key=decrypted_key or None,
         created_at=profile.created_at,
         updated_at=profile.updated_at,
     )
-
-
-def _require_provider_admin(auth_user: AuthUserProfile) -> None:
-    if auth_user.role not in PROVIDER_ADMIN_ROLES:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Provider profile admin access required")
 
 
 @router.get("/profiles", response_model=list[ProviderProfileOut])
@@ -98,6 +122,8 @@ def create_provider_profile(
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> ProviderProfileOut:
     _require_provider_admin(auth_user)
+    _require_encryption_key_configured("saved")
+
     existing = db.scalar(select(ProviderProfile).where(ProviderProfile.provider_name == payload.provider_name))
     if existing:
         raise HTTPException(status_code=409, detail="Provider profile already exists")
@@ -154,6 +180,7 @@ def update_provider_profile(
     if "api_key" in updates:
         api_key = (updates.pop("api_key") or "").strip()
         if api_key:
+            _require_encryption_key_configured("updated")
             profile.api_key = encrypt_value(api_key)
 
     for field, value in updates.items():
@@ -224,7 +251,6 @@ async def discover_provider_models(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> ProviderDiscoverOut:
-    """Call GET {base_url}/models with the given API key and return the model list."""
     _require_provider_admin(auth_user)
 
     base_url = payload.base_url.rstrip("/")
@@ -234,32 +260,28 @@ async def discover_provider_models(
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(f"{base_url}/models", headers=headers)
     except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="请求超时，请检查 Base URL 是否可访问")
+        raise HTTPException(status_code=504, detail="Upstream model discovery timed out.")
     except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"无法连接到 {base_url}：{exc}")
+        raise HTTPException(status_code=502, detail=f"Could not reach {base_url}: {exc}")
 
     if response.status_code == 401:
-        raise HTTPException(status_code=401, detail="API Key 无效或无权限")
+        raise HTTPException(status_code=401, detail="The supplied API key was rejected by the upstream provider.")
     if not response.is_success:
-        raise HTTPException(status_code=502, detail=f"上游返回 {response.status_code}：{response.text[:200]}")
+        raise HTTPException(status_code=502, detail=f"Upstream returned {response.status_code}: {response.text[:200]}")
 
     try:
         data = response.json()
     except Exception:
-        raise HTTPException(status_code=502, detail="上游返回非 JSON 响应")
+        raise HTTPException(status_code=502, detail="Upstream returned a non-JSON response.")
 
-    # OpenAI-compatible: {"data": [{"id": "...", "owned_by": "..."}, ...]}
     raw_models: list[dict] = []
     if isinstance(data, dict) and "data" in data:
         raw_models = data["data"] if isinstance(data["data"], list) else []
     elif isinstance(data, list):
         raw_models = data
 
-    # Check which model_names already exist in DB for this base_url
-    existing_names: set[str] = set(
-        db.scalars(
-            select(ProviderProfile.model_name).where(ProviderProfile.base_url == base_url)
-        ).all()
+    existing_names = set(
+        db.scalars(select(ProviderProfile.model_name).where(ProviderProfile.base_url == base_url)).all()
     )
 
     models = [
@@ -281,17 +303,15 @@ def bulk_import_provider_profiles(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> ProviderBulkImportOut:
-    """Bulk-create provider profiles from a discover result."""
     _require_provider_admin(auth_user)
+    _require_encryption_key_configured("saved")
 
     base_url = payload.base_url.rstrip("/")
     created: list[str] = []
     skipped: list[str] = []
 
     for item in payload.models:
-        existing = db.scalar(
-            select(ProviderProfile).where(ProviderProfile.provider_name == item.provider_name)
-        )
+        existing = db.scalar(select(ProviderProfile).where(ProviderProfile.provider_name == item.provider_name))
         if existing:
             skipped.append(item.provider_name)
             continue

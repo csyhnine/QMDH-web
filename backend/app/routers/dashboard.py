@@ -31,7 +31,12 @@ def _utc_date_key(dt: datetime) -> str:
 
 def _failure_reason(task: Task) -> str:
     if isinstance(task.result, dict):
-        raw_reason = task.result.get("error") or task.result.get("asset_warning") or task.result.get("summary")
+        raw_reason = (
+            task.result.get("error_summary")
+            or task.result.get("error")
+            or task.result.get("asset_warning")
+            or task.result.get("summary")
+        )
         if raw_reason:
             return str(raw_reason)[:220]
     return "Task failed without a recorded error message"

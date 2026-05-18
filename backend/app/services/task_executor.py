@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import mimetypes
+import re
 from base64 import b64encode
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -31,6 +33,12 @@ WHITE_CANVAS_DATA_URL = (
     "data:image/png;base64,"
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yh3cAAAAASUVORK5CYII="
 )
+
+logger = logging.getLogger(__name__)
+
+_HTTP_FAILURE_PATTERN = re.compile(r"^(?P<stage>.+?) failed with HTTP (?P<status>\d+): (?P<detail>.*)$", re.IGNORECASE | re.DOTALL)
+_REQUEST_FAILURE_PATTERN = re.compile(r"^(?P<stage>.+?) request failed: (?P<detail>.*)$", re.IGNORECASE | re.DOTALL)
+_HTML_ERROR_PATTERN = re.compile(r"<!doctype html|<html\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -666,6 +674,134 @@ def _asset_type_for_capability(capability: str) -> AssetType | None:
     return mapping.get(capability)
 
 
+def _sanitize_error_text(raw: object, *, limit: int = 320) -> str:
+    text = " ".join(str(raw or "").replace("\r", " ").replace("\n", " ").split()).strip()
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 1].rstrip()}…"
+
+
+def _stage_metadata(raw_stage: str) -> tuple[str, str]:
+    normalized = raw_stage.strip().lower()
+    mapping = (
+        ("image generation", ("image_generation_request", "调用生图接口")),
+        ("generated image download", ("generated_image_download", "下载生成结果")),
+        ("reference image caption", ("reference_image_caption", "分析参考图")),
+        ("modelscope async poll", ("async_result_poll", "轮询异步结果")),
+    )
+    for marker, payload in mapping:
+        if marker in normalized:
+            return payload
+    return ("task_execution", "执行任务")
+
+
+def _build_failure_result(exc: Exception, *, capability: str, provider_name: str) -> dict[str, object]:
+    raw_message = str(exc).strip() or "Unknown task execution error"
+    sanitized = _sanitize_error_text(raw_message, limit=520)
+    default_summary = "任务执行失败，请稍后重试或联系管理员检查模型配置。"
+    default_hint = "若持续失败，请记录任务 ID、模型名称和失败时间，交给管理员排查。"
+
+    http_match = _HTTP_FAILURE_PATTERN.match(raw_message)
+    if http_match:
+        stage_code, stage_label = _stage_metadata(http_match.group("stage"))
+        status_code = int(http_match.group("status"))
+        upstream_body = _sanitize_error_text(http_match.group("detail"), limit=380)
+        upstream_is_html = bool(_HTML_ERROR_PATTERN.search(http_match.group("detail")))
+
+        if status_code in {401, 403}:
+            summary = f"{stage_label}失败：上游拒绝了当前凭证或权限。"
+            hint = "请在后台模型管理检查 API Key、模型权限和账号状态。"
+        elif status_code == 404:
+            summary = f"{stage_label}失败：上游接口或模型地址不存在。"
+            hint = "请检查 base_url、接口路径和模型名称是否与当前厂商兼容。"
+        elif status_code == 429:
+            summary = f"{stage_label}失败：上游触发了限流。"
+            hint = "请稍后重试，或在后台切换额度更稳定的模型。"
+        elif status_code >= 500:
+            summary = f"{stage_label}失败：上游模型服务当前异常。"
+            hint = "请稍后重试；若持续失败，请让管理员检查上游服务状态。"
+        else:
+            summary = f"{stage_label}失败：上游返回 HTTP {status_code}。"
+            hint = default_hint
+
+        detail = (
+            f"Provider {provider_name} returned HTTP {status_code} during {stage_code}. "
+            f"{'Upstream returned an HTML error page.' if upstream_is_html else upstream_body or sanitized}"
+        )
+        return {
+            "error": summary,
+            "error_summary": summary,
+            "error_detail": detail,
+            "error_code": f"upstream_http_{status_code}",
+            "error_stage": stage_code,
+            "error_hint": hint,
+            "error_raw": upstream_body or sanitized,
+            "failed_capability": capability,
+            "failed_provider": provider_name,
+        }
+
+    request_match = _REQUEST_FAILURE_PATTERN.match(raw_message)
+    if request_match:
+        stage_code, stage_label = _stage_metadata(request_match.group("stage"))
+        detail = _sanitize_error_text(request_match.group("detail"), limit=380)
+        summary = f"{stage_label}失败：无法连接上游模型服务。"
+        hint = "请检查服务器网络、base_url 地址以及目标厂商服务是否可达。"
+        return {
+            "error": summary,
+            "error_summary": summary,
+            "error_detail": f"Provider {provider_name} network error during {stage_code}: {detail}",
+            "error_code": "upstream_network_error",
+            "error_stage": stage_code,
+            "error_hint": hint,
+            "error_raw": detail,
+            "failed_capability": capability,
+            "failed_provider": provider_name,
+        }
+
+    lowered = raw_message.lower()
+    if "timed out" in lowered or "timeout" in lowered:
+        summary = "任务执行失败：上游模型服务响应超时。"
+        hint = "请稍后重试；若经常超时，请让管理员调大超时或切换更稳定的模型。"
+        return {
+            "error": summary,
+            "error_summary": summary,
+            "error_detail": sanitized,
+            "error_code": "upstream_timeout",
+            "error_stage": "task_execution",
+            "error_hint": hint,
+            "error_raw": sanitized,
+            "failed_capability": capability,
+            "failed_provider": provider_name,
+        }
+
+    if "returned no image data" in lowered or "returned no image outputs" in lowered:
+        summary = "任务执行失败：上游没有返回可用的生成结果。"
+        hint = "请让管理员检查当前模型是否真的支持该能力，或是否需要调整请求参数。"
+        return {
+            "error": summary,
+            "error_summary": summary,
+            "error_detail": sanitized,
+            "error_code": "empty_generation_result",
+            "error_stage": "task_execution",
+            "error_hint": hint,
+            "error_raw": sanitized,
+            "failed_capability": capability,
+            "failed_provider": provider_name,
+        }
+
+    return {
+        "error": default_summary,
+        "error_summary": default_summary,
+        "error_detail": sanitized,
+        "error_code": "task_execution_error",
+        "error_stage": "task_execution",
+        "error_hint": default_hint,
+        "error_raw": sanitized,
+        "failed_capability": capability,
+        "failed_provider": provider_name,
+    }
+
+
 def _build_asset_tags(task: Task, workflow: Workflow) -> list[str]:
     tags = [workflow.category, workflow.key, task.requested_provider, task.classification.value]
     if style := task.payload.get("style"):
@@ -741,7 +877,14 @@ def execute_task(task_id: int) -> None:
         project = db.scalar(select(Project).where(Project.id == task.project_id))
         if not workflow or not project:
             task.status = TaskStatus.failed
-            task.result = {"error": "Task dependencies not found"}
+            task.result = {
+                "error": "任务执行失败：缺少工作流或项目依赖。",
+                "error_summary": "任务执行失败：缺少工作流或项目依赖。",
+                "error_detail": "Task dependencies not found before execution could start.",
+                "error_code": "task_dependencies_missing",
+                "error_stage": "task_bootstrap",
+                "error_hint": "请检查项目、工作流和任务关联数据是否完整。",
+            }
             db.commit()
             return
 
@@ -793,7 +936,50 @@ def execute_task(task_id: int) -> None:
                 }
         except Exception as exc:
             task.status = TaskStatus.failed
-            task.result = {"error": str(exc)}
+            failure = _build_failure_result(
+                exc,
+                capability=workflow.provider_capability,
+                provider_name=task.requested_provider,
+            )
+            task.result = failure
+
+            try:
+                provider_definition = get_provider_definition(task.requested_provider, db)
+                failed_model_name = provider_definition.model_name
+                failed_outbound = provider_definition.outbound
+            except Exception:
+                failed_model_name = task.requested_provider
+                failed_outbound = True
+
+            db.add(
+                ProviderCall(
+                    task_id=task.id,
+                    provider_name=task.requested_provider,
+                    model_name=failed_model_name,
+                    capability=workflow.provider_capability,
+                    cost=0.0,
+                    cost_currency=task.cost_currency or "CNY",
+                    latency_ms=0,
+                    outbound=failed_outbound,
+                    request_summary={
+                        "classification": task.classification.value,
+                        "project_code": project.code,
+                        "keys": list(task.payload.keys()),
+                        "failure": failure,
+                    },
+                )
+            )
+            logger.error(
+                "task execution failed",
+                extra={
+                    "task_id": task.id,
+                    "project_code": project.code,
+                    "provider_name": task.requested_provider,
+                    "error_code": failure.get("error_code"),
+                    "error_detail": failure.get("error_detail"),
+                },
+                exc_info=True,
+            )
 
         db.commit()
 

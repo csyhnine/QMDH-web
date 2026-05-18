@@ -123,5 +123,47 @@ class ChatStreamingTests(unittest.TestCase):
         self.assertEqual(payload[-1]["content"], "你好")
 
 
+    def test_chat_message_route_persists_structured_error_message(self) -> None:
+        token = self.login()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        create_response = self.client.post(
+            "/chat/conversations",
+            headers=headers,
+            json={"model_provider_id": 1, "title": ""},
+        )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        conversation_id = create_response.json()["id"]
+
+        async def fake_stream(provider, messages):
+            del provider, messages
+            yield (
+                'data: {"error": {"code": "chat_upstream_http_404", '
+                '"summary": "对话失败：当前 Chat 接口地址或模型名称不存在。", '
+                '"detail": "上游返回了 HTML 错误页，通常意味着 base_url 或接口路径配置错误。"}}\n\n'
+            )
+            yield "data: [DONE]\n\n"
+
+        with patch("app.routers.chat.stream_chat_completion", fake_stream):
+            response = self.client.post(
+                f"/chat/conversations/{conversation_id}/messages",
+                headers={**headers, "Content-Type": "application/json"},
+                json={"content": "why"},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIn("chat_upstream_http_404", response.text)
+
+        messages_response = self.client.get(
+            f"/chat/conversations/{conversation_id}/messages",
+            headers=headers,
+        )
+        self.assertEqual(messages_response.status_code, 200, messages_response.text)
+        payload = messages_response.json()
+        self.assertEqual(payload[-1]["role"], "assistant")
+        self.assertIn("当前 Chat 接口地址或模型名称不存在", payload[-1]["content"])
+        self.assertIn("错误码：chat_upstream_http_404", payload[-1]["content"])
+
+
 if __name__ == "__main__":
     unittest.main()

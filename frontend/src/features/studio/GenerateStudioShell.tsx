@@ -504,12 +504,33 @@ function truncateText(value: string, maxLength: number): string {
 }
 
 function taskSummary(task: Task, asset?: Asset): string {
+  if (task.status === "failed" && task.result["error_summary"]) {
+    return String(task.result["error_summary"]);
+  }
   return asset?.prompt_text ??
     (task.result["summary"]
       ? String(task.result["summary"])
       : task.result["error"]
         ? String(task.result["error"])
         : "等待结果返回。");
+}
+
+function taskFailureDetail(task: Task): string {
+  if (task.status !== "failed") return "";
+  const detail = task.result["error_detail"] ?? task.result["error_raw"] ?? task.result["error"];
+  return detail ? String(detail) : "";
+}
+
+function taskFailureHint(task: Task): string {
+  if (task.status !== "failed") return "";
+  const hint = task.result["error_hint"];
+  return hint ? String(hint) : "";
+}
+
+function taskFailureCode(task: Task): string {
+  if (task.status !== "failed") return "";
+  const code = task.result["error_code"];
+  return code ? String(code) : "";
 }
 
 function buildImagePayload(form: StudioFormState, workflowKey: string): Record<string, unknown> {
@@ -1032,6 +1053,7 @@ function FeedCard(props: {
   task: Task;
   asset?: Asset;
   galleryAssets: Asset[];
+  showDebugDetails?: boolean;
   onReuse: () => void;
   onBookmark: () => void;
   onShare: () => void;
@@ -1042,6 +1064,10 @@ function FeedCard(props: {
   const summary = taskSummary(props.task, props.asset);
   const summaryPreview = truncateText(summary, 160);
   const hasLongSummary = summaryPreview !== summary;
+  const failureDetail = taskFailureDetail(props.task);
+  const failureHint = taskFailureHint(props.task);
+  const failureCode = taskFailureCode(props.task);
+  const showFailureDetails = props.task.status === "failed" && Boolean(failureDetail || failureHint || failureCode);
 
   return (
     <article className="feed-card" ref={props.anchorRef}>
@@ -1057,6 +1083,18 @@ function FeedCard(props: {
             <details className="feed-card-summary-details">
               <summary>展开完整提示词</summary>
               <p>{summary}</p>
+            </details>
+          ) : null}
+          {showFailureDetails ? (
+            <details className="feed-card-summary-details feed-card-error-details">
+              <summary>查看失败原因</summary>
+              {failureDetail ? <p>{failureDetail}</p> : null}
+              {failureHint ? <p>建议：{failureHint}</p> : null}
+              <p>
+                任务 ID：{props.task.id}
+                {failureCode ? ` · 错误码：${failureCode}` : ""}
+                {props.showDebugDetails ? ` · 模型：${props.task.requested_provider}` : ""}
+              </p>
             </details>
           ) : null}
           <div className="feed-card-meta">
@@ -4057,6 +4095,7 @@ export default function GenerateStudioShell() {
                     task={task}
                     asset={linkedAsset}
                     galleryAssets={galleryAssets}
+                    showDebugDetails={userCanUseOpsViews}
                     onReuse={() => handleReuseTask(task, linkedAsset ?? galleryAssets[0])}
                     onBookmark={() => (linkedAsset ? void handleGalleryAction("bookmark", linkedAsset.id) : undefined)}
                     onShare={() => (linkedAsset ? void handleGalleryAction("share", linkedAsset.id) : undefined)}

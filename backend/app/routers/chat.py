@@ -21,6 +21,7 @@ from app.schemas import (
 )
 from app.services.chat_service import (
     build_chat_messages,
+    format_chat_error_message,
     get_chat_models,
     provider_profile_has_usable_api_key,
     snapshot_chat_provider_config,
@@ -31,12 +32,12 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 def _verify_owner(db: Session, conversation_id: int, user_id: int) -> Conversation:
-    conv = db.get(Conversation, conversation_id)
-    if not conv:
+    conversation = db.get(Conversation, conversation_id)
+    if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    if conv.user_id != user_id:
+    if conversation.user_id != user_id:
         raise HTTPException(status_code=403, detail="Conversation access denied")
-    return conv
+    return conversation
 
 
 @router.get("/models", response_model=list[ChatModelOut])
@@ -63,20 +64,20 @@ def create_conversation(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> ConversationOut:
-    conv = Conversation(
+    conversation = Conversation(
         user_id=auth_user.user_id,
         title=payload.title.strip() or "新对话",
         model_provider_id=payload.model_provider_id,
     )
-    db.add(conv)
+    db.add(conversation)
     db.commit()
-    db.refresh(conv)
+    db.refresh(conversation)
     return ConversationOut(
-        id=conv.id,
-        title=conv.title,
-        model_provider_id=conv.model_provider_id,
-        created_at=conv.created_at,
-        updated_at=conv.updated_at,
+        id=conversation.id,
+        title=conversation.title,
+        model_provider_id=conversation.model_provider_id,
+        created_at=conversation.created_at,
+        updated_at=conversation.updated_at,
     )
 
 
@@ -175,15 +176,28 @@ async def send_message(
     api_messages = [{"role": message.role, "content": message.content} for message in recent]
 
     full_content_parts: list[str] = []
+    last_error_payload: dict[str, object] | None = None
 
     async def generate():
+        nonlocal last_error_payload
+
         async for chunk in stream_chat_completion(provider_config, api_messages):
             if chunk.startswith("data: ") and "[DONE]" not in chunk:
                 try:
                     data = json.loads(chunk[6:])
                     if "delta" in data:
                         full_content_parts.append(data["delta"])
-                except (json.JSONDecodeError, KeyError):
+                    if "error" in data:
+                        raw_error = data["error"]
+                        if isinstance(raw_error, dict):
+                            last_error_payload = raw_error
+                        else:
+                            last_error_payload = {
+                                "summary": str(raw_error),
+                                "detail": str(raw_error),
+                                "code": "chat_stream_error",
+                            }
+                except (json.JSONDecodeError, KeyError, TypeError):
                     pass
             yield chunk
 
@@ -193,6 +207,14 @@ async def send_message(
                 conversation_id=conversation_id,
                 role="assistant",
                 content=full_content,
+            )
+            db.add(assistant_message)
+            db.commit()
+        elif last_error_payload:
+            assistant_message = ChatMessage(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=format_chat_error_message(last_error_payload),
             )
             db.add(assistant_message)
             db.commit()

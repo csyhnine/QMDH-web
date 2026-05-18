@@ -5,6 +5,7 @@ import json
 
 from app.core.logging import setup_logging
 from app.database import SessionLocal
+from app.services.inspiration_refresh import refresh_seed_inspiration_media
 from app.services.session_cleanup import run_session_cleanup_once
 from seed_users import seed_staff_users
 
@@ -14,6 +15,15 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("cleanup_sessions", help="Delete expired and stale revoked auth sessions")
     subparsers.add_parser("seed_users", help="Restore company member accounts from the staff roster")
+    refresh_parser = subparsers.add_parser(
+        "refresh_seed_inspiration_media",
+        help="Re-localize built-in inspiration seed images into managed storage",
+    )
+    refresh_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Refresh all matching seed records, not only current SVG placeholders",
+    )
     return parser
 
 
@@ -40,6 +50,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "seed_users":
         result = seed_staff_users(SessionLocal)
         print(json.dumps({"created": result.created, "skipped": result.skipped}))
+        return 0
+
+    if args.command == "refresh_seed_inspiration_media":
+        result = refresh_seed_inspiration_media(SessionLocal, placeholders_only=not args.all)
+        print(
+            json.dumps(
+                {
+                    "matched": result.matched,
+                    "refreshed": result.refreshed,
+                    "skipped": result.skipped,
+                    "placeholders_only": not args.all,
+                }
+            )
+        )
         return 0
 
     parser.error(f"Unknown command: {args.command}")

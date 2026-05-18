@@ -34,7 +34,7 @@ const studioNavItems: Array<{ key: Exclude<StudioTab, "generate"> | "generate"; 
 
 export default function AppShell(props: AppShellProps) {
   const navigate = useNavigate();
-  const { currentUser, canManageUsers, canUseOpsViews, logout } = useAuth();
+  const { currentUser, canUseOpsViews, logout } = useAuth();
 
   const className =
     props.kind === "admin"
@@ -95,14 +95,14 @@ export default function AppShell(props: AppShellProps) {
               </div>
             </div>
           ) : null}
-          {props.kind === "studio" && canUseOpsViews ? (
-            <button type="button" className="rail-logout" onClick={() => navigate("/admin/dashboard")}>
-              看板
+          {props.kind === "admin" && canUseOpsViews ? (
+            <button type="button" className="rail-logout" onClick={() => navigate("/studio/generate")}>
+              Studio
             </button>
           ) : null}
-          {props.kind === "studio" && canManageUsers ? (
-            <button type="button" className="rail-logout" onClick={() => navigate("/admin/users")}>
-              账号
+          {props.kind === "studio" && canUseOpsViews ? (
+            <button type="button" className="rail-logout" onClick={() => navigate("/admin/dashboard")}>
+              Admin
             </button>
           ) : null}
           <button type="button" className="rail-logout" onClick={() => void handleLogout()}>

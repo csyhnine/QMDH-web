@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -20,6 +21,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add structured task and provider-call archive tables."""
+    classification_enum = postgresql.ENUM('a', 'b', 'c', name='dataclassification', create_type=False)
+    task_status_enum = postgresql.ENUM(
+        'pending', 'running', 'completed', 'failed', name='taskstatus', create_type=False
+    )
+
     op.create_table(
         'task_archives',
         sa.Column('id', sa.Integer(), nullable=False),
@@ -32,8 +38,8 @@ def upgrade() -> None:
         sa.Column('user_id', sa.Integer(), nullable=True),
         sa.Column('user_name', sa.String(length=100), nullable=False),
         sa.Column('requested_provider', sa.String(length=100), nullable=False),
-        sa.Column('classification', sa.Enum('a', 'b', 'c', name='dataclassification'), nullable=False),
-        sa.Column('task_status', sa.Enum('pending', 'running', 'completed', 'failed', name='taskstatus'), nullable=False),
+        sa.Column('classification', classification_enum, nullable=False),
+        sa.Column('task_status', task_status_enum, nullable=False),
         sa.Column('cost', sa.Float(), nullable=False),
         sa.Column('cost_currency', sa.String(length=12), nullable=False),
         sa.Column('latency_ms', sa.Integer(), nullable=False),

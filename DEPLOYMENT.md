@@ -106,6 +106,11 @@ docker compose ps
 curl http://127.0.0.1:8080/api/v1/health
 ```
 
+Migration note:
+
+- the backend image must include `backend/alembic.ini` and `backend/migrations/`
+- if `docker compose run --rm backend alembic upgrade head` reports `No 'script_location' key found in configuration.`, the backend image was built from an older Dockerfile and must be rebuilt from the latest code before continuing
+
 ## 8. Data Safety Rules
 
 Never do these on the live server unless you intentionally want to wipe data:

@@ -5,7 +5,11 @@ import json
 
 from app.core.logging import setup_logging
 from app.database import SessionLocal
-from app.services.inspiration_refresh import refresh_seed_inspiration_media
+from app.services.inspiration_refresh import (
+    build_seed_inspiration_bundle,
+    import_seed_inspiration_bundle,
+    refresh_seed_inspiration_media,
+)
 from app.services.session_cleanup import run_session_cleanup_once
 from seed_users import seed_staff_users
 
@@ -23,6 +27,24 @@ def _build_parser() -> argparse.ArgumentParser:
         "--all",
         action="store_true",
         help="Refresh all matching seed records, not only current SVG placeholders",
+    )
+    bundle_build_parser = subparsers.add_parser(
+        "build_seed_inspiration_bundle",
+        help="Download built-in seed inspiration images locally and package them into a zip bundle",
+    )
+    bundle_build_parser.add_argument(
+        "--output",
+        required=True,
+        help="Zip file path to write, for example ./tmp/seed-inspiration-bundle.zip",
+    )
+    bundle_import_parser = subparsers.add_parser(
+        "import_seed_inspiration_bundle",
+        help="Import a local seed inspiration bundle into managed storage and update matching DB records",
+    )
+    bundle_import_parser.add_argument(
+        "--bundle",
+        required=True,
+        help="Path to the zip bundle produced by build_seed_inspiration_bundle",
     )
     return parser
 
@@ -60,7 +82,38 @@ def main(argv: list[str] | None = None) -> int:
                     "matched": result.matched,
                     "refreshed": result.refreshed,
                     "skipped": result.skipped,
+                    "restored": result.restored,
+                    "placeholders": result.placeholders,
                     "placeholders_only": not args.all,
+                }
+            )
+        )
+        return 0
+
+    if args.command == "build_seed_inspiration_bundle":
+        result = build_seed_inspiration_bundle(args.output)
+        print(
+            json.dumps(
+                {
+                    "bundle_path": result.bundle_path,
+                    "total": result.total,
+                    "restored": result.restored,
+                    "placeholders": result.placeholders,
+                }
+            )
+        )
+        return 0
+
+    if args.command == "import_seed_inspiration_bundle":
+        result = import_seed_inspiration_bundle(SessionLocal, bundle_path=args.bundle)
+        print(
+            json.dumps(
+                {
+                    "bundle_path": result.bundle_path,
+                    "extracted_files": result.extracted_files,
+                    "matched": result.matched,
+                    "updated": result.updated,
+                    "skipped": result.skipped,
                 }
             )
         )

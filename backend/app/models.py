@@ -69,6 +69,7 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(150), unique=True, index=True)
     code: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     classification: Mapped[DataClassification] = mapped_column(SqlEnum(DataClassification), default=DataClassification.b)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     tasks: Mapped[list["Task"]] = relationship(back_populates="project")
@@ -192,6 +193,58 @@ class ProviderCall(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     task: Mapped[Task] = relationship(back_populates="provider_calls")
+
+
+class TaskArchive(Base):
+    __tablename__ = "task_archives"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    project_code: Mapped[str] = mapped_column(String(50), index=True)
+    project_name: Mapped[str] = mapped_column(String(150))
+    workflow_key: Mapped[str] = mapped_column(String(100))
+    workflow_name: Mapped[str] = mapped_column(String(150))
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    user_name: Mapped[str] = mapped_column(String(100), index=True)
+    requested_provider: Mapped[str] = mapped_column(String(100), index=True)
+    classification: Mapped[DataClassification] = mapped_column(SqlEnum(DataClassification))
+    task_status: Mapped[TaskStatus] = mapped_column(SqlEnum(TaskStatus))
+    cost: Mapped[float] = mapped_column(Float, default=0.0)
+    cost_currency: Mapped[str] = mapped_column(String(12), default="CNY")
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    provider_call_count: Mapped[int] = mapped_column(Integer, default=0)
+    asset_count: Mapped[int] = mapped_column(Integer, default=0)
+    archive_source: Mapped[str] = mapped_column(String(50), index=True)
+    archive_reason: Mapped[str] = mapped_column(Text, default="")
+    source_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    task_created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    task_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    archived_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, server_default=func.now())
+
+    provider_calls: Mapped[list["ProviderCallArchive"]] = relationship(
+        back_populates="task_archive",
+        cascade="all, delete-orphan",
+    )
+
+
+class ProviderCallArchive(Base):
+    __tablename__ = "provider_call_archives"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider_call_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    task_archive_id: Mapped[int] = mapped_column(ForeignKey("task_archives.id"), index=True)
+    provider_name: Mapped[str] = mapped_column(String(50), index=True)
+    model_name: Mapped[str] = mapped_column(String(100))
+    capability: Mapped[str] = mapped_column(String(50))
+    cost: Mapped[float] = mapped_column(Float, default=0.0)
+    cost_currency: Mapped[str] = mapped_column(String(12), default="CNY")
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    outbound: Mapped[bool] = mapped_column(Boolean, default=True)
+    call_created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    archived_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, server_default=func.now())
+
+    task_archive: Mapped[TaskArchive] = relationship(back_populates="provider_calls")
 
 
 class AuditLog(Base):

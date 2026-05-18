@@ -100,13 +100,12 @@ Treat `QMDH_IMAGE_PROVIDER_PROFILES_JSON` as bootstrap or emergency-only input, 
 
 管理端保存的配置会进入 `provider_profiles` 表，并在后端返回 provider 列表、任务创建校验和任务执行时生效。同名数据库 provider 会覆盖环境变量中的同名配置，便于运行中切换模型或 key。
 
-如果存在 ModelScope profile，后端会用同一个 token 自动派生一组可试图像 provider，设计师页面只显示这些真实 runtime provider，不显示 `jimeng`、`nano_banana` 等模拟项：
+当前模型列表采取“所见即所得”：
 
-- `modelscope_free_image`：`MAILAND/majicflus_v1`
-- `modelscope_qwen_image_2512`：`Qwen/Qwen-Image-2512`
-- `modelscope_z_image`：`Tongyi-MAI/Z-Image`
-- `modelscope_z_image_turbo`：`Tongyi-MAI/Z-Image-Turbo`
-- `modelscope_firered_image_edit`：`FireRedTeam/FireRed-Image-Edit-1.1`，模型本身要求图片输入；当前后端会在无参考图时自动补一张白底图，有参考图时转发参考图，从而兼容设计师文生图列表
+- 可在 `/admin/models` 里通过 `/api/v1/providers/discover` 探测上游 `/v1/models`
+- 再通过 `/api/v1/providers/bulk-import` 显式导入需要的 provider profile
+- 设计师页面只显示后台已启用的真实 runtime provider，不显示 `jimeng`、`nano_banana` 等模拟项
+- `FireRedTeam/FireRed-Image-Edit-1.1` 这类要求图片输入的模型，当前仍通过后端白底图 / 参考图桥接兼容到现有生成体验
 
 模型与 key 管理不在设计师创作台暴露。管理人员需要直接访问：
 
@@ -116,7 +115,7 @@ http://127.0.0.1:18080/admin/models
 
 对应的 `GET/POST/PATCH/DELETE /api/v1/providers/profiles` 接口只允许 `admin`、`owner`、`ops` 角色访问。
 
-当前 MVP 只在前端脱敏展示 key，数据库内仍是明文保存。生产环境上线前需要补充密钥加密、访问审计和轮换策略。
+当前 MVP 在前端脱敏展示 key，数据库内保存的是加密值。生产环境仍需要继续落实密钥轮换、备份配对和访问审计策略。
 
 如果上传了参考图，`reference_mode=caption_prompt` 会让后端先调用视觉语言模型读取参考图，再把参考说明拼入文生图 prompt。这个方案能让参考图真实影响结果，但它不是直接的 `img2img / image.edit`。
 

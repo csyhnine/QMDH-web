@@ -8,6 +8,10 @@
 
 ---
 
+补充规则：
+
+- 若任务属于中大型需求，立项或评审时必须先做 `docs/roadmap-2.0-prep.md` 中定义的 2.0 兼容性检查。
+
 ## Current Iteration Goal
 
 在不扩大范围的前提下，把 QMDH-web 从“能跑的图像生成 MVP”推进到“可由管理人员运营设计师账号和用量的生产化内测版本”，优先完成：
@@ -99,7 +103,7 @@
 - 完成说明：
   - 后端新增 `provider_profiles` 数据表、CRUD 接口和脱敏 key 返回
   - `model_registry` 支持合并 `.env` provider 与数据库 provider；同名数据库配置可覆盖环境配置
-  - 当配置了 ModelScope token 时，后端会自动派生 `Qwen/Qwen-Image-2512`、`Tongyi-MAI/Z-Image`、`Tongyi-MAI/Z-Image-Turbo` 等可试文生图 provider
+  - 模型管理已支持 `/providers/discover` + `/providers/bulk-import` 的显式探测/导入链路；当前 runtime provider 以后台启用的 provider profile 为准，不再依赖隐藏自动派生
   - `FireRedTeam/FireRed-Image-Edit-1.1` 已确认要求图片上传；当前通过后端白底图兼容桥接进入设计师文生图列表，后续仍建议补专用 `image.edit` workflow / adapter
   - 设计师页面的模型列表只读取真实 runtime provider，不再显示 `jimeng`、`nano_banana` 等模拟占位项
   - 任务创建与执行都改为读取数据库会话下的 provider 注册表
@@ -244,32 +248,62 @@
   - FeedCard 新增"删除"按钮，支持删除单条生成记录（含关联资产和 provider 调用）
   - **已填充 12 条建筑参考案例**：Moriyama House、Villa Savoye、宁波博物馆、Luum Temple、红砖美术馆、Fallingwater、绩溪博物馆、Tama Library、龙美术馆、Thermal Baths Vals、阿那亚艺术中心、House NA（来源标注 ArchDaily / 古德设计网）
 
-### Task: [task-015] 任务删除留痕与运营计量归档
-- 状态：TODO
+### Task: [task-015] 任务软删除与基础运营留痕
+- 状态：DONE
 - 目标：
   - 避免设计师删除任务后直接抹掉运营看板、账号用量和模型调用统计
   - 为后续 PostgreSQL/生产化部署保留稳定的数据留痕口径
-- 边界：
-  - `backend/app/routers/tasks.py`
-  - `backend/app/routers/dashboard.py`
-  - 新增或扩展任务归档 / 用量计量数据表
-  - 必要的前端删除态与后台统计说明
-- 拟定方案：
-  - 方案 1：任务改为软删除，设计师前台默认隐藏，运营统计继续基于未清算的历史记录
-  - 方案 2：新增 `usage_ledger / task_archive` 一类归档表，在删除或清理前固化成本、调用、操作者与项目快照
-  - 当前用户已确认采用 `1 + 2` 方向，但暂不开发，先进入待办
+- 完成说明：
+  - `DELETE /tasks/{id}` 已改为软删除，写入 `tasks.deleted_at`
+  - `/api/v1/tasks` 和任务详情默认隐藏已删除任务，设计师前台不再看到被删除任务
+  - `/api/v1/dashboard/stats` 与账号额度统计继续纳入已软删除任务的成本、成功/失败和调用历史
+  - 删除理由与删除时间写入 `task.soft_deleted` 审计日志
+  - 已补 `deleted_at` migration 与后端测试，覆盖列表隐藏、额度不回退与审计留痕
 - 验收标准：
-  1. 删除已完成任务后，`/admin/dashboard` 与账号用量不回退
-  2. 运营侧能追溯任务删除前的 provider/model/cost 口径
-  3. 前后端单测与 build 通过
+  1. 删除已完成任务后，`/admin/dashboard` 与账号用量不回退：已完成
+  2. 运营侧能追溯任务删除前的 provider/model/cost 口径：已完成（保留 task + provider call + audit）
+  3. 前后端单测与 build 通过：已完成
+
+### Task: [task-016] 项目级删除归档与用量账本补强
+- 状态：IN_PROGRESS
+- 目标：
+  - 避免项目删除或后续清理流程再次硬删任务与 provider 调用，绕过已建立的软删除口径
+  - 为未来 PostgreSQL/生产化/2.0 升级预留更稳定的 `usage_ledger / archive` 口径
+- 边界：
+  - `backend/app/routers/projects.py`
+  - `backend/app/routers/dashboard.py`
+  - 新增或扩展任务归档 / 用量账本数据表
+  - 必要的删除策略说明与文档同步
+- 首轮 2.0 Compatibility Check：
+  - 这个改动不应绕开现有 `Workflow + Task` 主轴；项目删除策略应复用 task 侧已建立的软删除 / 归档口径
+  - 数据结构需要能继续扩展 `provider / model / cost / operator / project snapshot / artifact`，不把历史再塞回自由 JSON
+  - 删除后的历史结果应继续沉淀到项目或项目归档维度，而不是随页面状态一起消失
+  - 归档与清理过程必须可追踪、可恢复、可审计，至少保留删除动作、操作者、时间和影响范围
+  - 未来研究型 / 协作型工作流若引入 run / step / artifact，应该能复用同一层 `usage_ledger / archive` 口径
+- 拟定方案：
+  - 保留现有 task 软删除，不回退为硬删除
+  - 为项目删除、批量清理或后续历史回收设计 `usage_ledger / task_archive` 一类结构化留痕
+  - 明确项目删除时 `task / provider_call / asset` 的保留、解绑或归档策略
+- 当前进展：
+  - 已完成第一阶段实现：`DELETE /projects/{code}` 不再硬删 `project / task / provider_call`
+  - 当前项目删除已改为“项目归档语义”：`projects.archived_at` 标记归档、前台项目列表隐藏、成员解绑、资产解除 `project_id`
+  - 项目归档时会批量软删该项目下仍可见的 task，保留 provider call、成本、失败原因与 dashboard / quota 统计口径
+  - 已补 migration 与后端测试；本地工作区数据库已执行 Alembic 升级到包含 `projects.archived_at` 的版本
+  - 已补第二阶段基础归档层：新增 `task_archives` 与 `provider_call_archives`，在 task 软删与 project 归档时写入结构化快照
+  - 当前仍未落地独立的全量 `usage_ledger` 记账层，因此本 task 继续保持 `IN_PROGRESS`
+- 验收标准：
+  1. 删除项目或做批量清理后，运营统计与账号用量不回退：第一阶段已完成（项目归档 + task 软删保留）
+  2. 运营侧仍能追溯 provider/model/cost/operator/project snapshot：第二阶段基础已完成（保留 task + provider call + project.deleted audit + archive snapshot）
+  3. 方案符合 `docs/data-governance.md` 与 `docs/roadmap-2.0-prep.md`：当前实现符合，但仍待补更完整的 `usage_ledger`
 
 ---
 
 ## Next Suggested Step
 
-1. 在后台为 Chat 补至少 1 个 `chat.completions` 模型，并做一次真实对话联调
-2. 继续收敛模型管理页，补“探测结果 -> 页面分配 -> adapter 支持范围”的使用说明与筛选体验
-3. 等用户重新排期后，再推进 **task-015**（任务软删除 + 用量归档）
+1. 继续推进 **task-016** 下一步：设计更完整的 `usage_ledger`，把账号用量、项目归档、task/provider 调用快照串成可聚合账本
+2. 评估项目归档后的管理端可见性需求：是否需要 `/admin/projects` 增加“已归档项目”只读视图
+3. 先在 `/admin/models` 对现有 Chat profile 执行一次“校验”；当前本地 `ms_zhipuai_glm-5` 会在 `chat/completions` 上返回 `auth_error`
+4. 修正对应 ModelScope token / model 权限后，再做一次真实 Chat 联调
 
 ---
 
@@ -281,7 +315,7 @@
 
 | ID | 任务 | 说明 | 优先级 |
 |----|------|------|--------|
-| prod-001 | 前端 App.tsx 拆分 | 3000+ 行单文件拆为路由组件，降低维护成本 | P1 |
+| prod-001 | GenerateStudioShell 拆分 | 将 `frontend/src/features/studio/GenerateStudioShell.tsx` 继续拆为更小的 hooks / panels，降低 4000+ 行热点维护成本 | P1 |
 | prod-002 | 环境变量规范化 | 新增 `.env.production.example`，标注必填/可选/默认值 | P1 |
 | prod-003 | 后端日志结构化 | 统一 JSON 格式日志输出，方便 ELK/Loki 采集 | P2 |
 | prod-004 | 健康检查增强 | `/health` 检查 DB 连接、Redis 连接，支持 k8s 存活探针 | P2 |
@@ -294,7 +328,7 @@
 | prod-006 | API Rate Limiting | 防刷保护，内测阶段可跳过 | P3 |
 | prod-007 | Session 过期清理 | 定时任务清理 `auth_sessions` 过期记录 | P3 |
 | prod-008 | 静态资源存储方案 | 用户上传图片迁移到 OSS/S3，配合 CDN 分发 | P2 |
-| prod-009 | 任务软删除与用量归档 | 删除设计任务后仍保留运营统计、账号用量和审计追溯 | P1 |
+| prod-009 | 项目级删除归档与用量账本 | 删除项目或做批量清理后仍保留运营统计、账号用量和审计追溯 | P1 |
 
 ### 不建议当前阶段做
 

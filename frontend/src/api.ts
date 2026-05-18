@@ -154,6 +154,14 @@ export type ProviderProfileRecord = {
   updated_at: string;
 };
 
+export type ProviderProfileProbeResult = {
+  ok: boolean;
+  status: string;
+  detail: string;
+  checked_url: string | null;
+  checked_at: string;
+};
+
 export type ProviderProfileCreatePayload = {
   provider_name: string;
   api_key: string;
@@ -459,6 +467,8 @@ export const api = {
     patchJson<ProjectMember[]>(`/projects/${projectCode}/members`, { add_user_ids: addUserIds, remove_user_ids: removeUserIds }),
   providers: () => request<Provider[]>("/providers"),
   providerProfiles: () => request<ProviderProfileRecord[]>("/providers/profiles"),
+  probeProviderProfile: (profileId: number) =>
+    postJson<ProviderProfileProbeResult>(`/providers/profiles/${profileId}/probe`, {}),
   discoverProviderModels: (baseUrl: string, apiKey: string) =>
     postJson<ProviderDiscoverResult>("/providers/discover", { base_url: baseUrl, api_key: apiKey }),
   bulkImportProviderProfiles: (payload: ProviderBulkImportPayload) =>

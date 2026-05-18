@@ -1,6 +1,6 @@
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -193,6 +193,138 @@ class ProviderProfileTests(unittest.TestCase):
         self.assertEqual(definition.model_name, "db-model")
         self.assertEqual(definition.runtime_profile_name, "db_image")
         self.assertEqual(profile.api_key, "db-secret")
+
+    def test_probe_provider_profile_reports_success(self) -> None:
+        with self.SessionLocal() as db:
+            profile = ProviderProfile(
+                provider_name="chat_ok",
+                api_key=encrypt_value("sk-ok"),
+                base_url="https://api.example.test/v1",
+                model_name="chat-model",
+                adapter_kind="openai_compatible",
+                capabilities=["chat.completions"],
+                enabled=True,
+            )
+            db.add(profile)
+            db.commit()
+            profile_id = profile.id
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.text = '{"data":[]}'
+        mock_client = MagicMock()
+        mock_client.request = AsyncMock(return_value=mock_response)
+        mock_async_client = MagicMock()
+        mock_async_client.__aenter__.return_value = mock_client
+        mock_async_client.__aexit__.return_value = False
+
+        with patch("app.routers.providers.httpx.AsyncClient", return_value=mock_async_client):
+            response = self.client.post(f"/providers/profiles/{profile_id}/probe", headers=self.auth_headers())
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("/chat/completions", payload["checked_url"])
+        self.assertIn("Chat", payload["detail"])
+        mock_client.request.assert_awaited_once()
+        args, kwargs = mock_client.request.await_args
+        self.assertEqual(args[0], "POST")
+        self.assertIn("/chat/completions", args[1])
+        self.assertEqual(kwargs["json"]["model"], "chat-model")
+
+    def test_probe_provider_profile_reports_auth_error(self) -> None:
+        with self.SessionLocal() as db:
+            profile = ProviderProfile(
+                provider_name="chat_bad_key",
+                api_key=encrypt_value("sk-bad"),
+                base_url="https://api.example.test/v1",
+                model_name="chat-model",
+                adapter_kind="openai_compatible",
+                capabilities=["chat.completions"],
+                enabled=True,
+            )
+            db.add(profile)
+            db.commit()
+            profile_id = profile.id
+
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_response.is_success = False
+        mock_response.text = '{"error":{"message":"invalid token"}}'
+        mock_client = MagicMock()
+        mock_client.request = AsyncMock(return_value=mock_response)
+        mock_async_client = MagicMock()
+        mock_async_client.__aenter__.return_value = mock_client
+        mock_async_client.__aexit__.return_value = False
+
+        with patch("app.routers.providers.httpx.AsyncClient", return_value=mock_async_client):
+            response = self.client.post(f"/providers/profiles/{profile_id}/probe", headers=self.auth_headers())
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["status"], "auth_error")
+        self.assertIn("API Key", payload["detail"])
+
+    def test_probe_provider_profile_uses_models_endpoint_for_non_chat_capability(self) -> None:
+        with self.SessionLocal() as db:
+            profile = ProviderProfile(
+                provider_name="image_probe",
+                api_key=encrypt_value("sk-image"),
+                base_url="https://api.example.test/v1",
+                model_name="image-model",
+                adapter_kind="openai_compatible",
+                capabilities=["image.generate"],
+                enabled=True,
+            )
+            db.add(profile)
+            db.commit()
+            profile_id = profile.id
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.text = '{"data":[]}'
+        mock_client = MagicMock()
+        mock_client.request = AsyncMock(return_value=mock_response)
+        mock_async_client = MagicMock()
+        mock_async_client.__aenter__.return_value = mock_client
+        mock_async_client.__aexit__.return_value = False
+
+        with patch("app.routers.providers.httpx.AsyncClient", return_value=mock_async_client):
+            response = self.client.post(f"/providers/profiles/{profile_id}/probe", headers=self.auth_headers())
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertIn("/models", payload["checked_url"])
+        args, kwargs = mock_client.request.await_args
+        self.assertEqual(args[0], "GET")
+        self.assertIn("/models", args[1])
+        self.assertIn("headers", kwargs)
+
+    def test_probe_provider_profile_rejects_unsupported_adapter(self) -> None:
+        with self.SessionLocal() as db:
+            profile = ProviderProfile(
+                provider_name="claude_native",
+                api_key=encrypt_value("sk-native"),
+                base_url="https://api.example.test/v1",
+                model_name="claude-3",
+                adapter_kind="anthropic_native",
+                capabilities=["chat.completions"],
+                enabled=True,
+            )
+            db.add(profile)
+            db.commit()
+            profile_id = profile.id
+
+        response = self.client.post(f"/providers/profiles/{profile_id}/probe", headers=self.auth_headers())
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["status"], "unsupported")
 
 
 if __name__ == "__main__":

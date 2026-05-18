@@ -48,6 +48,8 @@ QMDH-web 采用“多 agent 接力开发”模式。
 - `tasks.md`：当前迭代任务、优先级与状态
 - `handoff.md`：最近交接记录
 - `review.md`：review 节奏与模板
+- `data-governance.md`：代码、配置、业务数据、媒体和 seed 内容的治理边界
+- `roadmap-2.0-prep.md`：1.0 如何为 2.0 预留地基的路线约束
 
 `docs/ai-agent-project-docs/` 只是模板来源，不是当前项目的正式事实源。
 
@@ -87,6 +89,7 @@ QMDH-web 采用“多 agent 接力开发”模式。
    - `docs/protocol.md`
    - `docs/tasks.md`
    - `docs/handoff.md`
+   - `docs/roadmap-2.0-prep.md`
    - 与当前任务相关的 `docs/architecture.md`
    - 与当前任务相关的 `docs/decisions.md`
 4. 核对文档与代码是否一致。
@@ -220,6 +223,22 @@ QMDH-web 采用“多 agent 接力开发”模式。
 
 ---
 
+### 10.5 2.0 Compatibility Check
+
+从现在开始，凡是 1.0 阶段内的中大型需求，都必须额外做一次 “2.0 兼容性检查”。
+
+至少回答以下问题：
+
+1. 这个改动是否会阻碍未来多步骤工作流？
+2. 这个数据结构是否还能扩展来源、步骤、工件、状态？
+3. 这个功能结果是否能沉淀到项目维度？
+4. 这个执行过程是否可追踪、可恢复、可审计？
+5. 这个能力以后是否能被研究型 / 协作型智能体复用？
+
+这条检查不要求现在实现 2.0，只要求避免把未来升级路径封死。
+
+---
+
 ## 11. End-of-Session Protocol
 
 任何会话都可能被中断，agent 必须假设自己无法持续工作到任务自然结束。
@@ -256,6 +275,7 @@ QMDH-web 采用“多 agent 接力开发”模式。
 - `tasks.md` 状态是否准确
 - `handoff.md` 是否足够清晰
 - 代码是否越界修改
+- 如为中大型需求，是否完成 `2.0 Compatibility Check`
 
 ### 12.2 Iteration Review
 每个迭代、里程碑或每 5-10 个任务后检查：

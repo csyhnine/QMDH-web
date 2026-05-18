@@ -5,6 +5,7 @@ import {
   type Provider,
   type ProviderBulkImportItem,
   type ProviderProfileCreatePayload,
+  type ProviderProfileProbeResult,
   type ProviderProfileRecord,
 } from "../../api";
 
@@ -280,6 +281,8 @@ export default function ModelsPage({ providerProfiles, providers, error, onRefre
   const [providerDraft, setProviderDraft] = useState<ProviderProfileDraft>(defaultProviderProfileDraft);
   const [editingProviderProfileId, setEditingProviderProfileId] = useState<number | null>(null);
   const [savingProviderProfile, setSavingProviderProfile] = useState(false);
+  const [probingProfileId, setProbingProfileId] = useState<number | null>(null);
+  const [probeResults, setProbeResults] = useState<Record<number, ProviderProfileProbeResult>>({});
   const [modelFilters, setModelFilters] = useState<ModelFilterState>({ search: "", capability: "all", adapterKind: "all", status: "all" });
   const [discoverPanelOpen, setDiscoverPanelOpen] = useState(false);
   const [discoverBaseUrl, setDiscoverBaseUrl] = useState("");
@@ -363,9 +366,34 @@ export default function ModelsPage({ providerProfiles, providers, error, onRefre
     try {
       await api.deleteProviderProfile(profileId);
       if (editingProviderProfileId === profileId) resetProviderProfileDraft();
+      setProbeResults((current) => {
+        if (!(profileId in current)) return current;
+        const next = { ...current };
+        delete next[profileId];
+        return next;
+      });
       onRefresh();
       onSetError("");
     } catch (err) { onSetError(err instanceof Error ? err.message : "删除模型配置失败"); }
+  }
+
+  async function handleProbeProviderProfile(profileId: number) {
+    setProbingProfileId(profileId);
+    try {
+      const result = await api.probeProviderProfile(profileId);
+      setProbeResults((current) => ({ ...current, [profileId]: result }));
+      onSetError("");
+    } catch (err) {
+      onSetError(err instanceof Error ? err.message : "校验模型连通性失败");
+    } finally {
+      setProbingProfileId(null);
+    }
+  }
+
+  function probeTone(status: string): SupportLevel {
+    if (status === "ok") return "ready";
+    if (status === "auth_error" || status === "invalid_key" || status === "missing_key") return "partial";
+    return "planned";
   }
 
   async function handleDiscoverModels(event: FormEvent<HTMLFormElement>) {
@@ -498,15 +526,26 @@ export default function ModelsPage({ providerProfiles, providers, error, onRefre
             {filteredProviderProfiles.length > 0 ? filteredProviderProfiles.map((profile) => {
               const support = summarizeProfileSupport(profile.adapter_kind, profile.capabilities);
               const adapter = getAdapterOption(profile.adapter_kind);
+              const probe = probeResults[profile.id];
               return (
                 <div key={profile.id} className="admin-table-row">
                   <span><strong>{profile.provider_name}</strong><small>{profile.model_name}</small></span>
                   <span className="model-capability-list">{profile.capabilities.map((c) => { const def = getCapabilityDefinition(c); return <em key={c} className={`model-capability-chip support-${def.support}`}>{def.label}</em>; })}</span>
                   <span><strong>{adapter.label}</strong><small className={`model-support-badge support-${support}`}>{supportLevelLabel(support)}</small></span>
                   <span><strong>{profile.unit_price} {profile.pricing_currency}</strong><small>{profile.pricing_unit}</small></span>
-                  <span>{profile.masked_api_key || (profile.has_api_key ? "已保存" : "no key")}</span>
-                  <span><em className={`status-pill ${profile.enabled ? "status-completed" : "status-failed"}`}>{profile.enabled ? "启用" : "停用"}</em></span>
-                  <span className="admin-row-actions"><button type="button" onClick={() => handleEditProviderProfile(profile)}>编辑</button><button type="button" onClick={() => handleDeleteProviderProfile(profile.id)}>删除</button></span>
+                  <span>
+                    <strong>{profile.masked_api_key || (profile.has_api_key ? "已保存" : "no key")}</strong>
+                    {probe ? <small>{probe.detail}</small> : null}
+                  </span>
+                  <span>
+                    <em className={`status-pill ${profile.enabled ? "status-completed" : "status-failed"}`}>{profile.enabled ? "启用" : "停用"}</em>
+                    {probe ? <small className={`model-support-badge support-${probeTone(probe.status)}`}>{probe.ok ? "已校验" : probe.status}</small> : null}
+                  </span>
+                  <span className="admin-row-actions">
+                    <button type="button" onClick={() => void handleProbeProviderProfile(profile.id)} disabled={probingProfileId === profile.id}>{probingProfileId === profile.id ? "校验中..." : "校验"}</button>
+                    <button type="button" onClick={() => handleEditProviderProfile(profile)}>编辑</button>
+                    <button type="button" onClick={() => handleDeleteProviderProfile(profile.id)}>删除</button>
+                  </span>
                 </div>
               );
             }) : <div className="template-empty">{providerProfiles.length > 0 ? "当前筛选条件下没有匹配的模型配置。" : "还没有后台模型配置。"}</div>}

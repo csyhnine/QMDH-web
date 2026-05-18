@@ -32,6 +32,14 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 
 ---
 
+## 2.5 Version Direction
+
+当前架构对版本方向的默认理解应保持一致：
+
+- **1.0** 继续是稳定可用的设计生产平台
+- **2.0** 是未来升级方向，面向研究型 / 协作型智能工作流
+- 当前阶段不直接落地完整 Agent 平台，而是在现有 `workflow + task`、项目沉淀、媒体存储和审计能力上预留升级地基
+
 ## 3. Key Entry Points
 
 - 仓库入口：
@@ -40,6 +48,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 - 前端入口：
   - `frontend/src/main.tsx`
   - `frontend/src/App.tsx`
+  - `frontend/src/router.tsx`
   - `frontend/src/api.ts`
 - 后端入口：
   - `backend/app/main.py`
@@ -50,7 +59,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 - 账号与管理入口：
   - `backend/app/routers/auth.py`
   - `backend/app/routers/users.py`
-  - `frontend/src/App.tsx` 中的 `/admin/users` 与 `/admin/dashboard`
+  - `frontend/src/router.tsx` 中的 `/admin/users`、`/admin/dashboard`、`/admin/models`
 - 部署入口：
   - `docker-compose.yml`
   - `DEPLOYMENT.md`
@@ -64,7 +73,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 - 模型配置入口：
   - `backend/app/routers/providers.py`
   - `backend/app/models.py` 中的 `ProviderProfile`
-  - `frontend/src/App.tsx` 中的 `/admin/models` 管理视图
+  - `frontend/src/pages/admin/ModelsPage.tsx`
 - 项目状态入口：
   - `docs/projects/project-index.json`
   - `docs/projects/<project-code>/status.md`
@@ -183,7 +192,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 - 路径：
   - `backend/app/routers/inspiration.py`
   - `backend/app/models.py` 中的 `InspirationPost`
-  - `frontend/src/App.tsx` 中的灵感页视图
+  - `frontend/src/pages/inspiration/InspirationPage.tsx`
 - 职责：
   - 灵感内容 CRUD（外部参考导入 + 用户分享生成结果）
   - 分类标签、卡片网格、点赞计数
@@ -200,7 +209,8 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 ### Module: Project Management / 项目管理
 - 路径：
   - `backend/app/routers/projects.py`
-  - `frontend/src/App.tsx` 中的项目面板和成员编辑
+  - `frontend/src/pages/admin/ProjectsPage.tsx`
+  - `frontend/src/features/studio/GenerateStudioShell.tsx` 中的项目面板和成员编辑
 - 职责：
   - 项目 CRUD（创建/重命名/删除）
   - 项目成员管理（添加/移除）
@@ -238,7 +248,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 ## 5. Data / Control Flow
 
 ### 主链路：图像生成任务
-1. 前端从 `frontend/src/App.tsx` 读取项目、workflow、provider、task、asset 数据。
+1. 前端通过 `frontend/src/router.tsx` 装配页面，并在 `frontend/src/pages/studio/GeneratePage.tsx` / `frontend/src/features/studio/GenerateStudioShell.tsx` 中读取项目、workflow、provider、task、asset 数据。
 2. 前端在 `frontend/src/api.ts` 为 API 请求附带 `Authorization: Bearer <session token>`；旧 `X-QMDH-Auth` 仅作为兼容路径保留。
 3. 用户在生图工作台填写业务字段，前端组装请求，但不再提交可信执行人字段。
 4. `POST /api/v1/tasks` 进入 `backend/app/routers/tasks.py`。
@@ -264,7 +274,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 4. 后端保存真实 API key，但响应只返回 `has_api_key` 与 `masked_api_key`。
 5. Provider profile 管理接口只允许 `admin / owner / ops` 角色访问。
 6. `/api/v1/providers` 会合并静态 provider、环境变量 provider 与已启用的数据库 provider。
-7. 如果存在 ModelScope profile，注册表会自动派生 `Qwen/Qwen-Image-2512`、`Tongyi-MAI/Z-Image`、`Tongyi-MAI/Z-Image-Turbo` 等同 token 文生图 provider；`FireRedTeam/FireRed-Image-Edit-1.1` 通过后端白底图桥接同时暴露 `image.generate` 与 `image.edit` 能力。
+7. `/api/v1/providers/discover` + `/api/v1/providers/bulk-import` 支持从上游 `/v1/models` 显式探测并批量导入 provider profile；当前 runtime provider 以后台启用的 profile 为准，不再隐藏自动派生 ModelScope 变体。
 8. 任务创建与执行都使用合并后的 provider 注册表，保证后台保存后可以真实参与生成。
 
 ### 辅助链路：账号与看板
@@ -297,9 +307,9 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 
 ## 6. Current Hot Spots
 
-- 热点模块：`frontend/src/App.tsx`
-  - 原因：当前大部分前端页面逻辑仍集中在单文件中
-  - 风险：现在同时承载设计师工作台、登录页和管理页，后续应在产品主线稳定后拆分
+- 热点模块：`frontend/src/features/studio/GenerateStudioShell.tsx`
+  - 原因：设计师工作台的大部分交互、状态与项目成员编辑仍集中在 4000+ 行单文件中
+  - 风险：继续叠加功能会放大状态耦合、回归范围和接手成本
 
 - 热点模块：`backend/app/services/task_executor.py`
   - 原因：图像/视频/文档执行能力都汇集在这里
@@ -313,6 +323,10 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
   - 原因：任务创建牵涉用户、项目、provider、workflow、审计和执行模式
   - 风险：认证、权限和一致性问题集中暴露在这里
 
+- 热点模块：`backend/app/routers/projects.py`
+  - 原因：项目删除当前仍承担“清理项目下任务 / provider 调用 / 资产关系”的历史策略
+  - 风险：如果继续沿用硬删路径，会绕过 task 软删除与未来 usage ledger / archive 口径
+
 - 热点模块：`backend/app/core/auth.py` 与 `backend/app/routers/users.py`
   - 原因：数据库 session、旧 token fallback 和角色边界集中在这里
   - 风险：后续移除兼容认证或接入 SSO 时需要集中回归权限边界
@@ -324,6 +338,21 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 - 热点模块：`docker-compose.yml` 与部署文件
   - 原因：MVP 1.0 已开始考虑单机服务器部署
   - 风险：若不持续同步代码与部署配置，极易出现“本地能跑、容器起不来”的漂移
+
+---
+
+## 6.5 1.0 -> 2.0 Compatibility Guardrails
+
+后续 1.0 中大型需求默认应遵守以下架构约束：
+
+- 不绕开现有 `Workflow + Task` 主轴另起一套平行业务执行链
+- 不把复杂能力继续无限堆进单一 `Task.payload / result`
+- 新增的状态、来源、产物、审计信息尽量结构化，而不是只写入自由 JSON
+- 新增图片、快照、摘要、导出物尽量走统一存储接口，视为未来“工件存储”的组成部分
+- 新增沉淀类能力优先挂到项目维度，而不是散落在独立页面状态中
+- 新增耗时或异步能力必须继续补状态、失败原因、来源与操作者
+
+这些约束的目的不是现在就引入 2.0 编排层，而是避免 1.0 后续迭代把未来工作流升级路径封死。
 
 ---
 

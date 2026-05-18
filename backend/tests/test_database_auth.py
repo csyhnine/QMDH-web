@@ -3,13 +3,14 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.security import hash_password, hash_session_token
 from app.database import Base, get_db
-from app.models import AuthSession, DataClassification, Project, ProviderCall, Task, TaskStatus, User, Workflow
+from app.models import Asset, AssetType, AuditLog, AuthSession, DataClassification, Project, ProviderCall, ProviderCallArchive, Task, TaskArchive, TaskStatus, User, Workflow
 from app.routers import auth, dashboard, projects, users
 from app.services.bootstrap import seed_initial_data
 
@@ -111,6 +112,19 @@ class DatabaseAuthTests(unittest.TestCase):
                     latency_ms=1200,
                     outbound=True,
                     request_summary={},
+                )
+            )
+            db.add(
+                Asset(
+                    name="Project cover",
+                    asset_type=AssetType.image,
+                    project_id=project.id,
+                    source_task_id=completed_task.id,
+                    storage_path="media/project-cover.png",
+                    prompt_text="cover",
+                    like_count=0,
+                    share_count=0,
+                    tags=["cover"],
                 )
             )
             db.commit()
@@ -233,6 +247,70 @@ class DatabaseAuthTests(unittest.TestCase):
 
         forbidden = self.client.get("/projects/QMDH-SEC/status", headers={"Authorization": f"Bearer {designer_token}"})
         self.assertEqual(forbidden.status_code, 403)
+
+    def test_delete_project_archives_history_and_hides_project(self) -> None:
+        admin_token = self.login("admin", "admin-pass")
+
+        delete_response = self.client.delete(
+            "/projects/QMDH-001",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        self.assertEqual(delete_response.status_code, 204, delete_response.text)
+
+        projects_after = self.client.get("/projects", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(projects_after.status_code, 200)
+        self.assertEqual([project["code"] for project in projects_after.json()], ["QMDH-SEC"])
+
+        archived_status = self.client.get("/projects/QMDH-001/status", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(archived_status.status_code, 404)
+
+        dashboard_after = self.client.get("/dashboard/stats", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(dashboard_after.status_code, 200)
+        self.assertEqual(dashboard_after.json()["total_tasks"], 2)
+        self.assertEqual(dashboard_after.json()["total_cost"], 1.25)
+
+        with self.SessionLocal() as db:
+            project = db.scalar(select(Project).where(Project.code == "QMDH-001"))
+            self.assertIsNotNone(project)
+            self.assertIsNotNone(project.archived_at)
+
+            tasks = db.scalars(select(Task).where(Task.project_id == project.id).order_by(Task.id)).all()
+            self.assertEqual(len(tasks), 2)
+            self.assertTrue(all(task.deleted_at is not None for task in tasks))
+
+            provider_calls = db.scalars(select(ProviderCall).where(ProviderCall.task_id.in_([task.id for task in tasks]))).all()
+            self.assertEqual(len(provider_calls), 1)
+
+            assets = db.scalars(select(Asset).where(Asset.source_task_id == tasks[0].id)).all()
+            self.assertEqual(len(assets), 1)
+            self.assertIsNone(assets[0].project_id)
+
+            designer = db.scalar(select(User).where(User.name == "designer"))
+            self.assertIsNotNone(designer)
+            self.assertNotIn("QMDH-001", designer.project_codes or [])
+
+            project_audit = db.scalar(
+                select(AuditLog)
+                .where(AuditLog.event_type == "project.deleted", AuditLog.project_code == "QMDH-001")
+                .order_by(AuditLog.id.desc())
+            )
+            self.assertIsNotNone(project_audit)
+            self.assertEqual(project_audit.details["task_count"], 2)
+            self.assertEqual(project_audit.details["soft_deleted_task_count"], 2)
+            self.assertEqual(project_audit.details["provider_call_count"], 1)
+            self.assertEqual(project_audit.details["unlinked_asset_count"], 1)
+
+            archives = db.scalars(select(TaskArchive).where(TaskArchive.project_code == "QMDH-001")).all()
+            self.assertEqual(len(archives), 2)
+            completed_archive = next(item for item in archives if item.requested_provider == "modelscope_free_image")
+            self.assertEqual(completed_archive.archive_source, "project.archive")
+            self.assertEqual(completed_archive.provider_call_count, 1)
+
+            archived_calls = db.scalars(
+                select(ProviderCallArchive).where(ProviderCallArchive.task_archive_id == completed_archive.id)
+            ).all()
+            self.assertEqual(len(archived_calls), 1)
+            self.assertEqual(archived_calls[0].model_name, "MAILAND/majicflus_v1")
 
     def test_seed_initial_data_creates_local_dev_accounts_without_overwriting_passwords(self) -> None:
         with self.SessionLocal() as db:

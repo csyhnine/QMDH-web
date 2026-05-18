@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.database import get_db
 from app.models import AuditLog, Project, Task, TaskStatus, User, Workflow
 from app.schemas import TaskCreate, TaskDeleteIn, TaskOut
+from app.services.task_archive import ensure_task_archive
 from app.services.media_storage import resolve_storage_payload
 from app.services.model_registry import get_provider_definition, get_provider_map
 from app.services.task_executor import enqueue_task, execute_task
@@ -97,7 +98,12 @@ def create_task(
     if workflow.provider_capability not in provider.capabilities:
         raise HTTPException(status_code=400, detail="Provider does not support workflow capability")
 
-    project = db.scalar(select(Project).where(Project.code == payload.project_code))
+    project = db.scalar(
+        select(Project).where(
+            Project.code == payload.project_code,
+            Project.archived_at.is_(None),
+        )
+    )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     ensure_project_access(auth_user, project.code)
@@ -173,6 +179,13 @@ def delete_task(
     # Soft-delete: set deleted_at timestamp
     deleted_at = datetime.now(timezone.utc)
     task.deleted_at = deleted_at
+    ensure_task_archive(
+        db,
+        task,
+        archive_source="task.delete",
+        archive_reason=(payload.reason if payload else "") or "",
+        archived_at=deleted_at,
+    )
 
     # Audit log entry
     write_audit_log(

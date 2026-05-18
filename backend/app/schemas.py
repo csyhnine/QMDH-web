@@ -217,6 +217,14 @@ class ProviderProfileOut(ProviderProfileBase):
     updated_at: datetime
 
 
+class ProviderProfileProbeOut(BaseModel):
+    ok: bool
+    status: str
+    detail: str
+    checked_url: str | None = None
+    checked_at: datetime
+
+
 class ProjectOut(BaseModel):
     id: int
     name: str

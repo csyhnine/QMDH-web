@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.security import hash_session_token
 from app.database import Base, get_db
-from app.models import AuditLog, DataClassification, Project, Task, TaskStatus, User, Workflow, AuthSession
+from app.models import Asset, AssetType, AuditLog, AuthSession, DataClassification, Project, ProviderCall, ProviderCallArchive, Task, TaskArchive, TaskStatus, User, Workflow
 from app.routers import dashboard, tasks
 
 
@@ -126,6 +126,33 @@ class TaskSoftDeleteTests(unittest.TestCase):
                 latency_ms=500,
             )
             db.add_all([self.task_keep, self.task_delete, self.task_other])
+            db.flush()
+            db.add(
+                ProviderCall(
+                    task_id=self.task_delete.id,
+                    provider_name="openai_image",
+                    model_name="gpt-image-1",
+                    capability="image.generate",
+                    cost=2.0,
+                    cost_currency="CNY",
+                    latency_ms=900,
+                    outbound=True,
+                    request_summary={"prompt": "delete me"},
+                )
+            )
+            db.add(
+                Asset(
+                    name="Delete me output",
+                    asset_type=AssetType.image,
+                    project_id=project.id,
+                    source_task_id=self.task_delete.id,
+                    storage_path="media/delete-me.png",
+                    prompt_text="delete me",
+                    like_count=0,
+                    share_count=0,
+                    tags=["delete"],
+                )
+            )
             db.commit()
             self.task_keep_id = self.task_keep.id
             self.task_delete_id = self.task_delete.id
@@ -282,6 +309,26 @@ class TaskSoftDeleteTests(unittest.TestCase):
         self.assertIn("deleted_at", reasoned.details)
 
         self.assertEqual(blank.details["reason"], "")
+
+    def test_soft_delete_writes_structured_task_archive(self) -> None:
+        response = self._delete(self.task_delete_id, "owner-token", json={"reason": "archive this history"})
+        self.assertEqual(response.status_code, 204, response.text)
+
+        with self.SessionLocal() as db:
+            archive = db.scalar(select(TaskArchive).where(TaskArchive.task_id == self.task_delete_id))
+            self.assertIsNotNone(archive)
+            self.assertEqual(archive.project_code, "QMDH-001")
+            self.assertEqual(archive.user_name, "owner.designer")
+            self.assertEqual(archive.archive_source, "task.delete")
+            self.assertEqual(archive.archive_reason, "archive this history")
+            self.assertEqual(archive.provider_call_count, 1)
+            self.assertEqual(archive.asset_count, 1)
+
+            call_archives = db.scalars(
+                select(ProviderCallArchive).where(ProviderCallArchive.task_archive_id == archive.id)
+            ).all()
+            self.assertEqual(len(call_archives), 1)
+            self.assertEqual(call_archives[0].provider_name, "openai_image")
 
 
 if __name__ == "__main__":

@@ -1,14 +1,18 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.audit import AuditEventType, write_audit_log
 from app.core.auth import ensure_project_access, get_current_auth_user, require_ops_access, require_user_admin
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import Asset, Project, ProviderCall, Task, User
+from app.models import Asset, Project, Task, User
 from app.schemas import ProjectMemberOut, ProjectOut, ProjectStatusOut
 from app.services.project_status import build_project_status_detail, build_project_status_map
+from app.services.task_archive import ensure_task_archive
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -23,12 +27,21 @@ class ProjectRename(BaseModel):
     name: str = Field(min_length=1, max_length=150)
 
 
+def _get_active_project(db: Session, project_code: str) -> Project | None:
+    return db.scalar(
+        select(Project).where(
+            Project.code == project_code,
+            Project.archived_at.is_(None),
+        )
+    )
+
+
 @router.get("", response_model=list[ProjectOut])
 def list_projects(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> list[dict]:
-    query = select(Project).order_by(Project.code)
+    query = select(Project).where(Project.archived_at.is_(None)).order_by(Project.code)
     if "*" not in auth_user.project_codes:
         query = query.where(Project.code.in_(auth_user.project_codes))
     projects = list(db.scalars(query).all())
@@ -114,7 +127,7 @@ def rename_project(
     """Rename a project. Requires ops access."""
     require_ops_access(auth_user)
     ensure_project_access(auth_user, project_code)
-    project = db.scalar(select(Project).where(Project.code == project_code))
+    project = _get_active_project(db, project_code)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -140,9 +153,13 @@ def rename_project(
 @router.get("/{project_code}/status", response_model=ProjectStatusOut)
 def get_project_status(
     project_code: str,
+    db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> dict:
     ensure_project_access(auth_user, project_code)
+    project = _get_active_project(db, project_code)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
     detail = build_project_status_detail(project_code)
     if not detail:
         raise HTTPException(status_code=404, detail="Project status not found")
@@ -157,6 +174,9 @@ def list_project_members(
 ) -> list[ProjectMemberOut]:
     """Return active users who have access to this project."""
     ensure_project_access(auth_user, project_code)
+    project = _get_active_project(db, project_code)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
     users = db.scalars(select(User).where(User.is_active.is_(True)).order_by(User.role, User.name)).all()
     members = []
     for user in users:
@@ -192,7 +212,7 @@ def update_project_members(
     ensure_project_access(auth_user, project_code)
 
     # Verify project exists
-    project = db.scalar(select(Project).where(Project.code == project_code))
+    project = _get_active_project(db, project_code)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -244,37 +264,70 @@ def delete_project(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ):
-    """Delete a project. Requires admin access. Removes project code from all users."""
+    """Archive a project. Requires admin access.
+    Preserves task/provider history for operations reporting."""
     require_user_admin(auth_user)
-    project = db.scalar(select(Project).where(Project.code == project_code))
+    project = _get_active_project(db, project_code)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Delete tasks belonging to this project (and their provider_calls)
+    archived_at = datetime.now(timezone.utc)
+
+    # Soft-delete any still-visible tasks so the project disappears from active use.
+    soft_deleted_count = 0
     tasks = db.scalars(select(Task).where(Task.project_id == project.id)).all()
     for task in tasks:
-        # Delete associated provider calls first (FK constraint)
-        calls = db.scalars(select(ProviderCall).where(ProviderCall.task_id == task.id)).all()
-        for call in calls:
-            db.delete(call)
-        db.delete(task)
+        if task.deleted_at is None:
+            task.deleted_at = archived_at
+            soft_deleted_count += 1
+
+    provider_call_count = 0
+    for task in tasks:
+        archive = ensure_task_archive(
+            db,
+            task,
+            archive_source="project.archive",
+            archive_reason=f"project archived: {project.code}",
+            archived_at=archived_at,
+        )
+        provider_call_count += int(archive.provider_call_count or 0)
 
     # Unlink assets
     assets = db.scalars(select(Asset).where(Asset.project_id == project.id)).all()
     for asset in assets:
         asset.project_id = None
 
-    # Flush before deleting the project
-    db.flush()
+    project.archived_at = archived_at
 
     # Remove project code from all users' project_codes
-    users = db.scalars(select(User).where(User.is_active.is_(True))).all()
+    users = db.scalars(select(User)).all()
+    unlinked_user_count = 0
     for user in users:
         codes = list(user.project_codes or [])
         if project_code in codes:
             codes.remove(project_code)
             user.project_codes = codes
+            unlinked_user_count += 1
 
-    db.delete(project)
+    write_audit_log(
+        db=db,
+        event_type=AuditEventType.PROJECT_DELETED,
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="project",
+        target_id=project.id,
+        target_name=project.name,
+        project_code=project.code,
+        classification=project.classification,
+        details={
+            "archived_at": archived_at.isoformat(),
+            "task_count": len(tasks),
+            "soft_deleted_task_count": soft_deleted_count,
+            "provider_call_count": provider_call_count,
+            "unlinked_asset_count": len(assets),
+            "unlinked_user_count": unlinked_user_count,
+        },
+    )
+
     db.commit()
     return Response(status_code=204)

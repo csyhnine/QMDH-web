@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
@@ -22,6 +24,7 @@ from app.schemas import (
     ProviderDiscoverIn,
     ProviderDiscoverOut,
     ProviderProfileCreate,
+    ProviderProfileProbeOut,
     ProviderProfileOut,
     ProviderProfileUpdate,
 )
@@ -105,6 +108,40 @@ def _to_profile_out(profile: ProviderProfile) -> ProviderProfileOut:
     )
 
 
+def _build_probe_request(profile: ProviderProfile, api_key: str) -> tuple[str, str, dict[str, object], str]:
+    base_url = profile.base_url.rstrip("/")
+    if "chat.completions" in (profile.capabilities or []):
+        return (
+            "POST",
+            f"{base_url}/chat/completions",
+            {
+                "headers": {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                "json": {
+                    "model": profile.model_name,
+                    "messages": [{"role": "user", "content": "ping"}],
+                    "stream": False,
+                    "max_tokens": 1,
+                },
+            },
+            "Chat 接口可用，当前模型已通过最小请求校验。",
+        )
+
+    return (
+        "GET",
+        f"{base_url}/models",
+        {
+            "headers": {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+        },
+        "模型服务已连通，当前 API Key 可读取模型列表。",
+    )
+
+
 @router.get("/profiles", response_model=list[ProviderProfileOut])
 def list_provider_profiles(
     db: Session = Depends(get_db),
@@ -113,6 +150,105 @@ def list_provider_profiles(
     require_ops_access(auth_user)
     profiles = db.scalars(select(ProviderProfile).order_by(ProviderProfile.provider_name)).all()
     return [_to_profile_out(profile) for profile in profiles]
+
+
+@router.post("/profiles/{profile_id}/probe", response_model=ProviderProfileProbeOut)
+async def probe_provider_profile(
+    profile_id: int,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> ProviderProfileProbeOut:
+    require_ops_access(auth_user)
+    profile = db.get(ProviderProfile, profile_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Provider profile not found")
+
+    checked_at = datetime.now(timezone.utc)
+
+    try:
+        api_key = decrypt_value_or_raise(profile.api_key)
+    except EncryptionKeyUnavailableError:
+        return ProviderProfileProbeOut(
+            ok=False,
+            status="invalid_key",
+            detail="QMDH_ENCRYPTION_KEY 未配置，无法解密当前保存的 API Key。",
+            checked_url=None,
+            checked_at=checked_at,
+        )
+    except EncryptedValueDecodeError:
+        return ProviderProfileProbeOut(
+            ok=False,
+            status="invalid_key",
+            detail="当前保存的 API Key 无法被现有 QMDH_ENCRYPTION_KEY 解密，请重新录入。",
+            checked_url=None,
+            checked_at=checked_at,
+        )
+
+    if not api_key.strip():
+        return ProviderProfileProbeOut(
+            ok=False,
+            status="missing_key",
+            detail="当前模型没有可用的 API Key，请先在后台重新录入。",
+            checked_url=None,
+            checked_at=checked_at,
+        )
+
+    if profile.adapter_kind != "openai_compatible":
+        return ProviderProfileProbeOut(
+            ok=False,
+            status="unsupported",
+            detail=f"当前只支持校验 openai_compatible 适配器，{profile.adapter_kind} 请先人工联调。",
+            checked_url=None,
+            checked_at=checked_at,
+        )
+
+    method, checked_url, request_kwargs, success_detail = _build_probe_request(profile, api_key)
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.request(method, checked_url, **request_kwargs)
+    except httpx.TimeoutException:
+        return ProviderProfileProbeOut(
+            ok=False,
+            status="timeout",
+            detail="上游模型服务校验超时。",
+            checked_url=checked_url,
+            checked_at=checked_at,
+        )
+    except httpx.RequestError as exc:
+        return ProviderProfileProbeOut(
+            ok=False,
+            status="connection_error",
+            detail=f"无法连接上游模型服务：{exc}",
+            checked_url=checked_url,
+            checked_at=checked_at,
+        )
+
+    if response.status_code in {401, 403}:
+        return ProviderProfileProbeOut(
+            ok=False,
+            status="auth_error",
+            detail="上游拒绝了当前 API Key，请检查 token 是否失效、录错或权限不足。",
+            checked_url=checked_url,
+            checked_at=checked_at,
+        )
+
+    if not response.is_success:
+        return ProviderProfileProbeOut(
+            ok=False,
+            status="upstream_error",
+            detail=f"上游返回 {response.status_code}: {response.text[:200]}",
+            checked_url=checked_url,
+            checked_at=checked_at,
+        )
+
+    return ProviderProfileProbeOut(
+        ok=True,
+        status="ok",
+        detail=success_detail,
+        checked_url=checked_url,
+        checked_at=checked_at,
+    )
 
 
 @router.post("/profiles", response_model=ProviderProfileOut, status_code=status.HTTP_201_CREATED)

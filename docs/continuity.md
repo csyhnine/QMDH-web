@@ -10,7 +10,9 @@
 4. `docs/projects/QMDH-001/status.md`
 5. `docs/deployment.md`
 6. `docs/server-operations.md`
-7. 本文件
+7. `docs/data-governance.md`
+8. `docs/roadmap-2.0-prep.md`
+9. 本文件
 
 ## Current Baseline
 
@@ -31,30 +33,33 @@
 2. 如果有未提交改动，先阅读 `git diff --stat` 和相关文件，不要直接覆盖。
 3. 先读 `docs/handoff.md` 最新一条交接，再读 `docs/tasks.md` 的 `Next Suggested Step`。
 4. 每完成一个可验证小目标就提交一次，避免把大量改动压在同一个未提交工作区里。
-5. 前端大改前先跑 `npm run build`；后端或数据结构变更后跑 `python -m unittest discover -s tests`。
+5. 前端大改前先跑 `npm run build`；后端或数据结构变更后优先用仓库 `.venv` 跑 `.\.venv\Scripts\python.exe -m unittest discover -s tests`。
 6. 涉及本地启动能力时跑 `cmd /c start-dev.cmd --check`。
 7. 推送前确认没有把 `.env`、`backend/app.db`、`local/`、`storage/`、`frontend/dist/`、`node_modules/` 带入 Git。
 
 ## Current Product State
 
 - 设计师工作台主流程可用：项目选择、提示词模板、参考图上传、真实 provider 生图、历史流、图库沉淀。
+- Chat 页面已上线：`/studio/chat` 可创建会话、流式回复和持久化历史，但仍需先在 `/admin/models` 配置至少一个 `chat.completions` 模型。
 - 账号系统已上线：数据库用户、密码登录、session、角色、项目授权。
 - 管理能力已上线：
   - `/admin/users`：账号管理
   - `/admin/models`：模型与 Key 运维配置，包含真实成本单价配置
   - `/admin/dashboard`：运营看板，KPI + 图表布局；成本/失败曲线与模型调用堆叠柱已使用 `/dashboard/stats` 的 `daily_series`、`model_calls_by_day` 按日真实数据
-- `task-012` 已在当前工作区实现模型探测与批量导入能力：`/admin/models` 可探测 `/v1/models` 并批量导入 provider profile，但在提交归档前应视为 WIP
+- 模型探测与批量导入能力已完成：`/admin/models` 可探测 `/v1/models` 并批量导入 provider profile；当前 runtime provider 以后台显式启用的 profile 为准，不再依赖 ModelScope 自动派生。
+- 任务删除留痕已完成：`DELETE /tasks/{id}` 现为软删除，设计师前台默认隐藏，运营看板与账号用量继续统计软删除历史。
 - 真实成本口径已接入：provider 配置 `pricing_currency / pricing_unit / unit_price`，任务按实际输出张数或请求次数写入成本。
 - 模拟 provider 的随机成本已移除，历史模拟成本在 schema 刷新时归零。
+- 未来 2.0 方向当前只作为升级预备路线存在，不作为立即上线目标；后续 1.0 中大型需求应先参考 `docs/roadmap-2.0-prep.md` 做兼容性检查。
 
 ## Near-Term Backlog
 
 优先按小提交拆分：
 
-1. `task-010`：补 provider key 加密、操作审计和正式 migration。
-2. `task-011`：设计师工作台主页重设计（需外部参考图对齐）。
-3. `task-012`：完成并归档模型管理页“探测并批量导入”功能提交，然后用管理页验证导入结果。
-4. `task-sec-001`：确认涉密项目 `QMDH-SEC` 的出域边界和模型可用范围。
+1. 在 `/admin/models` 配置至少 1 个可用 `chat.completions` 模型，并完成 `/studio/chat` 真实联调。
+2. 继续收敛模型管理页的“探测结果 -> 页面分配 -> adapter 支持范围”说明与筛选体验。
+3. 规划 `task-016`：项目级删除归档与用量账本补强；推进前先做一轮 2.0 Compatibility Check。
+4. 持续拆分 `frontend/src/features/studio/GenerateStudioShell.tsx`，降低当前前端最大热点文件的维护风险。
 
 ## Suggested Commit Rhythm
 
@@ -68,7 +73,7 @@
 git status --short
 git log -3 --oneline
 cmd /c start-dev.cmd --check
-cd backend; python -m unittest discover -s tests
+cd backend; .\.venv\Scripts\python.exe -m unittest discover -s tests
 cd frontend; npm run build
 ```
 

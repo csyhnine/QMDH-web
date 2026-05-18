@@ -6,7 +6,7 @@
 - 项目编号：QMDH-001
 - 当前阶段：Phase 1
 - 阶段状态：进行中
-- 最近更新时间：2026-05-11
+- 最近更新时间：2026-05-18
 
 ## 本阶段目标
 
@@ -18,7 +18,7 @@
 ## 当前进展
 
 - FastAPI 后端已提供项目、任务、工作流、图库、模板与媒体访问接口
-- React 前端已形成图像生成工作台主界面
+- React 前端已形成路由化工作台：`App.tsx` 仅保留壳层，主要页面经 `router.tsx` 分发到登录、生成、Chat、灵感和后台管理页
 - 前端模板体系已开始收敛到建筑与景观效果图增强场景，并修复了模板弹层溢出问题
 - `frontend/src/App.tsx` 已继续清理旧热门模板、模板保存死分支和旧本地兜底逻辑
 - 前端工作台入口已收束到图像生成，避免继续暴露视频待开发分支
@@ -39,7 +39,7 @@
 - 已新增独立后台模型管理入口 `/admin/models`，可维护 provider、model、base URL、API key、能力、启停状态和参考图模式
 - 模型管理已从设计师工作台侧栏拆出，并通过 `admin / owner / ops` 角色限制访问
 - 后端 provider 注册表已支持数据库配置，任务创建和执行都会读取后台保存的真实 provider profile
-- 当存在 ModelScope token 时，设计师文生图模型列表会自动出现 `MAILAND/majicflus_v1`、`Qwen/Qwen-Image-2512`、`Tongyi-MAI/Z-Image`、`Tongyi-MAI/Z-Image-Turbo`
+- 模型管理页已支持“探测并批量导入”：可读取上游 `/v1/models` 列表并显式创建 provider profile；设计师工作台只显示后台已启用的真实 runtime provider
 - `FireRedTeam/FireRed-Image-Edit-1.1` 已确认要求图片上传；当前由后端自动补白底图或转发用户参考图，兼容到设计师文生图体验中
 - 设计师页面已不再显示 `jimeng`、`nano_banana` 等模拟 provider
 - 已上线数据库账号系统：支持用户名密码登录、session、账号启停、角色和项目授权
@@ -54,17 +54,20 @@
 - 失败原因 Top 已补充 provider、用户和项目上下文，用于定位模型未配置或调度失败问题
 - `/admin/dashboard` 已按参考图重做为运营看板布局：宽侧栏、顶部筛选工具、KPI 卡、趋势图、环图、排行和账号监管
 - 后台管理面板已继续按参考图统一样式与信息结构：新增 `/admin/projects` 只读项目管理页和 `/admin/settings` 轻量设置中心，账号与模型页面改为表格加右侧详情/编辑面板
-- 模型管理页已在当前工作区补充“探测并批量导入”能力：可读取上游 `/v1/models` 列表并批量创建 provider profile；在提交归档前应视为进行中工作
+- Chat 页面已上线：支持会话列表、SSE 流式回复和历史持久化；实际可用性仍依赖 `/admin/models` 中已配置的 `chat.completions` 模型
+- 任务删除已改为软删除：设计师前台默认隐藏已删除任务，运营看板与账号用量继续保留删除前历史
+- 已接入 Alembic migration、Provider API key 加密与基础操作审计
 - 已新增 `docs/continuity.md`，用于 AI 额度不足或上下文不足时快速接手
 
 ## 风险与阻塞
 
 - 当前大多数参考图接入仍是“语义参考”方案；FireRed 使用白底图 / 参考图桥接调用图像编辑模型，属于兼容方案，后续仍需要专用 `image.edit` workflow / adapter
 - 当前已从 MVP token 认证升级到数据库账号与 session；旧 `X-QMDH-Auth` 仍作为兼容路径保留，后续稳定后可移除
-- `frontend/src/App.tsx` 仍是热点文件，但生图链路已实测可用，拆分工作降级为技术债
+- `frontend/src/features/studio/GenerateStudioShell.tsx` 仍是当前最大前端热点文件，后续继续叠加功能会放大状态耦合与回归成本
 - 当前热门模板已切到更贴近建筑/景观业务的方向，但模板配置仍在前端代码里，后续可考虑继续后端化
-- 当前 API key 采用数据库明文保存并在前端脱敏展示，生产环境仍需要补密钥加密、轮换和审计策略
-- 默认管理员密码、数据库明文 key、缺少正式 migration 和操作审计仍需生产化补强
+- Chat 仍需至少一个真实 `chat.completions` 模型完成后台配置后才能联调
+- 项目删除当前仍会硬删该项目下 task 和 provider call，和已落地的 task 软删除口径不一致
+- Provider API key 已加密，但生产环境仍需确保 `.env` 中的 `QMDH_ENCRYPTION_KEY` 与数据库备份配对保全
 - 账号额度当前为软监管，只用于看板展示，尚未在任务提交链路做硬拦截
 - 运营看板趋势图已接入后端按日聚合（`daily_series` / `model_calls_by_day`，与 `days` 参数一致）；多币种按日成本仍为数值累加，非汇率折算
 
@@ -75,11 +78,12 @@
 - 模板与参考图都要从“前端临时状态”升级到后端真实数据
 - 账号系统优先于继续整理 `App.tsx`，设计师使用管理和用量看板进入当前主线
 - 模型与 key 管理保留为运维配置入口，不围绕测试模型继续扩展
+- 2.0 当前只作为升级预备路线存在；中大型需求推进前应先做兼容性检查
 
 ## 下一步动作
 
 - 用 `open-accounts.cmd` 打开本地账号清单，并用预置设计师账号验证项目权限
-- 先在 `/admin/models` 配置真实 provider 的币种、计费单位和单价，再用 `/admin/dashboard` 观察真实成本、账号额度和失败统计
-- 先提交并归档当前工作区中的模型探测/批量导入改动，再用 `/admin/models` 验证导入后模型列表与运行时 provider 一致
+- 先在 `/admin/models` 配置至少一个可用 `chat.completions` 模型，并联调 `/studio/chat`
+- 继续收敛模型管理页的“探测结果 -> 页面分配 -> adapter 支持范围”说明与筛选体验
+- 若继续推进运营留痕，先为项目级删除归档与用量账本补一轮 2.0 Compatibility Check
 - 如果后续 AI 额度不足或换 agent，先读 `docs/continuity.md`，按小提交继续推进
-- 补 provider key 加密、操作审计、生产日志和正式 migration（`task-010`）

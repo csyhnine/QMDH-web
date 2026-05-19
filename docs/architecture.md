@@ -162,6 +162,27 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
   - 结果结构设计
   - Redis 模式一致性改进
 
+### Module: Usage Ledger / 运营账本
+- 路径：
+  - `backend/app/services/usage_ledger.py`
+  - `backend/app/routers/dashboard.py`
+  - `backend/app/models.py` 中的 `UsageLedger`, `TaskArchive`, `ProviderCallArchive`
+- 职责：
+  - 在 task 终态、task 软删除、project 归档时，为 task / provider_call 写入稳定账本
+  - 为运营看板、成本趋势、失败原因、账号用量提供不依赖 live task 可见性的统计读口径
+  - 将归档快照与运营统计解耦，避免“删除后报表回退”
+- 依赖：
+  - `backend/app/services/task_executor.py`
+  - `backend/app/routers/tasks.py`
+  - `backend/app/routers/projects.py`
+  - `backend/app/models.py`
+- 不应负责：
+  - 决定任务调度或 provider 调用流程
+  - 充当完整财务结算系统
+- 当前相关任务：
+  - 归档项目的只读查看需求评估
+  - 后续历史导出 / 对账口径扩展
+
 ### Module: Bootstrap / Seed Layer
 - 路径：
   - `backend/app/services/bootstrap.py`
@@ -283,7 +304,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 3. `GET /api/v1/auth/me` 返回当前用户、角色、启停状态和项目授权。
 4. `owner / admin` 可访问 `/admin/users`，通过 `/api/v1/users` 创建、编辑、停用账号和重置密码。
 5. `owner / admin / ops` 可访问 `/admin/dashboard`，读取最近任务数、成功率、成本、用户/项目排行、provider/model 分布和失败原因。
-6. `GET /api/v1/dashboard/stats` 在汇总指标之外返回 `daily_series` 与 `model_calls_by_day`（按 UTC 自然日、与查询参数 `days` 对齐），供运营看板绘制成本、失败次数与模型调用按日趋势。
+6. `GET /api/v1/dashboard/stats` 现在以 `usage_ledgers` 为主读口径，在汇总指标之外返回 `daily_series` 与 `model_calls_by_day`（按 UTC 自然日、与查询参数 `days` 对齐），供运营看板绘制成本、失败次数与模型调用按日趋势。
 7. `designer` 只使用设计师工作台，仍按 `project_codes` 过滤项目、任务、资产和模板。
 
 ### 辅助链路：项目状态
@@ -325,7 +346,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 
 - 热点模块：`backend/app/routers/projects.py`
   - 原因：项目删除当前仍承担“清理项目下任务 / provider 调用 / 资产关系”的历史策略
-  - 风险：如果继续沿用硬删路径，会绕过 task 软删除与未来 usage ledger / archive 口径
+  - 风险：项目归档现在同时承担 task 软删、archive snapshot 与 usage ledger 补账；若继续在这里叠加更多恢复 / 清理分支，容易让治理口径分叉
 
 - 热点模块：`backend/app/core/auth.py` 与 `backend/app/routers/users.py`
   - 原因：数据库 session、旧 token fallback 和角色边界集中在这里

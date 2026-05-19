@@ -41,13 +41,18 @@
 
 - 设计师工作台主流程可用：项目选择、提示词模板、参考图上传、真实 provider 生图、历史流、图库沉淀。
 - Chat 页面已上线：`/studio/chat` 可创建会话、流式回复和持久化历史，但仍需先在 `/admin/models` 配置至少一个 `chat.completions` 模型。
+- Chat 与生成失败诊断已补第一轮：后端会保存结构化失败信息（`error_summary / error_detail / error_code / error_hint`），Chat 页与生成卡片不再只显示模糊失败。
 - 账号系统已上线：数据库用户、密码登录、session、角色、项目授权。
 - 管理能力已上线：
   - `/admin/users`：账号管理
   - `/admin/models`：模型与 Key 运维配置，包含真实成本单价配置
-  - `/admin/dashboard`：运营看板，KPI + 图表布局；成本/失败曲线与模型调用堆叠柱已使用 `/dashboard/stats` 的 `daily_series`、`model_calls_by_day` 按日真实数据
+  - `/admin/dashboard`：运营看板，KPI + 图表布局；当前 `/dashboard/stats` 已改为读取 `usage_ledgers` 账本，按 task/provider_call 维度聚合成本、失败原因、账号用量与模型调用趋势
 - 模型探测与批量导入能力已完成：`/admin/models` 可探测 `/v1/models` 并批量导入 provider profile；当前 runtime provider 以后台显式启用的 profile 为准，不再依赖 ModelScope 自动派生。
 - 任务删除留痕已完成：`DELETE /tasks/{id}` 现为软删除，设计师前台默认隐藏，运营看板与账号用量继续统计软删除历史。
+- 默认灵感库 seed 图已具备本地打包 / 服务器导入能力：
+  - `python -m app.cli build_seed_inspiration_bundle --output <zip>`
+  - `python -m app.cli import_seed_inspiration_bundle --bundle <zip>`
+- 当前服务器若直接回源抓 ArchDaily 图片，仍可能因 `HTTP 403 AccessDenied` 回退到 placeholder；更稳的恢复方式是本地先构建 bundle，再上传服务器导入。
 - 真实成本口径已接入：provider 配置 `pricing_currency / pricing_unit / unit_price`，任务按实际输出张数或请求次数写入成本。
 - 模拟 provider 的随机成本已移除，历史模拟成本在 schema 刷新时归零。
 - 未来 2.0 方向当前只作为升级预备路线存在，不作为立即上线目标；后续 1.0 中大型需求应先参考 `docs/roadmap-2.0-prep.md` 做兼容性检查。
@@ -57,8 +62,8 @@
 优先按小提交拆分：
 
 1. 在 `/admin/models` 配置至少 1 个可用 `chat.completions` 模型，并完成 `/studio/chat` 真实联调。
-2. 继续收敛模型管理页的“探测结果 -> 页面分配 -> adapter 支持范围”说明与筛选体验。
-3. 规划 `task-016`：项目级删除归档与用量账本补强；推进前先做一轮 2.0 Compatibility Check。
+2. 如果当前目标是先稳定服务器灵感库，优先上传并导入本地 `tmp/seed-inspiration-bundle.zip`，不要再依赖服务器直接回源重抓。
+3. `task-016` 已完成；后续若继续做运营体验，优先评估 `/admin/projects` 是否需要“已归档项目”只读视图。
 4. 持续拆分 `frontend/src/features/studio/GenerateStudioShell.tsx`，降低当前前端最大热点文件的维护风险。
 
 ## Suggested Commit Rhythm
@@ -104,16 +109,27 @@ Never do these casually on the live server:
 ## Server Recovery / Handoff Pointers
 
 - Detailed runbook: `docs/server-operations.md`
-- Live update flow must include:
+- 日常轻量升级（无 migration）：
+  1. backup `.env`
+  2. backup PostgreSQL
+  3. backup `backend_media`
+  4. `git pull`
+  5. `docker compose up -d --build`
+- 带 migration 的升级：
   1. backup `.env`
   2. backup PostgreSQL
   3. backup `backend_media`
   4. `git pull`
   5. `docker compose run --rm backend alembic upgrade head`
   6. `docker compose up -d --build`
+- 默认灵感库真图恢复推荐流程：
+  1. 本地构建 `seed-inspiration-bundle.zip`
+  2. 上传到服务器 `/www/wwwroot/qmdh-web/seed-inspiration-bundle.zip`
+  3. 运行 `docker compose run --rm -v /www/wwwroot/qmdh-web/seed-inspiration-bundle.zip:/tmp/seed-inspiration-bundle.zip:ro backend python -m app.cli import_seed_inspiration_bundle --bundle /tmp/seed-inspiration-bundle.zip`
 
 ## Current Operational Conclusions
 
 - Company member accounts on the current server were not migrated from the historic DB; the server started from a fresh PostgreSQL database
 - Use `docker compose run --rm backend python -m app.cli seed_users` to restore the maintained company roster
 - Inspiration library default images should now be treated as managed storage assets, not long-term third-party hotlinks
+- 设计师分享图没有外部回源地址，正式环境必须把 `backend_media` 当成业务资产备份，不能靠“重新抓取”恢复

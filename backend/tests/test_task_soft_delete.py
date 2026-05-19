@@ -11,6 +11,7 @@ from app.core.security import hash_session_token
 from app.database import Base, get_db
 from app.models import Asset, AssetType, AuditLog, AuthSession, DataClassification, Project, ProviderCall, ProviderCallArchive, Task, TaskArchive, TaskStatus, User, Workflow
 from app.routers import dashboard, tasks
+from app.services.usage_ledger import ensure_usage_ledger_for_task
 
 
 class TaskSoftDeleteTests(unittest.TestCase):
@@ -153,6 +154,10 @@ class TaskSoftDeleteTests(unittest.TestCase):
                     tags=["delete"],
                 )
             )
+            db.flush()
+            ensure_usage_ledger_for_task(db, self.task_keep, ledger_source="test.seed")
+            ensure_usage_ledger_for_task(db, self.task_delete, ledger_source="test.seed")
+            ensure_usage_ledger_for_task(db, self.task_other, ledger_source="test.seed")
             db.commit()
             self.task_keep_id = self.task_keep.id
             self.task_delete_id = self.task_delete.id

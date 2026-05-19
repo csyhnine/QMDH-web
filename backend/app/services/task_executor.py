@@ -28,6 +28,7 @@ from app.services.media_storage import (
     write_preview_svg,
 )
 from app.services.model_registry import ProviderDefinition, get_image_provider_profile, get_provider_definition
+from app.services.usage_ledger import ensure_usage_ledger_for_task
 
 WHITE_CANVAS_DATA_URL = (
     "data:image/png;base64,"
@@ -918,6 +919,7 @@ def execute_task(task_id: int) -> None:
                     },
                 )
             )
+            db.flush()
 
             try:
                 assets = _materialize_assets(db, task, workflow, project)
@@ -969,6 +971,7 @@ def execute_task(task_id: int) -> None:
                     },
                 )
             )
+            db.flush()
             logger.error(
                 "task execution failed",
                 extra={
@@ -981,6 +984,11 @@ def execute_task(task_id: int) -> None:
                 exc_info=True,
             )
 
+        ensure_usage_ledger_for_task(
+            db,
+            task,
+            ledger_source="task.execute",
+        )
         db.commit()
 
 

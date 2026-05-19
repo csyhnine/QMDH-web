@@ -44,6 +44,20 @@ function InspirationRoute() {
   );
 }
 
+function AdminInspirationRoute() {
+  const [posts, setPosts] = useState<InspirationPost[]>([]);
+
+  useEffect(() => {
+    api.inspiration().then(setPosts).catch(() => setPosts([]));
+  }, []);
+
+  return (
+    <AppShell kind="admin" active="inspiration">
+      <InspirationPage posts={posts} onPostsChange={setPosts} canManage mode="admin" />
+    </AppShell>
+  );
+}
+
 function DashboardRoute() {
   const [dashboard, setDashboard] = useState<DashboardStats | null>(null);
   const [dashboardStatsDays, setDashboardStatsDays] = useState(30);
@@ -213,6 +227,7 @@ export default function AppRouter() {
           <Route path="/admin/users" element={<ProtectedRoute><AdminRoute><UsersRoute /></AdminRoute></ProtectedRoute>} />
           <Route path="/admin/models" element={<ProtectedRoute><OpsRoute><ModelsRoute /></OpsRoute></ProtectedRoute>} />
           <Route path="/admin/projects" element={<ProtectedRoute><OpsRoute><ProjectsRoute /></OpsRoute></ProtectedRoute>} />
+          <Route path="/admin/inspiration" element={<ProtectedRoute><OpsRoute><AdminInspirationRoute /></OpsRoute></ProtectedRoute>} />
           <Route path="/admin/settings" element={<ProtectedRoute><AdminRoute><SettingsRoute /></AdminRoute></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/studio/generate" replace />} />
         </Routes>

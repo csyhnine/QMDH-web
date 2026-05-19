@@ -1,4 +1,4 @@
-import { type CSSProperties, type ChangeEvent, type DragEvent, type FormEvent, type RefObject, useEffect, useRef, useState } from "react";
+﻿import { type CSSProperties, type ChangeEvent, type DragEvent, type FormEvent, type RefObject, useEffect, useRef, useState } from "react";
 
 import {
   api,
@@ -7,7 +7,6 @@ import {
   type AuthUser,
   type DashboardStats,
   type DiscoveredModel,
-  type InspirationPost,
   type ProviderBulkImportItem,
   getStoredAuthToken,
   type ManagedUser,
@@ -22,6 +21,9 @@ import {
   type UserCreatePayload,
   type Workflow
 } from "../../api";
+import StudioComposerDock from "./StudioComposerDock";
+import StudioHistoryPane, { type FeedFilterState } from "./StudioHistoryPane";
+import StudioWorkspacePane, { type ProjectUserBrief } from "./StudioWorkspacePane";
 
 type LoadState = {
   health: string;
@@ -71,12 +73,6 @@ type PromptTemplateFormValue = Pick<
 >;
 
 type CustomPromptTemplate = PromptTemplateRecord;
-
-type FeedFilterState = {
-  sort: "latest" | "oldest";
-  status: "all" | "running" | "completed";
-  provider: string;
-};
 
 type ComposerMenuKey = "template" | "provider" | "display" | "count" | null;
 type ActiveView = "studio" | "projects" | "models" | "users" | "dashboard" | "settings";
@@ -1162,28 +1158,6 @@ export default function GenerateStudioShell() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [studioForm, setStudioForm] = useState<StudioFormState>(defaultStudioForm);
-  const [studioTab, setStudioTab] = useState<"generate" | "inspiration" | "chat">("generate");
-  const [inspirationPosts, setInspirationPosts] = useState<InspirationPost[]>([]);
-  const [inspirationCategory, setInspirationCategory] = useState("全部");
-  const [inspirationLightbox, setInspirationLightbox] = useState<InspirationPost | null>(null);
-  const [importDialog, setImportDialog] = useState<{ open: boolean; url: string; loading: boolean; images: string[]; selectedImage: string; title: string; category: string; tags: string; error: string; manualMode: boolean }>({ open: false, url: "", loading: false, images: [], selectedImage: "", title: "", category: "建筑", tags: "", error: "", manualMode: false });
-  const [inspirationEdit, setInspirationEdit] = useState<{ postId: number; title: string; image_path: string; source_url: string } | null>(null);
-  // Chat state
-  const [chatConversations, setChatConversations] = useState<{ id: number; title: string; model_provider_id: number | null; created_at: string; updated_at: string }[]>([]);
-  const [activeChatId, setActiveChatId] = useState<number | null>(null);
-  const [chatMessages, setChatMessages] = useState<{ id?: number; role: string; content: string; created_at?: string }[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [chatModels, setChatModels] = useState<{ provider_id: number; provider_name: string; model_name: string; base_url: string }[]>([]);
-  const [selectedChatModel, setSelectedChatModel] = useState<number | null>(() => {
-    const saved = localStorage.getItem("qmdh_chat_model");
-    return saved ? parseInt(saved, 10) : null;
-  });
-  const [chatStreaming, setChatStreaming] = useState(false);
-  const chatMessagesRef = useRef<HTMLDivElement | null>(null);
-  const chatMessagesBottomRef = useRef<HTMLDivElement | null>(null);
-  const shouldAutoScrollChatRef = useRef(true);
-  const previousChatMessageCountRef = useRef(0);
-  const pendingInitialChatScrollRef = useRef(false);
   const [filters, setFilters] = useState<FeedFilterState>({
     sort: "oldest",
     status: "all",
@@ -1227,23 +1201,10 @@ export default function GenerateStudioShell() {
   const [showMemberEditor, setShowMemberEditor] = useState(false);
   const [memberSearchQuery, setMemberSearchQuery] = useState("");
   const [memberDraftIds, setMemberDraftIds] = useState<Set<number>>(new Set());
-  const [allUsersBrief, setAllUsersBrief] = useState<{ id: number; name: string; display_name: string; role: string; is_active: boolean }[]>([]);
+  const [allUsersBrief, setAllUsersBrief] = useState<ProjectUserBrief[]>([]);
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectCode, setNewProjectCode] = useState("");
-
-  function updateChatAutoScrollState() {
-    const element = chatMessagesRef.current;
-    if (!element) {
-      return;
-    }
-    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
-    shouldAutoScrollChatRef.current = distanceFromBottom <= 96;
-  }
-
-  function scrollChatToBottom(behavior: ScrollBehavior = "auto") {
-    chatMessagesBottomRef.current?.scrollIntoView({ block: "end", behavior });
-  }
   const [renamingProjectCode, setRenamingProjectCode] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [selectedAdminProjectCode, setSelectedAdminProjectCode] = useState("");
@@ -1386,33 +1347,6 @@ export default function GenerateStudioShell() {
     };
   }, [galleryPreview]);
 
-  useEffect(() => {
-    shouldAutoScrollChatRef.current = true;
-    pendingInitialChatScrollRef.current = true;
-    previousChatMessageCountRef.current = 0;
-  }, [activeChatId]);
-
-  const lastChatMessageContent = chatMessages[chatMessages.length - 1]?.content ?? "";
-
-  useEffect(() => {
-    const messageCount = chatMessages.length;
-    if (messageCount === 0) {
-      previousChatMessageCountRef.current = 0;
-      return;
-    }
-
-    const hasNewMessage = messageCount > previousChatMessageCountRef.current;
-    const shouldScroll = pendingInitialChatScrollRef.current || shouldAutoScrollChatRef.current;
-
-    if (shouldScroll) {
-      const behavior: ScrollBehavior = hasNewMessage ? "smooth" : "auto";
-      window.requestAnimationFrame(() => scrollChatToBottom(behavior));
-      pendingInitialChatScrollRef.current = false;
-    }
-
-    previousChatMessageCountRef.current = messageCount;
-  }, [activeChatId, chatMessages.length, lastChatMessageContent]);
-
   const availableProviders = state.providers.filter(
     (provider) =>
       isRuntimeImageProvider(provider) &&
@@ -1467,7 +1401,7 @@ export default function GenerateStudioShell() {
       : null;
   const hasProjectHistory = imageTasks.length > 0;
   const hasFilteredHistory = filteredTasks.length > 0;
-  const isStudioDockLayout = activeView === "studio" && studioTab === "generate";
+  const isStudioDockLayout = activeView === "studio";
   const activeTemplate =
     [...featuredAtmosphereTemplates, ...customTemplates].find(
       (template) => template.title === studioForm.title && template.prompt === studioForm.prompt
@@ -1530,6 +1464,87 @@ export default function GenerateStudioShell() {
       setState((current) => ({ ...current, projectMembers: members }));
     }).catch(() => {
       setState((current) => ({ ...current, projectMembers: [] }));
+    });
+  }
+
+  function resetNewProjectDraft() {
+    setShowNewProjectForm(false);
+    setNewProjectName("");
+    setNewProjectCode("");
+  }
+
+  async function handleCreateProject() {
+    try {
+      await api.createProject(newProjectName.trim(), newProjectCode.trim());
+      resetNewProjectDraft();
+      await loadData();
+    } catch (err) {
+      setState((current) => ({ ...current, error: err instanceof Error ? err.message : "创建项目失败" }));
+    }
+  }
+
+  function handleStartProjectRename(project: Project) {
+    setRenamingProjectCode(project.code);
+    setRenameValue(project.name);
+  }
+
+  function handleCancelProjectRename() {
+    setRenamingProjectCode(null);
+    setRenameValue("");
+  }
+
+  async function handleCommitProjectRename(projectCode: string) {
+    if (!renameValue.trim()) return;
+
+    try {
+      await api.renameProject(projectCode, renameValue.trim());
+      handleCancelProjectRename();
+      await loadData();
+    } catch (err) {
+      setState((current) => ({ ...current, error: err instanceof Error ? err.message : "重命名项目失败" }));
+    }
+  }
+
+  function handleOpenMemberEditor() {
+    setMemberDraftIds(new Set(state.projectMembers.filter((member) => !member.is_global).map((member) => member.id)));
+    setShowMemberEditor(true);
+    api.usersBrief().then(setAllUsersBrief).catch(() => {});
+  }
+
+  function handleCloseMemberEditor() {
+    setShowMemberEditor(false);
+    setMemberSearchQuery("");
+  }
+
+  function handleToggleMemberDraft(userId: number) {
+    setMemberDraftIds((current) => {
+      const next = new Set(current);
+      if (next.has(userId)) {
+        next.delete(userId);
+      } else {
+        next.add(userId);
+      }
+      return next;
+    });
+  }
+
+  function handleRemoveMemberDraft(userId: number) {
+    setMemberDraftIds((current) => {
+      const next = new Set(current);
+      next.delete(userId);
+      return next;
+    });
+  }
+
+  function handleSaveMemberChanges(toAdd: number[], toRemove: number[]) {
+    const projectCode = studioForm.projectCode;
+    if (!projectCode) return;
+
+    api.updateProjectMembers(projectCode, toAdd, toRemove).then((members) => {
+      setState((current) => ({ ...current, projectMembers: members }));
+      handleCloseMemberEditor();
+    }).catch((err) => {
+      setState((current) => ({ ...current, error: err instanceof Error ? err.message : "成员操作失败" }));
     });
   }
 
@@ -2148,7 +2163,6 @@ export default function GenerateStudioShell() {
   const adminUsers = state.users.filter((user) => ["owner", "admin"].includes(user.role));
   const enabledProviderProfiles = state.providerProfiles.filter((profile) => profile.enabled);
   const disabledProviderProfiles = state.providerProfiles.filter((profile) => !profile.enabled);
-  const isChatStudioLayout = activeView === "studio" && studioTab === "chat";
   const filteredProviderProfiles = state.providerProfiles.filter((profile) => {
     const searchText = `${profile.provider_name} ${profile.model_name}`.toLowerCase();
     const searchMatches = !modelFilters.search.trim() || searchText.includes(modelFilters.search.trim().toLowerCase());
@@ -2185,11 +2199,7 @@ export default function GenerateStudioShell() {
       className={
         isAdminView
           ? "studio-shell admin-shell"
-          : studioTab === "inspiration"
-            ? "studio-shell inspiration-shell"
-            : isChatStudioLayout
-              ? "studio-shell chat-shell"
-              : "studio-shell"
+          : "studio-shell"
       }
     >
       <aside className="global-rail">
@@ -2240,13 +2250,13 @@ export default function GenerateStudioShell() {
             </>
           ) : (
             <>
-              <button type="button" className={studioTab === "inspiration" ? "rail-item active" : "rail-item"} onClick={() => (window.location.href = "/studio/inspiration")}>
+              <button type="button" className="rail-item" onClick={() => (window.location.href = "/studio/inspiration")}>
                 <span>灵感</span>
               </button>
-              <button type="button" className={studioTab === "generate" ? "rail-item active" : "rail-item"} onClick={() => (window.location.href = "/studio/generate")}>
+              <button type="button" className="rail-item active" onClick={() => (window.location.href = "/studio/generate")}>
                 <span>生成</span>
               </button>
-              <button type="button" className={studioTab === "chat" ? "rail-item active" : "rail-item"} onClick={() => (window.location.href = "/studio/chat")}>
+              <button type="button" className="rail-item" onClick={() => (window.location.href = "/studio/chat")}>
                 <span>Chat</span>
               </button>
             </>
@@ -2280,268 +2290,40 @@ export default function GenerateStudioShell() {
         </div>
       </aside>
 
-      {activeView === "studio" && studioTab === "generate" ? (
-        <aside className="workspace-pane">
-        <div className="workspace-header">
-          <div>
-            <p className="workspace-kicker">开启创作</p>
-            <h2>{workspaceName}</h2>
-            <p>{activeProject?.summary ?? "从左侧切换项目，中间区域会按时间流展示这个项目的历史生成记录。"}</p>
-          </div>
-        </div>
-
-        <button type="button" className="workspace-primary" onClick={() => setShowNewProjectForm(true)}>
-          + 新项目
-        </button>
-
-        {showNewProjectForm ? (
-          <div className="new-project-form">
-            <input
-              type="text"
-              placeholder="项目名称"
-              value={newProjectName}
-              onChange={(e) => setNewProjectName(e.target.value)}
-              className="member-search-input"
-            />
-            <input
-              type="text"
-              placeholder="项目代码（大写英文+数字）"
-              value={newProjectCode}
-              onChange={(e) => setNewProjectCode(e.target.value.toUpperCase())}
-              className="member-search-input"
-            />
-            <div className="new-project-actions">
-              <button type="button" className="ghost-button" onClick={() => { setShowNewProjectForm(false); setNewProjectName(""); setNewProjectCode(""); }}>取消</button>
-              <button
-                type="button"
-                className="workspace-primary member-save-btn"
-                disabled={!newProjectName.trim() || !newProjectCode.trim()}
-                onClick={async () => {
-                  try {
-                    await api.createProject(newProjectName.trim(), newProjectCode.trim());
-                    setShowNewProjectForm(false);
-                    setNewProjectName("");
-                    setNewProjectCode("");
-                    await loadData();
-                  } catch (err) {
-                    setState((cur) => ({ ...cur, error: err instanceof Error ? err.message : "创建项目失败" }));
-                  }
-                }}
-              >创建</button>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="workspace-list">
-          {state.projects.map((project) => (
-            <div
-              key={project.id}
-              className={project.code === studioForm.projectCode ? "workspace-item active" : "workspace-item"}
-            >
-              {renamingProjectCode === project.code ? (
-                <div className="project-rename-form">
-                  <input
-                    type="text"
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    className="member-search-input"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && renameValue.trim()) {
-                        api.renameProject(project.code, renameValue.trim()).then(() => {
-                          setRenamingProjectCode(null);
-                          setRenameValue("");
-                          loadData();
-                        });
-                      } else if (e.key === "Escape") {
-                        setRenamingProjectCode(null);
-                        setRenameValue("");
-                      }
-                    }}
-                  />
-                  <button type="button" className="ghost-button ghost-button-sm" onClick={() => {
-                    if (renameValue.trim()) {
-                      api.renameProject(project.code, renameValue.trim()).then(() => {
-                        setRenamingProjectCode(null);
-                        setRenameValue("");
-                        loadData();
-                      });
-                    }
-                  }}>✓</button>
-                  <button type="button" className="ghost-button ghost-button-sm" onClick={() => { setRenamingProjectCode(null); setRenameValue(""); }}>✕</button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="workspace-item-btn"
-                  onClick={() => handleProjectSelect(project)}
-                >
-                  <strong>{project.name}</strong>
-                  <span>{project.code} / {project.classification}</span>
-                </button>
-              )}
-              {renamingProjectCode !== project.code && (canManageUsers(currentUser) || canUseOpsViews(currentUser)) ? (
-                <button
-                  type="button"
-                  className="project-rename-trigger"
-                  onClick={(e) => { e.stopPropagation(); setRenamingProjectCode(project.code); setRenameValue(project.name); }}
-                  title="重命名"
-                >✎</button>
-              ) : null}
-            </div>
-          ))}
-        </div>
-
-        {state.projectMembers.length > 0 ? (
-          <div className="workspace-members">
-            <div className="workspace-members-header">
-              <h4>项目成员 ({state.projectMembers.length})</h4>
-              {canManageUsers(currentUser) || canUseOpsViews(currentUser) ? (
-                <button type="button" className="ghost-button ghost-button-sm" onClick={() => {
-                  setMemberDraftIds(new Set(state.projectMembers.filter((m) => !m.is_global).map((m) => m.id)));
-                  setShowMemberEditor(true);
-                  api.usersBrief().then(setAllUsersBrief).catch(() => {});
-                }}>
-                  编辑
-                </button>
-              ) : null}
-            </div>
-            <div className="member-list">
-              {state.projectMembers.map((member) => (
-                <div key={member.id} className="member-chip">
-                  <span className="member-avatar">{member.display_name.slice(0, 1)}</span>
-                  <span className="member-name">{member.display_name}</span>
-                  <em className="member-role">{member.role}</em>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {showMemberEditor ? (
-          <div className="member-editor-overlay">
-            <div className="member-editor-left">
-              <div className="member-editor-header">
-                <h4>全体成员</h4>
-                <button type="button" className="ghost-button" onClick={() => { setShowMemberEditor(false); setMemberSearchQuery(""); }}>✕</button>
-              </div>
-              <input
-                type="text"
-                className="member-search-input"
-                placeholder="搜索用户..."
-                value={memberSearchQuery}
-                onChange={(e) => setMemberSearchQuery(e.target.value)}
-              />
-              <div className="member-editor-list">
-                {allUsersBrief
-                  .filter((u) => u.is_active)
-                  .filter((u) => {
-                    if (!memberSearchQuery.trim()) return true;
-                    const q = memberSearchQuery.toLowerCase();
-                    return u.name.toLowerCase().includes(q) || u.display_name.toLowerCase().includes(q);
-                  })
-                  .map((u) => {
-                    const isGlobal = state.projectMembers.some((m) => m.id === u.id && m.is_global);
-                    const isInDraft = memberDraftIds.has(u.id);
-                    return (
-                      <label key={u.id} className={`member-editor-row${isInDraft || isGlobal ? " is-member" : ""}`}>
-                        <input
-                          type="checkbox"
-                          checked={isInDraft || isGlobal}
-                          disabled={isGlobal}
-                          onChange={() => {
-                            if (isGlobal) return;
-                            setMemberDraftIds((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(u.id)) {
-                                next.delete(u.id);
-                              } else {
-                                next.add(u.id);
-                              }
-                              return next;
-                            });
-                          }}
-                        />
-                        <span className="member-avatar">{u.display_name.slice(0, 1)}</span>
-                        <span className="member-editor-name">{u.display_name} <small>@{u.name}</small></span>
-                        <em className="member-role">{isGlobal ? "全局" : u.role}</em>
-                      </label>
-                    );
-                  })}
-              </div>
-            </div>
-          </div>
-        ) : null}
-        </aside>
-      ) : null}
-
-      {showMemberEditor ? (
-        <div className="member-participants-floating">
-          <h4>项目参与人</h4>
-          <div className="member-selected-list">
-            {state.projectMembers.filter((m) => m.is_global).map((m) => (
-              <div key={m.id} className="member-selected-item">
-                <span className="member-avatar">{m.display_name.slice(0, 1)}</span>
-                <span className="member-selected-name">{m.display_name}</span>
-                <em className="member-role">全局</em>
-              </div>
-            ))}
-            {[...memberDraftIds].map((uid) => {
-              const u = allUsersBrief.find((x) => x.id === uid);
-              if (!u) return null;
-              return (
-                <div key={u.id} className="member-selected-item">
-                  <span className="member-avatar">{u.display_name.slice(0, 1)}</span>
-                  <span className="member-selected-name">{u.display_name}</span>
-                  <button
-                    type="button"
-                    className="member-remove-btn"
-                    onClick={() => {
-                      setMemberDraftIds((prev) => {
-                        const next = new Set(prev);
-                        next.delete(uid);
-                        return next;
-                      });
-                    }}
-                  >✕</button>
-                </div>
-              );
-            })}
-          </div>
-          {(() => {
-            const originalIds = new Set(state.projectMembers.filter((m) => !m.is_global).map((m) => m.id));
-            const toAdd = [...memberDraftIds].filter((id) => !originalIds.has(id));
-            const toRemove = [...originalIds].filter((id) => !memberDraftIds.has(id));
-            const hasChanges = toAdd.length > 0 || toRemove.length > 0;
-            return (
-              <div className="member-editor-footer">
-                <span className="member-editor-summary">
-                  {hasChanges
-                    ? `${toAdd.length > 0 ? `+${toAdd.length}` : ""}${toAdd.length > 0 && toRemove.length > 0 ? " " : ""}${toRemove.length > 0 ? `-${toRemove.length}` : ""}`
-                    : "未修改"}
-                </span>
-                <button
-                  type="button"
-                  className="workspace-primary member-save-btn"
-                  disabled={!hasChanges}
-                  onClick={() => {
-                    const projectCode = studioForm.projectCode;
-                    if (!projectCode) return;
-                    api.updateProjectMembers(projectCode, toAdd, toRemove).then((members) => {
-                      setState((cur) => ({ ...cur, projectMembers: members }));
-                      setShowMemberEditor(false);
-                      setMemberSearchQuery("");
-                    }).catch((err) => {
-                      setState((cur) => ({ ...cur, error: err instanceof Error ? err.message : "成员操作失败" }));
-                    });
-                  }}
-                >
-                  保存
-                </button>
-              </div>
-            );
-          })()}
-        </div>
+      {activeView === "studio" ? (
+        <StudioWorkspacePane
+          activeProject={activeProject}
+          allUsersBrief={allUsersBrief}
+          canManageProjects={userCanManageUsers || userCanUseOpsViews}
+          memberDraftIds={memberDraftIds}
+          memberSearchQuery={memberSearchQuery}
+          newProjectCode={newProjectCode}
+          newProjectName={newProjectName}
+          projectMembers={state.projectMembers}
+          projects={state.projects}
+          renameValue={renameValue}
+          renamingProjectCode={renamingProjectCode}
+          selectedProjectCode={studioForm.projectCode}
+          showMemberEditor={showMemberEditor}
+          showNewProjectForm={showNewProjectForm}
+          workspaceName={workspaceName}
+          onCancelNewProject={resetNewProjectDraft}
+          onCloseMemberEditor={handleCloseMemberEditor}
+          onCreateProject={handleCreateProject}
+          onMemberDraftRemove={handleRemoveMemberDraft}
+          onMemberDraftToggle={handleToggleMemberDraft}
+          onMemberSearchQueryChange={setMemberSearchQuery}
+          onNewProjectCodeChange={setNewProjectCode}
+          onNewProjectNameChange={setNewProjectName}
+          onOpenMemberEditor={handleOpenMemberEditor}
+          onProjectSelect={handleProjectSelect}
+          onRenameCancel={handleCancelProjectRename}
+          onRenameCommit={handleCommitProjectRename}
+          onRenameStart={handleStartProjectRename}
+          onRenameValueChange={setRenameValue}
+          onRequestNewProject={() => setShowNewProjectForm(true)}
+          onSaveMemberChanges={handleSaveMemberChanges}
+        />
       ) : null}
 
       <main
@@ -2550,8 +2332,6 @@ export default function GenerateStudioShell() {
             ? "canvas-area model-admin-area"
             : isStudioDockLayout
               ? "canvas-area canvas-studio-layout"
-              : isChatStudioLayout
-                ? "canvas-area canvas-chat-layout"
               : "canvas-area"
         }
       >
@@ -3706,721 +3486,110 @@ export default function GenerateStudioShell() {
           </section>
         ) : (
           <>
-        {studioTab === "inspiration" ? (
-          <section className="inspiration-page">
-            <header className="inspiration-header">
-              <div>
-                <h1>灵感</h1>
-                <p>探索参考案例、材质与构图，激发设计灵感</p>
-              </div>
-              <div className="inspiration-actions">
-                {(canManageUsers(currentUser) || canUseOpsViews(currentUser)) ? (
-                  <button type="button" className="admin-primary-button" onClick={() => {
-                    setImportDialog({ open: true, url: "", loading: false, images: [], selectedImage: "", title: "", category: inspirationCategory !== "全部" ? inspirationCategory : "建筑", tags: "", error: "", manualMode: false });
-                  }}>+ 导入参考</button>
-                ) : null}
-              </div>
-            </header>
-            <nav className="inspiration-categories">
-              {["全部", "建筑", "景观", "室内", "城市", "构图", "材质", "光影", "色彩"].map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  className={inspirationCategory === cat ? "active" : ""}
-                  onClick={() => {
-                    setInspirationCategory(cat);
-                    api.inspiration(cat).then(setInspirationPosts).catch(() => {});
-                  }}
-                >{cat}</button>
-              ))}
-            </nav>
-            <div className="inspiration-grid">
-              {inspirationPosts.length > 0 ? inspirationPosts.map((post) => (
-                <article key={post.id} className="inspiration-card">
-                  <div className="inspiration-card-image" onClick={() => setInspirationLightbox(post)} style={{ cursor: "pointer" }}>
-                    {post.image_path ? (
-                      <img src={post.image_path} alt={post.title} loading="lazy" />
-                    ) : (
-                      <div className="inspiration-card-placeholder" />
-                    )}
-                    {post.category !== "全部" ? <span className="inspiration-card-badge">{post.category}</span> : null}
-                  </div>
-                  <div className="inspiration-card-body">
-                    <h3>{post.title}</h3>
-                    {post.tags.length > 0 ? (
-                      <div className="inspiration-card-tags">
-                        {post.tags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}
-                      </div>
-                    ) : null}
-                    <div className="inspiration-card-meta">
-                      <span className="inspiration-source">
-                        {post.source_url ? (
-                          <a href={post.source_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                            来自 {(() => { try { return new URL(post.source_url).hostname.replace(/^www\./, ""); } catch { return post.source_name || "外部"; } })()}
-                          </a>
-                        ) : (
-                          post.source_type === "user" ? `由 ${post.user_name || "设计师"} 分享` : `来自 ${post.source_name || "外部"}`
-                        )}
-                      </span>
-                      <span className="inspiration-stats">
-                        <button type="button" className="ghost-button" onClick={() => {
-                          api.likeInspiration(post.id).then(() => api.inspiration(inspirationCategory).then(setInspirationPosts));
-                        }}>♡ {post.like_count}</button>
-                        {canUseOpsViews(currentUser) ? (
-                          <button type="button" className="ghost-button" title="编辑" onClick={() => {
-                            setInspirationEdit({ postId: post.id, title: post.title, image_path: post.image_path, source_url: post.source_url });
-                          }}>✎</button>
-                        ) : null}
-                      </span>
-                    </div>
-                  </div>
-                </article>
-              )) : (
-                <div className="inspiration-empty">
-                  <p>暂无灵感内容。管理员可以导入外部参考，设计师可以分享生成成果。</p>
-                </div>
-              )}
-            </div>
-            {/* Lightbox */}
-            {inspirationLightbox ? (
-              <div className="media-lightbox" onClick={() => setInspirationLightbox(null)} onKeyDown={(e) => { if (e.key === "Escape") setInspirationLightbox(null); }} tabIndex={0} ref={(el) => el?.focus()}>
-                <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()}>
-                  <button type="button" className="media-lightbox-close" onClick={() => setInspirationLightbox(null)}>×</button>
-                  <img src={inspirationLightbox.image_path} alt={inspirationLightbox.title} style={{ maxWidth: "90vw", maxHeight: "80vh", objectFit: "contain" }} />
-                  <div style={{ textAlign: "center", marginTop: "12px", color: "#fff" }}>
-                    <h3 style={{ margin: "0 0 8px", fontSize: "18px" }}>{inspirationLightbox.title}</h3>
-                    {inspirationLightbox.source_url ? (
-                      <a href={inspirationLightbox.source_url} target="_blank" rel="noopener noreferrer" style={{ color: "#8bb4ff", fontSize: "14px" }}>
-                        查看原文 →
-                      </a>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            {/* Import Dialog */}
-            {importDialog.open ? (
-              <div className="media-lightbox" onClick={() => setImportDialog({ ...importDialog, open: false })}>
-                <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: "12px", padding: "24px", maxWidth: "680px", width: "90vw", maxHeight: "85vh", overflow: "auto", color: "#333" }}>
-                  <h2 style={{ margin: "0 0 16px", fontSize: "18px" }}>导入灵感参考</h2>
-                  <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
-                    <input type="text" placeholder="粘贴文章链接（ArchDaily / 古德 / 小红书 / 微信公众号）" value={importDialog.url} onChange={(e) => setImportDialog({ ...importDialog, url: e.target.value, error: "" })} style={{ flex: 1, padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px" }} />
-                    <button type="button" className="admin-primary-button" disabled={importDialog.loading || !importDialog.url.trim()} onClick={async () => {
-                      setImportDialog({ ...importDialog, loading: true, error: "", images: [] });
-                      try {
-                        const result = await api.extractImages(importDialog.url.trim());
-                        setImportDialog({ ...importDialog, loading: false, images: result.images, title: result.title || importDialog.title, selectedImage: result.images[0] || "" });
-                      } catch (err: any) {
-                        setImportDialog({ ...importDialog, loading: false, error: err?.message || "提取失败", manualMode: true });
-                      }
-                    }}>{importDialog.loading ? "提取中..." : "提取图片"}</button>
-                  </div>
-                  {importDialog.error ? <p style={{ color: "#e53e3e", fontSize: "13px", margin: "0 0 12px" }}>{importDialog.error}</p> : null}
-                  {importDialog.images.length > 0 ? (
-                    <div style={{ marginBottom: "16px" }}>
-                      <p style={{ fontSize: "13px", color: "#666", margin: "0 0 8px" }}>选择封面图片（共 {importDialog.images.length} 张）：</p>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "8px", maxHeight: "240px", overflow: "auto" }}>
-                        {importDialog.images.map((img) => (
-                          <div key={img} onClick={() => setImportDialog({ ...importDialog, selectedImage: img })} style={{ border: importDialog.selectedImage === img ? "3px solid #3b82f6" : "2px solid #eee", borderRadius: "8px", overflow: "hidden", cursor: "pointer", aspectRatio: "4/3" }}>
-                            <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                  {importDialog.manualMode ? (
-                    <div style={{ marginBottom: "12px" }}>
-                      <input type="text" placeholder="手动输入图片 URL" value={importDialog.selectedImage} onChange={(e) => setImportDialog({ ...importDialog, selectedImage: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px" }} />
-                    </div>
-                  ) : null}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
-                    <div>
-                      <label style={{ fontSize: "13px", color: "#666" }}>标题</label>
-                      <input type="text" value={importDialog.title} onChange={(e) => setImportDialog({ ...importDialog, title: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "13px", color: "#666" }}>分类</label>
-                      <select value={importDialog.category} onChange={(e) => setImportDialog({ ...importDialog, category: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }}>
-                        {["建筑", "景观", "室内", "城市", "构图", "材质", "光影", "色彩"].map((c) => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div style={{ marginBottom: "16px" }}>
-                    <label style={{ fontSize: "13px", color: "#666" }}>标签（逗号分隔）</label>
-                    <input type="text" value={importDialog.tags} onChange={(e) => setImportDialog({ ...importDialog, tags: e.target.value })} placeholder="如：住宅, 日本, 混凝土" style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} />
-                  </div>
-                  <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-                    <button type="button" className="ghost-button" onClick={() => setImportDialog({ ...importDialog, open: false })}>取消</button>
-                    <button type="button" className="admin-primary-button" disabled={!importDialog.title.trim() || !importDialog.selectedImage.trim()} onClick={async () => {
-                      const tags = importDialog.tags.split(",").map(t => t.trim()).filter(Boolean);
-                      let sourceName = "";
-                      try { sourceName = new URL(importDialog.url).hostname.replace(/^www\./, ""); } catch {}
-                      await api.createInspiration({
-                        title: importDialog.title.trim(),
-                        image_path: importDialog.selectedImage.trim(),
-                        category: importDialog.category,
-                        source_type: "external",
-                        source_name: sourceName,
-                        source_url: importDialog.url.trim(),
-                        tags
-                      });
-                      setImportDialog({ ...importDialog, open: false });
-                      api.inspiration(inspirationCategory).then(setInspirationPosts);
-                    }}>确认导入</button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            {/* Edit Dialog */}
-            {inspirationEdit ? (
-              <div className="media-lightbox" onClick={() => setInspirationEdit(null)}>
-                <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: "12px", padding: "24px", maxWidth: "480px", width: "90vw", color: "#333" }}>
-                  <h2 style={{ margin: "0 0 16px", fontSize: "18px" }}>编辑灵感</h2>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                    <div>
-                      <label style={{ fontSize: "13px", color: "#666" }}>标题</label>
-                      <input type="text" value={inspirationEdit.title} onChange={(e) => setInspirationEdit({ ...inspirationEdit, title: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "13px", color: "#666" }}>图片 URL</label>
-                      <input type="text" value={inspirationEdit.image_path} onChange={(e) => setInspirationEdit({ ...inspirationEdit, image_path: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "13px", color: "#666" }}>原文链接</label>
-                      <input type="text" value={inspirationEdit.source_url} onChange={(e) => setInspirationEdit({ ...inspirationEdit, source_url: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} />
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", marginTop: "16px" }}>
-                    <button type="button" className="ghost-button" onClick={() => setInspirationEdit(null)}>取消</button>
-                    <button type="button" className="admin-primary-button" onClick={async () => {
-                      await api.updateInspiration(inspirationEdit.postId, { title: inspirationEdit.title, image_path: inspirationEdit.image_path, source_url: inspirationEdit.source_url });
-                      setInspirationEdit(null);
-                      api.inspiration(inspirationCategory).then(setInspirationPosts);
-                    }}>保存</button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </section>
-        ) : studioTab === "chat" ? (
-          <section className="chat-page">
-            {/* Left sidebar - conversations */}
-            <aside className="chat-sidebar">
-              <button type="button" className="chat-new-btn" onClick={async () => {
-                if (!selectedChatModel) { alert("请先选择模型"); return; }
-                const conv = await api.createChatConversation(selectedChatModel);
-                setChatConversations((prev) => [conv, ...prev]);
-                setActiveChatId(conv.id);
-                setChatMessages([]);
-              }}>
-                <span>＋</span> 新对话
-              </button>
-              <div className="chat-conv-list">
-                {chatConversations.map((conv) => (
-                  <div key={conv.id} className={`chat-conv-item ${activeChatId === conv.id ? "active" : ""}`} onClick={() => { setActiveChatId(conv.id); api.getChatMessages(conv.id).then(setChatMessages).catch(() => {}); }}>
-                    <span className="chat-conv-title">{conv.title}</span>
-                    <button type="button" className="chat-conv-del" onClick={(e) => { e.stopPropagation(); api.deleteChatConversation(conv.id).then(() => { setChatConversations((prev) => prev.filter((c) => c.id !== conv.id)); if (activeChatId === conv.id) { setActiveChatId(null); setChatMessages([]); } }); }}>×</button>
-                  </div>
-                ))}
-              </div>
-            </aside>
-            {/* Main chat area */}
-            <div className="chat-main">
-              {/* Top bar with model selector */}
-              <header className="chat-topbar">
-                <select className="chat-model-select" value={selectedChatModel || ""} onChange={(e) => { const v = parseInt(e.target.value, 10); setSelectedChatModel(v); localStorage.setItem("qmdh_chat_model", String(v)); }}>
-                  <option value="" disabled>选择模型</option>
-                  {chatModels.map((m) => <option key={m.provider_id} value={m.provider_id}>{m.model_name}</option>)}
-                </select>
-                {activeChatId ? <span className="chat-topbar-title">{chatConversations.find((c) => c.id === activeChatId)?.title || ""}</span> : null}
-              </header>
-              {activeChatId ? (
-                <>
-                  {/* Messages */}
-                  <div className="chat-messages" ref={chatMessagesRef} onScroll={updateChatAutoScrollState}>
-                    {chatMessages.map((msg, i) => (
-                      <div key={msg.id || i} className={`chat-msg ${msg.role}`}>
-                        {msg.role === "assistant" ? <div className="chat-msg-avatar">AI</div> : null}
-                        <div className="chat-msg-bubble">
-                          <div className="chat-msg-content">{msg.content || (chatStreaming && i === chatMessages.length - 1 ? "●" : "")}</div>
-                        </div>
-                        {msg.role === "user" ? <div className="chat-msg-avatar chat-msg-avatar-user">{(currentUser?.display_name || "U").slice(0, 1)}</div> : null}
-                      </div>
-                    ))}
-                    <div ref={chatMessagesBottomRef} aria-hidden="true" />
-                  </div>
-                  {/* Input area */}
-                  <div className="chat-input-area">
-                    <div className="chat-input-box">
-                      <textarea className="chat-textarea" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); document.getElementById("chat-send-btn")?.click(); } }} placeholder="和我聊聊天吧" rows={1} disabled={chatStreaming} />
-                      <button id="chat-send-btn" type="button" className="chat-send-btn" disabled={chatStreaming || !chatInput.trim()} onClick={async () => {
-                        if (!chatInput.trim() || !activeChatId) return;
-                        const content = chatInput.trim();
-                        setChatInput("");
-                        setChatMessages((prev) => [...prev, { role: "user", content }]);
-                        setChatStreaming(true);
-                        setChatMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-                        try {
-                          const token = getStoredAuthToken();
-                          const resp = await fetch(`/api/v1/chat/conversations/${activeChatId}/messages`, {
-                            method: "POST",
-                            headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-                            body: JSON.stringify({ content }),
-                          });
-                          if (!resp.ok) {
-                            let detail = "请求失败";
-                            try {
-                              const payload = await resp.json();
-                              detail = payload?.detail || detail;
-                            } catch {}
-                            throw new Error(detail);
-                          }
-                          const reader = resp.body!.getReader();
-                          const decoder = new TextDecoder();
-                          let buffer = "";
-                          while (true) {
-                            const { done, value } = await reader.read();
-                            if (done) break;
-                            buffer += decoder.decode(value, { stream: true });
-                            const lines = buffer.split("\n");
-                            buffer = lines.pop() || "";
-                            for (const line of lines) {
-                              if (!line.startsWith("data: ")) continue;
-                              const data = line.slice(6);
-                              if (data === "[DONE]") break;
-                              try {
-                                const parsed = JSON.parse(data);
-                                if (parsed.delta) {
-                                  setChatMessages((prev) => {
-                                    const updated = [...prev];
-                                    const last = updated[updated.length - 1];
-                                    if (last && last.role === "assistant") { updated[updated.length - 1] = { ...last, content: last.content + parsed.delta }; }
-                                    return updated;
-                                  });
-                                }
-                                if (parsed.error) {
-                                  setChatMessages((prev) => { const updated = [...prev]; updated[updated.length - 1] = { role: "assistant", content: `⚠️ ${parsed.error}` }; return updated; });
-                                }
-                              } catch {}
-                            }
-                          }
-                        } catch (err: any) {
-                          setChatMessages((prev) => { const updated = [...prev]; updated[updated.length - 1] = { role: "assistant", content: `⚠️ 请求失败: ${err?.message || "未知错误"}` }; return updated; });
-                        }
-                        setChatStreaming(false);
-                        api.getChatConversations().then(setChatConversations).catch(() => {});
-                      }}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
-                      </button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="chat-empty">
-                  {chatModels.length === 0 ? (
-                    <div className="chat-empty-inner">
-                      <h2>暂无可用模型</h2>
-                      <p>请在后台模型管理中添加 capabilities 包含 "chat.completions" 的模型</p>
-                    </div>
-                  ) : (
-                    <div className="chat-empty-inner">
-                      <h2>QMDH Chat</h2>
-                      <p>选择模型，创建新对话开始聊天</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
-        ) : (
-        <>
         <div className={isStudioDockLayout ? "studio-scroll-pane" : "studio-scroll-fallback"}>
-        {hasProjectHistory ? (
-          <header className="canvas-topbar canvas-topbar-history">
-            <div className="toolbar-row">
-              <label className="toolbar-field">
-                <span>时间</span>
-                <select
-                  value={filters.sort}
-                  onChange={(event) => setFilters((current) => ({ ...current, sort: event.target.value as FeedFilterState["sort"] }))}
-                >
-                  <option value="latest">最近优先</option>
-                  <option value="oldest">最早优先</option>
-                </select>
-              </label>
+          <StudioHistoryPane
+            availableProviders={availableProviders}
+            error={state.error}
+            filters={filters}
+            hasFilteredHistory={hasFilteredHistory}
+            hasProjectHistory={hasProjectHistory}
+            workspaceName={workspaceName}
+            onChangeFilters={setFilters}
+          >
+            {filteredTasks.map((task) => {
+              const galleryAssets = buildGalleryAssets(imageAssetsByTaskId.get(task.id) ?? []);
+              const linkedAsset = galleryAssets[0];
+              const isLatestTask = task.id === latestTask?.id;
 
-              <label className="toolbar-field">
-                <span>生成类型</span>
-                <select
-                  value={filters.provider}
-                  onChange={(event) => setFilters((current) => ({ ...current, provider: event.target.value }))}
-                >
-                  <option value="all">全部模型</option>
-                  {availableProviders.map((provider) => (
-                    <option key={provider.provider_name} value={provider.provider_name}>
-                      {provider.provider_name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="toolbar-field">
-                <span>操作状态</span>
-                <select
-                  value={filters.status}
-                  onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value as FeedFilterState["status"] }))}
-                >
-                  <option value="all">全部状态</option>
-                  <option value="running">运行中</option>
-                  <option value="completed">已完成</option>
-                </select>
-              </label>
-            </div>
-          </header>
-        ) : null}
-
-        {state.error ? <div className="floating-error">{state.error}</div> : null}
-
-        {activeView === "studio" && studioTab === "generate" && hasProjectHistory ? (
-          <section className="feed-stream">
-            {hasFilteredHistory ? (
-              filteredTasks.map((task) => {
-                const galleryAssets = buildGalleryAssets(imageAssetsByTaskId.get(task.id) ?? []);
-                const linkedAsset = galleryAssets[0];
-                const isLatestTask = task.id === latestTask?.id;
-
-                return (
-                  <FeedCard
-                    key={task.id}
-                    task={task}
-                    asset={linkedAsset}
-                    galleryAssets={galleryAssets}
-                    showDebugDetails={userCanUseOpsViews}
-                    onReuse={() => handleReuseTask(task, linkedAsset ?? galleryAssets[0])}
-                    onBookmark={() => (linkedAsset ? void handleGalleryAction("bookmark", linkedAsset.id) : undefined)}
-                    onShare={() => (linkedAsset ? void handleGalleryAction("share", linkedAsset.id) : undefined)}
-                    onDelete={async () => {
-                      if (!confirm("确定删除这条生成记录？")) return;
-                      try {
-                        await api.deleteTask(task.id);
-                        await loadData();
-                      } catch (err) {
-                        alert(err instanceof Error ? err.message : "删除失败");
-                      }
-                    }}
-                    onAssetPreview={(asset) => {
-                      if (getRenderableUrl(asset)) {
-                        setGalleryPreview({ task, asset });
-                      } else {
-                        handleReuseTask(task, asset);
-                      }
-                    }}
-                    anchorRef={isLatestTask ? latestTaskRef : undefined}
-                  />
-                );
-              })
-            ) : (
-              <section className="empty-stage empty-stage-inline empty-stage-filtered">
-                <div className="empty-stage-copy">
-                  <p className="canvas-kicker">当前筛选</p>
-                  <h1>没有匹配的生成记录</h1>
-                  <p>调整时间、模型或状态筛选后，可以继续查看这个项目的历史任务。</p>
-                </div>
-              </section>
-            )}
-          </section>
-        ) : activeView === "studio" && studioTab === "generate" ? (
-          <section className="empty-stage empty-stage-inline">
-            <div className="empty-stage-copy">
-              <p className="canvas-kicker">当前项目</p>
-              <h1>{workspaceName} 还没有生成记录</h1>
-              <p>先从下方输入区发起第一轮生成，结果会在这里按时间沉淀下来。</p>
-            </div>
-          </section>
-        ) : null}
+              return (
+                <FeedCard
+                  key={task.id}
+                  task={task}
+                  asset={linkedAsset}
+                  galleryAssets={galleryAssets}
+                  showDebugDetails={userCanUseOpsViews}
+                  onReuse={() => handleReuseTask(task, linkedAsset ?? galleryAssets[0])}
+                  onBookmark={() => (linkedAsset ? void handleGalleryAction("bookmark", linkedAsset.id) : undefined)}
+                  onShare={() => (linkedAsset ? void handleGalleryAction("share", linkedAsset.id) : undefined)}
+                  onDelete={async () => {
+                    if (!confirm("确定删除这条生成记录？")) return;
+                    try {
+                      await api.deleteTask(task.id);
+                      await loadData();
+                    } catch (err) {
+                      alert(err instanceof Error ? err.message : "删除失败");
+                    }
+                  }}
+                  onAssetPreview={(asset) => {
+                    if (getRenderableUrl(asset)) {
+                      setGalleryPreview({ task, asset });
+                    } else {
+                      handleReuseTask(task, asset);
+                    }
+                  }}
+                  anchorRef={isLatestTask ? latestTaskRef : undefined}
+                />
+              );
+            })}
+          </StudioHistoryPane>
         </div>
 
-        {activeView === "studio" && studioTab === "generate" ? (
-        <form className="composer-dock" onSubmit={handleSubmit}>
-          <div className="composer-leading">
-            <div>
-              <span className="composer-label">当前创作</span>
-              <strong>{workspaceName}</strong>
-            </div>
-            <div className="composer-statusline">
-              <span>{selectedWorkflow?.name ?? "图像生成"}</span>
-              <span>{selectedProvider?.model_name ?? studioForm.requestedProvider}</span>
-              <span>{studioForm.aspectRatio} / {selectedResolution?.label ?? studioForm.resolution}</span>
-              <span>{studioForm.imageCount} 张</span>
-            </div>
-          </div>
-
-          <div className="composer-body">
-            <button
-              type="button"
-              className={referencePreviewUrl ? "reference-dropzone has-preview" : "reference-dropzone"}
-              onClick={openReferencePicker}
-              onDrop={handleReferenceDrop}
-              onDragOver={(event) => event.preventDefault()}
-            >
-              {referencePreviewUrl ? (
-                <img src={referencePreviewUrl} alt={referenceFileName || "参考图"} className="reference-preview" />
-              ) : (
-                <span className="reference-dropzone-plus">+</span>
-              )}
-            </button>
-
-            <label className="composer-textarea">
-              <textarea
-                rows={4}
-                value={studioForm.prompt}
-                onChange={(event) => setStudioForm((current) => ({ ...current, prompt: event.target.value }))}
-                placeholder="上传参考图，输入文字或描述主体、场景和想要生成的画面。"
-              />
-              <span className="composer-textarea-hint">
-                {referenceFileName
-                  ? `已选择参考图：${referenceFileName}`
-                  : "支持拖拽上传参考图，也可以点击左侧加号选择图片。"}
-              </span>
-            </label>
-          </div>
-
-          <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handleReferenceInputChange} />
-
-          <div className="composer-toolbar" ref={composerToolbarRef}>
-            <div className="composer-menu">
-              <button
-                type="button"
-                className={activeComposerMenu === "template" ? "composer-menu-trigger is-open" : "composer-menu-trigger"}
-                onClick={() => toggleComposerMenu("template")}
-              >
-                {activeTemplate?.label ?? "选择模板"}
-              </button>
-              {activeComposerMenu === "template" ? (
-                <div className="composer-menu-panel composer-menu-panel-template">
-                  <div className="template-section">
-                    <div className="template-section-head">
-                      <strong>热门提示词</strong>
-                      <span>快速套用常用创作方向</span>
-                    </div>
-                    <div className="template-grid">
-                      {featuredAtmosphereTemplates.map((template) => (
-                        <button
-                          key={template.id}
-                          type="button"
-                          className={activeTemplate?.id === template.id ? "template-card is-active" : "template-card"}
-                          onClick={() => handleApplyTemplate(template)}
-                        >
-                          <strong>{template.label}</strong>
-                          <span>{template.deliverable}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="template-section">
-                    <div className="template-section-head">
-                      <strong>我的提示词</strong>
-                      <span>保存、编辑你自己的常用提示词</span>
-                    </div>
-                    {customTemplates.length > 0 ? (
-                      <div className="template-list">
-                        {customTemplates.map((template) => (
-                          <div key={template.id} className="template-list-item">
-                            <button type="button" className="template-card template-card-main" onClick={() => handleApplyTemplate(template)}>
-                              <strong>{template.label}</strong>
-                              <span>{template.title}</span>
-                            </button>
-                            <div className="template-card-actions">
-                              <button type="button" className="template-action-button" onClick={() => handleEditCustomTemplate(template)}>
-                                编辑
-                              </button>
-                              <button type="button" className="template-action-button" onClick={() => handleDeleteCustomTemplate(template.id)}>
-                                删除
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="template-empty">还没有自定义提示词，可以把当前创作内容保存下来。</div>
-                    )}
-                  </div>
-
-                  <div className="template-editor">
-                    <div className="template-section-head">
-                      <strong>{editingTemplateId ? "编辑自定义提示词" : "保存当前提示词"}</strong>
-                      <span>会保存当前的提示词、比例、分辨率、风格和补充说明</span>
-                    </div>
-                    <div className="template-editor-row">
-                      <label className="composer-menu-field">
-                        <span>名称</span>
-                        <input
-                          value={templateDraftLabel}
-                          onChange={(event) => setTemplateDraftLabel(event.target.value)}
-                          placeholder="例如：建筑氛围增强方案"
-                        />
-                      </label>
-                      <label className="composer-menu-field">
-                        <span>标题</span>
-                        <input
-                          value={templateDraftTitle}
-                          onChange={(event) => setTemplateDraftTitle(event.target.value)}
-                          placeholder="例如：建筑效果图氛围增强模板"
-                        />
-                      </label>
-                    </div>
-                    <div className="template-editor-actions">
-                      <button type="button" className="ghost-button" onClick={handleSaveCustomTemplate}>
-                        {editingTemplateId ? "更新提示词" : "保存当前提示词"}
-                      </button>
-                      {editingTemplateId ? (
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => {
-                            setEditingTemplateId(null);
-                            setTemplateDraftLabel("");
-                            setTemplateDraftTitle("");
-                          }}
-                        >
-                          取消编辑
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="composer-menu">
-              <button
-                type="button"
-                className={activeComposerMenu === "provider" ? "composer-menu-trigger is-open" : "composer-menu-trigger"}
-                onClick={() => toggleComposerMenu("provider")}
-              >
-                {selectedProvider?.model_name ?? "选择模型"}
-              </button>
-              {activeComposerMenu === "provider" ? (
-                <div className="composer-menu-panel composer-menu-panel-list composer-menu-panel-provider">
-                  {providerGroups.map((group) => (
-                    <div key={group.label} className="provider-choice-group">
-                      <span className="provider-choice-group-title">{group.label}</span>
-                      {group.providers.map((provider) => (
-                        <button
-                          key={provider.provider_name}
-                          type="button"
-                          className={
-                            studioForm.requestedProvider === provider.provider_name ? "composer-choice-item is-active" : "composer-choice-item"
-                          }
-                          onClick={() => {
-                            setStudioForm((current) => ({ ...current, requestedProvider: provider.provider_name }));
-                            setActiveComposerMenu(null);
-                          }}
-                        >
-                          <strong>{provider.model_name}</strong>
-                          <span>{provider.provider_name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="composer-menu">
-              <button
-                type="button"
-                className={activeComposerMenu === "display" ? "composer-menu-trigger is-open" : "composer-menu-trigger"}
-                onClick={() => toggleComposerMenu("display")}
-              >
-                {studioForm.aspectRatio} / {selectedResolution?.label ?? studioForm.resolution}
-              </button>
-              {activeComposerMenu === "display" ? (
-                <div className="composer-menu-panel composer-menu-panel-display">
-                  <div className="composer-menu-group">
-                    <span className="composer-menu-title">比例</span>
-                    <div className="composer-chip-grid">
-                      {aspectRatioOptions.map((ratio) => (
-                        <button
-                          key={ratio}
-                          type="button"
-                          className={studioForm.aspectRatio === ratio ? "composer-chip-button is-active" : "composer-chip-button"}
-                          onClick={() => setStudioForm((current) => ({ ...current, aspectRatio: ratio }))}
-                        >
-                          {ratio}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="composer-menu-group">
-                    <span className="composer-menu-title">分辨率</span>
-                    <div className="composer-chip-grid composer-chip-grid-two">
-                      {resolutionOptions.map((option) => (
-                        <button
-                          key={option.id}
-                          type="button"
-                          className={studioForm.resolution === option.id ? "composer-chip-button is-active" : "composer-chip-button"}
-                          onClick={() => setStudioForm((current) => ({ ...current, resolution: option.id }))}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="composer-menu">
-              <button
-                type="button"
-                className={activeComposerMenu === "count" ? "composer-menu-trigger is-open" : "composer-menu-trigger"}
-                onClick={() => toggleComposerMenu("count")}
-              >
-                {studioForm.imageCount} 张
-              </button>
-              {activeComposerMenu === "count" ? (
-                <div className="composer-menu-panel composer-menu-panel-list">
-                  {[1, 2, 3, 4].map((count) => (
-                    <button
-                      key={count}
-                      type="button"
-                      className={studioForm.imageCount === count ? "composer-choice-item is-active" : "composer-choice-item"}
-                      onClick={() => {
-                        setStudioForm((current) => ({ ...current, imageCount: count }));
-                        setActiveComposerMenu(null);
-                      }}
-                    >
-                      <strong>{count} 张</strong>
-                      <span>{count === 1 ? "默认张数" : `一次生成 ${count} 张`}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="composer-toolbar-actions">
-              <div className="composer-quickmeta">
-                <span>{selectedStyle?.label ?? studioForm.style}</span>
-                <span>{state.health === "healthy" ? "服务在线" : "服务异常"}</span>
-              </div>
-
-              <button
-                type="submit"
-                className="submit-button"
-                disabled={submitting || uploadingReference || availableProviders.length === 0}
-              >
-                {submitting ? "正在创建..." : "开始生成"}
-              </button>
-            </div>
-          </div>
-        </form>
+        {activeView === "studio" ? (
+          <StudioComposerDock
+            activeComposerMenu={activeComposerMenu}
+            activeTemplateId={activeTemplate?.id ?? null}
+            aspectRatioOptions={aspectRatioOptions}
+            availableProviderCount={availableProviders.length}
+            composerToolbarRef={composerToolbarRef}
+            customTemplates={customTemplates}
+            editingTemplateId={editingTemplateId}
+            featuredAtmosphereTemplates={featuredAtmosphereTemplates}
+            fileInputRef={fileInputRef}
+            onApplyTemplate={handleApplyTemplate}
+            onAspectRatioSelect={(ratio) => setStudioForm((current) => ({ ...current, aspectRatio: ratio }))}
+            onCancelTemplateEdit={() => {
+              setEditingTemplateId(null);
+              setTemplateDraftLabel("");
+              setTemplateDraftTitle("");
+            }}
+            onDeleteCustomTemplate={handleDeleteCustomTemplate}
+            onEditCustomTemplate={handleEditCustomTemplate}
+            onImageCountSelect={(count) => {
+              setStudioForm((current) => ({ ...current, imageCount: count }));
+              setActiveComposerMenu(null);
+            }}
+            onOpenReferencePicker={openReferencePicker}
+            onPromptChange={(value) => setStudioForm((current) => ({ ...current, prompt: value }))}
+            onProviderSelect={(providerName) => {
+              setStudioForm((current) => ({ ...current, requestedProvider: providerName }));
+              setActiveComposerMenu(null);
+            }}
+            onReferenceDrop={handleReferenceDrop}
+            onReferenceInputChange={handleReferenceInputChange}
+            onResolutionSelect={(resolutionId) => setStudioForm((current) => ({ ...current, resolution: resolutionId }))}
+            onSaveCustomTemplate={handleSaveCustomTemplate}
+            onSubmit={handleSubmit}
+            onTemplateDraftLabelChange={setTemplateDraftLabel}
+            onTemplateDraftTitleChange={setTemplateDraftTitle}
+            onToggleComposerMenu={toggleComposerMenu}
+            providerGroups={providerGroups}
+            referenceFileName={referenceFileName}
+            referencePreviewUrl={referencePreviewUrl}
+            resolutionOptions={resolutionOptions}
+            selectedProviderModelName={selectedProvider?.model_name ?? null}
+            selectedResolutionLabel={selectedResolution?.label ?? null}
+            selectedStyleLabel={selectedStyle?.label ?? studioForm.style}
+            serviceHealthy={state.health === "healthy"}
+            studioForm={studioForm}
+            submitting={submitting}
+            templateDraftLabel={templateDraftLabel}
+            templateDraftTitle={templateDraftTitle}
+            uploadingReference={uploadingReference}
+            workflowName={selectedWorkflow?.name ?? "图像生成"}
+            workspaceName={workspaceName}
+          />
         ) : null}
         </>
-        )}
-          </>
         )}
       </main>
       {galleryPreview && getRenderableUrl(galleryPreview.asset) ? (

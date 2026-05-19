@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
-from app.models import DataClassification, Project, ProviderCall, Task, TaskStatus, User, Workflow
+from app.models import DataClassification, Project, ProviderCall, Task, TaskStatus, UsageLedger, User, Workflow
 from app.services.task_executor import execute_task
 
 
@@ -84,6 +84,16 @@ class TaskErrorReportingTests(unittest.TestCase):
                 provider_calls[0].request_summary["failure"]["error_code"],
                 "upstream_http_404",
             )
+
+            task_ledger = db.scalar(
+                select(UsageLedger).where(
+                    UsageLedger.source_table == "tasks",
+                    UsageLedger.source_id == self.task_id,
+                )
+            )
+            self.assertIsNotNone(task_ledger)
+            assert task_ledger is not None
+            self.assertEqual(task_ledger.error_code, "upstream_http_404")
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_auth_user, require_ops_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import AuditLog, Project, ProviderCall, Task, TaskStatus, User, Workflow
+from app.models import AuditLog, TaskStatus, UsageLedger, User, Workflow
 from app.schemas import (
     DashboardDailyPoint,
     DashboardDayModelCalls,
@@ -29,16 +29,10 @@ def _utc_date_key(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).date().isoformat()
 
 
-def _failure_reason(task: Task) -> str:
-    if isinstance(task.result, dict):
-        raw_reason = (
-            task.result.get("error_summary")
-            or task.result.get("error")
-            or task.result.get("asset_warning")
-            or task.result.get("summary")
-        )
-        if raw_reason:
-            return str(raw_reason)[:220]
+def _failure_reason(entry: UsageLedger) -> str:
+    raw_reason = (entry.error_summary or "").strip()
+    if raw_reason:
+        return raw_reason[:220]
     return "Task failed without a recorded error message"
 
 
@@ -75,57 +69,80 @@ def get_dashboard_stats(
     while walk <= end_date:
         date_keys.append(walk.isoformat())
         walk += timedelta(days=1)
-    filters = [Task.created_at >= since]
+    task_filters = [
+        UsageLedger.entry_type == "task.finalized",
+        UsageLedger.recorded_at >= since,
+    ]
     if project_code:
-        filters.append(Project.code == project_code)
+        task_filters.append(UsageLedger.project_code == project_code)
     if user_name:
-        filters.append(User.name == user_name)
+        task_filters.append(UsageLedger.user_name == user_name)
     if provider_name:
-        filters.append(Task.requested_provider == provider_name)
+        task_filters.append(UsageLedger.requested_provider == provider_name)
+
+    provider_filters = [
+        UsageLedger.entry_type == "provider_call.recorded",
+        UsageLedger.recorded_at >= since,
+    ]
+    if project_code:
+        provider_filters.append(UsageLedger.project_code == project_code)
+    if user_name:
+        provider_filters.append(UsageLedger.user_name == user_name)
+    if provider_name:
+        provider_filters.append(UsageLedger.provider_name == provider_name)
 
     active_workflows = db.scalar(select(func.count(Workflow.id))) or 0
-    base_query = select(Task).join(Task.project).join(Task.user).where(*filters)
-    tasks = list(db.scalars(base_query).all())
-    task_ids = [task.id for task in tasks]
-    total_tasks = len(tasks)
-    successful_tasks = sum(1 for task in tasks if task.status == TaskStatus.completed)
-    failed_tasks = sum(1 for task in tasks if task.status == TaskStatus.failed)
+    task_entries = list(
+        db.scalars(
+            select(UsageLedger)
+            .where(*task_filters)
+            .order_by(UsageLedger.recorded_at.desc(), UsageLedger.id.desc())
+        ).all()
+    )
+    provider_entries = list(
+        db.scalars(
+            select(UsageLedger)
+            .where(*provider_filters)
+            .order_by(UsageLedger.recorded_at.desc(), UsageLedger.id.desc())
+        ).all()
+    )
+
+    total_tasks = len(task_entries)
+    successful_tasks = sum(1 for entry in task_entries if entry.task_status == TaskStatus.completed)
+    failed_tasks = sum(1 for entry in task_entries if entry.task_status == TaskStatus.failed)
     cost_by_currency_counter: Counter[str] = Counter()
-    for task in tasks:
-        cost_by_currency_counter[(task.cost_currency or "CNY").upper()] += float(task.cost or 0)
+    for entry in task_entries:
+        cost_by_currency_counter[(entry.cost_currency or "CNY").upper()] += float(entry.cost or 0)
     total_cost = sum(cost_by_currency_counter.values())
     primary_currency = cost_by_currency_counter.most_common(1)[0][0] if cost_by_currency_counter else "CNY"
     avg_cost = total_cost / total_tasks if total_tasks else 0.0
-    avg_latency = sum(int(task.latency_ms or 0) for task in tasks) / total_tasks if total_tasks else 0.0
+    avg_latency = sum(int(entry.latency_ms or 0) for entry in task_entries) / total_tasks if total_tasks else 0.0
     audit_logs = db.scalar(select(func.count(AuditLog.id))) or 0
-    outbound_tasks = sum(1 for task in tasks if task.requested_provider)
+    outbound_tasks = sum(1 for entry in task_entries if entry.requested_provider)
 
     success_rate = _success_rate(successful_tasks, total_tasks)
     audit_coverage_rate = round((audit_logs / total_tasks) * 100, 2) if total_tasks else 100.0
-    user_counts = Counter(task.user.name for task in tasks)
-    project_counts = Counter(task.project.code for task in tasks)
-    provider_counts = Counter(task.requested_provider for task in tasks)
-    failure_counts = Counter(_failure_reason(task) for task in tasks if task.status == TaskStatus.failed)
+    user_counts = Counter(entry.user_name for entry in task_entries)
+    project_counts = Counter(entry.project_code for entry in task_entries)
+    provider_counts = Counter(entry.requested_provider for entry in task_entries)
+    failure_counts = Counter(_failure_reason(entry) for entry in task_entries if entry.task_status == TaskStatus.failed)
     model_counts: Counter[str] = Counter()
     model_costs: Counter[str] = Counter()
-    provider_calls: list[ProviderCall] = []
-    if task_ids:
-        provider_calls = list(db.scalars(select(ProviderCall).where(ProviderCall.task_id.in_(task_ids))).all())
-        for call in provider_calls:
-            model_name = call.model_name or call.provider_name
-            model_counts[model_name] += 1
-            model_costs[model_name] += float(call.cost or 0)
+    for entry in provider_entries:
+        model_name = entry.model_name or entry.provider_name
+        model_counts[model_name] += 1
+        model_costs[model_name] += float(entry.cost or 0)
 
     provider_rows = []
     for name, count in provider_counts.most_common(10):
-        provider_tasks = [task for task in tasks if task.requested_provider == name]
-        provider_success = sum(1 for task in provider_tasks if task.status == TaskStatus.completed)
-        provider_failed = sum(1 for task in provider_tasks if task.status == TaskStatus.failed)
-        provider_cost = sum(float(task.cost or 0) for task in provider_tasks)
-        provider_currency_counts = Counter((task.cost_currency or "CNY").upper() for task in provider_tasks)
+        provider_tasks = [entry for entry in task_entries if entry.requested_provider == name]
+        provider_success = sum(1 for entry in provider_tasks if entry.task_status == TaskStatus.completed)
+        provider_failed = sum(1 for entry in provider_tasks if entry.task_status == TaskStatus.failed)
+        provider_cost = sum(float(entry.cost or 0) for entry in provider_tasks)
+        provider_currency_counts = Counter((entry.cost_currency or "CNY").upper() for entry in provider_tasks)
         provider_currency = provider_currency_counts.most_common(1)[0][0] if provider_currency_counts else "CNY"
         provider_latency = (
-            sum(int(task.latency_ms or 0) for task in provider_tasks) / len(provider_tasks)
+            sum(int(entry.latency_ms or 0) for entry in provider_tasks) / len(provider_tasks)
             if provider_tasks
             else 0.0
         )
@@ -145,15 +162,15 @@ def get_dashboard_stats(
     failure_rows = []
     for reason, count in failure_counts.most_common(10):
         failed_for_reason = [
-            task for task in tasks if task.status == TaskStatus.failed and _failure_reason(task) == reason
+            entry for entry in task_entries if entry.task_status == TaskStatus.failed and _failure_reason(entry) == reason
         ]
         failure_rows.append(
             {
                 "reason": reason,
                 "count": count,
-                "providers": sorted({task.requested_provider for task in failed_for_reason}),
-                "users": sorted({task.user.name for task in failed_for_reason}),
-                "projects": sorted({task.project.code for task in failed_for_reason}),
+                "providers": sorted({entry.requested_provider for entry in failed_for_reason}),
+                "users": sorted({entry.user_name for entry in failed_for_reason}),
+                "projects": sorted({entry.project_code for entry in failed_for_reason}),
             }
         )
 
@@ -161,32 +178,32 @@ def get_dashboard_stats(
     if user_name:
         user_filters.append(User.name == user_name)
     users = db.scalars(select(User).where(*user_filters).order_by(User.created_at.desc(), User.id.desc())).all()
-    tasks_by_user: dict[int, list[Task]] = {}
-    for task in tasks:
-        tasks_by_user.setdefault(task.user_id, []).append(task)
+    tasks_by_user: dict[int, list[UsageLedger]] = {}
+    for entry in task_entries:
+        if entry.user_id is not None:
+            tasks_by_user.setdefault(entry.user_id, []).append(entry)
 
     account_usage = []
     for user in users:
         user_tasks = tasks_by_user.get(user.id, [])
         user_total = len(user_tasks)
-        user_success = sum(1 for task in user_tasks if task.status == TaskStatus.completed)
-        user_failed = sum(1 for task in user_tasks if task.status == TaskStatus.failed)
-        user_cost = sum(float(task.cost or 0) for task in user_tasks)
-        user_currency_counts = Counter((task.cost_currency or "CNY").upper() for task in user_tasks)
+        user_success = sum(1 for entry in user_tasks if entry.task_status == TaskStatus.completed)
+        user_failed = sum(1 for entry in user_tasks if entry.task_status == TaskStatus.failed)
+        user_cost = sum(float(entry.cost or 0) for entry in user_tasks)
+        user_currency_counts = Counter((entry.cost_currency or "CNY").upper() for entry in user_tasks)
         user_currency = user_currency_counts.most_common(1)[0][0] if user_currency_counts else "CNY"
         user_latency = (
-            sum(int(task.latency_ms or 0) for task in user_tasks) / user_total
+            sum(int(entry.latency_ms or 0) for entry in user_tasks) / user_total
             if user_total
             else 0.0
         )
-        user_providers = Counter(task.requested_provider for task in user_tasks)
+        user_providers = Counter(entry.requested_provider for entry in user_tasks)
         user_models: Counter[str] = Counter()
-        if task_ids and user_tasks:
-            user_task_ids = {task.id for task in user_tasks}
+        if user_tasks:
             user_models.update(
-                call.model_name or call.provider_name
-                for call in provider_calls
-                if call.task_id in user_task_ids
+                entry.model_name or entry.provider_name
+                for entry in provider_entries
+                if entry.user_id == user.id
             )
         quota_limit = user.monthly_quota
         quota_remaining = None if quota_limit is None else _round(max(quota_limit - user_cost, 0.0))
@@ -213,36 +230,35 @@ def get_dashboard_stats(
                 "model_calls": [
                     {"name": name, "count": count} for name, count in user_models.most_common(5)
                 ],
-                "last_task_at": max((task.created_at for task in user_tasks), default=None),
+                "last_task_at": max((entry.recorded_at for entry in user_tasks), default=None),
             }
         )
 
     date_key_set = set(date_keys)
-    task_id_to_date = {task.id: _utc_date_key(task.created_at) for task in tasks}
-    daily_tasks_map: dict[str, list[Task]] = defaultdict(list)
-    for task in tasks:
-        dk = task_id_to_date[task.id]
+    daily_tasks_map: dict[str, list[UsageLedger]] = defaultdict(list)
+    for entry in task_entries:
+        dk = _utc_date_key(entry.recorded_at)
         if dk in date_key_set:
-            daily_tasks_map[dk].append(task)
+            daily_tasks_map[dk].append(entry)
 
     daily_series = [
         DashboardDailyPoint(
             date=dk,
             total_tasks=len(daily_tasks_map.get(dk, [])),
-            successful_tasks=sum(1 for t in daily_tasks_map.get(dk, []) if t.status == TaskStatus.completed),
-            failed_tasks=sum(1 for t in daily_tasks_map.get(dk, []) if t.status == TaskStatus.failed),
-            total_cost=_round(sum(float(t.cost or 0) for t in daily_tasks_map.get(dk, []))),
+            successful_tasks=sum(1 for entry in daily_tasks_map.get(dk, []) if entry.task_status == TaskStatus.completed),
+            failed_tasks=sum(1 for entry in daily_tasks_map.get(dk, []) if entry.task_status == TaskStatus.failed),
+            total_cost=_round(sum(float(entry.cost or 0) for entry in daily_tasks_map.get(dk, []))),
         )
         for dk in date_keys
     ]
 
     model_top = [name for name, _ in model_counts.most_common(5)]
     calls_by_day_model: dict[tuple[str, str], int] = defaultdict(int)
-    for call in provider_calls:
-        dk = task_id_to_date.get(call.task_id)
-        if dk is None or dk not in date_key_set:
+    for entry in provider_entries:
+        dk = _utc_date_key(entry.recorded_at)
+        if dk not in date_key_set:
             continue
-        mname = call.model_name or call.provider_name
+        mname = entry.model_name or entry.provider_name
         slot = mname if mname in model_top else "__other__"
         calls_by_day_model[(dk, slot)] += 1
 

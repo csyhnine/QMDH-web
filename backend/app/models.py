@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import JSON, Boolean, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -245,6 +245,45 @@ class ProviderCallArchive(Base):
     archived_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, server_default=func.now())
 
     task_archive: Mapped[TaskArchive] = relationship(back_populates="provider_calls")
+
+
+class UsageLedger(Base):
+    __tablename__ = "usage_ledgers"
+    __table_args__ = (UniqueConstraint("source_table", "source_id", name="uq_usage_ledgers_source"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    entry_type: Mapped[str] = mapped_column(String(50), index=True)
+    source_table: Mapped[str] = mapped_column(String(50))
+    source_id: Mapped[int] = mapped_column(Integer)
+    task_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    task_archive_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    provider_call_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    provider_call_archive_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    project_code: Mapped[str] = mapped_column(String(50), index=True)
+    project_name: Mapped[str] = mapped_column(String(150))
+    workflow_key: Mapped[str] = mapped_column(String(100))
+    workflow_name: Mapped[str] = mapped_column(String(150))
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    user_name: Mapped[str] = mapped_column(String(100), index=True)
+    requested_provider: Mapped[str] = mapped_column(String(100), index=True)
+    provider_name: Mapped[str] = mapped_column(String(100), default="", index=True)
+    model_name: Mapped[str] = mapped_column(String(150), default="")
+    capability: Mapped[str] = mapped_column(String(50), default="")
+    classification: Mapped[DataClassification] = mapped_column(SqlEnum(DataClassification))
+    task_status: Mapped[TaskStatus | None] = mapped_column(SqlEnum(TaskStatus), nullable=True)
+    cost: Mapped[float] = mapped_column(Float, default=0.0)
+    cost_currency: Mapped[str] = mapped_column(String(12), default="CNY")
+    billable_units: Mapped[float] = mapped_column(Float, default=0.0)
+    billing_unit: Mapped[str] = mapped_column(String(50), default="")
+    output_count: Mapped[int] = mapped_column(Integer, default=0)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    error_code: Mapped[str] = mapped_column(String(100), default="")
+    error_summary: Mapped[str] = mapped_column(Text, default="")
+    ledger_source: Mapped[str] = mapped_column(String(50), index=True)
+    source_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class AuditLog(Base):

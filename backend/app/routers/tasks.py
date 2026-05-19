@@ -17,6 +17,7 @@ from app.services.task_archive import ensure_task_archive
 from app.services.media_storage import resolve_storage_payload
 from app.services.model_registry import get_provider_definition, get_provider_map
 from app.services.task_executor import enqueue_task, execute_task
+from app.services.usage_ledger import ensure_usage_ledger_for_task
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -185,6 +186,11 @@ def delete_task(
         archive_source="task.delete",
         archive_reason=(payload.reason if payload else "") or "",
         archived_at=deleted_at,
+    )
+    ensure_usage_ledger_for_task(
+        db,
+        task,
+        ledger_source="task.delete",
     )
 
     # Audit log entry

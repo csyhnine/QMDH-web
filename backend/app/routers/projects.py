@@ -13,6 +13,7 @@ from app.models import Asset, Project, Task, User
 from app.schemas import ProjectMemberOut, ProjectOut, ProjectStatusOut
 from app.services.project_status import build_project_status_detail, build_project_status_map
 from app.services.task_archive import ensure_task_archive
+from app.services.usage_ledger import ensure_usage_ledger_for_task
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -289,6 +290,12 @@ def delete_project(
             archive_source="project.archive",
             archive_reason=f"project archived: {project.code}",
             archived_at=archived_at,
+        )
+        ensure_usage_ledger_for_task(
+            db,
+            task,
+            ledger_source="project.archive",
+            task_archive=archive,
         )
         provider_call_count += int(archive.provider_call_count or 0)
 

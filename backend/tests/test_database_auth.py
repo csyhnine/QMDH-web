@@ -10,9 +10,10 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.security import hash_password, hash_session_token
 from app.database import Base, get_db
-from app.models import Asset, AssetType, AuditLog, AuthSession, DataClassification, Project, ProviderCall, ProviderCallArchive, Task, TaskArchive, TaskStatus, User, Workflow
+from app.models import Asset, AssetType, AuditLog, AuthSession, DataClassification, Project, ProviderCall, ProviderCallArchive, Task, TaskArchive, TaskStatus, UsageLedger, User, Workflow
 from app.routers import auth, dashboard, projects, users
 from app.services.bootstrap import seed_initial_data
+from app.services.usage_ledger import ensure_usage_ledger_for_task
 
 
 class DatabaseAuthTests(unittest.TestCase):
@@ -127,6 +128,9 @@ class DatabaseAuthTests(unittest.TestCase):
                     tags=["cover"],
                 )
             )
+            db.flush()
+            ensure_usage_ledger_for_task(db, completed_task, ledger_source="test.seed")
+            ensure_usage_ledger_for_task(db, failed_task, ledger_source="test.seed")
             db.commit()
 
         self.app = FastAPI()
@@ -311,6 +315,15 @@ class DatabaseAuthTests(unittest.TestCase):
             ).all()
             self.assertEqual(len(archived_calls), 1)
             self.assertEqual(archived_calls[0].model_name, "MAILAND/majicflus_v1")
+
+            task_ledgers = db.scalars(
+                select(UsageLedger).where(
+                    UsageLedger.entry_type == "task.finalized",
+                    UsageLedger.project_code == "QMDH-001",
+                )
+            ).all()
+            self.assertEqual(len(task_ledgers), 2)
+            self.assertTrue(all(item.task_archive_id is not None for item in task_ledgers))
 
     def test_seed_initial_data_creates_local_dev_accounts_without_overwriting_passwords(self) -> None:
         with self.SessionLocal() as db:

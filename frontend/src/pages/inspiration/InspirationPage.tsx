@@ -1,58 +1,386 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, type InspirationPost } from "../../api";
 
 /* ─── Props ─── */
+
+const CATEGORIES = ["全部", "建筑", "景观", "室内", "城市", "构图", "材质", "光影", "色彩"] as const;
+const SOURCE_FILTERS = [
+  { key: "all", label: "全部来源" },
+  { key: "external", label: "外部导入" },
+  { key: "user", label: "设计师分享" },
+  { key: "seed", label: "默认 Seed" },
+] as const;
+const TAG_BATCH_MODES = [
+  { key: "append", label: "追加标签" },
+  { key: "replace", label: "替换标签" },
+  { key: "remove", label: "移除标签" },
+] as const;
 
 export type InspirationPageProps = {
   posts: InspirationPost[];
   onPostsChange: (posts: InspirationPost[]) => void;
   canManage: boolean;
+  mode?: "studio" | "admin";
 };
 
 /* ─── Component ─── */
 
-export default function InspirationPage({ posts, onPostsChange, canManage }: InspirationPageProps) {
+export default function InspirationPage({ posts, onPostsChange, canManage, mode = "studio" }: InspirationPageProps) {
+  const navigate = useNavigate();
   const [category, setCategory] = useState("全部");
+  const [sourceFilter, setSourceFilter] = useState<(typeof SOURCE_FILTERS)[number]["key"]>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [lightbox, setLightbox] = useState<InspirationPost | null>(null);
+  const [actionError, setActionError] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [deletingPostId, setDeletingPostId] = useState<number | null>(null);
+  const [selectedPostIds, setSelectedPostIds] = useState<number[]>([]);
+  const [bulkCategory, setBulkCategory] = useState("建筑");
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false);
+  const [isBatchUpdating, setIsBatchUpdating] = useState(false);
+  const [bulkTagsText, setBulkTagsText] = useState("");
+  const [bulkTagMode, setBulkTagMode] = useState<(typeof TAG_BATCH_MODES)[number]["key"]>("append");
+  const [isBatchTagging, setIsBatchTagging] = useState(false);
   const [importDialog, setImportDialog] = useState<{
     open: boolean; url: string; loading: boolean; images: string[];
     selectedImage: string; title: string; category: string; tags: string;
     error: string; manualMode: boolean;
   }>({ open: false, url: "", loading: false, images: [], selectedImage: "", title: "", category: "建筑", tags: "", error: "", manualMode: false });
   const [editDialog, setEditDialog] = useState<{ postId: number; title: string; image_path: string; source_url: string } | null>(null);
+  const importedCount = posts.filter((post) => post.source_type === "external").length;
+  const sharedCount = posts.filter((post) => post.source_type === "user").length;
+  const seedCount = posts.filter((post) => post.source_type !== "external" && post.source_type !== "user").length;
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const visiblePosts = posts.filter((post) => {
+    if (sourceFilter === "external" && post.source_type !== "external") return false;
+    if (sourceFilter === "user" && post.source_type !== "user") return false;
+    if (sourceFilter === "seed" && (post.source_type === "external" || post.source_type === "user")) return false;
+    if (!normalizedQuery) return true;
+    const haystack = [
+      post.title,
+      post.source_name,
+      post.source_url,
+      post.user_name,
+      ...post.tags,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(normalizedQuery);
+  });
+  const visiblePostIds = visiblePosts.map((post) => post.id);
+  const selectedPosts = posts.filter((post) => selectedPostIds.includes(post.id));
+  const selectedVisibleCount = visiblePostIds.filter((id) => selectedPostIds.includes(id)).length;
+  const allVisibleSelected = visiblePostIds.length > 0 && selectedVisibleCount === visiblePostIds.length;
 
-  function loadPosts(cat: string) {
-    api.inspiration(cat).then(onPostsChange).catch(() => {});
+  function parseTagInput(value: string): string[] {
+    return Array.from(
+      new Set(
+        value
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+      )
+    );
+  }
+
+  async function loadPosts(cat: string) {
+    setIsRefreshing(true);
+    setActionError("");
+    try {
+      onPostsChange(await api.inspiration(cat));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "加载灵感库失败");
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
+
+  function togglePostSelection(postId: number) {
+    setSelectedPostIds((current) =>
+      current.includes(postId) ? current.filter((id) => id !== postId) : [...current, postId]
+    );
+  }
+
+  function toggleVisibleSelection() {
+    setSelectedPostIds((current) => {
+      if (allVisibleSelected) {
+        return current.filter((id) => !visiblePostIds.includes(id));
+      }
+      return Array.from(new Set([...current, ...visiblePostIds]));
+    });
+  }
+
+  async function handleDelete(post: InspirationPost) {
+    if (!confirm(`确认删除灵感条目“${post.title}”吗？此操作不可撤销。`)) {
+      return;
+    }
+    setDeletingPostId(post.id);
+    setActionError("");
+    try {
+      await api.deleteInspiration(post.id);
+      setSelectedPostIds((current) => current.filter((id) => id !== post.id));
+      await loadPosts(category);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "删除灵感失败");
+    } finally {
+      setDeletingPostId(null);
+    }
+  }
+
+  async function handleBatchCategoryUpdate() {
+    if (selectedPostIds.length === 0) {
+      setActionError("请先选择要批量修改的灵感条目");
+      return;
+    }
+    setIsBatchUpdating(true);
+    setActionError("");
+    try {
+      await Promise.all(
+        selectedPostIds.map((postId) => api.updateInspiration(postId, { category: bulkCategory }))
+      );
+      setSelectedPostIds([]);
+      await loadPosts(category);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "批量修改分类失败");
+    } finally {
+      setIsBatchUpdating(false);
+    }
+  }
+
+  async function handleBatchDelete() {
+    if (selectedPostIds.length === 0) {
+      setActionError("请先选择要删除的灵感条目");
+      return;
+    }
+    if (!confirm(`确认批量删除 ${selectedPostIds.length} 条灵感内容吗？此操作不可撤销。`)) {
+      return;
+    }
+    setIsBatchDeleting(true);
+    setActionError("");
+    try {
+      await Promise.all(selectedPostIds.map((postId) => api.deleteInspiration(postId)));
+      setSelectedPostIds([]);
+      await loadPosts(category);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "批量删除灵感失败");
+    } finally {
+      setIsBatchDeleting(false);
+    }
+  }
+
+  async function handleBatchTagsUpdate() {
+    if (selectedPostIds.length === 0) {
+      setActionError("请先选择要批量修改标签的灵感条目");
+      return;
+    }
+    const nextTags = parseTagInput(bulkTagsText);
+    if (nextTags.length === 0) {
+      setActionError("请输入至少一个标签，多个标签请用逗号分隔");
+      return;
+    }
+    setIsBatchTagging(true);
+    setActionError("");
+    try {
+      await Promise.all(
+        selectedPosts.map((post) => {
+          const currentTags = Array.from(new Set(post.tags.map((tag) => tag.trim()).filter(Boolean)));
+          let finalTags = currentTags;
+          if (bulkTagMode === "append") {
+            finalTags = Array.from(new Set([...currentTags, ...nextTags]));
+          } else if (bulkTagMode === "replace") {
+            finalTags = nextTags;
+          } else if (bulkTagMode === "remove") {
+            finalTags = currentTags.filter((tag) => !nextTags.includes(tag));
+          }
+          return api.updateInspiration(post.id, { tags: finalTags });
+        })
+      );
+      setBulkTagsText("");
+      await loadPosts(category);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "批量修改标签失败");
+    } finally {
+      setIsBatchTagging(false);
+    }
   }
 
   return (
     <section className="inspiration-page">
       <header className="inspiration-header">
         <div>
-          <h1>灵感</h1>
-          <p>探索参考案例、材质与构图，激发设计灵感</p>
+          <h1>{mode === "admin" ? "灵感库管理" : "灵感"}</h1>
+          <p>{mode === "admin" ? "集中管理外部参考、默认 seed 与设计师分享内容。" : "探索参考案例、材质与构图，激发设计灵感"}</p>
         </div>
         <div className="inspiration-actions">
+          {mode === "studio" && canManage ? (
+            <button type="button" className="ghost-button" onClick={() => navigate("/admin/inspiration")}>
+              管理灵感库
+            </button>
+          ) : null}
+          {mode === "admin" ? (
+            <button type="button" className="ghost-button" disabled={isRefreshing} onClick={() => void loadPosts(category)}>
+              {isRefreshing ? "刷新中..." : "刷新"}
+            </button>
+          ) : null}
           {canManage ? (
             <button type="button" className="admin-primary-button" onClick={() => {
+              setActionError("");
               setImportDialog({ open: true, url: "", loading: false, images: [], selectedImage: "", title: "", category: category !== "全部" ? category : "建筑", tags: "", error: "", manualMode: false });
             }}>+ 导入参考</button>
           ) : null}
         </div>
       </header>
 
+      {actionError ? <div className="floating-error inspiration-feedback">{actionError}</div> : null}
+
+      {mode === "admin" ? (
+        <>
+          <div className="admin-kpi-grid inspiration-kpi-grid">
+            <article className="admin-kpi-card">
+              <div>
+                <span>当前分类</span>
+                <strong>{posts.length}</strong>
+                <small>{category === "全部" ? "全部分类条目总数" : `${category} 分类条目总数`}</small>
+              </div>
+              <i>库</i>
+            </article>
+            <article className="admin-kpi-card admin-green">
+              <div>
+                <span>外部导入</span>
+                <strong>{importedCount}</strong>
+                <small>管理员从外部参考导入的条目</small>
+              </div>
+              <i>引</i>
+            </article>
+            <article className="admin-kpi-card admin-purple">
+              <div>
+                <span>设计师分享</span>
+                <strong>{sharedCount}</strong>
+                <small>由设计师从生成结果分享而来</small>
+              </div>
+              <i>享</i>
+            </article>
+            <article className="admin-kpi-card admin-gray">
+              <div>
+                <span>默认 Seed</span>
+                <strong>{seedCount}</strong>
+                <small>当前分类下的内置默认灵感条目</small>
+              </div>
+              <i>种</i>
+            </article>
+          </div>
+
+          <div className="admin-toolbar inspiration-admin-toolbar">
+            <input
+              type="text"
+              aria-label="搜索灵感条目"
+              placeholder="搜索标题、标签、来源或分享人"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <select
+              aria-label="筛选来源"
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value as (typeof SOURCE_FILTERS)[number]["key"])}
+            >
+              {SOURCE_FILTERS.map((item) => (
+                <option key={item.key} value={item.key}>{item.label}</option>
+              ))}
+            </select>
+            <button type="button" className="ghost-button" onClick={toggleVisibleSelection}>
+              {allVisibleSelected ? "取消全选当前结果" : "全选当前结果"}
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={selectedPostIds.length === 0}
+              onClick={() => setSelectedPostIds([])}
+            >
+              清空已选
+            </button>
+            <select
+              aria-label="批量分类"
+              value={bulkCategory}
+              onChange={(e) => setBulkCategory(e.target.value)}
+            >
+              {CATEGORIES.filter((item) => item !== "全部").map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={selectedPostIds.length === 0 || isBatchUpdating}
+              onClick={() => void handleBatchCategoryUpdate()}
+            >
+              {isBatchUpdating ? "批量修改中..." : "批量改分类"}
+            </button>
+            <select
+              aria-label="批量标签模式"
+              value={bulkTagMode}
+              onChange={(e) => setBulkTagMode(e.target.value as (typeof TAG_BATCH_MODES)[number]["key"])}
+            >
+              {TAG_BATCH_MODES.map((item) => (
+                <option key={item.key} value={item.key}>{item.label}</option>
+              ))}
+            </select>
+            <input
+              type="text"
+              aria-label="批量标签输入"
+              placeholder="标签用逗号分隔"
+              value={bulkTagsText}
+              onChange={(e) => setBulkTagsText(e.target.value)}
+            />
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={selectedPostIds.length === 0 || isBatchTagging}
+              onClick={() => void handleBatchTagsUpdate()}
+            >
+              {isBatchTagging ? "批量标签处理中..." : "批量改标签"}
+            </button>
+            <button
+              type="button"
+              className="ghost-button danger-text"
+              disabled={selectedPostIds.length === 0 || isBatchDeleting}
+              onClick={() => void handleBatchDelete()}
+            >
+              {isBatchDeleting ? "批量删除中..." : "批量删除"}
+            </button>
+            <span className="inspiration-toolbar-summary">
+              当前显示 {visiblePosts.length} / {posts.length} 条，当前结果已选 {selectedVisibleCount} 条，总已选 {selectedPostIds.length} 条
+            </span>
+          </div>
+        </>
+      ) : null}
+
       <nav className="inspiration-categories">
-        {["全部", "建筑", "景观", "室内", "城市", "构图", "材质", "光影", "色彩"].map((cat) => (
-          <button key={cat} type="button" className={category === cat ? "active" : ""} onClick={() => { setCategory(cat); loadPosts(cat); }}>{cat}</button>
+        {CATEGORIES.map((cat) => (
+          <button key={cat} type="button" className={category === cat ? "active" : ""} onClick={() => { setCategory(cat); void loadPosts(cat); }}>{cat}</button>
         ))}
       </nav>
 
       <div className="inspiration-grid">
-        {posts.length > 0 ? posts.map((post) => (
+        {visiblePosts.length > 0 ? visiblePosts.map((post) => (
           <article key={post.id} className="inspiration-card">
             <div className="inspiration-card-image" onClick={() => setLightbox(post)} style={{ cursor: "pointer" }}>
               {post.image_path ? <img src={post.image_path} alt={post.title} loading="lazy" /> : <div className="inspiration-card-placeholder" />}
               {post.category !== "全部" ? <span className="inspiration-card-badge">{post.category}</span> : null}
+              {mode === "admin" ? (
+                <label
+                  className="inspiration-card-select"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedPostIds.includes(post.id)}
+                    onChange={() => togglePostSelection(post.id)}
+                  />
+                  <span>选择</span>
+                </label>
+              ) : null}
             </div>
             <div className="inspiration-card-body">
               <h3>{post.title}</h3>
@@ -68,14 +396,40 @@ export default function InspirationPage({ posts, onPostsChange, canManage }: Ins
                   ) : post.source_type === "user" ? `由 ${post.user_name || "设计师"} 分享` : `来自 ${post.source_name || "外部"}`}
                 </span>
                 <span className="inspiration-stats">
-                  <button type="button" className="ghost-button" onClick={() => { api.likeInspiration(post.id).then(() => loadPosts(category)); }}>♡ {post.like_count}</button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={async () => {
+                      setActionError("");
+                      try {
+                        await api.likeInspiration(post.id);
+                        await loadPosts(category);
+                      } catch (err) {
+                        setActionError(err instanceof Error ? err.message : "点赞失败");
+                      }
+                    }}
+                  >
+                    ♡ {post.like_count}
+                  </button>
                   {canManage ? <button type="button" className="ghost-button" title="编辑" onClick={() => setEditDialog({ postId: post.id, title: post.title, image_path: post.image_path, source_url: post.source_url })}>✎</button> : null}
+                  {mode === "admin" ? (
+                    <button
+                      type="button"
+                      className="ghost-button danger-text"
+                      disabled={deletingPostId === post.id}
+                      onClick={() => void handleDelete(post)}
+                    >
+                      {deletingPostId === post.id ? "删除中..." : "删除"}
+                    </button>
+                  ) : null}
                 </span>
               </div>
             </div>
           </article>
         )) : (
-          <div className="inspiration-empty"><p>暂无灵感内容。管理员可以导入外部参考，设计师可以分享生成成果。</p></div>
+          <div className="inspiration-empty">
+            <p>{posts.length > 0 ? "当前筛选条件下没有匹配的灵感条目。" : "暂无灵感内容。管理员可以导入外部参考，设计师可以分享生成成果。"}</p>
+          </div>
         )}
       </div>
 
@@ -136,12 +490,16 @@ export default function InspirationPage({ posts, onPostsChange, canManage }: Ins
             <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
               <button type="button" className="ghost-button" onClick={() => setImportDialog({ ...importDialog, open: false })}>取消</button>
               <button type="button" className="admin-primary-button" disabled={!importDialog.title.trim() || !importDialog.selectedImage.trim()} onClick={async () => {
-                const tags = importDialog.tags.split(",").map((t) => t.trim()).filter(Boolean);
-                let sourceName = "";
-                try { sourceName = new URL(importDialog.url).hostname.replace(/^www\./, ""); } catch {}
-                await api.createInspiration({ title: importDialog.title.trim(), image_path: importDialog.selectedImage.trim(), category: importDialog.category, source_type: "external", source_name: sourceName, source_url: importDialog.url.trim(), tags });
-                setImportDialog({ ...importDialog, open: false });
-                loadPosts(category);
+                try {
+                  const tags = importDialog.tags.split(",").map((t) => t.trim()).filter(Boolean);
+                  let sourceName = "";
+                  try { sourceName = new URL(importDialog.url).hostname.replace(/^www\./, ""); } catch {}
+                  await api.createInspiration({ title: importDialog.title.trim(), image_path: importDialog.selectedImage.trim(), category: importDialog.category, source_type: "external", source_name: sourceName, source_url: importDialog.url.trim(), tags });
+                  setImportDialog({ ...importDialog, open: false });
+                  await loadPosts(category);
+                } catch (err) {
+                  setImportDialog({ ...importDialog, error: err instanceof Error ? err.message : "导入灵感失败" });
+                }
               }}>确认导入</button>
             </div>
           </div>
@@ -161,9 +519,13 @@ export default function InspirationPage({ posts, onPostsChange, canManage }: Ins
             <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", marginTop: "16px" }}>
               <button type="button" className="ghost-button" onClick={() => setEditDialog(null)}>取消</button>
               <button type="button" className="admin-primary-button" onClick={async () => {
-                await api.updateInspiration(editDialog.postId, { title: editDialog.title, image_path: editDialog.image_path, source_url: editDialog.source_url });
-                setEditDialog(null);
-                loadPosts(category);
+                try {
+                  await api.updateInspiration(editDialog.postId, { title: editDialog.title, image_path: editDialog.image_path, source_url: editDialog.source_url });
+                  setEditDialog(null);
+                  await loadPosts(category);
+                } catch (err) {
+                  setActionError(err instanceof Error ? err.message : "更新灵感失败");
+                }
               }}>保存</button>
             </div>
           </div>

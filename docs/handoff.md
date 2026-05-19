@@ -10,6 +10,89 @@
 
 ## Latest Handoffs
 
+### [2026-05-18 19:10] Session Handoff
+- 执行角色：Feature / Data Governance / Documentation / Verification
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：No
+  - 是否有未提交改动：Yes（backend/docs 有未提交修改，另有本地 `tmp/` 未跟踪）
+  - 是否已 push：No
+- 本次完成：
+  - 完成 `task-016` 的账本层落地：新增 `usage_ledgers` 表与 `backend/app/services/usage_ledger.py`
+  - 在 task 执行终态、`DELETE /tasks/{id}` 软删、`DELETE /projects/{code}` 项目归档路径补齐 task / provider_call 级记账
+  - `/api/v1/dashboard/stats` 已切换为账本读口径，不再直接依赖 live `tasks / provider_calls` 做核心运营聚合
+  - 新增 Alembic migration：`e4f5a6b7c8d9_add_usage_ledgers.py`，并为历史任务 / provider call 回填账本
+  - 更新 `docs/tasks.md`、`docs/continuity.md`，将 `task-016` 标记为 DONE
+  - 后端测试已通过：`python -m unittest discover -s tests`（62 项）
+- 修改文件：
+  - `backend/app/models.py`
+  - `backend/app/services/usage_ledger.py`
+  - `backend/app/services/task_executor.py`
+  - `backend/app/routers/dashboard.py`
+  - `backend/app/routers/tasks.py`
+  - `backend/app/routers/projects.py`
+  - `backend/migrations/versions/e4f5a6b7c8d9_add_usage_ledgers.py`
+  - `backend/tests/test_database_auth.py`
+  - `backend/tests/test_task_error_reporting.py`
+  - `backend/tests/test_task_soft_delete.py`
+  - `docs/tasks.md`
+  - `docs/continuity.md`
+  - `docs/data-governance.md`
+  - `docs/architecture.md`
+  - `docs/server-operations.md`
+  - `docs/handoff.md`
+- 当前任务状态：
+  - `task-016`: DONE
+  - Chat / 生成失败诊断：DONE（第一轮）
+  - seed 图恢复工具：DONE（本地 bundle + 服务器导入路径已明确）
+- 风险与注意事项：
+  - 账本层已落地，但还没有补“已归档项目只读视图”；当前重点仍是保证统计与审计不断层
+  - 新版本部署到任意环境时都要执行 `alembic upgrade head`，否则缺少 `usage_ledgers`
+  - 本地 `tmp/seed-inspiration-bundle.zip` 仍只适用于默认灵感库恢复，不覆盖设计师分享图
+- 下一位 agent 的第一步：
+  - 如果目标是恢复服务器默认灵感图库：上传 `tmp/seed-inspiration-bundle.zip` 到服务器并执行 `import_seed_inspiration_bundle`
+  - 如果目标是继续 1.0 主线：回到 `prod-001`，继续拆分 `GenerateStudioShell`
+  - 如果目标是继续运营体验：评估 `/admin/projects` 是否需要“已归档项目”只读视图
+- 是否可直接接手：Yes
+
+### [2026-05-18 17:05] Session Handoff
+- 执行角色：Feature / Ops / Documentation
+- 当前分支：`main`
+- 仓库状态：
+  - 工作区是否干净：Yes（仅本地 `tmp/` 未跟踪，用于 seed bundle，不应提交）
+  - 是否有未提交改动：No
+  - 是否已 push：Yes
+- 最近已推送提交：
+  - `360e449` Add seed inspiration media bundle tools
+  - `141df93` Improve runtime error diagnostics
+  - `6e2d718` Add inspiration media refresh command
+- 本次完成：
+  - 为 Chat 与设计生成失败链路补齐结构化报错，前端不再只显示模糊失败；后端会保存 `error_summary / error_detail / error_code / error_hint`
+  - 为默认灵感库 seed 图补齐运维入口：
+    - `python -m app.cli build_seed_inspiration_bundle --output <zip>`
+    - `python -m app.cli import_seed_inspiration_bundle --bundle <zip>`
+  - 修正 `refresh_seed_inspiration_media` 的统计口径，区分 `restored`（真实图恢复）与 `placeholders`（仍为占位图）
+  - 本地已成功构建 `14/14` 真实图片的 seed bundle：`tmp/seed-inspiration-bundle.zip`
+  - 明确服务器升级规则：正常升级不会丢模型、账号、记录、图片；只有执行 `docker compose down -v` 或删除 `postgres_data / backend_media` 才会丢数据
+- 当前服务器真实状态：
+  - 代码升级可按 `git pull + docker compose up -d --build` 走轻量流程
+  - 服务器直接回源抓 ArchDaily / `images.adsttc.com` 仍可能出现 `HTTP 403 AccessDenied`
+  - 因此单跑 `refresh_seed_inspiration_media` 不能保证恢复真图；要稳定恢复默认灵感图库，应优先走“本地 bundle 上传 + 服务器导入”
+- 当前任务状态：
+  - `task-016`: IN_PROGRESS
+  - Chat / 生成失败诊断：DONE（第一轮）
+  - seed 图恢复工具：DONE（运维入口已具备）
+- 风险与注意事项：
+  - 当前 seed bundle 只覆盖默认灵感库那批内置条目，不覆盖设计师分享图或任意外部导入图
+  - 设计师分享图仍依赖 `backend_media`，正式环境绝不能删卷
+  - 若要求“标题与封面严格一一对应”，后续仍建议人工钉死映射后再重打一版 bundle
+  - `task-016` 的 `usage_ledger` 主账本层仍未落地，当前 archive 仍是地基，不是完整账本
+- 下一位 agent 的第一步：
+  - 如果目标是先稳定服务器灵感库：先把本地 `tmp/seed-inspiration-bundle.zip` 上传到服务器 `/www/wwwroot/qmdh-web/seed-inspiration-bundle.zip`，再运行 `import_seed_inspiration_bundle`
+  - 如果目标是继续主线：回到 `task-016`，设计独立 `usage_ledger`
+  - 如果目标是继续体验：为默认 seed 图做一版“标题 -> 固定封面”人工映射，减少同项目错图
+- 是否可直接接手：Yes
+
 ## Strategic Note (2026-05-16)
 
 - QMDH 2.0 当前只作为升级方向，不是立即落地目标。
@@ -51,143 +134,6 @@
   - 若继续主线，优先定义 `usage_ledger` 的最小字段模型和写入时机
   - 若先做管理体验，再评估是否补 `/admin/projects` 的归档视图
 - 是否可直接接手：Yes
-
-### [2026-05-18 10:28] Session Handoff
-- 执行角色：Feature / Migration / Verification
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes（backend/docs 改动为主）
-  - 是否已 push：No
-- 本次完成：
-  - 把 `DELETE /projects/{code}` 从硬删改为“项目归档语义”：新增 `projects.archived_at`，归档时批量软删该项目未删 task，但保留 `provider_calls`
-  - 归档项目后会从活动项目列表隐藏、解绑成员项目权限、解除资产 `project_id`，并写入 `project.deleted` 审计日志
-  - 封住已归档项目继续接单的口子：任务创建现在要求 `Project.archived_at is null`
-  - 新增 Alembic migration：`b2c3d4e5f6a7_add_project_archived_at.py`
-  - 新增并通过项目归档后端测试；当前全量后端测试 `56` 项通过
-  - 已在当前工作区执行 `alembic upgrade head`，本地 `backend/app.db` 已升级到包含 `projects.archived_at`
-- 修改文件：
-  - `backend/app/models.py`
-  - `backend/app/routers/projects.py`
-  - `backend/app/routers/tasks.py`
-  - `backend/tests/test_database_auth.py`
-  - `backend/migrations/versions/b2c3d4e5f6a7_add_project_archived_at.py`
-  - `docs/tasks.md`
-  - `docs/handoff.md`
-- 当前任务状态：
-  - `task-016`: IN_PROGRESS
-  - 已完成第一阶段“项目归档不抹历史”，尚未补独立 `usage_ledger / task_archive` 结构化账本层
-- 风险与注意事项：
-  - 当前实现已经避免项目删除导致运营统计和账号用量回退，但历史口径仍主要依赖 `task + provider_call + audit`
-  - 若后续需要“查看已归档项目”或“恢复项目”，还要为 `/admin/projects` 设计只读归档视图或恢复动作
-  - 其他环境要跟进执行 Alembic migration，否则新代码会因为缺少 `projects.archived_at` 无法正常查询
-- 下一位 agent 的第一步：
-  - 先确认目标是继续做 `task-016` 第二阶段账本层，还是切回 Chat/模型运维
-  - 若继续主线，优先设计 `usage_ledger / task_archive` 的最小结构，而不是回到硬删或自由 JSON
-- 是否可直接接手：Yes
-
-### [2026-05-18 10:06] Session Handoff
-- 执行角色：Feature / Integration / Verification
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes（本轮新增 backend/frontend/docs 改动）
-  - 是否已 push：No
-- 本次完成：
-  - 为 `/api/v1/providers/profiles/{id}/probe` 新增 capability-aware 校验：`chat.completions` 走最小 `POST /chat/completions`，非 Chat profile 继续走 `GET /models`
-  - `/admin/models` 已接入“校验”按钮与结果展示，可直接看到最近一次 probe 的 `detail / status`
-  - 新增并通过 provider profile probe 后端测试，当前全量后端测试 `55` 项通过
-  - 前端 `npm run build` 通过
-  - 用真实本地数据冒烟确认：profile `2 / ms_zhipuai_glm-5` 的 probe 现会明确返回 `auth_error`，`checked_url` 为 `https://api-inference.modelscope.cn/v1/chat/completions`
-- 修改文件：
-  - `backend/app/routers/providers.py`
-  - `backend/app/schemas.py`
-  - `backend/tests/test_provider_profiles.py`
-  - `frontend/src/api.ts`
-  - `frontend/src/pages/admin/ModelsPage.tsx`
-  - `docs/handoff.md`
-- 当前任务状态：
-  - `task-007`: DONE
-  - `task-012`: DONE
-  - 本轮为已完成能力补了一层“可用性校验”，未新开独立 task
-- 风险与注意事项：
-  - `/models` 可达不代表 Chat 真可用；本地当前问题已经定位为 Chat 上游鉴权失败，而不是 provider profile 完全不可连通
-  - 该 probe 对 Chat 会发起一次最小真实请求，适合作为管理员手动排障动作，不应被高频自动轮询
-  - 项目级删除仍是 `task-016` 风险源，和本轮修复无冲突但也尚未解决
-- 下一位 agent 的第一步：
-  - 先在 `/admin/models` 对现有 Chat profile 执行一次“校验”，确认 UI 呈现是否符合预期
-  - 再决定是修正 ModelScope token / model 权限，还是继续推进 `task-016`
-- 是否可直接接手：Yes
-
-### [2026-05-18 09:38] Session Handoff
-- 执行角色：Integration / Documentation
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：No
-  - 是否有未提交改动：Yes（本轮仅同步文档）
-  - 是否已 push：No
-- 本次完成：
-  - 按仓库协议重新接手，逐项阅读 `protocol/tasks/handoff/continuity/data-governance/roadmap-2.0-prep/architecture/decisions/server-operations`
-  - 先读工作区 diff，再核对代码事实，确认当前未提交改动仅在 `docs/`
-  - 基线验证完成：前端 `npm run build` 通过，`cmd /c start-dev.cmd --check` 通过，后端需使用 `backend/.venv/Scripts/python.exe -m unittest discover -s tests` 才能稳定跑全量测试；在仓库 `.venv` 下 51 个测试通过
-  - 确认 `task-015` 的第一阶段其实已落地：task 删除已改为软删除，`dashboard/quota` 继续统计软删除历史，migration 与测试都已存在
-  - 确认剩余真实风险已转移到项目级删除路径：`backend/app/routers/projects.py` 仍会硬删项目下 task 与 provider call
-  - 已为 `task-016` 补首轮 2.0 Compatibility Check，明确项目级删除后续必须复用 task 侧留痕口径，并为未来 `usage_ledger / archive` 预留结构化字段
-  - 同步修正文档：更新 `tasks/continuity/architecture/project status/handoff`，移除“App.tsx 仍是超长主入口”“ModelScope 自动派生仍在使用”“task-015 仍未开发”等过期描述
-- 修改文件：
-  - `docs/tasks.md`
-  - `docs/continuity.md`
-  - `docs/architecture.md`
-  - `docs/deployment.md`
-  - `docs/projects/QMDH-001/status.md`
-  - `docs/handoff.md`
-- 当前任务状态：
-  - `task-015`: DONE（task 软删除与基础运营留痕）
-  - `task-016`: TODO（项目级删除归档与用量账本补强）
-- 风险与注意事项：
-  - `/studio/chat` 已具备前后端链路，但必须先在 `/admin/models` 配置 `chat.completions` 模型才能实际使用
-  - `frontend/src/features/studio/GenerateStudioShell.tsx` 仍是 4000+ 行热点文件
-  - 项目删除当前仍是硬删历史，尚未纳入软删除 / ledger 口径
-- 下一位 agent 的第一步：
-  - 先用仓库 `.venv` 跑后端测试、再跑前端 build，确认环境无漂移
-  - 再去 `/admin/models` 配一个真实 Chat 模型，验证 `/studio/chat`
-  - 若继续做运营留痕，先为 `task-016` 做 2.0 Compatibility Check，再设计项目级删除归档
-- 是否可直接接手：Yes
-
-### [2026-05-13 17:03] Session Handoff
-- 执行角色：Feature / Integration / Documentation
-- 当前分支：`main`
-- 仓库状态：
-  - 工作区是否干净：Yes
-  - 是否有未提交改动：No
-  - 是否已 push：Yes
-- 本次完成：
-  - 完成 Chat 页面宽布局修正，消息区不再沿用生成页三栏骨架而被压窄
-  - 完成模型管理页收敛：能力分配、adapter 类型、厂商模板、紧凑模板卡、筛选和编辑态回填
-  - 修正模型管理页 KPI 中文乱码，并降低浏览器自动填充把 `admin` 误写进 `Base URL / API Key` 的概率
-  - 核实库内现状：`tasks=0`、`provider_calls=0`、`assets=4`、`inspiration_posts=12`、`users=66`、`projects=1`
-  - 当时确认现状风险：任务删除仍为硬删除，会连带抹掉运营统计来源；已按用户确认方向登记 `task-015 / prod-009`
-  - 更新交接文档、任务文档，并同步当前仓库状态到 GitHub
-- 修改文件：
-  - `frontend/src/App.tsx`
-  - `frontend/src/api.ts`
-  - `frontend/src/styles.css`
-  - `backend/app/routers/providers.py`
-  - `backend/app/schemas.py`
-  - `backend/tests/test_provider_profiles.py`
-  - `docs/tasks.md`
-  - `docs/ai-agent-project-docs/docs/handoff.md`
-  - `docs/handoff.md`
-  - `.gitignore`
-- 当前任务状态：
-  - `task-011`: DONE
-  - `task-012`: DONE
-  - `task-013`: DONE
-  - `task-014`: DONE
-  - `task-015`: 当时记录为 TODO；现已在代码中完成第一阶段软删除
-- 风险与注意事项：
-  - 运营看板为空是当前数据库里没有任务与 provider 调用，不是前端渲染故障
-  - 这条记录已过时：当前 task 删除已改为软删除；仍需注意的是项目删除路径还会硬删历史
 
 ## Server Handoff Update (2026-05-15)
 

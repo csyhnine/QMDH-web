@@ -51,10 +51,14 @@ This matrix maps the practical storage / source-of-truth rule now used by QMDH-w
 - Structured archive tables now exist as the next step beyond soft delete:
   - `task_archives`
   - `provider_call_archives`
-- This means QMDH-web now has two layers of business-history preservation:
+- A dedicated accounting ledger now also exists:
+  - `usage_ledgers`
+  - task terminal states and provider calls are written into the ledger during execution, task soft delete, and project archive flows
+- This means QMDH-web now has three layers of business-history preservation:
   1. live operational tables (`tasks`, `provider_calls`, `audit_logs`)
-  2. archive snapshots written when tasks are deleted or projects are archived
-- A fuller `usage_ledger` style accounting layer is still future work; current archive tables are the foundation, not the final 2.0 target model.
+  2. `usage_ledgers` as the stable reporting / accounting read model for task and provider-call usage
+  3. archive snapshots written when tasks are deleted or projects are archived
+- Current dashboard / quota style operational statistics should read from the ledger layer instead of relying on live `tasks` / `provider_calls` surviving forever.
 
 ### 1. Code
 

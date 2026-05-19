@@ -265,7 +265,7 @@
   3. 前后端单测与 build 通过：已完成
 
 ### Task: [task-016] 项目级删除归档与用量账本补强
-- 状态：IN_PROGRESS
+- 状态：DONE
 - 目标：
   - 避免项目删除或后续清理流程再次硬删任务与 provider 调用，绕过已建立的软删除口径
   - 为未来 PostgreSQL/生产化/2.0 升级预留更稳定的 `usage_ledger / archive` 口径
@@ -288,22 +288,22 @@
   - 已完成第一阶段实现：`DELETE /projects/{code}` 不再硬删 `project / task / provider_call`
   - 当前项目删除已改为“项目归档语义”：`projects.archived_at` 标记归档、前台项目列表隐藏、成员解绑、资产解除 `project_id`
   - 项目归档时会批量软删该项目下仍可见的 task，保留 provider call、成本、失败原因与 dashboard / quota 统计口径
-  - 已补 migration 与后端测试；本地工作区数据库已执行 Alembic 升级到包含 `projects.archived_at` 的版本
   - 已补第二阶段基础归档层：新增 `task_archives` 与 `provider_call_archives`，在 task 软删与 project 归档时写入结构化快照
-  - 当前仍未落地独立的全量 `usage_ledger` 记账层，因此本 task 继续保持 `IN_PROGRESS`
+  - 已新增独立 `usage_ledgers` 账本表，并在 task 执行终态、task 软删、project 归档路径补齐 task / provider_call 级记账
+  - `/api/v1/dashboard/stats` 已切换为账本读口径；新增 migration 会为历史 `tasks / provider_calls` 回填账本，避免新旧数据断层
 - 验收标准：
-  1. 删除项目或做批量清理后，运营统计与账号用量不回退：第一阶段已完成（项目归档 + task 软删保留）
-  2. 运营侧仍能追溯 provider/model/cost/operator/project snapshot：第二阶段基础已完成（保留 task + provider call + project.deleted audit + archive snapshot）
-  3. 方案符合 `docs/data-governance.md` 与 `docs/roadmap-2.0-prep.md`：当前实现符合，但仍待补更完整的 `usage_ledger`
+  1. 删除项目或做批量清理后，运营统计与账号用量不回退：已完成（项目归档 + task 软删 + 账本读口径）
+  2. 运营侧仍能追溯 provider/model/cost/operator/project snapshot：已完成（usage ledger + archive snapshot + project.deleted audit）
+  3. 方案符合 `docs/data-governance.md` 与 `docs/roadmap-2.0-prep.md`：已完成
 
 ---
 
 ## Next Suggested Step
 
-1. 继续推进 **task-016** 下一步：设计更完整的 `usage_ledger`，把账号用量、项目归档、task/provider 调用快照串成可聚合账本
-2. 评估项目归档后的管理端可见性需求：是否需要 `/admin/projects` 增加“已归档项目”只读视图
-3. 先在 `/admin/models` 对现有 Chat profile 执行一次“校验”；当前本地 `ms_zhipuai_glm-5` 会在 `chat/completions` 上返回 `auth_error`
-4. 修正对应 ModelScope token / model 权限后，再做一次真实 Chat 联调
+1. 如果当前目标是稳定服务器灵感库，优先上传并导入本地 `tmp/seed-inspiration-bundle.zip`，不要继续依赖服务器直接重抓 ArchDaily
+2. 若导入后仍要求“标题与封面严格一一对应”，为默认 seed 图补一版人工钉死映射，再重新构建并导入 bundle
+3. 回到 `prod-001`：继续拆分 `frontend/src/features/studio/GenerateStudioShell.tsx`，降低当前前端最大热点文件的维护风险
+4. 评估项目归档后的管理端可见性需求：是否需要 `/admin/projects` 增加“已归档项目”只读视图
 
 ---
 
@@ -328,7 +328,6 @@
 | prod-006 | API Rate Limiting | 防刷保护，内测阶段可跳过 | P3 |
 | prod-007 | Session 过期清理 | 定时任务清理 `auth_sessions` 过期记录 | P3 |
 | prod-008 | 静态资源存储方案 | 用户上传图片迁移到 OSS/S3，配合 CDN 分发 | P2 |
-| prod-009 | 项目级删除归档与用量账本 | 删除项目或做批量清理后仍保留运营统计、账号用量和审计追溯 | P1 |
 
 ### 不建议当前阶段做
 

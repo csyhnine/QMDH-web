@@ -890,6 +890,10 @@ def execute_task(task_id: int) -> None:
             return
 
         task.status = TaskStatus.running
+        task.result = {
+            **(task.result if isinstance(task.result, dict) else {}),
+            "queued_stage": "running",
+        }
         db.commit()
 
         try:
@@ -900,6 +904,13 @@ def execute_task(task_id: int) -> None:
             task.cost = outcome.cost
             task.cost_currency = outcome.cost_currency
             task.result = outcome.result
+            task.result = {
+                **task.result,
+                "queued_stage": "completed",
+                "reference_image_supplied": bool(
+                    task.payload.get("reference_image") or task.payload.get("source_image")
+                ),
+            }
 
             db.add(
                 ProviderCall(
@@ -944,6 +955,13 @@ def execute_task(task_id: int) -> None:
                 provider_name=task.requested_provider,
             )
             task.result = failure
+            task.result = {
+                **task.result,
+                "queued_stage": "failed",
+                "reference_image_supplied": bool(
+                    task.payload.get("reference_image") or task.payload.get("source_image")
+                ),
+            }
 
             try:
                 provider_definition = get_provider_definition(task.requested_provider, db)

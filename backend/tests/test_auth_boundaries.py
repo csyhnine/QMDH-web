@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
 from app.database import Base, get_db
-from app.models import DataClassification, Project, Workflow
+from app.models import DataClassification, Project, Task, Workflow
 from app.routers import projects, prompt_templates, tasks
 
 
@@ -146,12 +146,25 @@ class AuthBoundaryTests(unittest.TestCase):
                 "user_name": "attacker",
                 "requested_provider": "jimeng",
                 "classification": "B",
-                "payload": {"prompt": "生成一张建筑效果图"},
+                "payload": {
+                    "prompt": "生成一张建筑效果图",
+                    "image_count": 2,
+                    "reference_image": "/media/reference/cover.png",
+                    "source_image": "/media/reference/cover.png",
+                },
             },
         )
 
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.json()["user_name"], "reviewer")
+        self.assertTrue(response.json()["result"]["reference_image_supplied"])
+        self.assertEqual(response.json()["result"]["requested_image_count"], 2)
+
+        with self.SessionLocal() as db:
+            created_task = db.query(Task).filter(Task.title == "测试图像生成任务").one()
+
+        self.assertEqual(created_task.payload["reference_image"], "/media/reference/cover.png")
+        self.assertEqual(created_task.payload["source_image"], "/media/reference/cover.png")
 
         forbidden = self.client.post(
             "/tasks",

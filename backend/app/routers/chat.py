@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
@@ -20,13 +21,13 @@ from app.schemas import (
     ConversationOut,
 )
 from app.services.chat_service import (
-    build_chat_messages,
     format_chat_error_message,
     get_chat_models,
     provider_profile_has_usable_api_key,
     snapshot_chat_provider_config,
     stream_chat_completion,
 )
+from app.services.usage_ledger import record_chat_usage_ledger
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -89,7 +90,7 @@ def list_conversations(
     conversations = db.scalars(
         select(Conversation)
         .where(Conversation.user_id == auth_user.user_id)
-        .order_by(Conversation.updated_at.desc())
+        .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
     ).all()
     return [
         ConversationOut(
@@ -152,21 +153,23 @@ async def send_message(
             status_code=503,
             detail="该模型的 API Key 当前不可用，请检查 QMDH_ENCRYPTION_KEY 或在模型管理页重新录入密钥。",
         )
+    provider_name = provider.provider_name
+    provider_model_name = provider.model_name
     provider_config = snapshot_chat_provider_config(provider)
 
+    content = payload.content.strip()
     user_message = ChatMessage(
         conversation_id=conversation_id,
         role="user",
-        content=payload.content.strip(),
+        content=content,
     )
     db.add(user_message)
 
     if conversation.title == "新对话":
-        conversation.title = payload.content.strip()[:50]
-
+        conversation.title = content[:50]
+    conversation.updated_at = datetime.now(timezone.utc)
     db.commit()
 
-    _ = build_chat_messages(db, conversation_id, "")
     all_messages = db.scalars(
         select(ChatMessage)
         .where(ChatMessage.conversation_id == conversation_id)
@@ -177,16 +180,28 @@ async def send_message(
 
     full_content_parts: list[str] = []
     last_error_payload: dict[str, object] | None = None
+    last_usage_payload = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
     async def generate():
-        nonlocal last_error_payload
+        nonlocal last_error_payload, last_usage_payload
 
         async for chunk in stream_chat_completion(provider_config, api_messages):
             if chunk.startswith("data: ") and "[DONE]" not in chunk:
                 try:
                     data = json.loads(chunk[6:])
                     if "delta" in data:
-                        full_content_parts.append(data["delta"])
+                        full_content_parts.append(str(data["delta"]))
+                    if "usage" in data and isinstance(data["usage"], dict):
+                        prompt_tokens = int(data["usage"].get("prompt_tokens") or 0)
+                        completion_tokens = int(data["usage"].get("completion_tokens") or 0)
+                        total_tokens = int(data["usage"].get("total_tokens") or 0)
+                        if total_tokens == 0:
+                            total_tokens = prompt_tokens + completion_tokens
+                        last_usage_payload = {
+                            "prompt_tokens": max(prompt_tokens, 0),
+                            "completion_tokens": max(completion_tokens, 0),
+                            "total_tokens": max(total_tokens, 0),
+                        }
                     if "error" in data:
                         raw_error = data["error"]
                         if isinstance(raw_error, dict):
@@ -197,7 +212,7 @@ async def send_message(
                                 "detail": str(raw_error),
                                 "code": "chat_stream_error",
                             }
-                except (json.JSONDecodeError, KeyError, TypeError):
+                except (json.JSONDecodeError, TypeError, ValueError):
                     pass
             yield chunk
 
@@ -207,16 +222,50 @@ async def send_message(
                 conversation_id=conversation_id,
                 role="assistant",
                 content=full_content,
+                token_count=last_usage_payload["total_tokens"],
             )
             db.add(assistant_message)
+            conversation.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(assistant_message)
+            record_chat_usage_ledger(
+                db,
+                message=assistant_message,
+                conversation=conversation,
+                provider=provider,
+                user_id=auth_user.user_id,
+                user_name=auth_user.name,
+                provider_name=provider_name,
+                model_name=provider_model_name,
+                prompt_tokens=last_usage_payload["prompt_tokens"],
+                completion_tokens=last_usage_payload["completion_tokens"],
+                total_tokens=last_usage_payload["total_tokens"],
+            )
             db.commit()
         elif last_error_payload:
             assistant_message = ChatMessage(
                 conversation_id=conversation_id,
                 role="assistant",
                 content=format_chat_error_message(last_error_payload),
+                token_count=last_usage_payload["total_tokens"],
             )
             db.add(assistant_message)
+            conversation.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(assistant_message)
+            record_chat_usage_ledger(
+                db,
+                message=assistant_message,
+                conversation=conversation,
+                provider=provider,
+                user_id=auth_user.user_id,
+                user_name=auth_user.name,
+                provider_name=provider_name,
+                model_name=provider_model_name,
+                prompt_tokens=last_usage_payload["prompt_tokens"],
+                completion_tokens=last_usage_payload["completion_tokens"],
+                total_tokens=last_usage_payload["total_tokens"],
+            )
             db.commit()
 
     return StreamingResponse(

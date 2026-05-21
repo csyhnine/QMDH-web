@@ -131,6 +131,38 @@ class DatabaseAuthTests(unittest.TestCase):
             db.flush()
             ensure_usage_ledger_for_task(db, completed_task, ledger_source="test.seed")
             ensure_usage_ledger_for_task(db, failed_task, ledger_source="test.seed")
+            db.add(
+                UsageLedger(
+                    entry_type="chat.message.completed",
+                    source_table="chat_messages",
+                    source_id=1,
+                    project_code="__chat__",
+                    project_name="Chat",
+                    workflow_key="chat.completions",
+                    workflow_name="Chat Conversation",
+                    user_id=designer.id,
+                    user_name=designer.name,
+                    requested_provider="ms_zhipuai_glm-5",
+                    provider_name="ms_zhipuai_glm-5",
+                    model_name="ZhipuAI/GLM-5",
+                    capability="chat.completions",
+                    classification=DataClassification.b,
+                    task_status=None,
+                    cost=0.0,
+                    cost_currency="CNY",
+                    billable_units=0.0,
+                    billing_unit="chat_tokens",
+                    output_count=1,
+                    prompt_tokens=120,
+                    completion_tokens=80,
+                    total_tokens=200,
+                    latency_ms=0,
+                    error_code="",
+                    error_summary="",
+                    ledger_source="test.seed",
+                    recorded_at=datetime.now(timezone.utc),
+                )
+            )
             db.commit()
 
         self.app = FastAPI()
@@ -208,8 +240,17 @@ class DatabaseAuthTests(unittest.TestCase):
         self.assertEqual(stats["total_cost"], 1.25)
         self.assertEqual(stats["cost_unit"], "CNY")
         self.assertEqual(stats["cost_by_currency"], [{"currency": "CNY", "total_cost": 1.25}])
+        self.assertEqual(stats["today_image_generate_count"], 2)
+        self.assertEqual(stats["week_image_generate_count"], 2)
+        self.assertEqual(stats["today_video_generate_count"], 0)
+        self.assertEqual(stats["week_video_generate_count"], 0)
+        self.assertEqual(stats["window_chat_turn_count"], 1)
+        self.assertEqual(stats["window_chat_prompt_tokens"], 120)
+        self.assertEqual(stats["window_chat_completion_tokens"], 80)
+        self.assertEqual(stats["window_chat_total_tokens"], 200)
         self.assertEqual(len(stats["daily_series"]), 30)
         self.assertEqual(sum(day["total_tasks"] for day in stats["daily_series"]), stats["total_tasks"])
+        self.assertEqual(sum(day["chat_total_tokens"] for day in stats["daily_series"]), 200)
         self.assertEqual(len(stats["model_calls_by_day"]), 30)
         week_view = self.client.get("/dashboard/stats?days=7", headers={"Authorization": f"Bearer {ops_token}"})
         self.assertEqual(week_view.status_code, 200)
@@ -220,6 +261,11 @@ class DatabaseAuthTests(unittest.TestCase):
         designer_usage = next(row for row in stats["account_usage"] if row["name"] == "designer")
         self.assertEqual(designer_usage["total_tasks"], 2)
         self.assertEqual(designer_usage["quota_status"], "unlimited")
+        designer_execution = next(row for row in stats["execution_rankings"] if row["user_name"] == "designer")
+        self.assertEqual(designer_execution["image_generate_count"], 2)
+        self.assertEqual(designer_execution["video_generate_count"], 0)
+        self.assertEqual(designer_execution["chat_turn_count"], 1)
+        self.assertEqual(designer_execution["chat_total_tokens"], 200)
 
         created = self.client.post(
             "/users",

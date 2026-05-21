@@ -20,6 +20,10 @@ from app.models import ChatMessage, ProviderProfile
 
 logger = logging.getLogger(__name__)
 _HTML_ERROR_PATTERN = re.compile(r"<!doctype html|<html\b", re.IGNORECASE)
+_USAGE_REJECTION_PATTERN = re.compile(
+    r"include_usage|stream_options|unknown parameter|extra inputs",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -100,6 +104,75 @@ def build_chat_messages(db: Session, conversation_id: int, new_content: str) -> 
     return result
 
 
+def _body_rejects_usage_stream(body_text: str) -> bool:
+    return bool(_USAGE_REJECTION_PATTERN.search(body_text or ""))
+
+
+def _extract_usage_payload(raw_usage: object) -> dict[str, int] | None:
+    if not isinstance(raw_usage, dict):
+        return None
+
+    prompt_tokens = int(raw_usage.get("prompt_tokens") or 0)
+    completion_tokens = int(raw_usage.get("completion_tokens") or 0)
+    total_tokens = int(raw_usage.get("total_tokens") or 0)
+    if total_tokens == 0:
+        total_tokens = prompt_tokens + completion_tokens
+
+    if prompt_tokens == 0 and completion_tokens == 0 and total_tokens == 0:
+        return None
+
+    return {
+        "prompt_tokens": max(prompt_tokens, 0),
+        "completion_tokens": max(completion_tokens, 0),
+        "total_tokens": max(total_tokens, 0),
+    }
+
+
+def _upstream_error_event(
+    *,
+    response: httpx.Response,
+    raw_body: bytes,
+    model_name: str,
+) -> str:
+    body_text = _sanitize_error_text(raw_body.decode("utf-8", errors="ignore"), limit=380)
+    upstream_is_html = bool(_HTML_ERROR_PATTERN.search(body_text))
+
+    summary = f"对话失败：上游模型服务返回 HTTP {response.status_code}。"
+    detail = body_text or f"Upstream returned HTTP {response.status_code}."
+    code = f"chat_upstream_http_{response.status_code}"
+
+    try:
+        error_data = json.loads(raw_body)
+        if isinstance(error_data, dict):
+            if isinstance(error_data.get("error"), dict):
+                detail = _sanitize_error_text(error_data["error"].get("message", detail), limit=380)
+            elif error_data.get("detail"):
+                detail = _sanitize_error_text(error_data.get("detail"), limit=380)
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    if response.status_code in {401, 403}:
+        summary = "对话失败：当前 Chat 模型拒绝了 API Key 或权限。"
+    elif response.status_code == 404:
+        summary = "对话失败：当前 Chat 接口地址或模型名称不存在。"
+        if upstream_is_html:
+            detail = "上游返回了 HTML 错误页，通常意味着 base_url 或接口路径配置错误。"
+    elif response.status_code == 429:
+        summary = "对话失败：上游 Chat 服务触发了限流。"
+    elif response.status_code >= 500:
+        summary = "对话失败：上游 Chat 服务当前异常。"
+
+    logger.warning(
+        "chat completion upstream error",
+        extra={
+            "status_code": response.status_code,
+            "model_name": model_name,
+            "error_code": code,
+        },
+    )
+    return f"data: {json.dumps({'error': chat_error_payload(code=code, summary=summary, detail=detail, status_code=response.status_code)})}\n\n"
+
+
 async def stream_chat_completion(
     provider: ChatProviderConfig,
     messages: list[dict],
@@ -108,11 +181,6 @@ async def stream_chat_completion(
     api_key = decrypt_value_or_raise(provider.api_key)
 
     url = f"{provider.base_url.rstrip('/')}/chat/completions"
-    payload = {
-        "model": provider.model_name,
-        "messages": messages,
-        "stream": True,
-    }
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -120,59 +188,52 @@ async def stream_chat_completion(
 
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream("POST", url, json=payload, headers=headers) as response:
-                if response.status_code != 200:
-                    raw_body = await response.aread()
-                    body_text = _sanitize_error_text(raw_body.decode("utf-8", errors="ignore"), limit=380)
-                    upstream_is_html = bool(_HTML_ERROR_PATTERN.search(body_text))
+            for include_usage in (True, False):
+                payload = {
+                    "model": provider.model_name,
+                    "messages": messages,
+                    "stream": True,
+                }
+                if include_usage:
+                    payload["stream_options"] = {"include_usage": True}
 
-                    summary = f"对话失败：上游模型服务返回 HTTP {response.status_code}。"
-                    detail = body_text or f"Upstream returned HTTP {response.status_code}."
-                    code = f"chat_upstream_http_{response.status_code}"
+                async with client.stream("POST", url, json=payload, headers=headers) as response:
+                    if response.status_code != 200:
+                        raw_body = await response.aread()
+                        body_text = _sanitize_error_text(raw_body.decode("utf-8", errors="ignore"), limit=380)
+                        if include_usage and response.status_code == 400 and _body_rejects_usage_stream(body_text):
+                            logger.info(
+                                "chat completion retrying without stream usage",
+                                extra={"model_name": provider.model_name, "status_code": response.status_code},
+                            )
+                            continue
 
-                    try:
-                        error_data = json.loads(raw_body)
-                        if isinstance(error_data, dict) and isinstance(error_data.get("error"), dict):
-                            detail = _sanitize_error_text(error_data["error"].get("message", detail), limit=380)
-                    except (json.JSONDecodeError, TypeError):
-                        pass
+                        yield _upstream_error_event(response=response, raw_body=raw_body, model_name=provider.model_name)
+                        return
 
-                    if response.status_code in {401, 403}:
-                        summary = "对话失败：当前 Chat 模型拒绝了 API Key 或权限。"
-                    elif response.status_code == 404:
-                        summary = "对话失败：当前 Chat 接口地址或模型名称不存在。"
-                        if upstream_is_html:
-                            detail = "上游返回了 HTML 错误页，通常意味着 base_url 或接口路径配置错误。"
-                    elif response.status_code == 429:
-                        summary = "对话失败：上游 Chat 服务触发了限流。"
-                    elif response.status_code >= 500:
-                        summary = "对话失败：上游 Chat 服务当前异常。"
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:]
+                        if data.strip() == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
 
-                    logger.warning(
-                        "chat completion upstream error",
-                        extra={
-                            "status_code": response.status_code,
-                            "model_name": provider.model_name,
-                            "error_code": code,
-                        },
-                    )
-                    yield f"data: {json.dumps({'error': chat_error_payload(code=code, summary=summary, detail=detail, status_code=response.status_code)})}\n\n"
-                    return
+                        usage = _extract_usage_payload(chunk.get("usage"))
+                        if usage:
+                            yield f"data: {json.dumps({'usage': usage})}\n\n"
 
-                async for line in response.aiter_lines():
-                    if not line.startswith("data: "):
-                        continue
-                    data = line[6:]
-                    if data.strip() == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(data)
-                        delta = chunk.get("choices", [{}])[0].get("delta", {})
-                        content = delta.get("content", "")
+                        try:
+                            delta = chunk.get("choices", [{}])[0].get("delta", {})
+                            content = delta.get("content", "")
+                        except (IndexError, KeyError, TypeError):
+                            content = ""
                         if content:
                             yield f"data: {json.dumps({'delta': content})}\n\n"
-                    except (json.JSONDecodeError, IndexError, KeyError, TypeError):
-                        continue
+                    break
 
     except httpx.TimeoutException:
         yield f"data: {json.dumps({'error': chat_error_payload(code='chat_upstream_timeout', summary='对话失败：上游 Chat 服务响应超时。', detail='The upstream chat completion request timed out.')})}\n\n"

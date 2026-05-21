@@ -120,7 +120,14 @@ def create_task(
         requested_provider=payload.requested_provider,
         classification=payload.classification,
         payload=payload.payload,
-        result={"summary": "Task accepted and waiting for execution."},
+        result={
+            "summary": "Task accepted and waiting for execution.",
+            "reference_image_supplied": bool(
+                payload.payload.get("reference_image") or payload.payload.get("source_image")
+            ),
+            "requested_image_count": int(payload.payload.get("image_count") or 1),
+            "queued_stage": "accepted",
+        },
     )
     db.add(task)
     db.flush()

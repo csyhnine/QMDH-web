@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ChangeEvent, type DragEvent, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type InspirationPost } from "../../api";
 
@@ -16,6 +16,15 @@ const TAG_BATCH_MODES = [
   { key: "replace", label: "替换标签" },
   { key: "remove", label: "移除标签" },
 ] as const;
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("读取图片失败"));
+    reader.readAsDataURL(file);
+  });
+}
 
 export type InspirationPageProps = {
   posts: InspirationPost[];
@@ -42,12 +51,14 @@ export default function InspirationPage({ posts, onPostsChange, canManage, mode 
   const [bulkTagsText, setBulkTagsText] = useState("");
   const [bulkTagMode, setBulkTagMode] = useState<(typeof TAG_BATCH_MODES)[number]["key"]>("append");
   const [isBatchTagging, setIsBatchTagging] = useState(false);
+  const importUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const editUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [importDialog, setImportDialog] = useState<{
     open: boolean; url: string; loading: boolean; images: string[];
     selectedImage: string; title: string; category: string; tags: string;
-    error: string; manualMode: boolean;
+    error: string; manualMode: boolean; uploadingFile?: boolean;
   }>({ open: false, url: "", loading: false, images: [], selectedImage: "", title: "", category: "建筑", tags: "", error: "", manualMode: false });
-  const [editDialog, setEditDialog] = useState<{ postId: number; title: string; image_path: string; source_url: string } | null>(null);
+  const [editDialog, setEditDialog] = useState<{ postId: number; title: string; image_path: string; source_url: string; uploadingFile?: boolean; uploadError?: string } | null>(null);
   const importedCount = posts.filter((post) => post.source_type === "external").length;
   const sharedCount = posts.filter((post) => post.source_type === "user").length;
   const seedCount = posts.filter((post) => post.source_type !== "external" && post.source_type !== "user").length;
@@ -83,6 +94,93 @@ export default function InspirationPage({ posts, onPostsChange, canManage, mode 
           .filter(Boolean)
       )
     );
+  }
+
+  async function uploadImageFile(file: File): Promise<string> {
+    if (!file.type.startsWith("image/")) {
+      throw new Error("请选择图片文件");
+    }
+    const dataUrl = await readFileAsDataUrl(file);
+    const uploaded = await api.uploadReferenceImage({
+      file_name: file.name,
+      data_url: dataUrl,
+    });
+    return uploaded.storage_path;
+  }
+
+  async function handleImportFileUpload(file: File) {
+    setImportDialog((current) => ({ ...current, error: "", uploadingFile: true }));
+    try {
+      const storagePath = await uploadImageFile(file);
+      setImportDialog((current) => ({
+        ...current,
+        selectedImage: storagePath,
+        manualMode: true,
+        error: "",
+        uploadingFile: false,
+      }));
+    } catch (err) {
+      setImportDialog((current) => ({
+        ...current,
+        error: err instanceof Error ? err.message : "上传图片失败",
+        uploadingFile: false,
+      }));
+    }
+  }
+
+  async function handleEditFileUpload(file: File) {
+    setEditDialog((current) => (current ? { ...current, uploadError: "", uploadingFile: true } : current));
+    try {
+      const storagePath = await uploadImageFile(file);
+      setEditDialog((current) =>
+        current
+          ? {
+              ...current,
+              image_path: storagePath,
+              uploadError: "",
+              uploadingFile: false,
+            }
+          : current
+      );
+    } catch (err) {
+      setEditDialog((current) =>
+        current
+          ? {
+              ...current,
+              uploadError: err instanceof Error ? err.message : "上传图片失败",
+              uploadingFile: false,
+            }
+          : current
+      );
+    }
+  }
+
+  function handleImportFileInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    void handleImportFileUpload(file);
+  }
+
+  function handleEditFileInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    void handleEditFileUpload(file);
+  }
+
+  function handleImportDrop(event: DragEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (!file) return;
+    void handleImportFileUpload(file);
+  }
+
+  function handleEditDrop(event: DragEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (!file) return;
+    void handleEditFileUpload(file);
   }
 
   async function loadPosts(cat: string) {
@@ -227,7 +325,7 @@ export default function InspirationPage({ posts, onPostsChange, canManage, mode 
           {canManage ? (
             <button type="button" className="admin-primary-button" onClick={() => {
               setActionError("");
-              setImportDialog({ open: true, url: "", loading: false, images: [], selectedImage: "", title: "", category: category !== "全部" ? category : "建筑", tags: "", error: "", manualMode: false });
+              setImportDialog({ open: true, url: "", loading: false, images: [], selectedImage: "", title: "", category: category !== "全部" ? category : "建筑", tags: "", error: "", manualMode: false, uploadingFile: false });
             }}>+ 导入参考</button>
           ) : null}
         </div>
@@ -411,7 +509,7 @@ export default function InspirationPage({ posts, onPostsChange, canManage, mode 
                   >
                     ♡ {post.like_count}
                   </button>
-                  {canManage ? <button type="button" className="ghost-button" title="编辑" onClick={() => setEditDialog({ postId: post.id, title: post.title, image_path: post.image_path, source_url: post.source_url })}>✎</button> : null}
+                  {canManage ? <button type="button" className="ghost-button" title="编辑" onClick={() => setEditDialog({ postId: post.id, title: post.title, image_path: post.image_path, source_url: post.source_url, uploadingFile: false, uploadError: "" })}>✎</button> : null}
                   {mode === "admin" ? (
                     <button
                       type="button"
@@ -452,6 +550,7 @@ export default function InspirationPage({ posts, onPostsChange, canManage, mode 
         <div className="media-lightbox" onClick={() => setImportDialog({ ...importDialog, open: false })}>
           <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: "12px", padding: "24px", maxWidth: "680px", width: "90vw", maxHeight: "85vh", overflow: "auto", color: "#333" }}>
             <h2 style={{ margin: "0 0 16px", fontSize: "18px" }}>导入灵感参考</h2>
+            <input ref={importUploadInputRef} type="file" accept="image/*" hidden onChange={handleImportFileInputChange} />
             <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
               <input type="text" placeholder="粘贴文章链接" value={importDialog.url} onChange={(e) => setImportDialog({ ...importDialog, url: e.target.value, error: "" })} style={{ flex: 1, padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px" }} />
               <button type="button" className="admin-primary-button" disabled={importDialog.loading || !importDialog.url.trim()} onClick={async () => {
@@ -465,6 +564,38 @@ export default function InspirationPage({ posts, onPostsChange, canManage, mode 
               }}>{importDialog.loading ? "提取中..." : "提取图片"}</button>
             </div>
             {importDialog.error ? <p style={{ color: "#e53e3e", fontSize: "13px", margin: "0 0 12px" }}>{importDialog.error}</p> : null}
+            <div className="inspiration-upload-panel" style={{ marginBottom: "16px" }}>
+              <button
+                type="button"
+                className={`inspiration-upload-dropzone${importDialog.selectedImage ? " has-image" : ""}`}
+                onClick={() => importUploadInputRef.current?.click()}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={handleImportDrop}
+              >
+                {importDialog.selectedImage ? (
+                  <>
+                    <img src={importDialog.selectedImage} alt="" className="inspiration-upload-preview" />
+                    <span className="inspiration-upload-overlay">点击或拖拽替换本地封面图</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="inspiration-upload-title">拖拽图片到这里，或点击上传本地封面图</span>
+                    <span className="inspiration-upload-hint">上传后会自动保存到服务器媒体目录，不需要再去宝塔面板手动传图</span>
+                  </>
+                )}
+              </button>
+              <div className="inspiration-upload-actions">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={Boolean(importDialog.uploadingFile)}
+                  onClick={() => importUploadInputRef.current?.click()}
+                >
+                  {importDialog.uploadingFile ? "上传中..." : "上传本地图片"}
+                </button>
+                <span className="inspiration-upload-hint">也可以继续使用下方图片 URL，兼容外部图片链接</span>
+              </div>
+            </div>
             {importDialog.images.length > 0 ? (
               <div style={{ marginBottom: "16px" }}>
                 <p style={{ fontSize: "13px", color: "#666", margin: "0 0 8px" }}>选择封面图片（共 {importDialog.images.length} 张）：</p>
@@ -511,8 +642,42 @@ export default function InspirationPage({ posts, onPostsChange, canManage, mode 
         <div className="media-lightbox" onClick={() => setEditDialog(null)}>
           <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: "12px", padding: "24px", maxWidth: "480px", width: "90vw", color: "#333" }}>
             <h2 style={{ margin: "0 0 16px", fontSize: "18px" }}>编辑灵感</h2>
+            <input ref={editUploadInputRef} type="file" accept="image/*" hidden onChange={handleEditFileInputChange} />
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               <div><label style={{ fontSize: "13px", color: "#666" }}>标题</label><input type="text" value={editDialog.title} onChange={(e) => setEditDialog({ ...editDialog, title: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} /></div>
+              <div className="inspiration-upload-panel">
+                <button
+                  type="button"
+                  className={`inspiration-upload-dropzone${editDialog.image_path ? " has-image" : ""}`}
+                  onClick={() => editUploadInputRef.current?.click()}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={handleEditDrop}
+                >
+                  {editDialog.image_path ? (
+                    <>
+                      <img src={editDialog.image_path} alt="" className="inspiration-upload-preview" />
+                      <span className="inspiration-upload-overlay">点击或拖拽替换封面图</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="inspiration-upload-title">上传或拖拽管理封面图</span>
+                      <span className="inspiration-upload-hint">上传成功后会自动回填图片地址</span>
+                    </>
+                  )}
+                </button>
+                <div className="inspiration-upload-actions">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={Boolean(editDialog.uploadingFile)}
+                    onClick={() => editUploadInputRef.current?.click()}
+                  >
+                    {editDialog.uploadingFile ? "上传中..." : "选择本地图片"}
+                  </button>
+                  <span className="inspiration-upload-hint">如果需要，也可以继续手动维护下面的图片 URL</span>
+                </div>
+                {editDialog.uploadError ? <p className="inspiration-upload-error">{editDialog.uploadError}</p> : null}
+              </div>
               <div><label style={{ fontSize: "13px", color: "#666" }}>图片 URL</label><input type="text" value={editDialog.image_path} onChange={(e) => setEditDialog({ ...editDialog, image_path: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} /></div>
               <div><label style={{ fontSize: "13px", color: "#666" }}>原文链接</label><input type="text" value={editDialog.source_url} onChange={(e) => setEditDialog({ ...editDialog, source_url: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} /></div>
             </div>

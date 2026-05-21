@@ -5,7 +5,17 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import ProviderCall, ProviderCallArchive, Task, TaskArchive, UsageLedger
+from app.models import (
+    ChatMessage,
+    Conversation,
+    DataClassification,
+    ProviderCall,
+    ProviderCallArchive,
+    ProviderProfile,
+    Task,
+    TaskArchive,
+    UsageLedger,
+)
 
 
 def _now() -> datetime:
@@ -104,6 +114,9 @@ def ensure_usage_ledger_for_task(
     task_entry.billable_units = billable_units
     task_entry.billing_unit = billing_unit
     task_entry.output_count = output_count
+    task_entry.prompt_tokens = 0
+    task_entry.completion_tokens = 0
+    task_entry.total_tokens = 0
     task_entry.latency_ms = latency_ms
     task_entry.error_code = error_code
     task_entry.error_summary = error_summary
@@ -163,6 +176,9 @@ def ensure_usage_ledger_for_task(
         provider_entry.billable_units = 1.0
         provider_entry.billing_unit = "provider_call"
         provider_entry.output_count = 0
+        provider_entry.prompt_tokens = 0
+        provider_entry.completion_tokens = 0
+        provider_entry.total_tokens = 0
         provider_entry.latency_ms = int(call.latency_ms or 0)
         provider_entry.error_code = str((failure or {}).get("error_code") or "").strip()
         provider_entry.error_summary = str((failure or {}).get("error_summary") or "").strip()
@@ -170,3 +186,73 @@ def ensure_usage_ledger_for_task(
         provider_entry.recorded_at = recorded_at or call.created_at or provider_entry.recorded_at or _now()
 
     return task_entry
+
+
+def record_chat_usage_ledger(
+    db: Session,
+    *,
+    message: ChatMessage,
+    conversation: Conversation,
+    provider: ProviderProfile,
+    user_id: int | None = None,
+    user_name: str | None = None,
+    provider_name: str | None = None,
+    model_name: str | None = None,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    total_tokens: int = 0,
+    recorded_at: datetime | None = None,
+) -> UsageLedger:
+    ledger = db.scalar(
+        select(UsageLedger).where(
+            UsageLedger.source_table == "chat_messages",
+            UsageLedger.source_id == message.id,
+        )
+    )
+    if not ledger:
+        ledger = UsageLedger(
+            entry_type="chat.message.completed",
+            source_table="chat_messages",
+            source_id=message.id,
+            ledger_source="chat.message.completed",
+            recorded_at=recorded_at or message.created_at or _now(),
+        )
+        db.add(ledger)
+
+    resolved_user_id = user_id if user_id is not None else conversation.__dict__.get("user_id")
+    resolved_user_name = user_name or ""
+    resolved_provider_name = provider_name or provider.__dict__.get("provider_name") or ""
+    resolved_model_name = model_name or provider.__dict__.get("model_name") or ""
+
+    ledger.task_id = None
+    ledger.task_archive_id = None
+    ledger.provider_call_id = None
+    ledger.provider_call_archive_id = None
+    ledger.project_id = None
+    ledger.project_code = "__chat__"
+    ledger.project_name = "Chat"
+    ledger.workflow_key = "chat.completions"
+    ledger.workflow_name = "Chat Conversation"
+    ledger.user_id = resolved_user_id
+    ledger.user_name = resolved_user_name
+    ledger.requested_provider = resolved_provider_name
+    ledger.provider_name = resolved_provider_name
+    ledger.model_name = resolved_model_name
+    ledger.capability = "chat.completions"
+    ledger.classification = DataClassification.b
+    ledger.task_status = None
+    ledger.cost = 0.0
+    ledger.cost_currency = "CNY"
+    ledger.billable_units = 0.0
+    ledger.billing_unit = "chat_tokens"
+    ledger.output_count = 1
+    ledger.prompt_tokens = max(int(prompt_tokens or 0), 0)
+    ledger.completion_tokens = max(int(completion_tokens or 0), 0)
+    ledger.total_tokens = max(int(total_tokens or 0), 0)
+    ledger.latency_ms = 0
+    ledger.error_code = ""
+    ledger.error_summary = ""
+    ledger.source_deleted_at = None
+    ledger.recorded_at = recorded_at or message.created_at or ledger.recorded_at or _now()
+
+    return ledger

@@ -4,14 +4,14 @@ from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.encryption import encrypt_value
 from app.core.security import hash_password
 from app.database import Base, get_db
-from app.models import ProviderProfile, User
+from app.models import ChatMessage, Conversation, ProviderProfile, UsageLedger, User
 from app.routers import auth, chat
 
 
@@ -97,6 +97,7 @@ class ChatStreamingTests(unittest.TestCase):
             seen["provider_type"] = type(provider).__name__
             seen["model_name"] = provider.model_name
             seen["messages"] = messages
+            yield f"data: {json.dumps({'usage': {'prompt_tokens': 11, 'completion_tokens': 7, 'total_tokens': 18}})}\n\n"
             yield f"data: {json.dumps({'delta': '你好'})}\n\n"
             yield "data: [DONE]\n\n"
 
@@ -121,6 +122,115 @@ class ChatStreamingTests(unittest.TestCase):
         payload = messages_response.json()
         self.assertEqual(payload[-1]["role"], "assistant")
         self.assertEqual(payload[-1]["content"], "你好")
+
+        with self.SessionLocal() as db:
+            assistant_message = db.scalar(
+                select(ChatMessage)
+                .join(Conversation, Conversation.id == ChatMessage.conversation_id)
+                .where(Conversation.id == conversation_id, ChatMessage.role == "assistant")
+            )
+            self.assertIsNotNone(assistant_message)
+            assert assistant_message is not None
+            self.assertEqual(assistant_message.token_count, 18)
+
+            usage_ledger = db.scalar(
+                select(UsageLedger).where(
+                    UsageLedger.source_table == "chat_messages",
+                    UsageLedger.source_id == assistant_message.id,
+                )
+            )
+            self.assertIsNotNone(usage_ledger)
+            assert usage_ledger is not None
+            self.assertEqual(usage_ledger.prompt_tokens, 11)
+            self.assertEqual(usage_ledger.completion_tokens, 7)
+            self.assertEqual(usage_ledger.total_tokens, 18)
+
+    def test_chat_message_route_writes_zero_token_ledger_when_stream_has_no_usage(self) -> None:
+        token = self.login()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        create_response = self.client.post(
+            "/chat/conversations",
+            headers=headers,
+            json={"model_provider_id": 1, "title": ""},
+        )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        conversation_id = create_response.json()["id"]
+
+        async def fake_stream(provider, messages):
+            del provider, messages
+            yield f"data: {json.dumps({'delta': '没有 usage 也要成功'})}\n\n"
+            yield "data: [DONE]\n\n"
+
+        with patch("app.routers.chat.stream_chat_completion", fake_stream):
+            response = self.client.post(
+                f"/chat/conversations/{conversation_id}/messages",
+                headers={**headers, "Content-Type": "application/json"},
+                json={"content": "继续"},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+
+        with self.SessionLocal() as db:
+            assistant_message = db.scalar(
+                select(ChatMessage)
+                .join(Conversation, Conversation.id == ChatMessage.conversation_id)
+                .where(Conversation.id == conversation_id, ChatMessage.role == "assistant")
+            )
+            self.assertIsNotNone(assistant_message)
+            assert assistant_message is not None
+            self.assertEqual(assistant_message.token_count, 0)
+
+            usage_ledger = db.scalar(
+                select(UsageLedger).where(
+                    UsageLedger.source_table == "chat_messages",
+                    UsageLedger.source_id == assistant_message.id,
+                )
+            )
+            self.assertIsNotNone(usage_ledger)
+            assert usage_ledger is not None
+            self.assertEqual(usage_ledger.prompt_tokens, 0)
+            self.assertEqual(usage_ledger.completion_tokens, 0)
+            self.assertEqual(usage_ledger.total_tokens, 0)
+
+    def test_conversation_list_reorders_by_latest_message_activity(self) -> None:
+        token = self.login()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        first = self.client.post(
+            "/chat/conversations",
+            headers=headers,
+            json={"model_provider_id": 1, "title": "第一个"},
+        )
+        second = self.client.post(
+            "/chat/conversations",
+            headers=headers,
+            json={"model_provider_id": 1, "title": "第二个"},
+        )
+        self.assertEqual(first.status_code, 201, first.text)
+        self.assertEqual(second.status_code, 201, second.text)
+        first_id = first.json()["id"]
+        second_id = second.json()["id"]
+
+        async def fake_stream(provider, messages):
+            del provider, messages
+            yield f"data: {json.dumps({'delta': '把旧会话顶到最前面'})}\n\n"
+            yield "data: [DONE]\n\n"
+
+        with patch("app.routers.chat.stream_chat_completion", fake_stream):
+            response = self.client.post(
+                f"/chat/conversations/{first_id}/messages",
+                headers={**headers, "Content-Type": "application/json"},
+                json={"content": "刷新排序"},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+
+        conversations_response = self.client.get("/chat/conversations", headers=headers)
+        self.assertEqual(conversations_response.status_code, 200, conversations_response.text)
+        ordered_ids = [item["id"] for item in conversations_response.json()]
+        self.assertEqual(ordered_ids[0], first_id)
+        self.assertIn(second_id, ordered_ids[1:])
 
 
     def test_chat_message_route_persists_structured_error_message(self) -> None:

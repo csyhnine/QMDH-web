@@ -94,6 +94,11 @@ export type DashboardDailyPoint = {
   successful_tasks: number;
   failed_tasks: number;
   total_cost: number;
+  image_generate_count: number;
+  image_edit_count: number;
+  video_generate_count: number;
+  chat_turn_count: number;
+  chat_total_tokens: number;
 };
 
 export type DashboardModelCallSlice = {
@@ -104,6 +109,18 @@ export type DashboardModelCallSlice = {
 export type DashboardDayModelCalls = {
   date: string;
   slices: DashboardModelCallSlice[];
+};
+
+export type DashboardExecutionRanking = {
+  user_name: string;
+  image_generate_count: number;
+  image_edit_count: number;
+  video_generate_count: number;
+  chat_turn_count: number;
+  chat_prompt_tokens: number;
+  chat_completion_tokens: number;
+  chat_total_tokens: number;
+  last_activity_at: string | null;
 };
 
 export type DashboardStats = {
@@ -129,6 +146,15 @@ export type DashboardStats = {
   account_usage: Array<Record<string, unknown>>;
   daily_series: DashboardDailyPoint[];
   model_calls_by_day: DashboardDayModelCalls[];
+  today_image_generate_count: number;
+  week_image_generate_count: number;
+  today_video_generate_count: number;
+  week_video_generate_count: number;
+  window_chat_turn_count: number;
+  window_chat_prompt_tokens: number;
+  window_chat_completion_tokens: number;
+  window_chat_total_tokens: number;
+  execution_rankings: DashboardExecutionRanking[];
 };
 
 export type ProviderProfileRecord = {

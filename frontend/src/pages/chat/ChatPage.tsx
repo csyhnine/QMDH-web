@@ -32,6 +32,37 @@ type ChatStreamError = {
   status_code?: number;
 };
 
+function formatConversationTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatStreamError(error: string | ChatStreamError) {
+  if (typeof error === "string") {
+    return `提示：${error}`;
+  }
+
+  const summary = (error.summary || "对话失败，请稍后重试。").trim();
+  const detail = (error.detail || "").trim();
+  const code = (error.code || "").trim();
+  const lines = [summary];
+  if (detail && detail !== summary) {
+    lines.push(`排查线索：${detail}`);
+  }
+  if (code) {
+    lines.push(`错误码：${code}`);
+  }
+  return lines.join("\n");
+}
+
 export default function ChatPage() {
   const { currentUser } = useAuth();
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
@@ -44,6 +75,7 @@ export default function ChatPage() {
     return saved ? parseInt(saved, 10) : null;
   });
   const [streaming, setStreaming] = useState(false);
+  const [chatError, setChatError] = useState("");
 
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const messagesBottomRef = useRef<HTMLDivElement | null>(null);
@@ -74,40 +106,47 @@ export default function ChatPage() {
     element.style.height = `${Math.min(element.scrollHeight, 160)}px`;
   }
 
-  function formatConversationTime(value: string) {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return "";
+  async function refreshConversations(preferredConversationId?: number | null) {
+    const nextConversations = await api.getChatConversations();
+    setConversations(nextConversations);
+
+    const pinnedConversationId = preferredConversationId ?? activeChatId;
+    if (pinnedConversationId == null) {
+      return nextConversations;
     }
-    return new Intl.DateTimeFormat("zh-CN", {
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date);
+    if (!nextConversations.some((conversation) => conversation.id === pinnedConversationId)) {
+      setActiveChatId(null);
+      setMessages([]);
+    }
+    return nextConversations;
   }
 
-  function formatStreamError(error: string | ChatStreamError) {
-    if (typeof error === "string") {
-      return `提示：${error}`;
+  async function loadConversation(conversationId: number) {
+    setChatError("");
+    setActiveChatId(conversationId);
+    pendingInitialScrollRef.current = true;
+    previousMessageCountRef.current = 0;
+    try {
+      const nextMessages = await api.getChatMessages(conversationId);
+      setMessages(nextMessages);
+    } catch (error) {
+      setMessages([]);
+      setChatError(error instanceof Error ? error.message : "加载会话消息失败");
     }
-
-    const summary = (error.summary || "对话失败，请稍后重试。").trim();
-    const detail = (error.detail || "").trim();
-    const code = (error.code || "").trim();
-    const lines = [summary];
-    if (detail && detail !== summary) {
-      lines.push(`排查线索：${detail}`);
-    }
-    if (code) {
-      lines.push(`错误码：${code}`);
-    }
-    return lines.join("\n");
   }
 
   useEffect(() => {
-    api.getChatModels().then(setChatModels).catch(() => {});
-    api.getChatConversations().then(setConversations).catch(() => {});
+    async function bootstrap() {
+      try {
+        const [models] = await Promise.all([api.getChatModels(), refreshConversations(null)]);
+        setChatModels(models);
+        setChatError("");
+      } catch (error) {
+        setChatError(error instanceof Error ? error.message : "加载 Chat 页面失败");
+      }
+    }
+
+    void bootstrap();
   }, []);
 
   useEffect(() => {
@@ -141,62 +180,184 @@ export default function ChatPage() {
     previousMessageCountRef.current = messageCount;
   }, [activeChatId, lastMessageContent, messages.length]);
 
+  async function handleCreateConversation() {
+    if (!selectedModel) {
+      setChatError("请先选择模型。");
+      return;
+    }
+
+    try {
+      const conversation = await api.createChatConversation(selectedModel);
+      await refreshConversations(conversation.id);
+      await loadConversation(conversation.id);
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : "创建新对话失败");
+    }
+  }
+
+  async function handleDeleteConversation(conversationId: number) {
+    try {
+      await api.deleteChatConversation(conversationId);
+      if (activeChatId === conversationId) {
+        setActiveChatId(null);
+        setMessages([]);
+      }
+      await refreshConversations(activeChatId === conversationId ? null : activeChatId);
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : "删除会话失败");
+    }
+  }
+
+  async function handleSendMessage() {
+    if (!chatInput.trim() || !activeChatId) {
+      return;
+    }
+
+    const content = chatInput.trim();
+    setChatInput("");
+    setChatError("");
+    setMessages((prev) => [...prev, { role: "user", content }, { role: "assistant", content: "" }]);
+    setStreaming(true);
+    shouldAutoScrollRef.current = true;
+
+    try {
+      const token = getStoredAuthToken();
+      const response = await fetch(`/api/v1/chat/conversations/${activeChatId}/messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content }),
+      });
+
+      if (!response.ok) {
+        let detail = "请求失败";
+        try {
+          const payload = await response.json();
+          detail = payload?.detail || detail;
+        } catch {
+          // Ignore JSON parse failures.
+        }
+        throw new Error(detail);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("聊天响应流不可用");
+      }
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) {
+            continue;
+          }
+          const data = line.slice(6);
+          if (data === "[DONE]") {
+            break;
+          }
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.delta) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                if (last && last.role === "assistant") {
+                  updated[updated.length - 1] = {
+                    ...last,
+                    content: `${last.content}${parsed.delta}`,
+                  };
+                }
+                return updated;
+              });
+            }
+            if (parsed.error) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  role: "assistant",
+                  content: formatStreamError(parsed.error as string | ChatStreamError),
+                };
+                return updated;
+              });
+            }
+          } catch {
+            // Ignore malformed chunks.
+          }
+        }
+      }
+
+      await refreshConversations(activeChatId);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "未知错误";
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[updated.length - 1] = {
+          role: "assistant",
+          content: `提示：请求失败，${message}`,
+        };
+        return updated;
+      });
+      setChatError(message);
+    } finally {
+      setStreaming(false);
+    }
+  }
+
   return (
     <section className="chat-page">
       <aside className="chat-sidebar">
-        <button
-          type="button"
-          className="chat-new-btn"
-          onClick={async () => {
-            if (!selectedModel) {
-              alert("请先选择模型");
-              return;
-            }
-            const conversation = await api.createChatConversation(selectedModel);
-            setConversations((prev) => [conversation, ...prev]);
-            setActiveChatId(conversation.id);
-            setMessages([]);
-          }}
-        >
-          <span>+</span>
-          新对话
-        </button>
+        <div className="chat-sidebar-head">
+          <button type="button" className="chat-new-btn" onClick={() => void handleCreateConversation()}>
+            <span>+</span>
+            新对话
+          </button>
+          {chatError ? <p className="chat-sidebar-error">{chatError}</p> : null}
+        </div>
 
         <div className="chat-conv-list">
-          {conversations.map((conversation) => (
-            <div
-              key={conversation.id}
-              className={`chat-conv-item ${activeChatId === conversation.id ? "active" : ""}`}
-              onClick={() => {
-                setActiveChatId(conversation.id);
-                api.getChatMessages(conversation.id).then(setMessages).catch(() => {});
-              }}
-            >
-              <div className="chat-conv-copy">
-                <span className="chat-conv-title">{conversation.title}</span>
-                <small className="chat-conv-time">
-                  {formatConversationTime(conversation.updated_at || conversation.created_at)}
-                </small>
-              </div>
-              <button
-                type="button"
-                className="chat-conv-del"
-                aria-label="删除会话"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  api.deleteChatConversation(conversation.id).then(() => {
-                    setConversations((prev) => prev.filter((item) => item.id !== conversation.id));
-                    if (activeChatId === conversation.id) {
-                      setActiveChatId(null);
-                      setMessages([]);
-                    }
-                  });
-                }}
+          {conversations.length > 0 ? (
+            conversations.map((conversation) => (
+              <div
+                key={conversation.id}
+                className={`chat-conv-item ${activeChatId === conversation.id ? "active" : ""}`}
+                onClick={() => void loadConversation(conversation.id)}
               >
-                ×
-              </button>
+                <div className="chat-conv-copy">
+                  <span className="chat-conv-title">{conversation.title}</span>
+                  <small className="chat-conv-time">
+                    {formatConversationTime(conversation.updated_at || conversation.created_at)}
+                  </small>
+                </div>
+                <button
+                  type="button"
+                  className="chat-conv-del"
+                  aria-label="删除会话"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleDeleteConversation(conversation.id);
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))
+          ) : (
+            <div className="chat-conv-empty">
+              <strong>还没有对话</strong>
+              <span>选择模型后，新建一个会话开始聊天。</span>
             </div>
-          ))}
+          )}
         </div>
       </aside>
 
@@ -233,7 +394,7 @@ export default function ChatPage() {
           <>
             <div className="chat-messages" ref={messagesRef} onScroll={updateAutoScrollState}>
               {messages.map((message, index) => (
-                <div key={message.id || index} className={`chat-msg ${message.role}`}>
+                <div key={message.id || `${message.role}-${index}`} className={`chat-msg ${message.role}`}>
                   {message.role === "assistant" ? <div className="chat-msg-avatar">AI</div> : null}
                   <div className="chat-msg-bubble">
                     <div className="chat-msg-content">
@@ -260,117 +421,18 @@ export default function ChatPage() {
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
-                      document.getElementById("chat-send-btn")?.click();
+                      void handleSendMessage();
                     }
                   }}
-                  placeholder="和我聊聊天吧"
+                  placeholder="和我聊聊吧"
                   rows={1}
                   disabled={streaming}
                 />
                 <button
-                  id="chat-send-btn"
                   type="button"
                   className="chat-send-btn"
                   disabled={streaming || !chatInput.trim()}
-                  onClick={async () => {
-                    if (!chatInput.trim() || !activeChatId) {
-                      return;
-                    }
-
-                    const content = chatInput.trim();
-                    setChatInput("");
-                    setMessages((prev) => [...prev, { role: "user", content }]);
-                    setStreaming(true);
-                    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
-                    try {
-                      const token = getStoredAuthToken();
-                      const response = await fetch(`/api/v1/chat/conversations/${activeChatId}/messages`, {
-                        method: "POST",
-                        headers: {
-                          Authorization: `Bearer ${token}`,
-                          "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({ content }),
-                      });
-
-                      if (!response.ok) {
-                        let detail = "请求失败";
-                        try {
-                          const payload = await response.json();
-                          detail = payload?.detail || detail;
-                        } catch {
-                          // ignore JSON parse failures
-                        }
-                        throw new Error(detail);
-                      }
-
-                      const reader = response.body!.getReader();
-                      const decoder = new TextDecoder();
-                      let buffer = "";
-
-                      while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) {
-                          break;
-                        }
-                        buffer += decoder.decode(value, { stream: true });
-                        const lines = buffer.split("\n");
-                        buffer = lines.pop() || "";
-
-                        for (const line of lines) {
-                          if (!line.startsWith("data: ")) {
-                            continue;
-                          }
-                          const data = line.slice(6);
-                          if (data === "[DONE]") {
-                            break;
-                          }
-                          try {
-                            const parsed = JSON.parse(data);
-                            if (parsed.delta) {
-                              setMessages((prev) => {
-                                const updated = [...prev];
-                                const last = updated[updated.length - 1];
-                                if (last && last.role === "assistant") {
-                                  updated[updated.length - 1] = {
-                                    ...last,
-                                    content: last.content + parsed.delta,
-                                  };
-                                }
-                                return updated;
-                              });
-                            }
-                            if (parsed.error) {
-                              setMessages((prev) => {
-                                const updated = [...prev];
-                                updated[updated.length - 1] = {
-                                  role: "assistant",
-                                  content: formatStreamError(parsed.error as string | ChatStreamError),
-                                };
-                                return updated;
-                              });
-                            }
-                          } catch {
-                            // ignore malformed stream chunks
-                          }
-                        }
-                      }
-                    } catch (error: unknown) {
-                      const message = error instanceof Error ? error.message : "未知错误";
-                      setMessages((prev) => {
-                        const updated = [...prev];
-                        updated[updated.length - 1] = {
-                          role: "assistant",
-                          content: `提示：请求失败，${message}`,
-                        };
-                        return updated;
-                      });
-                    }
-
-                    setStreaming(false);
-                    api.getChatConversations().then(setConversations).catch(() => {});
-                  }}
+                  onClick={() => void handleSendMessage()}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M22 2L11 13" />

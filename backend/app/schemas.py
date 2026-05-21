@@ -71,13 +71,16 @@ class AssetOut(BaseModel):
 
 
 class DashboardDailyPoint(BaseModel):
-    """UTC calendar day bucket for dashboard charts."""
-
     date: str
     total_tasks: int = 0
     successful_tasks: int = 0
     failed_tasks: int = 0
     total_cost: float = 0.0
+    image_generate_count: int = 0
+    image_edit_count: int = 0
+    video_generate_count: int = 0
+    chat_turn_count: int = 0
+    chat_total_tokens: int = 0
 
 
 class DashboardModelCallSlice(BaseModel):
@@ -88,6 +91,18 @@ class DashboardModelCallSlice(BaseModel):
 class DashboardDayModelCalls(BaseModel):
     date: str
     slices: list[DashboardModelCallSlice] = Field(default_factory=list)
+
+
+class DashboardExecutionRanking(BaseModel):
+    user_name: str
+    image_generate_count: int = 0
+    image_edit_count: int = 0
+    video_generate_count: int = 0
+    chat_turn_count: int = 0
+    chat_prompt_tokens: int = 0
+    chat_completion_tokens: int = 0
+    chat_total_tokens: int = 0
+    last_activity_at: datetime | None = None
 
 
 class DashboardStats(BaseModel):
@@ -113,6 +128,15 @@ class DashboardStats(BaseModel):
     account_usage: list[dict[str, Any]] = Field(default_factory=list)
     daily_series: list[DashboardDailyPoint] = Field(default_factory=list)
     model_calls_by_day: list[DashboardDayModelCalls] = Field(default_factory=list)
+    today_image_generate_count: int = 0
+    week_image_generate_count: int = 0
+    today_video_generate_count: int = 0
+    week_video_generate_count: int = 0
+    window_chat_turn_count: int = 0
+    window_chat_prompt_tokens: int = 0
+    window_chat_completion_tokens: int = 0
+    window_chat_total_tokens: int = 0
+    execution_rankings: list[DashboardExecutionRanking] = Field(default_factory=list)
 
 
 class AuthLoginIn(BaseModel):

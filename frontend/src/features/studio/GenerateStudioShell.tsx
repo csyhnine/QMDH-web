@@ -76,6 +76,21 @@ type CustomPromptTemplate = PromptTemplateRecord;
 
 type ComposerMenuKey = "template" | "provider" | "display" | "count" | null;
 type ActiveView = "studio" | "projects" | "models" | "users" | "dashboard" | "settings";
+type SubmissionStage = "uploading_reference" | "submitting" | "pending" | "running" | "completed" | "failed";
+
+type SubmissionTracker = {
+  taskId: number | null;
+  taskTitle: string;
+  providerName: string;
+  imageCount: number;
+  hasReferenceImage: boolean;
+  stage: SubmissionStage;
+};
+
+type TemplateFeedback = {
+  type: "success" | "error";
+  message: string;
+};
 
 type ProviderProfileDraft = {
   providerName: string;
@@ -527,6 +542,10 @@ function taskFailureCode(task: Task): string {
   if (task.status !== "failed") return "";
   const code = task.result["error_code"];
   return code ? String(code) : "";
+}
+
+function taskHasReferenceImage(task: Task): boolean {
+  return Boolean(task.result["reference_image_supplied"]);
 }
 
 function buildImagePayload(form: StudioFormState, workflowKey: string): Record<string, unknown> {
@@ -1064,9 +1083,11 @@ function FeedCard(props: {
   const failureHint = taskFailureHint(props.task);
   const failureCode = taskFailureCode(props.task);
   const showFailureDetails = props.task.status === "failed" && Boolean(failureDetail || failureHint || failureCode);
+  const showRunningState = props.task.status === "pending" || props.task.status === "running";
+  const hasReferenceImage = taskHasReferenceImage(props.task);
 
   return (
-    <article className="feed-card" ref={props.anchorRef}>
+    <article className={showRunningState ? "feed-card feed-card-running" : "feed-card"} ref={props.anchorRef}>
       <div className="feed-card-head">
         <div className="feed-card-avatar">{props.task.requested_provider.slice(0, 1).toUpperCase()}</div>
         <div className="feed-card-copy">
@@ -1097,6 +1118,7 @@ function FeedCard(props: {
             <span>{props.task.project_code}</span>
             <span>{props.task.requested_provider}</span>
             <span>{formatDuration(props.task.latency_ms)}</span>
+            {hasReferenceImage ? <span>已附带参考图</span> : null}
             {props.asset ? <span>已入图库</span> : null}
           </div>
         </div>
@@ -1123,8 +1145,8 @@ function FeedCard(props: {
         </div>
       ) : (
         <div className="feed-gallery-empty">
-          <h3>任务还没有返回预览</h3>
-          <p>任务执行完成后，这里会显示本轮生成结果和可复用资产。</p>
+          <h3>{showRunningState ? "任务正在执行中" : "任务还没有返回预览"}</h3>
+          <p>{showRunningState ? "系统正在排队或执行，本轮结果返回后会自动显示在这里。" : "任务执行完成后，这里会显示本轮生成结果和可复用资产。"}</p>
         </div>
       )}
 
@@ -1170,9 +1192,12 @@ export default function GenerateStudioShell() {
   const [referenceFileName, setReferenceFileName] = useState("");
   const [uploadingReference, setUploadingReference] = useState(false);
   const [customTemplates, setCustomTemplates] = useState<CustomPromptTemplate[]>([]);
+  const [templateFeedback, setTemplateFeedback] = useState<TemplateFeedback | null>(null);
   const [templateDraftLabel, setTemplateDraftLabel] = useState("");
   const [templateDraftTitle, setTemplateDraftTitle] = useState("");
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
+  const [templateEditSnapshot, setTemplateEditSnapshot] = useState<StudioFormState | null>(null);
+  const [submissionTracker, setSubmissionTracker] = useState<SubmissionTracker | null>(null);
   const [providerDraft, setProviderDraft] = useState<ProviderProfileDraft>(defaultProviderProfileDraft);
   const [editingProviderProfileId, setEditingProviderProfileId] = useState<number | null>(null);
   const [savingProviderProfile, setSavingProviderProfile] = useState(false);
@@ -1223,6 +1248,7 @@ export default function GenerateStudioShell() {
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
     const statsDays = options.dashboardDays ?? dashboardStatsDays;
+    let templateLoadError = "";
 
     try {
       const shouldLoadAdminData = activeView !== "studio";
@@ -1237,7 +1263,10 @@ export default function GenerateStudioShell() {
         api.workflows(),
         api.tasks(),
         api.assets(),
-        api.promptTemplates().catch(() => null),
+        api.promptTemplates().catch((error) => {
+          templateLoadError = error instanceof Error ? error.message : "加载提示词失败";
+          return [];
+        }),
         shouldLoadUsers ? api.users().catch(() => []) : Promise.resolve([]),
         shouldLoadAdminData && shouldLoadDashboard ? api.dashboardStats(statsDays).catch(() => null) : Promise.resolve(null)
       ]);
@@ -1255,12 +1284,10 @@ export default function GenerateStudioShell() {
         users,
         projectMembers: state.projectMembers,
         dashboard,
-        error: "",
+        error: templateLoadError,
         ready: true
       });
-      if (templates) {
-        setCustomTemplates(sortTemplatesByUpdatedAt(templates));
-      }
+      setCustomTemplates(sortTemplatesByUpdatedAt(templates));
       setLastSyncedAt(new Date().toISOString());
     } catch (error) {
       if (requestId !== loadRequestIdRef.current) return;
@@ -1305,12 +1332,14 @@ export default function GenerateStudioShell() {
 
   useEffect(() => {
     if (!currentUser) return;
+    const hasRunningTask = state.tasks.some((task) => task.status === "pending" || task.status === "running");
+    const intervalMs = hasRunningTask ? 2500 : 8000;
     const timer = window.setInterval(() => {
       void loadData();
-    }, 8000);
+    }, intervalMs);
 
     return () => window.clearInterval(timer);
-  }, [currentUser?.name, activeView]);
+  }, [currentUser?.name, activeView, state.tasks]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -1406,6 +1435,28 @@ export default function GenerateStudioShell() {
     [...featuredAtmosphereTemplates, ...customTemplates].find(
       (template) => template.title === studioForm.title && template.prompt === studioForm.prompt
     ) ?? null;
+  const trackedSubmissionTask =
+    submissionTracker?.taskId !== null
+      ? state.tasks.find((task) => task.id === submissionTracker?.taskId) ?? null
+      : null;
+  const submissionProgress = submissionTracker
+    ? {
+        ...submissionTracker,
+        stage: uploadingReference
+          ? "uploading_reference"
+          : submitting
+            ? "submitting"
+            : trackedSubmissionTask?.status === "failed"
+              ? "failed"
+              : trackedSubmissionTask?.status === "completed"
+                ? "completed"
+                : trackedSubmissionTask?.status === "running"
+                  ? "running"
+                  : trackedSubmissionTask?.status === "pending"
+                    ? "pending"
+                    : submissionTracker.stage,
+      }
+    : null;
 
   useEffect(() => {
     if (availableProviders.length === 0) return;
@@ -1566,6 +1617,9 @@ export default function GenerateStudioShell() {
     clearReferenceUpload();
     setActiveComposerMenu(null);
     setEditingTemplateId(null);
+    setTemplateEditSnapshot(null);
+    setTemplateFeedback(null);
+    setSubmissionTracker(null);
     setTemplateDraftLabel("");
     setTemplateDraftTitle("");
     setStudioForm((current) => ({
@@ -1621,6 +1675,14 @@ export default function GenerateStudioShell() {
     setReferencePreviewUrl(nextPreviewUrl);
     setReferenceFileName(file.name);
     setUploadingReference(true);
+    setSubmissionTracker({
+      taskId: null,
+      taskTitle: studioForm.title.trim() || defaultStudioForm.title,
+      providerName: selectedProvider?.model_name ?? studioForm.requestedProvider,
+      imageCount: clampImageCount(studioForm.imageCount),
+      hasReferenceImage: true,
+      stage: "uploading_reference",
+    });
 
     try {
       const dataUrl = await fileToDataUrl(file);
@@ -1648,6 +1710,7 @@ export default function GenerateStudioShell() {
       }));
     } finally {
       setUploadingReference(false);
+      setSubmissionTracker((current) => (current?.taskId === null ? null : current));
       resetReferenceFileInput();
     }
   }
@@ -1673,14 +1736,17 @@ export default function GenerateStudioShell() {
 
   function handleApplyTemplate(template: PromptTemplateFormValue | CustomPromptTemplate) {
     const nextTemplate = "aspect_ratio" in template || "updated_at" in template ? toTemplateFormValue(template) : template;
+    setTemplateFeedback(null);
     setStudioForm((current) => applyTemplateToForm(nextTemplate, current));
     setActiveComposerMenu(null);
   }
 
   function handleEditCustomTemplate(template: CustomPromptTemplate) {
+    setTemplateEditSnapshot(studioForm);
     setEditingTemplateId(template.id);
     setTemplateDraftLabel(template.label);
     setTemplateDraftTitle(template.title);
+    setTemplateFeedback(null);
     setStudioForm((current) => applyTemplateToForm(toTemplateFormValue(template), current));
     setActiveComposerMenu("template");
   }
@@ -1691,14 +1757,20 @@ export default function GenerateStudioShell() {
       setCustomTemplates((current) => current.filter((template) => template.id !== templateId));
       if (editingTemplateId === templateId) {
         setEditingTemplateId(null);
+        setTemplateEditSnapshot(null);
         setTemplateDraftLabel("");
         setTemplateDraftTitle("");
       }
+      setTemplateFeedback({ type: "success", message: "提示词已删除。" });
       setState((current) => ({
         ...current,
         error: ""
       }));
     } catch (error) {
+      setTemplateFeedback({
+        type: "error",
+        message: error instanceof Error ? error.message : "删除提示词失败",
+      });
       setState((current) => ({
         ...current,
         error: error instanceof Error ? error.message : "删除提示词失败"
@@ -1712,6 +1784,7 @@ export default function GenerateStudioShell() {
     const prompt = studioForm.prompt.trim();
 
     if (!label) {
+      setTemplateFeedback({ type: "error", message: "请先填写自定义提示词名称。" });
       setState((current) => ({
         ...current,
         error: "请先填写自定义提示词名称"
@@ -1720,6 +1793,7 @@ export default function GenerateStudioShell() {
     }
 
     if (!prompt) {
+      setTemplateFeedback({ type: "error", message: "请先填写提示词内容后再保存。" });
       setState((current) => ({
         ...current,
         error: "请先填写提示词内容后再保存"
@@ -1742,6 +1816,8 @@ export default function GenerateStudioShell() {
 
         setCustomTemplates((current) => sortTemplatesByUpdatedAt([createdTemplate, ...current]));
         setEditingTemplateId(createdTemplate.id);
+        setTemplateEditSnapshot(null);
+        setTemplateFeedback({ type: "success", message: "提示词已保存到“我的提示词”。" });
       } else {
         const updatedTemplate = await api.updatePromptTemplate(editingTemplateId, {
           label,
@@ -1758,6 +1834,8 @@ export default function GenerateStudioShell() {
           sortTemplatesByUpdatedAt([updatedTemplate, ...current.filter((template) => template.id !== updatedTemplate.id)])
         );
         setEditingTemplateId(updatedTemplate.id);
+        setTemplateEditSnapshot(null);
+        setTemplateFeedback({ type: "success", message: "提示词已更新。" });
       }
 
       setState((current) => ({
@@ -1766,6 +1844,10 @@ export default function GenerateStudioShell() {
       }));
       return;
     } catch (error) {
+      setTemplateFeedback({
+        type: "error",
+        message: error instanceof Error ? error.message : "保存提示词失败",
+      });
       setState((current) => ({
         ...current,
         error: error instanceof Error ? error.message : "保存提示词失败"
@@ -1983,6 +2065,7 @@ export default function GenerateStudioShell() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setActiveComposerMenu(null);
+    setTemplateFeedback(null);
 
     if (uploadingReference) {
       setState((current) => ({
@@ -1993,9 +2076,17 @@ export default function GenerateStudioShell() {
     }
 
     setSubmitting(true);
+    setSubmissionTracker({
+      taskId: null,
+      taskTitle: studioForm.title.trim() || defaultStudioForm.title,
+      providerName: selectedProvider?.model_name ?? studioForm.requestedProvider,
+      imageCount: clampImageCount(studioForm.imageCount),
+      hasReferenceImage: Boolean(studioForm.referenceImage),
+      stage: "submitting",
+    });
 
     try {
-      await api.createTask({
+      const createdTask = await api.createTask({
         title: studioForm.title.trim() || defaultStudioForm.title,
         workflow_key: selectedWorkflowKey,
         project_code: studioForm.projectCode,
@@ -2003,9 +2094,25 @@ export default function GenerateStudioShell() {
         classification: studioForm.classification,
         payload: buildImagePayload(studioForm, selectedWorkflowKey)
       });
+      setSubmissionTracker({
+        taskId: createdTask.id,
+        taskTitle: createdTask.title,
+        providerName: selectedProvider?.model_name ?? createdTask.requested_provider,
+        imageCount: clampImageCount(Number(createdTask.result["requested_image_count"] ?? studioForm.imageCount)),
+        hasReferenceImage: Boolean(createdTask.result["reference_image_supplied"] ?? studioForm.referenceImage),
+        stage: createdTask.status === "running" ? "running" : "pending",
+      });
       hasAutoPositionedRef.current = false;
       await loadData({ force: true });
     } catch (error) {
+      setSubmissionTracker((current) =>
+        current
+          ? {
+              ...current,
+              stage: "failed",
+            }
+          : current
+      );
       setState((current) => ({
         ...current,
         error: error instanceof Error ? error.message : "提交任务失败"
@@ -3549,8 +3656,13 @@ export default function GenerateStudioShell() {
             onAspectRatioSelect={(ratio) => setStudioForm((current) => ({ ...current, aspectRatio: ratio }))}
             onCancelTemplateEdit={() => {
               setEditingTemplateId(null);
+              if (templateEditSnapshot) {
+                setStudioForm(templateEditSnapshot);
+              }
+              setTemplateEditSnapshot(null);
               setTemplateDraftLabel("");
               setTemplateDraftTitle("");
+              setTemplateFeedback(null);
             }}
             onDeleteCustomTemplate={handleDeleteCustomTemplate}
             onEditCustomTemplate={handleEditCustomTemplate}
@@ -3582,6 +3694,8 @@ export default function GenerateStudioShell() {
             serviceHealthy={state.health === "healthy"}
             studioForm={studioForm}
             submitting={submitting}
+            submissionProgress={submissionProgress}
+            templateFeedback={templateFeedback}
             templateDraftLabel={templateDraftLabel}
             templateDraftTitle={templateDraftTitle}
             uploadingReference={uploadingReference}

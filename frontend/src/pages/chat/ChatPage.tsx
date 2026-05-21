@@ -144,14 +144,11 @@ export default function ChatPage() {
   useEffect(() => {
     async function bootstrap() {
       try {
-        const [models, nextConversations] = await Promise.all([api.getChatModels(), refreshConversations(activeChatId)]);
+        const [models, nextConversations] = await Promise.all([api.getChatModels(), refreshConversations(null)]);
         setChatModels(models);
         setChatError("");
 
-        const initialConversationId =
-          activeChatId && nextConversations.some((conversation) => conversation.id === activeChatId)
-            ? activeChatId
-            : nextConversations[0]?.id ?? null;
+        const initialConversationId = nextConversations[0]?.id ?? null;
 
         if (initialConversationId !== null) {
           await loadConversation(initialConversationId);

@@ -15,6 +15,10 @@ This document defines how QMDH-web should manage:
 
 The goal is to let the project continue evolving locally while the server keeps the latest code **and** preserves the latest business state.
 
+One operational corollary is important:
+
+- a deployment is not complete until both the PostgreSQL schema and the Alembic revision metadata match the repo's expected migration head
+
 ## Core Rule
 
 QMDH-web must always separate these three concerns:
@@ -219,6 +223,7 @@ A correct deployment should:
 - bring the newest code to the server
 - keep the existing production data
 - run migrations for schema changes
+- verify that `alembic current` matches repo `head` after migration
 - preserve secrets and encryption keys
 - avoid recreating or wiping the live database
 
@@ -232,14 +237,16 @@ When the product continues development, the expected flow is:
 4. back up server `.env`, PostgreSQL, and media
 5. pull latest code on the server
 6. run `alembic upgrade head`
-7. rebuild / restart containers
-8. verify health and smoke-test key workflows
+7. run `alembic current` and confirm it matches repo `head`
+8. rebuild / restart containers
+9. verify health and smoke-test key workflows
 
 This means:
 
 - **latest code** comes from GitHub
 - **latest data** stays on the server
 - migrations bridge old server data to new code expectations
+- an "already upgraded" table does not guarantee the migration chain is complete; Alembic metadata must also be aligned
 
 ## Data Loss Red Flags
 

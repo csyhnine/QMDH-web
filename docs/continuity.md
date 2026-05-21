@@ -99,6 +99,9 @@ cd frontend; npm run build
 - `backend_media` volume: generated images, managed inspiration images, other uploaded media
 - `redis_data` volume: queue/runtime persistence only
 - `.env` on the server contains `QMDH_ENCRYPTION_KEY`; this key must stay paired with the database backups
+- production upgrade completion must be judged by both:
+  - schema changes actually existing in PostgreSQL
+  - `docker compose run --rm backend alembic current` matching repo `head`
 
 Never do these casually on the live server:
 
@@ -121,7 +124,12 @@ Never do these casually on the live server:
   3. backup `backend_media`
   4. `git pull`
   5. `docker compose run --rm backend alembic upgrade head`
-  6. `docker compose up -d --build`
+  6. `docker compose run --rm backend alembic current`
+  7. `docker compose up -d --build`
+- 如果出现“表已存在但升级失败”或 worker 报 `UndefinedColumn`：
+  - 不要删卷，不要 `docker compose down -v`
+  - 先检查 `alembic current` 是否落后于 repo `head`
+  - 再按 `docs/server-operations.md` 的 `Migration Desync Recovery` 执行手工补列 + `alembic stamp`
 - 默认灵感库真图恢复推荐流程：
   1. 本地构建 `seed-inspiration-bundle.zip`
   2. 上传到服务器 `/www/wwwroot/qmdh-web/seed-inspiration-bundle.zip`

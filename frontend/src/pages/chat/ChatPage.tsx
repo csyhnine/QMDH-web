@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { api, getStoredAuthToken } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 
+const ACTIVE_CHAT_STORAGE_KEY = "qmdh.active.chat";
+
 type ChatConversation = {
   id: number;
   title: string;
@@ -66,7 +68,10 @@ function formatStreamError(error: string | ChatStreamError) {
 export default function ChatPage() {
   const { currentUser } = useAuth();
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
-  const [activeChatId, setActiveChatId] = useState<number | null>(null);
+  const [activeChatId, setActiveChatId] = useState<number | null>(() => {
+    const saved = localStorage.getItem(ACTIVE_CHAT_STORAGE_KEY);
+    return saved ? parseInt(saved, 10) : null;
+  });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatModels, setChatModels] = useState<ChatModel[]>([]);
@@ -117,6 +122,7 @@ export default function ChatPage() {
     if (!nextConversations.some((conversation) => conversation.id === pinnedConversationId)) {
       setActiveChatId(null);
       setMessages([]);
+      localStorage.removeItem(ACTIVE_CHAT_STORAGE_KEY);
     }
     return nextConversations;
   }
@@ -138,9 +144,21 @@ export default function ChatPage() {
   useEffect(() => {
     async function bootstrap() {
       try {
-        const [models] = await Promise.all([api.getChatModels(), refreshConversations(null)]);
+        const [models, nextConversations] = await Promise.all([api.getChatModels(), refreshConversations(activeChatId)]);
         setChatModels(models);
         setChatError("");
+
+        const initialConversationId =
+          activeChatId && nextConversations.some((conversation) => conversation.id === activeChatId)
+            ? activeChatId
+            : nextConversations[0]?.id ?? null;
+
+        if (initialConversationId !== null) {
+          await loadConversation(initialConversationId);
+        } else {
+          setActiveChatId(null);
+          setMessages([]);
+        }
       } catch (error) {
         setChatError(error instanceof Error ? error.message : "加载 Chat 页面失败");
       }
@@ -148,6 +166,14 @@ export default function ChatPage() {
 
     void bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (activeChatId == null) {
+      localStorage.removeItem(ACTIVE_CHAT_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(ACTIVE_CHAT_STORAGE_KEY, String(activeChatId));
+  }, [activeChatId]);
 
   useEffect(() => {
     shouldAutoScrollRef.current = true;
@@ -198,11 +224,18 @@ export default function ChatPage() {
   async function handleDeleteConversation(conversationId: number) {
     try {
       await api.deleteChatConversation(conversationId);
-      if (activeChatId === conversationId) {
-        setActiveChatId(null);
-        setMessages([]);
+      const deletingActiveConversation = activeChatId === conversationId;
+      const nextConversations = await refreshConversations(deletingActiveConversation ? null : activeChatId);
+
+      if (deletingActiveConversation) {
+        const fallbackConversationId = nextConversations[0]?.id ?? null;
+        if (fallbackConversationId !== null) {
+          await loadConversation(fallbackConversationId);
+        } else {
+          setActiveChatId(null);
+          setMessages([]);
+        }
       }
-      await refreshConversations(activeChatId === conversationId ? null : activeChatId);
     } catch (error) {
       setChatError(error instanceof Error ? error.message : "删除会话失败");
     }

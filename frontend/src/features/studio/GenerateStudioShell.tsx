@@ -548,6 +548,22 @@ function taskHasReferenceImage(task: Task): boolean {
   return Boolean(task.result["reference_image_supplied"]);
 }
 
+function inferVirtualTaskPercent(task: Task, nowMs: number): number {
+  if (task.status === "completed") return 100;
+  if (task.status === "failed") return 96;
+
+  const createdAtMs = new Date(task.created_at).getTime();
+  const elapsedSeconds = Math.max(0, (nowMs - createdAtMs) / 1000);
+
+  if (task.status === "pending") {
+    return Math.min(68, 12 + Math.floor(elapsedSeconds * 1.2));
+  }
+  if (task.status === "running") {
+    return Math.min(95, 70 + Math.floor(elapsedSeconds * 0.35));
+  }
+  return 0;
+}
+
 function buildImagePayload(form: StudioFormState, workflowKey: string): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     style: form.style,
@@ -1085,6 +1101,17 @@ function FeedCard(props: {
   const showFailureDetails = props.task.status === "failed" && Boolean(failureDetail || failureHint || failureCode);
   const showRunningState = props.task.status === "pending" || props.task.status === "running";
   const hasReferenceImage = taskHasReferenceImage(props.task);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const virtualProgress = showRunningState ? inferVirtualTaskPercent(props.task, nowTick) : 0;
+
+  useEffect(() => {
+    if (!showRunningState) {
+      return;
+    }
+
+    const timer = window.setInterval(() => setNowTick(Date.now()), 900);
+    return () => window.clearInterval(timer);
+  }, [showRunningState]);
 
   return (
     <article className={showRunningState ? "feed-card feed-card-running" : "feed-card"} ref={props.anchorRef}>
@@ -1146,7 +1173,20 @@ function FeedCard(props: {
       ) : (
         <div className="feed-gallery-empty">
           <h3>{showRunningState ? "任务正在执行中" : "任务还没有返回预览"}</h3>
-          <p>{showRunningState ? "系统正在排队或执行，本轮结果返回后会自动显示在这里。" : "任务执行完成后，这里会显示本轮生成结果和可复用资产。"}</p>
+          {showRunningState ? (
+            <div className="feed-task-progress">
+              <div className="feed-task-progress-head">
+                <strong>{virtualProgress}% 进度中</strong>
+                <span>{props.task.status === "running" ? "生成中" : "排队中"}</span>
+              </div>
+              <div className="feed-task-progress-track" aria-hidden="true">
+                <b style={{ width: `${virtualProgress}%` }} />
+              </div>
+              <p>系统正在排队或执行，本轮结果返回后会自动显示在这里。</p>
+            </div>
+          ) : (
+            <p>任务执行完成后，这里会显示本轮生成结果和可复用资产。</p>
+          )}
         </div>
       )}
 

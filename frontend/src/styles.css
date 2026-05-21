@@ -1237,6 +1237,55 @@ button {
   line-height: 1.7;
 }
 
+.feed-task-progress {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.feed-task-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.feed-task-progress-head strong {
+  font-size: 0.96rem;
+  color: #0f172a;
+}
+
+.feed-task-progress-head span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.feed-task-progress-track {
+  position: relative;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(191, 219, 254, 0.55);
+}
+
+.feed-task-progress-track b {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb 0%, #3b82f6 55%, #93c5fd 100%);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08);
+  transition: width 420ms ease;
+}
+
 .ghost-button,
 .composer-chip,
 .ratio-pill,
@@ -1349,6 +1398,38 @@ button {
   margin: 0;
 }
 
+.composer-progress-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.composer-progress-meta b {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 1.02rem;
+  color: #1d4ed8;
+}
+
+.composer-progress-track {
+  position: relative;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.composer-progress-track b {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb 0%, #3b82f6 42%, #60a5fa 100%);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08);
+  transition: width 420ms ease;
+}
+
 .composer-progress-steps {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1383,6 +1464,10 @@ button {
   background: linear-gradient(90deg, #16a34a 0%, #15803d 100%);
 }
 
+.composer-progress-completed .composer-progress-meta b {
+  color: #15803d;
+}
+
 .composer-progress-failed {
   border-color: rgba(194, 65, 12, 0.2);
   background: linear-gradient(180deg, rgba(255, 247, 237, 0.96), rgba(255, 237, 213, 0.78));
@@ -1390,6 +1475,10 @@ button {
 
 .composer-progress-failed .composer-progress-steps span.is-active {
   background: linear-gradient(90deg, #ea580c 0%, #c2410c 100%);
+}
+
+.composer-progress-failed .composer-progress-meta b {
+  color: #c2410c;
 }
 
 .composer-body {

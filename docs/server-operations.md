@@ -1,6 +1,6 @@
 # Server Operations Runbook
 
-Last updated: `2026-05-18`
+Last updated: `2026-05-21`
 
 ## Current Production-Like Server Snapshot
 
@@ -86,11 +86,15 @@ Always update in this order:
    - `git pull origin main`
 7. If this update includes Alembic migrations, run:
    - `docker compose run --rm backend alembic upgrade head`
-8. Rebuild and restart:
+8. Confirm Alembic state:
+   - `docker compose run --rm backend alembic current`
+   - expected result: current revision matches repo `head`
+9. Rebuild and restart:
    - `docker compose up -d --build`
-9. Validate:
+10. Validate:
    - `docker compose ps`
    - `docker compose logs --tail=100 backend`
+   - `docker compose logs --tail=100 worker`
    - `curl http://127.0.0.1:8080/api/v1/health`
    - manual smoke test for login / chat / generation / admin models
 
@@ -102,10 +106,79 @@ Always update in this order:
 - Has migration in this release:
   - `git pull origin main`
   - `docker compose run --rm backend alembic upgrade head`
+  - `docker compose run --rm backend alembic current`
   - `docker compose up -d --build`
 - Current repo status note:
   - the `usage_ledgers` rollout for `task-016` includes Alembic migration `e4f5a6b7c8d9_add_usage_ledgers.py`
+  - the chat token metering rollout includes Alembic migration `f6a7b8c9d0e1_add_chat_token_columns_to_usage_ledgers.py`
   - any environment upgrading to this version must run `alembic upgrade head` before restart
+
+## Migration Desync Recovery
+
+This project has already seen one real production-like incident on `2026-05-21`:
+
+- repo code was already at `9e2006a`
+- `usage_ledgers` table already existed
+- Alembic `current` was still `c3d4e5f6a7b8`
+- worker crashed with `column usage_ledgers.prompt_tokens does not exist`
+- generation tasks could stay in `pending` / `running` until the schema was repaired
+
+This means a release can be "partially upgraded":
+
+- code pulled successfully
+- containers restarted successfully
+- but database schema and Alembic revision are still behind repo expectations
+
+### How To Recognize This Failure Mode
+
+Look for one or more of these signals:
+
+- `docker compose run --rm backend alembic upgrade head` fails with `relation "..." already exists`
+- `docker compose run --rm backend alembic current` reports an older revision than repo `head`
+- worker logs contain `UndefinedColumn`, especially on newly added fields
+- frontend generation cards stay in `pending` / `running` longer than expected, then fail only after worker recovery
+
+### Standard Recovery Rule
+
+Do **not** wipe volumes. Do **not** run `docker compose down -v`.
+
+Instead:
+
+1. inspect current revision:
+   - `docker compose run --rm backend alembic current`
+2. inspect the actual table / columns in PostgreSQL
+3. if the table already exists but a later migration only adds missing columns, add the missing columns manually with `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...`
+4. if the schema now matches repo expectations, align Alembic metadata with:
+   - `docker compose run --rm backend alembic stamp <target_revision>`
+5. restart `backend` and `worker`
+6. verify health and re-check worker logs
+
+### Specific Recovery For `usage_ledgers` Token Columns
+
+If worker logs show `column usage_ledgers.prompt_tokens does not exist`, run:
+
+```bash
+cd /www/wwwroot/qmdh-web
+docker compose exec postgres psql -U qmdh -d qmdh -c "
+ALTER TABLE usage_ledgers
+  ADD COLUMN IF NOT EXISTS prompt_tokens INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS completion_tokens INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS total_tokens INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE usage_ledgers ALTER COLUMN prompt_tokens DROP DEFAULT;
+ALTER TABLE usage_ledgers ALTER COLUMN completion_tokens DROP DEFAULT;
+ALTER TABLE usage_ledgers ALTER COLUMN total_tokens DROP DEFAULT;
+"
+docker compose run --rm backend alembic stamp f6a7b8c9d0e1
+docker compose run --rm backend alembic current
+docker compose restart backend worker
+curl http://127.0.0.1:8080/api/v1/health
+```
+
+Expected result:
+
+- Alembic current becomes `f6a7b8c9d0e1`
+- worker no longer crashes on `usage_ledgers.prompt_tokens`
+- generation tasks fail or succeed according to the real upstream image provider state, instead of failing on local schema mismatch
 
 `curl http://127.0.0.1:8080/api/v1/health` is a local health probe used to confirm that the backend API is actually responding after restart.
 

@@ -1,4 +1,4 @@
-import { type ChangeEvent, type DragEvent, type FormEvent, type RefObject, useEffect, useState } from "react";
+import { type ChangeEvent, type DragEvent, type FormEvent, type RefObject } from "react";
 
 import { type PromptTemplateRecord, type Provider } from "../../api";
 
@@ -158,47 +158,6 @@ export default function StudioComposerDock({
     completed: 3,
     failed: 3,
   };
-  const [virtualPercent, setVirtualPercent] = useState(0);
-
-  useEffect(() => {
-    if (!submissionProgress) {
-      setVirtualPercent(0);
-      return;
-    }
-
-    if (submissionProgress.stage === "completed") {
-      setVirtualPercent(100);
-      return;
-    }
-
-    if (submissionProgress.stage === "failed") {
-      setVirtualPercent((current) => Math.max(current, 96));
-      return;
-    }
-
-    const rangeByStage: Record<Exclude<SubmissionStage, "completed" | "failed">, { floor: number; ceiling: number }> = {
-      uploading_reference: { floor: 8, ceiling: 22 },
-      submitting: { floor: 24, ceiling: 38 },
-      pending: { floor: 40, ceiling: 74 },
-      running: { floor: 68, ceiling: 94 },
-    };
-
-    const range = rangeByStage[submissionProgress.stage];
-    setVirtualPercent((current) => Math.max(current, range.floor));
-
-    const timer = window.setInterval(() => {
-      setVirtualPercent((current) => {
-        if (current >= range.ceiling) {
-          return current;
-        }
-        const step = submissionProgress.stage === "running" ? 2 : 1;
-        return Math.min(current + step, range.ceiling);
-      });
-    }, 700);
-
-    return () => window.clearInterval(timer);
-  }, [submissionProgress]);
-
   return (
     <form className="composer-dock" onSubmit={onSubmit}>
       <div className="composer-leading">
@@ -218,16 +177,10 @@ export default function StudioComposerDock({
         <section className={`composer-progress composer-progress-${submissionProgress.stage}`}>
           <div className="composer-progress-head">
             <strong>{stageLabels[submissionProgress.stage]}</strong>
-            <div className="composer-progress-meta">
-              <span>
-                {submissionProgress.providerName} · {submissionProgress.imageCount} 张
-                {submissionProgress.hasReferenceImage ? " · 已附带参考图" : ""}
-              </span>
-              <b>{virtualPercent}%</b>
-            </div>
-          </div>
-          <div className="composer-progress-track" aria-hidden="true">
-            <b style={{ width: `${virtualPercent}%` }} />
+            <span>
+              {submissionProgress.providerName} · {submissionProgress.imageCount} 张
+              {submissionProgress.hasReferenceImage ? " · 已附带参考图" : ""}
+            </span>
           </div>
           <div className="composer-progress-steps" aria-hidden="true">
             {["reference", "submitted", "running", "done"].map((label, index) => (

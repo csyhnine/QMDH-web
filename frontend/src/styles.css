@@ -4588,8 +4588,8 @@ textarea:focus-visible {
 /* ===== Chat Page (清言风格) ===== */
 .chat-page {
   display: flex;
-  height: 100%;
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
   width: 100%;
   background: #f7f8fa;
   overflow: hidden;
@@ -4597,7 +4597,9 @@ textarea:focus-visible {
 
 .chat-sidebar {
   width: 280px;
-  min-height: 100vh;
+  position: sticky;
+  top: 0;
+  height: 100vh;
   background: #fff;
   border-right: 1px solid #e8eaed;
   display: flex;
@@ -4634,7 +4636,7 @@ textarea:focus-visible {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px;
+  padding: 8px 8px 18px;
 }
 
 .chat-sidebar-error {
@@ -4723,10 +4725,12 @@ textarea:focus-visible {
 
 .chat-main {
   flex: 1;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
+  height: 100vh;
+  max-height: 100vh;
   overflow: hidden;
 }
 
@@ -4769,7 +4773,7 @@ textarea:focus-visible {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px clamp(20px, 4vw, 48px) 20px;
+  padding: 24px clamp(20px, 4vw, 48px) 28px;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -4976,6 +4980,9 @@ textarea:focus-visible {
 
   .chat-sidebar {
     width: 100%;
+    position: static;
+    height: auto;
+    min-height: 0;
     max-height: 260px;
     border-right: none;
     border-bottom: 1px solid #e8eaed;

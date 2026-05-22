@@ -339,7 +339,7 @@ class ProviderProfile(Base):
     capabilities: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["image.generate"])
     quality: Mapped[str] = mapped_column(String(50), default="medium")
     output_format: Mapped[str] = mapped_column(String(20), default="png")
-    timeout_seconds: Mapped[float] = mapped_column(Float, default=90.0)
+    timeout_seconds: Mapped[float] = mapped_column(Float, default=300.0)
     pricing_currency: Mapped[str] = mapped_column(String(12), default="CNY")
     pricing_unit: Mapped[str] = mapped_column(String(50), default="per_image")
     unit_price: Mapped[float] = mapped_column(Float, default=0.0)

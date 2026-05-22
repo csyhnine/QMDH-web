@@ -300,10 +300,11 @@
 
 ## Next Suggested Step
 
-1. 如果当前目标是稳定服务器灵感库，优先上传并导入本地 `tmp/seed-inspiration-bundle.zip`，不要继续依赖服务器直接重抓 ArchDaily
-2. 若导入后仍要求“标题与封面严格一一对应”，为默认 seed 图补一版人工钉死映射，再重新构建并导入 bundle
-3. 回到 `prod-001`：继续拆分 `frontend/src/features/studio/GenerateStudioShell.tsx`，降低当前前端最大热点文件的维护风险
-4. 评估项目归档后的管理端可见性需求：是否需要 `/admin/projects` 增加“已归档项目”只读视图
+1. 优先处理 `gpt-image-2` 参考图真实上传修复：提交并部署当前本地补丁，然后在服务器复测一条带参考图的任务，确认上游实际收到图片输入而不是纯文本请求
+2. 如果当前目标是稳定服务器灵感库，优先上传并导入本地 `tmp/seed-inspiration-bundle.zip`，不要继续依赖服务器直接重抓 ArchDaily
+3. 若导入后仍要求“标题与封面严格一一对应”，为默认 seed 图补一版人工钉死映射，再重新构建并导入 bundle
+4. 回到 `prod-001`：继续拆分 `frontend/src/features/studio/GenerateStudioShell.tsx`，降低当前前端最大热点文件的维护风险
+5. 评估项目归档后的管理端可见性需求：是否需要 `/admin/projects` 增加“已归档项目”只读视图
 
 ---
 

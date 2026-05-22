@@ -158,6 +158,9 @@ class AuthBoundaryTests(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.json()["user_name"], "reviewer")
         self.assertTrue(response.json()["result"]["reference_image_supplied"])
+        self.assertEqual(response.json()["result"]["reference_image_count"], 1)
+        self.assertEqual(response.json()["result"]["reference_image_storage_path"], "/media/reference/cover.png")
+        self.assertEqual(response.json()["result"]["reference_image_storage_paths"], ["/media/reference/cover.png"])
         self.assertEqual(response.json()["result"]["requested_image_count"], 2)
 
         with self.SessionLocal() as db:

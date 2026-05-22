@@ -26,7 +26,7 @@ class ImageProviderProfile:
     api_key: str
     base_url: str
     model_name: str
-    timeout_seconds: float = 90.0
+    timeout_seconds: float = 300.0
     quality: str = "medium"
     output_format: str = "png"
     pricing_currency: str = "CNY"
@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     openai_image_api_key: str | None = None
     openai_image_base_url: str = "https://api.openai.com/v1"
     openai_image_model: str = "gpt-image-1"
-    openai_image_timeout_seconds: float = 90.0
+    openai_image_timeout_seconds: float = 300.0
     openai_image_quality: str = "medium"
     openai_image_output_format: str = "png"
     image_provider_profiles_json: str = "[]"
@@ -177,7 +177,7 @@ class Settings(BaseSettings):
                 api_key=api_key,
                 base_url=base_url,
                 model_name=model_name,
-                timeout_seconds=float(item.get("timeout_seconds") or 90.0),
+                timeout_seconds=float(item.get("timeout_seconds") or 300.0),
                 quality=str(item.get("quality") or "medium"),
                 output_format=str(item.get("output_format") or "png"),
                 pricing_currency=str(item.get("pricing_currency") or "CNY").upper(),

@@ -277,6 +277,60 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         self.assertFalse(outcome.result["reference_image_used"])
         self.assertEqual(outcome.result["image_edit_bridge_mode"], "white_canvas")
 
+    def test_gpt_image_2_with_multiple_reference_images_uses_native_edit_endpoint_even_in_generate_mode(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="openai_gpt_image_2",
+            api_key="test-key",
+            base_url="https://api.openai.com/v1",
+            model_name="gpt-image-2",
+            timeout_seconds=1,
+            reference_mode="disabled",
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "openai_gpt_image_2",
+                "gpt-image-2",
+                ["image.generate", "image.edit"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        reference_images = [
+            "data:image/png;base64,cmVmZXJlbmNlMQ==",
+            "data:image/png;base64,cmVmZXJlbmNlMg==",
+        ]
+        generation_payload = {"data": [{"b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yh3cAAAAASUVORK5CYII="}]}
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload)],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {
+                            "prompt": "Keep the same massing and camera angle, enhance facade quality",
+                            "aspect_ratio": "16:9",
+                            "reference_images": reference_images,
+                            "reference_image": reference_images[0],
+                        },
+                    )
+
+        generation_request = mocked_urlopen.call_args_list[0].args[0]
+        generation_body = json.loads(generation_request.data.decode("utf-8"))
+
+        self.assertTrue(generation_request.full_url.endswith("/images/edits"))
+        self.assertEqual(generation_body["model"], "gpt-image-2")
+        self.assertEqual(len(generation_body["images"]), 2)
+        self.assertEqual(generation_body["images"][0]["image_url"], reference_images[0])
+        self.assertEqual(generation_body["images"][1]["image_url"], reference_images[1])
+        self.assertTrue(outcome.result["reference_image_used"])
+        self.assertEqual(outcome.result["reference_image_count"], 2)
+        self.assertTrue(outcome.result["native_image_edit_used"])
+        self.assertEqual(outcome.result["native_image_edit_fallback_from"], "image.generate")
+        self.assertTrue(outcome.result["storage_path"].startswith("generated/openai_gpt_image_2/"))
+
 
 if __name__ == "__main__":
     unittest.main()

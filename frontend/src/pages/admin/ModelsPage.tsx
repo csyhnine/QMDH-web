@@ -84,7 +84,7 @@ const defaultProviderProfileDraft: ProviderProfileDraft = {
   capabilities: "image.generate",
   quality: "medium",
   outputFormat: "png",
-  timeoutSeconds: 90,
+  timeoutSeconds: 300,
   pricingCurrency: "CNY",
   pricingUnit: "per_image",
   unitPrice: 0,
@@ -184,7 +184,7 @@ function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfile
     capabilities: profile.capabilities.join(", "),
     quality: profile.quality ?? "medium",
     outputFormat: profile.output_format ?? "png",
-    timeoutSeconds: profile.timeout_seconds ?? 90,
+    timeoutSeconds: profile.timeout_seconds ?? 300,
     pricingCurrency: profile.pricing_currency ?? "CNY",
     pricingUnit: profile.pricing_unit ?? "per_image",
     unitPrice: profile.unit_price ?? 0,
@@ -204,7 +204,7 @@ function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileC
     capabilities: parseCapabilities(draft.capabilities),
     quality: draft.quality || "medium",
     output_format: draft.outputFormat || "png",
-    timeout_seconds: draft.timeoutSeconds || 90,
+    timeout_seconds: draft.timeoutSeconds || 300,
     pricing_currency: draft.pricingCurrency || "CNY",
     pricing_unit: draft.pricingUnit || "per_image",
     unit_price: draft.unitPrice || 0,
@@ -571,7 +571,8 @@ export default function ModelsPage({ providerProfiles, providers, error, onRefre
               </label>
               <label className="composer-menu-field"><span>Quality</span><input value={providerDraft.quality} onChange={(e) => setProviderDraft((c) => ({ ...c, quality: e.target.value }))} placeholder="medium" /></label>
               <label className="composer-menu-field"><span>Format</span><select value={providerDraft.outputFormat} onChange={(e) => setProviderDraft((c) => ({ ...c, outputFormat: e.target.value }))}><option value="png">png</option><option value="jpeg">jpeg</option><option value="webp">webp</option><option value="mp4">mp4</option></select></label>
-              <label className="composer-menu-field"><span>Timeout</span><input type="number" min="10" value={providerDraft.timeoutSeconds} onChange={(e) => setProviderDraft((c) => ({ ...c, timeoutSeconds: Number(e.target.value) || 90 }))} /></label>
+              <label className="composer-menu-field"><span>Timeout</span><input type="number" min="30" value={providerDraft.timeoutSeconds} onChange={(e) => setProviderDraft((c) => ({ ...c, timeoutSeconds: Number(e.target.value) || 300 }))} /></label>
+              <p className="admin-form-help">建议图片任务从 300 秒起步；视频任务可按上游建议调整到 600-900 秒。</p>
               <label className="composer-menu-field"><span>计费币种</span><input value={providerDraft.pricingCurrency} onChange={(e) => setProviderDraft((c) => ({ ...c, pricingCurrency: e.target.value }))} placeholder="CNY" /></label>
               <label className="composer-menu-field"><span>计费单位</span><select value={providerDraft.pricingUnit} onChange={(e) => setProviderDraft((c) => ({ ...c, pricingUnit: e.target.value }))}><option value="per_image">按张图片</option><option value="per_request">按次请求</option></select></label>
               <label className="composer-menu-field"><span>单价</span><input type="number" min="0" step="0.0001" value={providerDraft.unitPrice} onChange={(e) => setProviderDraft((c) => ({ ...c, unitPrice: Number(e.target.value) || 0 }))} placeholder="0" /></label>

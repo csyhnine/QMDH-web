@@ -205,7 +205,7 @@ class ProviderProfileBase(BaseModel):
     capabilities: list[str] = Field(default_factory=lambda: ["image.generate"])
     quality: str = "medium"
     output_format: str = "png"
-    timeout_seconds: float = 90.0
+    timeout_seconds: float = 300.0
     pricing_currency: str = Field(default="CNY", max_length=12)
     pricing_unit: str = "per_image"
     unit_price: float = Field(default=0.0, ge=0)

@@ -22,6 +22,37 @@ from app.services.usage_ledger import ensure_usage_ledger_for_task
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
+def _reference_image_count(payload: dict) -> int:
+    for key in ("reference_images", "source_images"):
+        raw_value = payload.get(key)
+        if isinstance(raw_value, list):
+            values = [str(item or "").strip() for item in raw_value]
+            cleaned = [value for value in values if value]
+            if cleaned:
+                return min(4, len(cleaned))
+
+    for key in ("reference_image", "source_image"):
+        if str(payload.get(key) or "").strip():
+            return 1
+    return 0
+
+
+def _reference_image_storage_paths(payload: dict) -> list[str]:
+    for key in ("reference_images", "source_images"):
+        raw_value = payload.get(key)
+        if isinstance(raw_value, list):
+            values = [str(item or "").strip() for item in raw_value]
+            cleaned = [value for value in values if value]
+            if cleaned:
+                return cleaned[:4]
+
+    for key in ("reference_image", "source_image", "image"):
+        value = str(payload.get(key) or "").strip()
+        if value:
+            return [value]
+    return []
+
+
 def _get_or_create_user(db: Session, auth_user: AuthUserProfile) -> User:
     user = db.scalar(select(User).where(User.name == auth_user.name))
     if user:
@@ -110,6 +141,7 @@ def create_task(
     ensure_project_access(auth_user, project.code)
 
     user = _get_or_create_user(db, auth_user)
+    reference_image_storage_paths = _reference_image_storage_paths(payload.payload)
 
     task = Task(
         title=payload.title,
@@ -122,9 +154,10 @@ def create_task(
         payload=payload.payload,
         result={
             "summary": "Task accepted and waiting for execution.",
-            "reference_image_supplied": bool(
-                payload.payload.get("reference_image") or payload.payload.get("source_image")
-            ),
+            "reference_image_supplied": _reference_image_count(payload.payload) > 0,
+            "reference_image_count": _reference_image_count(payload.payload),
+            "reference_image_storage_path": reference_image_storage_paths[0] if reference_image_storage_paths else "",
+            "reference_image_storage_paths": reference_image_storage_paths,
             "requested_image_count": int(payload.payload.get("image_count") or 1),
             "queued_stage": "accepted",
         },

@@ -465,7 +465,7 @@ def bulk_import_provider_profiles(
             capabilities=item.capabilities or ["image.generate"],
             quality="medium",
             output_format="png",
-            timeout_seconds=90.0,
+            timeout_seconds=300.0,
             pricing_currency="CNY",
             pricing_unit="per_image",
             unit_price=0.0,

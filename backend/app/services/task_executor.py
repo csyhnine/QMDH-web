@@ -131,18 +131,59 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
         requested_count = _requested_image_count(payload)
         reference_result: dict[str, object] = {}
         prompt_for_generation = prompt
-        reference_image = _extract_reference_image(payload)
+        reference_images = _extract_reference_images(payload)
+        reference_image = reference_images[0] if reference_images else ""
         image_edit_bridge_url = ""
+        native_edit_image_urls: list[str] = []
+        request_endpoint_path = "/images/generations"
         if capability == "image.edit":
-            image_edit_bridge_url, reference_result = _build_image_edit_bridge_request(
-                profile=self.profile,
-                reference_image=reference_image,
-            )
+            if _uses_native_image_edit_request(self.profile):
+                if not reference_images:
+                    raise ValueError("Image edit task requires a reference image for this provider profile")
+                native_edit_image_urls = [_reference_image_to_model_url(item) for item in reference_images]
+                request_endpoint_path = "/images/edits"
+                reference_result = {
+                    "reference_image_used": True,
+                    "reference_image_mode": "native_image_edit",
+                    "reference_image_count": len(reference_images),
+                    "native_image_edit_used": True,
+                    "native_image_edit_endpoint": "images.edits",
+                    "native_image_edit_provider": self.profile.provider_name,
+                }
+            elif _uses_image_edit_bridge(self.profile):
+                image_edit_bridge_url, reference_result = _build_image_edit_bridge_request(
+                    profile=self.profile,
+                    reference_image=reference_image,
+                )
+            elif reference_image:
+                prompt_for_generation, reference_result = _apply_reference_image_to_prompt(
+                    profile=self.profile,
+                    prompt=prompt,
+                    reference_image=reference_image,
+                )
+            else:
+                raise ValueError("Image edit task requires a reference image for this provider profile")
         elif _uses_image_edit_bridge(self.profile):
             image_edit_bridge_url, reference_result = _build_image_edit_bridge_request(
                 profile=self.profile,
                 reference_image=reference_image,
             )
+        elif (
+            reference_image
+            and "image.edit" in self.definition.capabilities
+            and _uses_native_image_edit_request(self.profile)
+        ):
+            native_edit_image_urls = [_reference_image_to_model_url(item) for item in reference_images]
+            request_endpoint_path = "/images/edits"
+            reference_result = {
+                "reference_image_used": True,
+                "reference_image_mode": "native_image_edit",
+                "reference_image_count": len(reference_images),
+                "native_image_edit_used": True,
+                "native_image_edit_endpoint": "images.edits",
+                "native_image_edit_provider": self.profile.provider_name,
+                "native_image_edit_fallback_from": capability,
+            }
         elif reference_image:
             prompt_for_generation, reference_result = _apply_reference_image_to_prompt(
                 profile=self.profile,
@@ -157,6 +198,8 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
             "quality": self.profile.quality,
             "output_format": self.profile.output_format,
         }
+        if native_edit_image_urls:
+            request_body["images"] = [{"image_url": image_url} for image_url in native_edit_image_urls]
         if image_edit_bridge_url:
             request_body["image_url"] = image_edit_bridge_url
 
@@ -182,6 +225,7 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
                 body=request_body,
                 headers=headers,
                 timeout_seconds=self.profile.timeout_seconds,
+                endpoint_path=request_endpoint_path,
             )
 
             if _uses_modelscope_async_mode(self.profile):
@@ -281,17 +325,45 @@ def get_provider_adapter(provider_name: str, db: Session | None = None) -> Provi
     return SimulatedProviderAdapter(definition)
 
 
-def _extract_reference_image(payload: dict) -> str:
+def _extract_reference_images(payload: dict) -> list[str]:
+    for key in ("reference_images", "source_images"):
+        raw_value = payload.get(key)
+        if isinstance(raw_value, list):
+            values = [str(item or "").strip() for item in raw_value]
+            cleaned = [value for value in values if value]
+            if cleaned:
+                return cleaned[:4]
+
     for key in ("reference_image", "source_image", "image"):
         value = str(payload.get(key) or "").strip()
         if value:
-            return value
-    return ""
+            return [value]
+    return []
+
+
+def _extract_reference_image(payload: dict) -> str:
+    reference_images = _extract_reference_images(payload)
+    return reference_images[0] if reference_images else ""
+
+
+def _reference_image_result_fields(payload: dict) -> dict[str, object]:
+    reference_images = _extract_reference_images(payload)
+    return {
+        "reference_image_supplied": bool(reference_images),
+        "reference_image_count": len(reference_images),
+        "reference_image_storage_path": reference_images[0] if reference_images else "",
+        "reference_image_storage_paths": reference_images,
+    }
 
 
 def _uses_image_edit_bridge(profile: ImageProviderProfile) -> bool:
     identity = f"{profile.provider_name} {profile.model_name}".lower()
     return "firered" in identity or "image-edit" in identity
+
+
+def _uses_native_image_edit_request(profile: ImageProviderProfile) -> bool:
+    identity = f"{profile.provider_name} {profile.model_name} {profile.base_url}".lower()
+    return "gpt-image" in identity or "api.openai.com" in identity
 
 
 def _build_image_edit_bridge_request(
@@ -513,9 +585,16 @@ def _requested_image_count(payload: dict) -> int:
     return max(1, min(4, count))
 
 
-def _submit_image_generation_request(*, base_url: str, body: dict, headers: dict[str, str], timeout_seconds: float) -> dict:
+def _submit_image_generation_request(
+    *,
+    base_url: str,
+    body: dict,
+    headers: dict[str, str],
+    timeout_seconds: float,
+    endpoint_path: str = "/images/generations",
+) -> dict:
     request = Request(
-        url=f"{base_url.rstrip('/')}/images/generations",
+        url=f"{base_url.rstrip('/')}{endpoint_path}",
         data=json.dumps(body).encode("utf-8"),
         headers=headers,
         method="POST",
@@ -726,8 +805,8 @@ def _build_failure_result(exc: Exception, *, capability: str, provider_name: str
             hint = default_hint
 
         detail = (
-            f"Provider {provider_name} returned HTTP {status_code} during {stage_code}. "
-            f"{'Upstream returned an HTML error page.' if upstream_is_html else upstream_body or sanitized}"
+            f"阶段：{stage_code}；HTTP 状态：{status_code}；"
+            f"错误信息：{'Upstream returned an HTML error page.' if upstream_is_html else upstream_body or sanitized}"
         )
         return {
             "error": summary,
@@ -750,7 +829,7 @@ def _build_failure_result(exc: Exception, *, capability: str, provider_name: str
         return {
             "error": summary,
             "error_summary": summary,
-            "error_detail": f"Provider {provider_name} network error during {stage_code}: {detail}",
+            "error_detail": f"阶段：{stage_code}；网络错误：{detail}",
             "error_code": "upstream_network_error",
             "error_stage": stage_code,
             "error_hint": hint,
@@ -766,7 +845,7 @@ def _build_failure_result(exc: Exception, *, capability: str, provider_name: str
         return {
             "error": summary,
             "error_summary": summary,
-            "error_detail": sanitized,
+            "error_detail": f"阶段：task_execution；错误信息：{sanitized}",
             "error_code": "upstream_timeout",
             "error_stage": "task_execution",
             "error_hint": hint,
@@ -781,7 +860,7 @@ def _build_failure_result(exc: Exception, *, capability: str, provider_name: str
         return {
             "error": summary,
             "error_summary": summary,
-            "error_detail": sanitized,
+            "error_detail": f"阶段：task_execution；错误信息：{sanitized}",
             "error_code": "empty_generation_result",
             "error_stage": "task_execution",
             "error_hint": hint,
@@ -793,7 +872,7 @@ def _build_failure_result(exc: Exception, *, capability: str, provider_name: str
     return {
         "error": default_summary,
         "error_summary": default_summary,
-        "error_detail": sanitized,
+        "error_detail": f"阶段：task_execution；错误信息：{sanitized}",
         "error_code": "task_execution_error",
         "error_stage": "task_execution",
         "error_hint": default_hint,
@@ -907,9 +986,7 @@ def execute_task(task_id: int) -> None:
             task.result = {
                 **task.result,
                 "queued_stage": "completed",
-                "reference_image_supplied": bool(
-                    task.payload.get("reference_image") or task.payload.get("source_image")
-                ),
+                **_reference_image_result_fields(task.payload),
             }
 
             db.add(
@@ -958,9 +1035,7 @@ def execute_task(task_id: int) -> None:
             task.result = {
                 **task.result,
                 "queued_stage": "failed",
-                "reference_image_supplied": bool(
-                    task.payload.get("reference_image") or task.payload.get("source_image")
-                ),
+                **_reference_image_result_fields(task.payload),
             }
 
             try:

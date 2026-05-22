@@ -1014,8 +1014,13 @@ button {
 }
 
 .feed-card {
+  position: relative;
   display: grid;
   gap: 16px;
+}
+
+.feed-card-with-reference {
+  padding-top: 94px;
 }
 
 .feed-card-running {
@@ -1023,6 +1028,76 @@ button {
   box-shadow:
     0 18px 40px rgba(37, 99, 235, 0.08),
     inset 0 0 0 1px rgba(37, 99, 235, 0.08);
+}
+
+.feed-card-reference-badge {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  max-width: min(320px, calc(100% - 40px));
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px 8px 8px;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #f8fafc;
+  box-shadow: 0 18px 32px rgba(15, 23, 42, 0.18);
+}
+
+.feed-card-reference-stack {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.feed-card-reference-stack img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.feed-card-reference-count {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.78);
+  color: white;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.feed-card-reference-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.feed-card-reference-copy strong {
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.feed-card-reference-copy span {
+  color: rgba(248, 250, 252, 0.82);
+  font-size: 0.76rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .feed-card-head {
@@ -1488,6 +1563,33 @@ button {
   align-items: start;
 }
 
+.reference-column {
+  display: grid;
+  gap: 10px;
+}
+
+.composer-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.composer-mode-button {
+  min-height: 36px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.92);
+  color: #475467;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.composer-mode-button.is-active {
+  border-color: rgba(37, 99, 235, 0.24);
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+}
+
 .reference-dropzone {
   min-height: 120px;
   border: 1px dashed rgba(15, 23, 42, 0.14);
@@ -1518,10 +1620,45 @@ button {
   padding: 0;
 }
 
+.reference-preview-grid {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+}
+
 .reference-preview {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.reference-upload-list {
+  display: grid;
+  gap: 6px;
+}
+
+.reference-upload-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
+  color: #475467;
+  font-size: 0.78rem;
+}
+
+.reference-upload-chip button {
+  border: 0;
+  background: transparent;
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
 .composer-textarea {
@@ -3414,6 +3551,13 @@ button {
   margin: 0;
   color: #667085;
   line-height: 1.6;
+}
+
+.admin-form-help {
+  margin: -4px 0 4px;
+  color: #667085;
+  font-size: 0.8rem;
+  line-height: 1.5;
 }
 
 .provider-preset-list,

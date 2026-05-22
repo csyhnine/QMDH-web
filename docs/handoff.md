@@ -10,6 +10,118 @@
 
 ## Latest Handoffs
 
+### [2026-05-21 19:10] Session Handoff
+- Role: Feature / Bugfix / Verification
+- Branch: `main`
+- Repo status:
+  - Working tree clean: No
+  - Uncommitted changes: Yes
+  - Pushed: No
+- What was added locally in this round:
+  - designer studio now explicitly distinguishes `文生图` vs `图像编辑`
+  - `图像编辑` mode requires at least 1 reference image and allows at most 4
+  - studio provider list now follows mode capability:
+    - text-to-image mode only shows `image.generate`
+    - image-edit mode only shows `image.edit`
+  - studio payload now sends `reference_images` / `source_images` arrays while keeping first-image compatibility fields
+  - backend now extracts up to 4 reference images and passes all of them into native `gpt-image` edit requests
+- Root cause addressed:
+  - previous studio flow still mixed text-to-image and image-edit semantics
+  - even when a designer uploaded a reference image, the task could still be submitted as `image.generate`
+  - `gpt-image-2` therefore often received no real uploaded input image on the upstream side
+- Verification completed locally:
+  - frontend: `npm run build` passed
+  - backend: `test_task_executor_openai.py` passed
+  - backend: `test_auth_boundaries.py` passed
+- Deployment status:
+  - local only
+  - not yet committed, pushed, or deployed to `120.79.227.11`
+- Next agent first step:
+  - commit current local patch set intentionally
+  - deploy to server
+  - verify with one real `图像编辑 + gpt-image-2 + 2-4 张参考图` task that upstream now sees images in `/images/edits`
+- Safe to hand off: Yes
+
+### [2026-05-21 18:10] Session Handoff
+- Role: Bugfix / Verification
+- Branch: `main`
+- Repo status:
+  - Working tree clean: No
+  - Uncommitted changes: Yes
+  - Pushed: No
+- Current local uncommitted focus:
+  - existing timeout-default + failure-display patch set remains
+  - added a local fix for reference-image upload on `gpt-image-2`-style providers
+- Root cause verified from code:
+  - frontend selected `image.generate` first whenever a provider had both `image.generate` and `image.edit`
+  - backend `OpenAIImageProviderAdapter` only sent a real image input for a narrow bridge-model heuristic (`firered` / `image-edit`)
+  - as a result, `gpt-image-2` with an uploaded reference image could still hit `/images/generations` without an actual uploaded input image
+- What was changed locally:
+  - `frontend/src/features/studio/GenerateStudioShell.tsx`
+    - when a reference image exists and the provider supports `image.edit`, the studio now prefers the `image-edit` workflow
+  - `backend/app/services/task_executor.py`
+    - added native image-edit request routing for `gpt-image` / OpenAI image providers
+    - when a reference image is supplied, the adapter now sends the real image through `/images/edits` instead of only falling back to text-only/caption behavior
+    - added a backend-side fallback so even if a task still arrives as `image.generate`, `gpt-image` providers with reference images will use the native image-edit endpoint
+  - `backend/tests/test_task_executor_openai.py`
+    - added coverage asserting `gpt-image-2` with a reference image uses `/images/edits` and includes the uploaded image
+- Verification completed locally:
+  - backend: `test_task_executor_openai.py` passed
+  - backend: `test_task_error_reporting.py` passed
+  - frontend: `npm run build` passed
+- Deployment status:
+  - local only so far
+  - not yet committed, pushed, or deployed to `120.79.227.11`
+- Next agent first step:
+  - commit the current local patch set intentionally
+  - deploy to the server with the normal `admin git pull` flow
+  - after deploy, reproduce one `gpt-image-2` reference-image task and confirm the upstream now sees an actual uploaded image in the request
+- Safe to hand off: Yes
+
+### [2026-05-21 15:55] Session Handoff
+- Role: Feature / Ops / Verification / Server Recovery
+- Branch: `main`
+- Repo status:
+  - Working tree clean: No
+  - Uncommitted changes: Yes
+  - Pushed: No for the newest local timeout/error-display patch set
+- Current local uncommitted files:
+  - `backend/app/core/config.py`
+  - `backend/app/models.py`
+  - `backend/app/routers/providers.py`
+  - `backend/app/schemas.py`
+  - `backend/app/services/task_executor.py`
+  - `frontend/src/features/studio/GenerateStudioShell.tsx`
+  - `frontend/src/pages/admin/ModelsPage.tsx`
+  - `frontend/src/styles.css`
+  - local `tmp/` remains untracked
+- Server facts:
+  - Server IP: `120.79.227.11`
+  - Deploy path: `/www/wwwroot/qmdh-web`
+  - Runtime is managed with Docker Compose
+  - `git pull` on the server must be run as `admin` because GitHub deploy-key access does not work under `root`
+  - `root` is usable for ops work after adding `safe.directory` for `/www/wwwroot/qmdh-web`
+  - Current deployed server code is `30f5196`
+  - `alembic current` on the server is `f6a7b8c9d0e1 (head)`
+- What was done in this session:
+  - Verified repeated image-generation failures directly from live `worker` logs
+  - Confirmed the latest failed tasks are true upstream timeouts, not frontend submission failures
+  - Confirmed historical upstream instability for `gpt-image-2`: timeout + HTTP 504 + HTTP 404 all occurred
+  - Manually increased live-server `gpt-image-2` timeout in PostgreSQL from `180` to `300`
+  - Prepared a local code patch to make `300s` the default timeout for provider profiles and to improve failure-detail display without exposing upstream URLs
+- Current production issue:
+  - Image generation for provider `gpt-image-2` can still fail even after increasing timeout because the upstream image endpoint itself appears unstable
+  - Latest known task states include `upstream_timeout` with detail `The read operation timed out`
+- Important deployment history:
+  - A previous migration desync incident happened on the server: app code moved ahead while Alembic/schema state did not fully match
+  - Recovery was completed by manual column repair plus `alembic stamp f6a7b8c9d0e1`
+  - Future deploys must verify both schema and `alembic current`, not only `git rev-parse`
+- Next agent first step:
+  - Run `git status --short` locally and review the 8 modified files before doing anything else
+  - Decide whether to commit/push the timeout-default + error-display patch set
+  - If pushing, redeploy server code and keep checking whether `gpt-image-2` failures change from timeout to another upstream class
+- Safe to hand off: Yes
+
 ### [2026-05-18 19:10] Session Handoff
 - 执行角色：Feature / Data Governance / Documentation / Verification
 - 当前分支：`main`
@@ -236,3 +348,23 @@ For future agents, the server source of truth is now:
   - 继续引入 Alembic，创建初始 migration
   - 为项目 CRUD 添加审计日志
 - 是否可直接接手：Yes
+### [2026-05-21 20:05] Session Handoff
+- Scope:
+  - studio 图像编辑继续沿用上传后的参考图做图
+  - 任务一提交后，任务卡片左上角显示本轮使用的参考图缩略图；多张参考图时显示首图和数量
+- Code:
+  - `backend/app/routers/tasks.py`
+    - accepted task result 新增 `reference_image_storage_path` / `reference_image_storage_paths`
+  - `backend/app/services/task_executor.py`
+    - completed / failed task result 同步写入参考图路径与数量
+  - `frontend/src/features/studio/GenerateStudioShell.tsx`
+    - `FeedCard` 新增参考图角标
+    - 读取任务结果中的参考图路径，在左上角显示缩略图与数量
+  - `frontend/src/styles.css`
+    - 新增 `feed-card-reference-*` 样式
+- Verification:
+  - `frontend`: `npm run build` passed
+  - `backend`: `python -m pytest tests/test_auth_boundaries.py tests/test_task_executor_openai.py` passed
+- Notes:
+  - 这批改动仍未部署到服务器 `120.79.227.11`
+  - 线上要看到任务卡片参考图角标，仍需部署当前本地未提交改动

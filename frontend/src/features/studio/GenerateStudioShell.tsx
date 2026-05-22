@@ -41,6 +41,7 @@ type LoadState = {
 };
 
 type StudioFormState = {
+  creationMode: "generate" | "edit";
   title: string;
   prompt: string;
   projectCode: string;
@@ -51,8 +52,14 @@ type StudioFormState = {
   resolution: string;
   imageCount: number;
   deliverable: string;
-  referenceImage: string;
+  referenceImages: string[];
   notes: string;
+};
+
+type ReferenceUploadItem = {
+  fileName: string;
+  previewUrl: string;
+  storagePath: string;
 };
 
 type PromptTemplate = {
@@ -190,7 +197,7 @@ const defaultProviderProfileDraft: ProviderProfileDraft = {
   capabilities: "image.generate",
   quality: "medium",
   outputFormat: "png",
-  timeoutSeconds: 90,
+  timeoutSeconds: 300,
   pricingCurrency: "CNY",
   pricingUnit: "per_image",
   unitPrice: 0,
@@ -412,6 +419,7 @@ const providerPresets: ProviderPreset[] = [
 ];
 
 const defaultStudioForm: StudioFormState = {
+  creationMode: "generate",
   title: featuredAtmosphereTemplates[0].title,
   prompt: featuredAtmosphereTemplates[0].prompt,
   projectCode: "QMDH-001",
@@ -422,7 +430,7 @@ const defaultStudioForm: StudioFormState = {
   resolution: featuredAtmosphereTemplates[0].resolution,
   imageCount: 1,
   deliverable: featuredAtmosphereTemplates[0].deliverable,
-  referenceImage: "",
+  referenceImages: [],
   notes: featuredAtmosphereTemplates[0].notes
 };
 
@@ -459,6 +467,10 @@ function formatStatus(status: string | null): string {
 
 function clampImageCount(value: number): number {
   return Math.max(1, Math.min(4, Math.trunc(value || 1)));
+}
+
+function clampReferenceImageCount(value: number): number {
+  return Math.max(0, Math.min(4, Math.trunc(value || 0)));
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -544,8 +556,65 @@ function taskFailureCode(task: Task): string {
   return code ? String(code) : "";
 }
 
+function taskFailureStage(task: Task): string {
+  if (task.status !== "failed") return "";
+  const stage = task.result["error_stage"];
+  return stage ? String(stage) : "";
+}
+
+function formatFailureStage(stage: string): string {
+  switch (stage) {
+    case "image_generation_request":
+      return "图片生成请求";
+    case "generated_image_download":
+      return "结果下载";
+    case "reference_image_caption":
+      return "参考图分析";
+    case "async_result_poll":
+      return "异步结果轮询";
+    case "task_execution":
+      return "任务执行";
+    default:
+      return stage || "任务执行";
+  }
+}
+
 function taskHasReferenceImage(task: Task): boolean {
-  return Boolean(task.result["reference_image_supplied"]);
+  return taskReferenceImageCount(task) > 0 || Boolean(task.result["reference_image_supplied"]);
+}
+
+function taskReferenceImages(task: Task): string[] {
+  const storagePaths = task.result["reference_image_storage_paths"];
+  if (Array.isArray(storagePaths)) {
+    return storagePaths
+      .map((value) => String(value || "").trim())
+      .filter((value) => Boolean(value))
+      .slice(0, 4);
+  }
+
+  const storagePath = String(task.result["reference_image_storage_path"] ?? "").trim();
+  return storagePath ? [storagePath] : [];
+}
+
+function taskReferenceImageCount(task: Task): number {
+  const referenceImages = taskReferenceImages(task);
+  if (referenceImages.length > 0) {
+    return referenceImages.length;
+  }
+
+  const rawCount = Number(task.result["reference_image_count"] ?? 0);
+  if (Number.isFinite(rawCount) && rawCount > 0) {
+    return rawCount;
+  }
+  return 0;
+}
+
+function summarizeReferenceImageLabel(path: string): string {
+  if (!path) return "已使用参考图";
+  const normalized = path.split("?")[0]?.replace(/\\/g, "/") ?? path;
+  const segments = normalized.split("/").filter(Boolean);
+  const fileName = segments.length > 0 ? segments[segments.length - 1] : normalized;
+  return truncateText(fileName || "已使用参考图", 24);
 }
 
 function inferVirtualTaskPercent(task: Task, nowMs: number): number {
@@ -565,6 +634,9 @@ function inferVirtualTaskPercent(task: Task, nowMs: number): number {
 }
 
 function buildImagePayload(form: StudioFormState, workflowKey: string): Record<string, unknown> {
+  const referenceImages =
+    workflowKey === IMAGE_EDIT_WORKFLOW_KEY ? form.referenceImages.filter((value) => Boolean(value)) : [];
+  const primaryReferenceImage = referenceImages[0] ?? "";
   const payload: Record<string, unknown> = {
     style: form.style,
     aspect_ratio: form.aspectRatio,
@@ -572,16 +644,24 @@ function buildImagePayload(form: StudioFormState, workflowKey: string): Record<s
     image_count: clampImageCount(form.imageCount),
     deliverable: form.deliverable,
     prompt_supplement: form.notes,
-    reference_image: form.referenceImage,
-    source_image: form.referenceImage,
+    reference_images: referenceImages,
+    source_images: referenceImages,
+    reference_image: primaryReferenceImage,
+    source_image: primaryReferenceImage,
     prompt: form.prompt,
     edit_prompt: workflowKey === IMAGE_EDIT_WORKFLOW_KEY ? form.prompt : ""
   };
 
-  return Object.fromEntries(Object.entries(payload).filter(([, value]) => Boolean(value)));
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => {
+      if (Array.isArray(value)) return value.length > 0;
+      return Boolean(value);
+    })
+  );
 }
 
-function getStudioWorkflowKeyForProvider(provider: Provider | undefined): string {
+function getStudioWorkflowKeyForProvider(provider: Provider | undefined, creationMode: "generate" | "edit"): string {
+  if (creationMode === "edit" && provider?.capabilities.includes("image.edit")) return IMAGE_EDIT_WORKFLOW_KEY;
   if (provider?.capabilities.includes("image.generate")) return IMAGE_WORKFLOW_KEY;
   if (provider?.capabilities.includes("image.edit")) return IMAGE_EDIT_WORKFLOW_KEY;
   return IMAGE_WORKFLOW_KEY;
@@ -914,7 +994,7 @@ function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileC
     capabilities: parseCapabilities(draft.capabilities),
     quality: draft.quality.trim() || "medium",
     output_format: draft.outputFormat.trim() || "png",
-    timeout_seconds: Number(draft.timeoutSeconds) || 90,
+    timeout_seconds: Number(draft.timeoutSeconds) || 300,
     pricing_currency: draft.pricingCurrency.trim().toUpperCase() || "CNY",
     pricing_unit: draft.pricingUnit.trim() || "per_image",
     unit_price: Number(draft.unitPrice) || 0,
@@ -1098,9 +1178,14 @@ function FeedCard(props: {
   const failureDetail = taskFailureDetail(props.task);
   const failureHint = taskFailureHint(props.task);
   const failureCode = taskFailureCode(props.task);
+  const failureStage = taskFailureStage(props.task);
   const showFailureDetails = props.task.status === "failed" && Boolean(failureDetail || failureHint || failureCode);
   const showRunningState = props.task.status === "pending" || props.task.status === "running";
+  const referenceImages = taskReferenceImages(props.task);
+  const referenceImageCount = taskReferenceImageCount(props.task);
   const hasReferenceImage = taskHasReferenceImage(props.task);
+  const primaryReferenceImage = referenceImages[0] ?? "";
+  const referenceImageLabel = summarizeReferenceImageLabel(primaryReferenceImage);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const virtualProgress = showRunningState ? inferVirtualTaskPercent(props.task, nowTick) : 0;
 
@@ -1114,7 +1199,26 @@ function FeedCard(props: {
   }, [showRunningState]);
 
   return (
-    <article className={showRunningState ? "feed-card feed-card-running" : "feed-card"} ref={props.anchorRef}>
+    <article
+      className={[
+        "feed-card",
+        showRunningState ? "feed-card-running" : "",
+        hasReferenceImage ? "feed-card-with-reference" : ""
+      ].filter(Boolean).join(" ")}
+      ref={props.anchorRef}
+    >
+      {primaryReferenceImage ? (
+        <div className="feed-card-reference-badge" aria-label={`本任务使用了 ${referenceImageCount} 张参考图`}>
+          <div className="feed-card-reference-stack">
+            <img src={primaryReferenceImage} alt="参考图缩略图" />
+            {referenceImageCount > 1 ? <span className="feed-card-reference-count">+{referenceImageCount - 1}</span> : null}
+          </div>
+          <div className="feed-card-reference-copy">
+            <strong>参考图</strong>
+            <span>{referenceImageCount > 1 ? `${referenceImageLabel} 等 ${referenceImageCount} 张` : referenceImageLabel}</span>
+          </div>
+        </div>
+      ) : null}
       <div className="feed-card-head">
         <div className="feed-card-avatar">{props.task.requested_provider.slice(0, 1).toUpperCase()}</div>
         <div className="feed-card-copy">
@@ -1132,7 +1236,8 @@ function FeedCard(props: {
           {showFailureDetails ? (
             <details className="feed-card-summary-details feed-card-error-details">
               <summary>查看失败原因</summary>
-              {failureDetail ? <p>{failureDetail}</p> : null}
+              {failureStage ? <p>失败阶段：{formatFailureStage(failureStage)}</p> : null}
+              {failureDetail ? <p>错误信息：{failureDetail}</p> : null}
               {failureHint ? <p>建议：{failureHint}</p> : null}
               <p>
                 任务 ID：{props.task.id}
@@ -1145,7 +1250,7 @@ function FeedCard(props: {
             <span>{props.task.project_code}</span>
             <span>{props.task.requested_provider}</span>
             <span>{formatDuration(props.task.latency_ms)}</span>
-            {hasReferenceImage ? <span>已附带参考图</span> : null}
+            {hasReferenceImage ? <span>参考图 {referenceImageCount} 张</span> : null}
             {props.asset ? <span>已入图库</span> : null}
           </div>
         </div>
@@ -1228,8 +1333,7 @@ export default function GenerateStudioShell() {
   const [submitting, setSubmitting] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [activeComposerMenu, setActiveComposerMenu] = useState<ComposerMenuKey>(null);
-  const [referencePreviewUrl, setReferencePreviewUrl] = useState<string | null>(null);
-  const [referenceFileName, setReferenceFileName] = useState("");
+  const [referenceUploads, setReferenceUploads] = useState<ReferenceUploadItem[]>([]);
   const [uploadingReference, setUploadingReference] = useState(false);
   const [customTemplates, setCustomTemplates] = useState<CustomPromptTemplate[]>([]);
   const [templateFeedback, setTemplateFeedback] = useState<TemplateFeedback | null>(null);
@@ -1396,11 +1500,11 @@ export default function GenerateStudioShell() {
 
   useEffect(() => {
     return () => {
-      if (referencePreviewUrl) {
-        URL.revokeObjectURL(referencePreviewUrl);
+      for (const item of referenceUploads) {
+        URL.revokeObjectURL(item.previewUrl);
       }
     };
-  }, [referencePreviewUrl]);
+  }, [referenceUploads]);
 
   useEffect(() => {
     if (!galleryPreview) return;
@@ -1419,14 +1523,16 @@ export default function GenerateStudioShell() {
   const availableProviders = state.providers.filter(
     (provider) =>
       isRuntimeImageProvider(provider) &&
-      provider.capabilities.some((capability) => capability === "image.generate" || capability === "image.edit")
+      provider.capabilities.some((capability) =>
+        studioForm.creationMode === "edit" ? capability === "image.edit" : capability === "image.generate"
+      )
   );
   const providerGroups = groupProviders(availableProviders);
 
   const activeProject = state.projects.find((project) => project.code === studioForm.projectCode);
   const workspaceName = activeProject?.name ?? "默认创作";
   const selectedProvider = availableProviders.find((provider) => provider.provider_name === studioForm.requestedProvider);
-  const selectedWorkflowKey = getStudioWorkflowKeyForProvider(selectedProvider);
+  const selectedWorkflowKey = getStudioWorkflowKeyForProvider(selectedProvider, studioForm.creationMode);
   const selectedWorkflow = state.workflows.find((workflow) => workflow.key === selectedWorkflowKey);
   const selectedStyle = stylePresets.find((preset) => preset.id === studioForm.style);
   const selectedResolution = resolutionOptions.find((option) => option.id === studioForm.resolution);
@@ -1544,6 +1650,14 @@ export default function GenerateStudioShell() {
     }
   }
 
+  function syncReferenceUploads(nextUploads: ReferenceUploadItem[]) {
+    setReferenceUploads(nextUploads);
+    setStudioForm((current) => ({
+      ...current,
+      referenceImages: nextUploads.map((item) => item.storagePath),
+    }));
+  }
+
   function handleProjectSelect(project: Project) {
     setStudioForm((current) => ({
       ...current,
@@ -1640,17 +1754,19 @@ export default function GenerateStudioShell() {
   }
 
   function clearReferenceUpload() {
-    if (referencePreviewUrl) {
-      URL.revokeObjectURL(referencePreviewUrl);
+    for (const item of referenceUploads) {
+      URL.revokeObjectURL(item.previewUrl);
     }
-    setReferencePreviewUrl(null);
-    setReferenceFileName("");
     setUploadingReference(false);
-    setStudioForm((current) => ({
-      ...current,
-      referenceImage: ""
-    }));
+    syncReferenceUploads([]);
     resetReferenceFileInput();
+  }
+
+  function removeReferenceUpload(index: number) {
+    const target = referenceUploads[index];
+    if (!target) return;
+    URL.revokeObjectURL(target.previewUrl);
+    syncReferenceUploads(referenceUploads.filter((_, currentIndex) => currentIndex !== index));
   }
 
   function handleResetComposer() {
@@ -1678,6 +1794,7 @@ export default function GenerateStudioShell() {
 
       return {
         ...current,
+        creationMode: task.workflow_key === IMAGE_EDIT_WORKFLOW_KEY ? "edit" : "generate",
         title: task.title,
         prompt: asset?.prompt_text ?? current.prompt,
         projectCode: task.project_code,
@@ -1697,23 +1814,43 @@ export default function GenerateStudioShell() {
     }
   }
 
-  async function handleReferenceFile(file: File) {
-    if (!file.type.startsWith("image/")) {
+  async function handleReferenceFiles(files: File[]) {
+    if (files.length === 0) {
       resetReferenceFileInput();
-      setState((current) => ({
-        ...current,
-        error: "请上传图片文件作为参考图"
-      }));
       return;
     }
 
-    if (referencePreviewUrl) {
-      URL.revokeObjectURL(referencePreviewUrl);
+    const validFiles = files.filter((file) => file.type.startsWith("image/"));
+    if (validFiles.length !== files.length) {
+      setState((current) => ({
+        ...current,
+        error: "请只上传图片文件作为参考图"
+      }));
     }
 
-    const nextPreviewUrl = URL.createObjectURL(file);
-    setReferencePreviewUrl(nextPreviewUrl);
-    setReferenceFileName(file.name);
+    const remainingSlots = 4 - referenceUploads.length;
+    if (remainingSlots <= 0) {
+      setState((current) => ({
+        ...current,
+        error: "图像编辑最多只能上传 4 张参考图"
+      }));
+      resetReferenceFileInput();
+      return;
+    }
+
+    const acceptedFiles = validFiles.slice(0, remainingSlots);
+    if (acceptedFiles.length === 0) {
+      resetReferenceFileInput();
+      return;
+    }
+
+    if (validFiles.length > remainingSlots) {
+      setState((current) => ({
+        ...current,
+        error: "最多只能保留 4 张参考图，超出的图片已忽略"
+      }));
+    }
+
     setUploadingReference(true);
     setSubmissionTracker({
       taskId: null,
@@ -1724,26 +1861,30 @@ export default function GenerateStudioShell() {
       stage: "uploading_reference",
     });
 
+    const nextUploads = [...referenceUploads];
     try {
-      const dataUrl = await fileToDataUrl(file);
-      const uploaded = await api.uploadReferenceImage({
-        file_name: file.name,
-        data_url: dataUrl
-      });
+      for (const file of acceptedFiles) {
+        const dataUrl = await fileToDataUrl(file);
+        const uploaded = await api.uploadReferenceImage({
+          file_name: file.name,
+          data_url: dataUrl
+        });
+        nextUploads.push({
+          fileName: file.name,
+          previewUrl: URL.createObjectURL(file),
+          storagePath: uploaded.storage_path,
+        });
+      }
 
-      setStudioForm((current) => ({
-        ...current,
-        referenceImage: uploaded.storage_path
-      }));
+      syncReferenceUploads(nextUploads);
       setState((current) => ({
         ...current,
         error: ""
       }));
     } catch (error) {
-      setStudioForm((current) => ({
-        ...current,
-        referenceImage: ""
-      }));
+      for (const item of nextUploads.slice(referenceUploads.length)) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
       setState((current) => ({
         ...current,
         error: error instanceof Error ? error.message : "参考图上传失败"
@@ -1756,18 +1897,14 @@ export default function GenerateStudioShell() {
   }
 
   function handleReferenceInputChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (file) {
-      handleReferenceFile(file);
-    }
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    void handleReferenceFiles(files);
   }
 
   function handleReferenceDrop(event: DragEvent<HTMLButtonElement>) {
     event.preventDefault();
-    const file = event.dataTransfer.files?.[0];
-    if (file) {
-      handleReferenceFile(file);
-    }
+    const files = event.dataTransfer.files ? Array.from(event.dataTransfer.files) : [];
+    void handleReferenceFiles(files);
   }
 
   function openReferencePicker() {
@@ -2115,13 +2252,54 @@ export default function GenerateStudioShell() {
       return;
     }
 
+    if (!selectedProvider) {
+      setState((current) => ({
+        ...current,
+        error: "请先选择一个可用模型"
+      }));
+      return;
+    }
+
+    if (studioForm.creationMode === "edit" && !selectedProvider.capabilities.includes("image.edit")) {
+      setState((current) => ({
+        ...current,
+        error: "当前模型不支持图像编辑，请切换到支持 image.edit 的模型"
+      }));
+      return;
+    }
+
+    if (studioForm.creationMode === "generate" && !selectedProvider.capabilities.includes("image.generate")) {
+      setState((current) => ({
+        ...current,
+        error: "当前模型不支持文生图，请切换到支持 image.generate 的模型"
+      }));
+      return;
+    }
+
+    const referenceImageCount = clampReferenceImageCount(studioForm.referenceImages.length);
+    if (studioForm.creationMode === "edit" && referenceImageCount < 1) {
+      setState((current) => ({
+        ...current,
+        error: "图像编辑至少需要上传 1 张参考图"
+      }));
+      return;
+    }
+
+    if (referenceImageCount > 4) {
+      setState((current) => ({
+        ...current,
+        error: "参考图最多只能上传 4 张"
+      }));
+      return;
+    }
+
     setSubmitting(true);
     setSubmissionTracker({
       taskId: null,
       taskTitle: studioForm.title.trim() || defaultStudioForm.title,
       providerName: selectedProvider?.model_name ?? studioForm.requestedProvider,
       imageCount: clampImageCount(studioForm.imageCount),
-      hasReferenceImage: Boolean(studioForm.referenceImage),
+      hasReferenceImage: referenceImageCount > 0,
       stage: "submitting",
     });
 
@@ -2139,7 +2317,7 @@ export default function GenerateStudioShell() {
         taskTitle: createdTask.title,
         providerName: selectedProvider?.model_name ?? createdTask.requested_provider,
         imageCount: clampImageCount(Number(createdTask.result["requested_image_count"] ?? studioForm.imageCount)),
-        hasReferenceImage: Boolean(createdTask.result["reference_image_supplied"] ?? studioForm.referenceImage),
+        hasReferenceImage: Boolean(createdTask.result["reference_image_supplied"] ?? referenceImageCount > 0),
         stage: createdTask.status === "running" ? "running" : "pending",
       });
       hasAutoPositionedRef.current = false;
@@ -3404,13 +3582,14 @@ export default function GenerateStudioShell() {
                     <span>Timeout</span>
                     <input
                       type="number"
-                      min="10"
+                      min="30"
                       value={providerDraft.timeoutSeconds}
                       onChange={(event) =>
-                        setProviderDraft((current) => ({ ...current, timeoutSeconds: Number(event.target.value) || 90 }))
+                        setProviderDraft((current) => ({ ...current, timeoutSeconds: Number(event.target.value) || 300 }))
                       }
                     />
                   </label>
+                  <p className="admin-form-help">建议图片任务从 300 秒起步；视频任务可按上游建议调整到 600-900 秒。</p>
                   <label className="composer-menu-field">
                     <span>计费币种</span>
                     <input
@@ -3710,12 +3889,16 @@ export default function GenerateStudioShell() {
               setStudioForm((current) => ({ ...current, imageCount: count }));
               setActiveComposerMenu(null);
             }}
+            onModeChange={(mode) => {
+              setStudioForm((current) => ({ ...current, creationMode: mode }));
+            }}
             onOpenReferencePicker={openReferencePicker}
             onPromptChange={(value) => setStudioForm((current) => ({ ...current, prompt: value }))}
             onProviderSelect={(providerName) => {
               setStudioForm((current) => ({ ...current, requestedProvider: providerName }));
               setActiveComposerMenu(null);
             }}
+            onRemoveReferenceUpload={removeReferenceUpload}
             onReferenceDrop={handleReferenceDrop}
             onReferenceInputChange={handleReferenceInputChange}
             onResolutionSelect={(resolutionId) => setStudioForm((current) => ({ ...current, resolution: resolutionId }))}
@@ -3725,8 +3908,7 @@ export default function GenerateStudioShell() {
             onTemplateDraftTitleChange={setTemplateDraftTitle}
             onToggleComposerMenu={toggleComposerMenu}
             providerGroups={providerGroups}
-            referenceFileName={referenceFileName}
-            referencePreviewUrl={referencePreviewUrl}
+            referenceUploads={referenceUploads}
             resolutionOptions={resolutionOptions}
             selectedProviderModelName={selectedProvider?.model_name ?? null}
             selectedResolutionLabel={selectedResolution?.label ?? null}

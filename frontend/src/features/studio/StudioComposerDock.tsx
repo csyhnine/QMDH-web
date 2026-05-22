@@ -5,12 +5,19 @@ import { type PromptTemplateRecord, type Provider } from "../../api";
 type ComposerMenuKey = "template" | "provider" | "display" | "count" | null;
 
 type StudioFormValue = {
+  creationMode: "generate" | "edit";
   prompt: string;
   requestedProvider: string;
   aspectRatio: string;
   resolution: string;
   imageCount: number;
   style: string;
+};
+
+type ReferenceUploadItem = {
+  fileName: string;
+  previewUrl: string;
+  storagePath: string;
 };
 
 type TemplateOption = {
@@ -67,9 +74,11 @@ type StudioComposerDockProps = {
   onDeleteCustomTemplate: (templateId: number) => void;
   onEditCustomTemplate: (template: PromptTemplateRecord) => void;
   onImageCountSelect: (count: number) => void;
+  onModeChange: (mode: "generate" | "edit") => void;
   onOpenReferencePicker: () => void;
   onPromptChange: (value: string) => void;
   onProviderSelect: (providerName: string) => void;
+  onRemoveReferenceUpload: (index: number) => void;
   onReferenceDrop: (event: DragEvent<HTMLButtonElement>) => void;
   onReferenceInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onResolutionSelect: (resolutionId: string) => void;
@@ -79,8 +88,7 @@ type StudioComposerDockProps = {
   onTemplateDraftTitleChange: (value: string) => void;
   onToggleComposerMenu: (menu: Exclude<ComposerMenuKey, null>) => void;
   providerGroups: ProviderGroup[];
-  referenceFileName: string;
-  referencePreviewUrl: string | null;
+  referenceUploads: ReferenceUploadItem[];
   resolutionOptions: ResolutionOption[];
   selectedProviderModelName: string | null;
   selectedResolutionLabel: string | null;
@@ -113,9 +121,11 @@ export default function StudioComposerDock({
   onDeleteCustomTemplate,
   onEditCustomTemplate,
   onImageCountSelect,
+  onModeChange,
   onOpenReferencePicker,
   onPromptChange,
   onProviderSelect,
+  onRemoveReferenceUpload,
   onReferenceDrop,
   onReferenceInputChange,
   onResolutionSelect,
@@ -125,8 +135,7 @@ export default function StudioComposerDock({
   onTemplateDraftTitleChange,
   onToggleComposerMenu,
   providerGroups,
-  referenceFileName,
-  referencePreviewUrl,
+  referenceUploads,
   resolutionOptions,
   selectedProviderModelName,
   selectedResolutionLabel,
@@ -158,6 +167,11 @@ export default function StudioComposerDock({
     completed: 3,
     failed: 3,
   };
+  const modeLabel = studioForm.creationMode === "edit" ? "图像编辑" : "文生图";
+  const referenceHint =
+    studioForm.creationMode === "edit"
+      ? `图像编辑要求 1-4 张参考图，当前已上传 ${referenceUploads.length} 张。`
+      : "文生图模式不会强制发送参考图；切换到图像编辑后会使用已上传的参考图。";
   return (
     <form className="composer-dock" onSubmit={onSubmit}>
       <div className="composer-leading">
@@ -166,6 +180,7 @@ export default function StudioComposerDock({
           <strong>{workspaceName}</strong>
         </div>
         <div className="composer-statusline">
+          <span>{modeLabel}</span>
           <span>{workflowName}</span>
           <span>{selectedProviderModelName ?? studioForm.requestedProvider}</span>
           <span>{studioForm.aspectRatio} / {selectedResolutionLabel ?? studioForm.resolution}</span>
@@ -192,36 +207,64 @@ export default function StudioComposerDock({
       ) : null}
 
       <div className="composer-body">
-        <button
-          type="button"
-          className={referencePreviewUrl ? "reference-dropzone has-preview" : "reference-dropzone"}
-          onClick={onOpenReferencePicker}
-          onDrop={onReferenceDrop}
-          onDragOver={(event) => event.preventDefault()}
-        >
-          {referencePreviewUrl ? (
-            <img src={referencePreviewUrl} alt={referenceFileName || "参考图"} className="reference-preview" />
-          ) : (
-            <span className="reference-dropzone-plus">+</span>
-          )}
-        </button>
+        <div className="reference-column">
+          <div className="composer-mode-switch" role="tablist" aria-label="创作模式">
+            <button
+              type="button"
+              className={studioForm.creationMode === "generate" ? "composer-mode-button is-active" : "composer-mode-button"}
+              onClick={() => onModeChange("generate")}
+            >
+              文生图
+            </button>
+            <button
+              type="button"
+              className={studioForm.creationMode === "edit" ? "composer-mode-button is-active" : "composer-mode-button"}
+              onClick={() => onModeChange("edit")}
+            >
+              图像编辑
+            </button>
+          </div>
+          <button
+            type="button"
+            className={referenceUploads.length > 0 ? "reference-dropzone has-preview" : "reference-dropzone"}
+            onClick={onOpenReferencePicker}
+            onDrop={onReferenceDrop}
+            onDragOver={(event) => event.preventDefault()}
+          >
+            {referenceUploads.length > 0 ? (
+              <div className="reference-preview-grid">
+                {referenceUploads.slice(0, 4).map((item) => (
+                  <img key={item.storagePath} src={item.previewUrl} alt={item.fileName} className="reference-preview" />
+                ))}
+              </div>
+            ) : (
+              <span className="reference-dropzone-plus">+</span>
+            )}
+          </button>
+          {referenceUploads.length > 0 ? (
+            <div className="reference-upload-list">
+              {referenceUploads.map((item, index) => (
+                <div key={item.storagePath} className="reference-upload-chip">
+                  <span>{index + 1}. {item.fileName}</span>
+                  <button type="button" onClick={() => onRemoveReferenceUpload(index)}>移除</button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
 
         <label className="composer-textarea">
           <textarea
             rows={4}
             value={studioForm.prompt}
             onChange={(event) => onPromptChange(event.target.value)}
-            placeholder="上传参考图，输入文字或描述主体、场景和想要生成的画面。"
+            placeholder="请输入要生成或编辑的画面描述。"
           />
-          <span className="composer-textarea-hint">
-            {referenceFileName
-              ? `已选择参考图：${referenceFileName}`
-              : "支持拖拽上传参考图，也可以点击左侧加号选择图片。"}
-          </span>
+          <span className="composer-textarea-hint">{referenceHint}</span>
         </label>
       </div>
 
-      <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={onReferenceInputChange} />
+      <input ref={fileInputRef} type="file" accept="image/*" multiple hidden onChange={onReferenceInputChange} />
 
       <div className="composer-toolbar" ref={composerToolbarRef}>
         <div className="composer-menu">

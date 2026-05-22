@@ -16,6 +16,23 @@
 
 ## Current Baseline
 
+- Current repo head used for the last server deployment: `30f5196`
+- Current local working tree is intentionally dirty:
+  - timeout-default / failure-display patch set is not yet committed
+  - reference-image upload fix for `gpt-image` providers is not yet committed
+  - designer studio split for `文生图 / 图像编辑` and `1-4` reference images is not yet committed
+  - local `tmp/` remains untracked
+- Server snapshot as of 2026-05-21:
+  - server IP: `120.79.227.11`
+  - deploy path: `/www/wwwroot/qmdh-web`
+  - deployed code: `30f5196`
+  - `alembic current`: `f6a7b8c9d0e1 (head)`
+  - live `gpt-image-2` timeout was manually raised to `300` seconds
+- Server access note:
+  - do not store credentials in repo docs
+  - use `admin` for `git pull`
+  - use `root` for Docker, PostgreSQL, and log inspection when necessary
+
 - 当前分支：`main`
 - 当前功能基线提交：请以 `git log -1 --oneline` 为准（勿依赖本节手写哈希；`task-009` 接入看板时间序列后基线已前进）
 - 最新提交以 `git log -1 --oneline` 为准
@@ -141,3 +158,15 @@ Never do these casually on the live server:
 - Use `docker compose run --rm backend python -m app.cli seed_users` to restore the maintained company roster
 - Inspiration library default images should now be treated as managed storage assets, not long-term third-party hotlinks
 - 设计师分享图没有外部回源地址，正式环境必须把 `backend_media` 当成业务资产备份，不能靠“重新抓取”恢复
+## 2026-05-21 Continuity Note
+
+- 本地未提交改动已继续扩展到 designer studio 任务卡片：
+  - 任务提交后，卡片左上角会显示本轮使用的参考图缩略图
+  - 多张参考图时显示首图和数量
+- 后端任务结果现已返回：
+  - `reference_image_storage_path`
+  - `reference_image_storage_paths`
+  - `reference_image_count`
+- 本地验证已通过：
+  - `frontend npm run build`
+  - `backend python -m pytest tests/test_auth_boundaries.py tests/test_task_executor_openai.py`

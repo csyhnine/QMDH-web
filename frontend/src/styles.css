@@ -1001,12 +1001,12 @@ button {
 .feed-stream {
   width: 100%;
   display: grid;
-  gap: 18px;
+  gap: 12px;
 }
 
 .feed-card,
 .feed-empty {
-  padding: 20px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-xl);
   background: var(--panel);
@@ -1016,11 +1016,11 @@ button {
 .feed-card {
   position: relative;
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .feed-card-with-reference {
-  padding-top: 94px;
+  padding-top: 78px;
 }
 
 .feed-card-running {
@@ -1032,14 +1032,14 @@ button {
 
 .feed-card-reference-badge {
   position: absolute;
-  top: 18px;
-  left: 20px;
-  max-width: min(320px, calc(100% - 40px));
+  top: 14px;
+  left: 16px;
+  max-width: min(300px, calc(100% - 32px));
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 14px 8px 8px;
-  border-radius: 18px;
+  gap: 10px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 16px;
   background: rgba(15, 23, 42, 0.92);
   color: #f8fafc;
   box-shadow: 0 18px 32px rgba(15, 23, 42, 0.18);
@@ -1047,8 +1047,8 @@ button {
 
 .feed-card-reference-stack {
   position: relative;
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   overflow: hidden;
   flex-shrink: 0;
   border-radius: 16px;
@@ -1087,13 +1087,13 @@ button {
 }
 
 .feed-card-reference-copy strong {
-  font-size: 0.86rem;
+  font-size: 0.82rem;
   font-weight: 600;
 }
 
 .feed-card-reference-copy span {
   color: rgba(248, 250, 252, 0.82);
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
@@ -1120,7 +1120,7 @@ button {
 
 .feed-card-copy {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .feed-card-topline {
@@ -1132,19 +1132,19 @@ button {
 }
 
 .feed-card-topline strong {
-  font-size: 1.04rem;
+  font-size: 0.98rem;
   font-weight: 600;
 }
 
 .feed-card-copy p {
   margin: 0;
   color: var(--muted);
-  line-height: 1.75;
+  line-height: 1.6;
 }
 
 .feed-card-summary-preview {
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -1207,7 +1207,7 @@ button {
 
 .feed-gallery {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1244,7 +1244,7 @@ button {
 
 .asset-tile {
   position: relative;
-  min-height: 260px;
+  min-height: 168px;
   border-radius: 20px;
   overflow: hidden;
   background:
@@ -1254,7 +1254,7 @@ button {
 }
 
 .asset-tile-primary {
-  min-height: 300px;
+  min-height: 190px;
 }
 
 .asset-tile img {
@@ -1291,7 +1291,7 @@ button {
 }
 
 .feed-gallery-empty {
-  padding: 18px;
+  padding: 12px 14px;
   border: 1px dashed var(--line-strong);
   border-radius: 20px;
   background: rgba(17, 24, 39, 0.03);
@@ -1314,8 +1314,8 @@ button {
 
 .feed-task-progress {
   display: grid;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .feed-task-progress-head {
@@ -1345,7 +1345,7 @@ button {
 
 .feed-task-progress-track {
   position: relative;
-  height: 12px;
+  height: 8px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(191, 219, 254, 0.55);
@@ -1558,20 +1558,21 @@ button {
 
 .composer-body {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: 136px minmax(0, 1fr);
+  gap: 14px;
   align-items: start;
 }
 
 .reference-column {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  align-content: start;
 }
 
 .composer-mode-switch {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: 1fr;
+  gap: 6px;
 }
 
 .composer-mode-button {
@@ -1591,7 +1592,8 @@ button {
 }
 
 .reference-dropzone {
-  min-height: 120px;
+  width: 100%;
+  min-height: 96px;
   border: 1px dashed rgba(15, 23, 42, 0.14);
   border-radius: 20px;
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.92));
@@ -1637,7 +1639,7 @@ button {
 
 .reference-upload-list {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .reference-upload-chip {
@@ -1645,12 +1647,12 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.8);
   color: #475467;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
 }
 
 .reference-upload-chip button {

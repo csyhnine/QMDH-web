@@ -526,6 +526,12 @@ function truncateText(value: string, maxLength: number): string {
   return `${normalized.slice(0, maxLength).trimEnd()}…`;
 }
 
+function deriveTaskTitleFromPrompt(prompt: string, fallback = "未命名任务"): string {
+  const normalized = prompt.replace(/\s+/g, " ").trim();
+  if (!normalized) return fallback;
+  return truncateText(normalized, 36);
+}
+
 function taskSummary(task: Task, asset?: Asset): string {
   if (task.status === "failed" && task.result["error_summary"]) {
     return String(task.result["error_summary"]);
@@ -536,6 +542,24 @@ function taskSummary(task: Task, asset?: Asset): string {
       : task.result["error"]
         ? String(task.result["error"])
         : "等待结果返回。");
+}
+
+function taskDisplayTitle(task: Task, asset?: Asset): string {
+  const promptSource =
+    asset?.prompt_text ??
+    (typeof task.result["prompt"] === "string" ? String(task.result["prompt"]) : "");
+
+  if (promptSource.trim()) {
+    return deriveTaskTitleFromPrompt(promptSource, String(task.title || "").trim() || "未命名任务");
+  }
+
+  const rawTitle = String(task.title || "").trim();
+  if (rawTitle && !/模板/.test(rawTitle)) {
+    return rawTitle;
+  }
+
+  const summary = taskSummary(task, asset);
+  return deriveTaskTitleFromPrompt(summary, rawTitle || "未命名任务");
 }
 
 function taskFailureDetail(task: Task): string {
@@ -1172,6 +1196,7 @@ function FeedCard(props: {
   onAssetPreview?: (asset: Asset) => void;
   anchorRef?: RefObject<HTMLElement | null>;
 }) {
+  const displayTitle = taskDisplayTitle(props.task, props.asset);
   const summary = taskSummary(props.task, props.asset);
   const summaryPreview = truncateText(summary, 160);
   const hasLongSummary = summaryPreview !== summary;
@@ -1223,7 +1248,7 @@ function FeedCard(props: {
         <div className="feed-card-avatar">{props.task.requested_provider.slice(0, 1).toUpperCase()}</div>
         <div className="feed-card-copy">
           <div className="feed-card-topline">
-            <strong>{props.task.title}</strong>
+            <strong>{displayTitle}</strong>
             <span className={`status-pill status-${props.task.status}`}>{formatStatus(props.task.status)}</span>
           </div>
           <p className="feed-card-summary-preview">{summaryPreview}</p>
@@ -2294,9 +2319,13 @@ export default function GenerateStudioShell() {
     }
 
     setSubmitting(true);
+    const taskTitle = deriveTaskTitleFromPrompt(
+      studioForm.prompt,
+      studioForm.title.trim() || defaultStudioForm.title
+    );
     setSubmissionTracker({
       taskId: null,
-      taskTitle: studioForm.title.trim() || defaultStudioForm.title,
+      taskTitle,
       providerName: selectedProvider?.model_name ?? studioForm.requestedProvider,
       imageCount: clampImageCount(studioForm.imageCount),
       hasReferenceImage: referenceImageCount > 0,
@@ -2305,7 +2334,7 @@ export default function GenerateStudioShell() {
 
     try {
       const createdTask = await api.createTask({
-        title: studioForm.title.trim() || defaultStudioForm.title,
+        title: taskTitle,
         workflow_key: selectedWorkflowKey,
         project_code: studioForm.projectCode,
         requested_provider: studioForm.requestedProvider,

@@ -151,22 +151,6 @@ export default function StudioComposerDock({
   workflowName,
   workspaceName,
 }: StudioComposerDockProps) {
-  const stageLabels: Record<SubmissionStage, string> = {
-    uploading_reference: "参考图上传中",
-    submitting: "任务已提交",
-    pending: "排队中",
-    running: "执行中",
-    completed: "已完成",
-    failed: "执行失败",
-  };
-  const stageIndex: Record<SubmissionStage, number> = {
-    uploading_reference: 0,
-    submitting: 1,
-    pending: 2,
-    running: 2,
-    completed: 3,
-    failed: 3,
-  };
   const modeLabel = studioForm.creationMode === "edit" ? "图像编辑" : "文生图";
   const referenceHint =
     studioForm.creationMode === "edit"
@@ -187,25 +171,6 @@ export default function StudioComposerDock({
           <span>{studioForm.imageCount} 张</span>
         </div>
       </div>
-
-      {submissionProgress ? (
-        <section className={`composer-progress composer-progress-${submissionProgress.stage}`}>
-          <div className="composer-progress-head">
-            <strong>{stageLabels[submissionProgress.stage]}</strong>
-            <span>
-              {submissionProgress.providerName} · {submissionProgress.imageCount} 张
-              {submissionProgress.hasReferenceImage ? " · 已附带参考图" : ""}
-            </span>
-          </div>
-          <div className="composer-progress-steps" aria-hidden="true">
-            {["reference", "submitted", "running", "done"].map((label, index) => (
-              <span key={label} className={index <= stageIndex[submissionProgress.stage] ? "is-active" : ""} />
-            ))}
-          </div>
-          <p className="composer-progress-copy">{submissionProgress.taskTitle}</p>
-        </section>
-      ) : null}
-
       <div className="composer-body">
         <div className="reference-column">
           <div className="composer-mode-switch" role="tablist" aria-label="创作模式">

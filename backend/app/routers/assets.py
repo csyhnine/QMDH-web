@@ -7,14 +7,53 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import can_access_project, ensure_project_access, get_current_auth_user
+from app.core.auth import can_access_project, get_current_auth_user, has_admin_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import Asset, AssetBookmark
+from app.models import Asset, AssetBookmark, Project, Task
 from app.schemas import AssetOut, ReferenceUploadIn, ReferenceUploadOut
 from app.services.media_storage import resolve_storage_path, write_binary_asset
 
 router = APIRouter(prefix="/assets", tags=["assets"])
+
+
+def _designer_owned_task_ids(db: Session, auth_user: AuthUserProfile) -> set[int]:
+    query = select(Task.id).join(Task.project).where(Task.deleted_at.is_(None))
+    if auth_user.user_id is not None:
+        query = query.where(Task.user_id == auth_user.user_id)
+    else:
+        query = query.where(Task.user.has(name=auth_user.name))
+    if "*" not in auth_user.project_codes:
+        query = query.where(Project.code.in_(auth_user.project_codes))
+    return set(db.scalars(query).all())
+
+
+def _can_access_asset(
+    asset: Asset,
+    *,
+    auth_user: AuthUserProfile,
+    owned_task_ids: set[int],
+) -> bool:
+    if has_admin_access(auth_user.role):
+        return True
+    if asset.source_task_id is None:
+        return False
+    if asset.source_task_id not in owned_task_ids:
+        return False
+    if asset.project is None:
+        return True
+    return can_access_project(auth_user, asset.project.code)
+
+
+def _ensure_asset_access(
+    asset: Asset,
+    *,
+    auth_user: AuthUserProfile,
+    db: Session,
+) -> None:
+    owned_task_ids = _designer_owned_task_ids(db, auth_user)
+    if not _can_access_asset(asset, auth_user=auth_user, owned_task_ids=owned_task_ids):
+        raise HTTPException(status_code=403, detail="Asset access denied")
 
 
 def _to_asset_out(db: Session, asset: Asset, auth_user: AuthUserProfile) -> AssetOut:
@@ -68,10 +107,11 @@ def list_assets(
     bookmarked: bool | None = None,
 ) -> list[AssetOut]:
     assets = db.scalars(select(Asset).order_by(Asset.created_at.desc())).all()
+    owned_task_ids = set() if has_admin_access(auth_user.role) else _designer_owned_task_ids(db, auth_user)
     accessible = [
         asset
         for asset in assets
-        if asset.project is None or can_access_project(auth_user, asset.project.code)
+        if _can_access_asset(asset, auth_user=auth_user, owned_task_ids=owned_task_ids)
     ]
 
     # Get current user's bookmarked asset IDs
@@ -120,8 +160,7 @@ def like_asset(
     asset = db.get(Asset, asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
-    if asset.project:
-        ensure_project_access(auth_user, asset.project.code)
+    _ensure_asset_access(asset, auth_user=auth_user, db=db)
     asset.like_count += 1
     db.commit()
     db.refresh(asset)
@@ -137,8 +176,7 @@ def share_asset(
     asset = db.get(Asset, asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
-    if asset.project:
-        ensure_project_access(auth_user, asset.project.code)
+    _ensure_asset_access(asset, auth_user=auth_user, db=db)
     asset.share_count += 1
     db.commit()
     db.refresh(asset)
@@ -155,8 +193,7 @@ def toggle_bookmark(
     asset = db.get(Asset, asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
-    if asset.project:
-        ensure_project_access(auth_user, asset.project.code)
+    _ensure_asset_access(asset, auth_user=auth_user, db=db)
 
     user_id = auth_user.user_id
     if not user_id:

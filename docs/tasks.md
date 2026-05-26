@@ -1,5 +1,14 @@
 # Tasks
 
+## 2026-05-25 Alignment Update
+
+- This section overrides older historical notes below when they conflict with current code.
+- Runtime roles are now effectively `admin` and `designer`.
+- Legacy `owner` and `ops` inputs are normalized to `admin` at auth boundaries for compatibility, but they are no longer an active product role model.
+- Designers now see only their own task and asset history. Same-project membership no longer implies shared history visibility.
+- `/admin/projects` and project-member management are no longer part of the active product surface.
+- Projects remain as personal or admin-managed task containers, not collaboration spaces with shared history cards.
+
 ## Usage Rules
 - 本文件只保留当前迭代和下一步任务
 - 更早历史迁移到 `docs/archive/`

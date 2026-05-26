@@ -1,5 +1,12 @@
 # Decisions
 
+## 2026-05-25 Active Alignment Note
+
+- When older decision text mentions `owner`, `ops`, `/admin/projects`, or project-member shared history, treat that wording as historical unless the code still matches it.
+- The current active product surface is centered on `admin` and `designer`.
+- The current active visibility model is user-owned history for designers, with admins retaining global management visibility.
+- Projects remain containers for task organization and assignment, not collaboration spaces with automatic shared history.
+
 ## Purpose
 本文档只记录顶层技术决策、重要约束和当前不应反复横跳的问题。
 不记录零散实现细节。
@@ -7,6 +14,24 @@
 ---
 
 ## Active Decisions
+
+### Decision: active product surface is user-centered, not project-member shared history
+- 状态：Accepted
+- 日期：2026-05-25
+- 背景：
+  - The original MVP accumulated project-centered authorization and project-member collaboration assumptions.
+  - The current product boundary is narrower: users manage their own image-generation task containers, and only preset admins use backend management views.
+- 决策内容：
+  - Designers only see their own tasks and assets by default.
+  - Shared project membership must not imply shared history visibility.
+  - `/admin/projects` and project-member management are not active product capabilities.
+  - The active role model is `admin` and `designer`; legacy `owner` and `ops` values are only compatibility aliases.
+- 影响：
+  - Permission checks, admin routes, and history queries should default to user ownership semantics.
+  - Historical docs that describe project-member sharing or multi-tier admin surfaces need to be treated as outdated unless separately refreshed.
+- 禁止事项：
+  - Do not reintroduce project-member shared history as an implicit default.
+  - Do not treat `ops` as an independently active product role without a new explicit product decision.
 
 ### Decision: 仓库文档而非聊天记录作为长期上下文
 - 状态：Accepted

@@ -1,5 +1,14 @@
 # Architecture
 
+## 2026-05-25 Alignment Update
+
+- This update overrides older historical references below when they conflict with current runtime behavior.
+- The active permission model is now `admin` and `designer`.
+- Admins can access backend management views such as `/admin/dashboard`, `/admin/models`, `/admin/users`, and `/admin/settings`.
+- Designers use the studio and only see their own task and asset history.
+- `/admin/projects` has been removed from the active frontend surface, and project-member management APIs/UI are no longer active product capabilities.
+- Projects still exist in the data model, but they now act as personal or admin-managed task containers rather than shared-history collaboration spaces.
+
 ## 1. Purpose
 本文档描述 QMDH-web 当前有效架构，用于帮助新 agent 快速理解：
 

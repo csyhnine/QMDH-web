@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_auth_user
+from app.core.auth import get_current_auth_user, normalize_user_role
 from app.core.config import AuthUserProfile, settings
 from app.core.security import create_session_token, hash_session_token, verify_password
 from app.database import get_db
@@ -21,7 +21,7 @@ def _to_auth_user_out(user: User) -> AuthUserOut:
         id=user.id,
         name=user.name,
         display_name=user.display_name or user.name,
-        role=user.role,
+        role=normalize_user_role(user.role),
         project_codes=user.project_codes or [],
         is_active=user.is_active,
         monthly_quota=user.monthly_quota,

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditEventType, write_audit_log
-from app.core.auth import get_current_auth_user, require_ops_access
+from app.core.auth import get_current_auth_user, has_admin_access, require_ops_access
 from app.core.config import AuthUserProfile, settings
 from app.core.encryption import (
     EncryptedValueDecodeError,
@@ -31,7 +31,6 @@ from app.schemas import (
 from app.services.model_registry import list_provider_capabilities
 
 router = APIRouter(prefix="/providers", tags=["providers"])
-PROVIDER_ADMIN_ROLES = {"admin", "owner", "ops"}
 
 
 @router.get("", response_model=list[ProviderCapability])
@@ -58,7 +57,7 @@ def _mask_api_key(api_key: str) -> str:
 
 
 def _require_provider_admin(auth_user: AuthUserProfile) -> None:
-    if auth_user.role not in PROVIDER_ADMIN_ROLES:
+    if not has_admin_access(auth_user.role):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Provider profile admin access required")
 
 

@@ -10,6 +10,63 @@
 
 ## Latest Handoffs
 
+### [2026-05-25 11:40] Session Handoff
+- Role: Product alignment / Refactor / Verification
+- Branch: `main`
+- Repo status:
+  - Working tree clean: No
+  - Uncommitted changes: Yes
+  - Pushed: No
+- What changed in this round:
+  - normalized runtime roles to `admin` / `designer` while keeping legacy `owner` / `ops` aliases readable through normalization
+  - changed designer task and asset visibility to current-user ownership instead of same-project shared visibility
+  - removed active `/admin/projects` routing and removed project-member management from the active UI/API surface
+  - simplified the studio workspace so projects remain personal task containers, not collaboration/member-sharing spaces
+  - deleted the unused `frontend/src/pages/admin/ProjectsPage.tsx` file
+- Verification completed locally:
+  - backend: `PYTHONPATH=backend ..\\backend\\.venv\\Scripts\\python.exe -m pytest tests\\test_database_auth.py tests\\test_auth_boundaries.py`
+  - frontend: `npm run build`
+- Important current product reality:
+  - only admins should access backend management views
+  - designers should only see their own task and asset history
+  - project access still exists as an admin-managed container scope, but project member sharing is no longer an active product concept
+- Remaining follow-up:
+  - `frontend/src/features/studio/GenerateStudioShell.tsx` still contains legacy admin-view code and remains the main frontend hot spot
+  - docs still contain historical references to `/admin/projects`, `ops`, `owner`, and project-member collaboration; use `docs/product-boundary.md` as the clean current baseline when older files disagree
+- Deployment status:
+  - local only
+  - not yet committed, pushed, or deployed
+- Safe to hand off: Yes
+
+### [2026-05-26 10:40] Session Handoff
+- Role: Product alignment / Personal-project ownership / Verification
+- Branch: `main`
+- Repo status:
+  - Working tree clean: No
+  - Uncommitted changes: Yes
+  - Pushed: No
+- What changed in this round:
+  - removed `project_codes` from the public user-management schema and stopped defaulting new users into `QMDH-001`
+  - moved personal-project code generation fully to the backend so the left workspace no longer asks the frontend or admins to manage internal `project_code` values
+  - added owner-based manageability for personal projects in code via `Project.owner_user_id` and returned `can_manage` to the frontend
+  - allowed session-backed designers to rename and delete their own personal projects while leaving legacy owner-less projects effectively admin-managed
+  - added a delete control to the left personal-project workspace UI and aligned copy/docs with the owner-based model
+- Verification completed locally:
+  - backend: `PYTHONPATH=backend ..\\backend\\.venv\\Scripts\\python.exe -m pytest tests\\test_database_auth.py tests\\test_auth_boundaries.py`
+  - frontend: `npm run build`
+- Important current product reality:
+  - tasks still carry internal `project_code` / `project_id` links as compatibility identifiers
+  - designers only see their own task and asset history
+  - new personal projects are self-managed by their owner account
+  - legacy projects that predate owner attribution may still require admin handling
+- Remaining follow-up:
+  - deploying this patch set requires a real database migration for `projects.owner_user_id`
+  - `frontend/src/features/studio/GenerateStudioShell.tsx` remains a large hotspot and is still worth splitting
+- Deployment status:
+  - local only
+  - not yet committed, pushed, or deployed
+- Safe to hand off: Yes
+
 ### [2026-05-21 19:10] Session Handoff
 - Role: Feature / Bugfix / Verification
 - Branch: `main`

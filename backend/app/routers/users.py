@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditEventType, write_audit_log
-from app.core.auth import get_current_auth_user, require_ops_access, require_user_admin
+from app.core.auth import get_current_auth_user, normalize_user_role, require_user_admin
 from app.core.config import AuthUserProfile
 from app.core.security import hash_password
 from app.database import get_db
@@ -14,16 +13,17 @@ from app.models import User
 from app.schemas import UserCreate, UserOut, UserPasswordReset, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
-VALID_ROLES = {"owner", "admin", "ops", "designer"}
-
-
-def _normalize_project_codes(project_codes: list[str]) -> list[str]:
-    normalized = [code.strip() for code in project_codes if code.strip()]
-    return normalized
+VALID_ROLES = {"admin", "designer"}
+ROLE_ALIASES = {
+    "owner": "admin",
+    "admin": "admin",
+    "ops": "admin",
+    "designer": "designer",
+}
 
 
 def _validate_role(role: str) -> str:
-    normalized = role.strip()
+    normalized = ROLE_ALIASES.get(role.strip().lower(), "")
     if normalized not in VALID_ROLES:
         raise HTTPException(status_code=400, detail="Invalid user role")
     return normalized
@@ -34,43 +34,13 @@ def _to_user_out(user: User) -> UserOut:
         id=user.id,
         name=user.name,
         display_name=user.display_name or user.name,
-        role=user.role,
-        project_codes=user.project_codes or [],
+        role=normalize_user_role(user.role),
         is_active=user.is_active,
         monthly_quota=user.monthly_quota,
         created_at=user.created_at,
         updated_at=user.updated_at or user.created_at,
         last_login_at=user.last_login_at,
     )
-
-
-class UserBrief(BaseModel):
-    """Lightweight user info for member selection (ops+ accessible)."""
-    id: int
-    name: str
-    display_name: str
-    role: str
-    is_active: bool
-
-
-@router.get("/brief", response_model=list[UserBrief])
-def list_users_brief(
-    db: Session = Depends(get_db),
-    auth_user: AuthUserProfile = Depends(get_current_auth_user),
-) -> list[UserBrief]:
-    """Return minimal user list for member selection. Requires ops access."""
-    require_ops_access(auth_user)
-    users = db.scalars(select(User).order_by(User.role, User.name)).all()
-    return [
-        UserBrief(
-            id=user.id,
-            name=user.name,
-            display_name=user.display_name or user.name,
-            role=user.role,
-            is_active=user.is_active,
-        )
-        for user in users
-    ]
 
 
 @router.get("", response_model=list[UserOut])
@@ -100,7 +70,7 @@ def create_user(
         role=_validate_role(payload.role),
         password_hash=hash_password(payload.password),
         is_active=payload.is_active,
-        project_codes=_normalize_project_codes(payload.project_codes),
+        project_codes=[],
         monthly_quota=payload.monthly_quota,
     )
     db.add(user)
@@ -115,7 +85,7 @@ def create_user(
         target_type="user",
         target_id=user.id,
         target_name=user.name,
-        details={"role": user.role, "project_codes": user.project_codes},
+        details={"role": user.role},
     )
     db.commit()
 
@@ -139,8 +109,6 @@ def update_user(
         user.display_name = updates["display_name"].strip() or user.name
     if "role" in updates and updates["role"] is not None:
         user.role = _validate_role(updates["role"])
-    if "project_codes" in updates and updates["project_codes"] is not None:
-        user.project_codes = _normalize_project_codes(updates["project_codes"])
     if "is_active" in updates and updates["is_active"] is not None:
         if auth_user.user_id == user.id and not updates["is_active"]:
             raise HTTPException(status_code=400, detail="Cannot disable the current user")

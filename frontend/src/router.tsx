@@ -9,7 +9,6 @@ const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/admin/DashboardPage"));
 const UsersPage = lazy(() => import("./pages/admin/UsersPage"));
 const ModelsPage = lazy(() => import("./pages/admin/ModelsPage"));
-const ProjectsPage = lazy(() => import("./pages/admin/ProjectsPage"));
 const SettingsPage = lazy(() => import("./pages/admin/SettingsPage"));
 const InspirationPage = lazy(() => import("./pages/inspiration/InspirationPage"));
 const ChatPage = lazy(() => import("./pages/chat/ChatPage"));
@@ -144,44 +143,20 @@ function ModelsRoute() {
   );
 }
 
-function ProjectsRoute() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-
-  async function refresh() {
-    const [nextProjects, nextTasks] = await Promise.all([api.projects(), api.tasks()]);
-    setProjects(nextProjects);
-    setTasks(nextTasks);
-  }
-
-  useEffect(() => {
-    void refresh();
-  }, []);
-
-  return (
-    <AppShell kind="admin" active="projects">
-      <ProjectsPage projects={projects} tasks={tasks} userCanUseOpsViews={true} onRefresh={() => void refresh()} />
-    </AppShell>
-  );
-}
-
 function SettingsRoute() {
   const { canManageUsers } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfileRecord[]>([]);
   const [users, setUsers] = useState<ManagedUser[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
 
   async function refresh() {
-    const [nextTasks, nextProfiles, nextProjects, nextUsers] = await Promise.all([
+    const [nextTasks, nextProfiles, nextUsers] = await Promise.all([
       api.tasks(),
       api.providerProfiles(),
-      api.projects(),
       canManageUsers ? api.users() : Promise.resolve([]),
     ]);
     setTasks(nextTasks);
     setProviderProfiles(nextProfiles);
-    setProjects(nextProjects);
     setUsers(nextUsers);
   }
 
@@ -197,7 +172,6 @@ function SettingsRoute() {
         tasks={tasks}
         providerProfiles={providerProfiles}
         users={users}
-        projects={projects}
         onRefresh={() => void refresh()}
       />
     </AppShell>
@@ -226,7 +200,6 @@ export default function AppRouter() {
           <Route path="/admin/dashboard" element={<ProtectedRoute><OpsRoute><DashboardRoute /></OpsRoute></ProtectedRoute>} />
           <Route path="/admin/users" element={<ProtectedRoute><AdminRoute><UsersRoute /></AdminRoute></ProtectedRoute>} />
           <Route path="/admin/models" element={<ProtectedRoute><OpsRoute><ModelsRoute /></OpsRoute></ProtectedRoute>} />
-          <Route path="/admin/projects" element={<ProtectedRoute><OpsRoute><ProjectsRoute /></OpsRoute></ProtectedRoute>} />
           <Route path="/admin/inspiration" element={<ProtectedRoute><OpsRoute><AdminInspirationRoute /></OpsRoute></ProtectedRoute>} />
           <Route path="/admin/settings" element={<ProtectedRoute><AdminRoute><SettingsRoute /></AdminRoute></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/studio/generate" replace />} />

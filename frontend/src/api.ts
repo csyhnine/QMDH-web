@@ -68,7 +68,13 @@ export type LoginResponse = {
   user: AuthUser;
 };
 
-export type ManagedUser = AuthUser & {
+export type ManagedUser = {
+  id: number;
+  name: string;
+  display_name: string;
+  role: string;
+  is_active: boolean;
+  monthly_quota: number | null;
   created_at: string;
   updated_at: string;
   last_login_at: string | null;
@@ -79,13 +85,12 @@ export type UserCreatePayload = {
   password: string;
   display_name: string;
   role: string;
-  project_codes: string[];
   is_active: boolean;
   monthly_quota: number | null;
 };
 
 export type UserUpdatePayload = Partial<
-  Pick<UserCreatePayload, "display_name" | "role" | "project_codes" | "is_active" | "monthly_quota">
+  Pick<UserCreatePayload, "display_name" | "role" | "is_active" | "monthly_quota">
 >;
 
 export type DashboardDailyPoint = {
@@ -243,19 +248,12 @@ export type Project = {
   name: string;
   code: string;
   classification: string;
+  can_manage: boolean;
   current_phase: string | null;
   phase_status: string | null;
   last_updated: string | null;
   summary: string | null;
   next_action: string | null;
-};
-
-export type ProjectMember = {
-  id: number;
-  name: string;
-  display_name: string;
-  role: string;
-  is_global: boolean;
 };
 
 export type InspirationPost = {
@@ -469,7 +467,6 @@ export const api = {
   logout: () => postJson<void>("/auth/logout"),
   me: () => request<AuthUser>("/auth/me"),
   users: () => request<ManagedUser[]>("/users"),
-  usersBrief: () => request<{ id: number; name: string; display_name: string; role: string; is_active: boolean }[]>("/users/brief"),
   createUser: (payload: UserCreatePayload) => postJson<ManagedUser>("/users", payload),
   updateUser: (userId: number, payload: UserUpdatePayload) => patchJson<ManagedUser>(`/users/${userId}`, payload),
   resetUserPassword: (userId: number, password: string) =>
@@ -481,16 +478,13 @@ export const api = {
   },
   health: () => request<{ status: string; service: string }>("/health"),
   projects: () => request<Project[]>("/projects"),
-  createProject: (name: string, code: string, classification?: string) =>
-    postJson<Project>("/projects", { name, code, classification: classification || "B" }),
+  createProject: (name: string, classification?: string) =>
+    postJson<Project>("/projects", { name, classification: classification || "B" }),
   renameProject: (projectCode: string, name: string) =>
     patchJson<Project>(`/projects/${projectCode}`, { name }),
   deleteProject: (projectCode: string) =>
     deleteRequest(`/projects/${projectCode}`),
   projectStatus: (projectCode: string) => request<ProjectStatus>(`/projects/${projectCode}/status`),
-  projectMembers: (projectCode: string) => request<ProjectMember[]>(`/projects/${projectCode}/members`),
-  updateProjectMembers: (projectCode: string, addUserIds: number[], removeUserIds: number[]) =>
-    patchJson<ProjectMember[]>(`/projects/${projectCode}/members`, { add_user_ids: addUserIds, remove_user_ids: removeUserIds }),
   providers: () => request<Provider[]>("/providers"),
   providerProfiles: () => request<ProviderProfileRecord[]>("/providers/profiles"),
   probeProviderProfile: (profileId: number) =>

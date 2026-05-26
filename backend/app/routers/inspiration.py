@@ -62,7 +62,7 @@ def create_inspiration(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> InspirationPostOut:
-    """Create an inspiration post. Users can share their generations, ops can import external references."""
+    """Create an inspiration post. Users can share their generations, admins can import external references."""
     if payload.source_type == "external":
         require_ops_access(auth_user)
 
@@ -130,7 +130,7 @@ def update_inspiration(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> InspirationPostOut:
-    """Update an inspiration post. Only ops+ can update."""
+    """Update an inspiration post. Only admins can update."""
     require_ops_access(auth_user)
     post = db.get(InspirationPost, post_id)
     if not post:
@@ -159,7 +159,7 @@ async def extract_images_from_url(
     payload: ExtractImagesIn,
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> ExtractImagesOut:
-    """Fetch a URL and extract all image URLs from the page. Ops+ only."""
+    """Fetch a URL and extract all image URLs from the page. Admins only."""
     require_ops_access(auth_user)
 
     url = payload.url.strip()

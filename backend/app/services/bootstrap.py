@@ -2,6 +2,7 @@ from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from app.core.auth import normalize_user_role
 from app.core.config import settings
 from app.core.security import hash_password
 from app.models import Asset, AssetType, DataClassification, InspirationPost, Project, User, Workflow
@@ -20,7 +21,7 @@ LOCAL_DEV_ACCOUNTS = [
     {
         "name": "qmdh.ops",
         "display_name": "Ops",
-        "role": "ops",
+        "role": "admin",
         "password": "qmdh-ops-2026",
         "project_codes": ["*"],
         "monthly_quota": None,
@@ -37,10 +38,14 @@ LOCAL_DEV_ACCOUNTS = [
 
 
 def ensure_schema(engine: Engine) -> None:
-    """Schema migration is now handled by Alembic. This function is kept for backwards compatibility."""
-    # All schema changes are now managed by Alembic migrations.
-    # Run `alembic upgrade head` to apply migrations.
-    pass
+    """Apply lightweight compatibility fixes for local databases that predate newer models."""
+    inspector = inspect(engine)
+
+    project_columns = {column["name"] for column in inspector.get_columns("projects")}
+    with engine.begin() as connection:
+        if "owner_user_id" not in project_columns:
+            connection.execute(text("ALTER TABLE projects ADD COLUMN owner_user_id INTEGER"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_projects_owner_user_id ON projects (owner_user_id)"))
 
 
 def seed_initial_data(db: Session) -> None:
@@ -51,16 +56,21 @@ def seed_initial_data(db: Session) -> None:
                 User(
                     name=settings.bootstrap_admin_name,
                     display_name=settings.bootstrap_admin_name,
-                    role="owner",
+                    role="admin",
                     password_hash=hash_password(settings.bootstrap_admin_password),
                     is_active=True,
                     project_codes=["*"],
                 )
             )
         elif not admin.password_hash:
-            admin.role = "owner"
+            admin.role = "admin"
             admin.display_name = admin.display_name or admin.name
             admin.password_hash = hash_password(settings.bootstrap_admin_password)
+            admin.is_active = True
+            admin.project_codes = ["*"]
+        else:
+            admin.role = "admin"
+            admin.display_name = admin.display_name or admin.name
             admin.is_active = True
             admin.project_codes = ["*"]
 
@@ -81,8 +91,7 @@ def seed_initial_data(db: Session) -> None:
             continue
 
         user.display_name = user.display_name or account["display_name"]
-        if user.role not in {"owner", "admin", "ops", "designer"}:
-            user.role = account["role"]
+        user.role = normalize_user_role(user.role or account["role"])
         if not user.project_codes:
             user.project_codes = account["project_codes"]
         if not user.password_hash:

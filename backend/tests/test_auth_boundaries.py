@@ -127,6 +127,18 @@ class AuthBoundaryTests(unittest.TestCase):
         )
         self.assertEqual(forbidden.status_code, 403)
 
+    def test_token_only_user_cannot_create_personal_project(self) -> None:
+        response = self.client.post(
+            "/projects",
+            headers={"X-QMDH-Auth": "reviewer-token", "X-QMDH-User": "reviewer"},
+            json={
+                "name": "Reviewer personal group",
+                "classification": "B",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+
     def test_mismatched_user_header_is_rejected(self) -> None:
         response = self.client.get(
             "/prompt-templates",

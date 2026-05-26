@@ -38,7 +38,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(50), default="designer")
     password_hash: Mapped[str] = mapped_column(Text, default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    project_codes: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["QMDH-001"])
+    project_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
     monthly_quota: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -68,10 +68,12 @@ class Project(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(150), unique=True, index=True)
     code: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     classification: Mapped[DataClassification] = mapped_column(SqlEnum(DataClassification), default=DataClassification.b)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    owner: Mapped[User | None] = relationship()
     tasks: Mapped[list["Task"]] = relationship(back_populates="project")
     assets: Mapped[list["Asset"]] = relationship(back_populates="project")
 

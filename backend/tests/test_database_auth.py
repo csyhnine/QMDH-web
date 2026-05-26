@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.security import hash_password, hash_session_token
 from app.database import Base, get_db
 from app.models import Asset, AssetType, AuditLog, AuthSession, DataClassification, Project, ProviderCall, ProviderCallArchive, Task, TaskArchive, TaskStatus, UsageLedger, User, Workflow
-from app.routers import auth, dashboard, projects, users
+from app.routers import assets, auth, dashboard, projects, tasks, users
 from app.services.bootstrap import seed_initial_data
 from app.services.usage_ledger import ensure_usage_ledger_for_task
 
@@ -51,6 +51,14 @@ class DatabaseAuthTests(unittest.TestCase):
                 is_active=True,
                 project_codes=["QMDH-001"],
             )
+            peer_designer = User(
+                name="peer.designer",
+                display_name="Peer Designer",
+                role="designer",
+                password_hash=hash_password("peer-pass"),
+                is_active=True,
+                project_codes=["QMDH-001"],
+            )
             disabled = User(
                 name="disabled",
                 display_name="Disabled",
@@ -59,7 +67,7 @@ class DatabaseAuthTests(unittest.TestCase):
                 is_active=False,
                 project_codes=["QMDH-001"],
             )
-            db.add_all([admin, ops, designer, disabled])
+            db.add_all([admin, ops, designer, peer_designer, disabled])
             db.flush()
             db.add(Project(name="Demo", code="QMDH-001", classification=DataClassification.b))
             db.add(Project(name="Secret", code="QMDH-SEC", classification=DataClassification.a))
@@ -175,6 +183,8 @@ class DatabaseAuthTests(unittest.TestCase):
         self.app.include_router(auth.router)
         self.app.include_router(users.router)
         self.app.include_router(projects.router)
+        self.app.include_router(tasks.router)
+        self.app.include_router(assets.router)
         self.app.include_router(dashboard.router)
         self.client = TestClient(self.app)
 
@@ -230,7 +240,11 @@ class DatabaseAuthTests(unittest.TestCase):
         self.assertEqual(designer_users.status_code, 403)
 
         ops_users = self.client.get("/users", headers={"Authorization": f"Bearer {ops_token}"})
-        self.assertEqual(ops_users.status_code, 403)
+        self.assertEqual(ops_users.status_code, 200)
+
+        ops_me = self.client.get("/auth/me", headers={"Authorization": f"Bearer {ops_token}"})
+        self.assertEqual(ops_me.status_code, 200)
+        self.assertEqual(ops_me.json()["role"], "admin")
 
         ops_dashboard = self.client.get("/dashboard/stats", headers={"Authorization": f"Bearer {ops_token}"})
         self.assertEqual(ops_dashboard.status_code, 200)
@@ -275,11 +289,20 @@ class DatabaseAuthTests(unittest.TestCase):
                 "password": "new-pass",
                 "display_name": "New Designer",
                 "role": "designer",
-                "project_codes": ["QMDH-001"],
                 "is_active": True,
             },
         )
         self.assertEqual(created.status_code, 201, created.text)
+        self.assertNotIn("project_codes", created.json())
+
+        listed_users = self.client.get("/users", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(listed_users.status_code, 200)
+        self.assertTrue(all("project_codes" not in user for user in listed_users.json()))
+
+        with self.SessionLocal() as db:
+            new_user = db.scalar(select(User).where(User.name == "new.designer"))
+            self.assertIsNotNone(new_user)
+            self.assertEqual(new_user.project_codes, [])
 
         reset = self.client.post(
             f"/users/{created.json()['id']}/reset-password",
@@ -288,15 +311,186 @@ class DatabaseAuthTests(unittest.TestCase):
         )
         self.assertEqual(reset.status_code, 200)
 
+    def test_designer_task_and_asset_visibility_is_scoped_to_own_history(self) -> None:
+        designer_token = self.login("designer", "designer-pass")
+        peer_token = self.login("peer.designer", "peer-pass")
+        admin_token = self.login("admin", "admin-pass")
+
+        with self.SessionLocal() as db:
+            workflow = db.scalar(select(Workflow).where(Workflow.key == "image-generate"))
+            project = db.scalar(select(Project).where(Project.code == "QMDH-001"))
+            peer = db.scalar(select(User).where(User.name == "peer.designer"))
+            self.assertIsNotNone(workflow)
+            self.assertIsNotNone(project)
+            self.assertIsNotNone(peer)
+
+            peer_task = Task(
+                title="Peer task",
+                status=TaskStatus.completed,
+                workflow_id=workflow.id,
+                project_id=project.id,
+                user_id=peer.id,
+                requested_provider="modelscope_free_image",
+                payload={},
+                result={},
+                classification=DataClassification.b,
+                cost=0.25,
+                latency_ms=600,
+            )
+            db.add(peer_task)
+            db.flush()
+            peer_asset = Asset(
+                name="Peer asset",
+                asset_type=AssetType.image,
+                project_id=project.id,
+                source_task_id=peer_task.id,
+                storage_path="media/peer-asset.png",
+                prompt_text="peer",
+                like_count=0,
+                share_count=0,
+                tags=["peer"],
+            )
+            db.add(peer_asset)
+            db.commit()
+            peer_asset_id = peer_asset.id
+
+        designer_tasks = self.client.get("/tasks", headers={"Authorization": f"Bearer {designer_token}"})
+        self.assertEqual(designer_tasks.status_code, 200, designer_tasks.text)
+        self.assertEqual({task["title"] for task in designer_tasks.json()}, {"Done", "Jimeng failed"})
+
+        peer_tasks = self.client.get("/tasks", headers={"Authorization": f"Bearer {peer_token}"})
+        self.assertEqual(peer_tasks.status_code, 200, peer_tasks.text)
+        self.assertEqual({task["title"] for task in peer_tasks.json()}, {"Peer task"})
+
+        admin_tasks = self.client.get("/tasks", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(admin_tasks.status_code, 200, admin_tasks.text)
+        self.assertEqual({task["title"] for task in admin_tasks.json()}, {"Done", "Jimeng failed", "Peer task"})
+
+        designer_assets = self.client.get("/assets", headers={"Authorization": f"Bearer {designer_token}"})
+        self.assertEqual(designer_assets.status_code, 200, designer_assets.text)
+        self.assertEqual({asset["name"] for asset in designer_assets.json()}, {"Project cover"})
+
+        peer_assets = self.client.get("/assets", headers={"Authorization": f"Bearer {peer_token}"})
+        self.assertEqual(peer_assets.status_code, 200, peer_assets.text)
+        self.assertEqual({asset["name"] for asset in peer_assets.json()}, {"Peer asset"})
+
+        admin_assets = self.client.get("/assets", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(admin_assets.status_code, 200, admin_assets.text)
+        self.assertEqual({asset["name"] for asset in admin_assets.json()}, {"Project cover", "Peer asset"})
+
+        forbidden_like = self.client.post(f"/assets/{peer_asset_id}/like", headers={"Authorization": f"Bearer {designer_token}"})
+        self.assertEqual(forbidden_like.status_code, 403)
+
+        forbidden_bookmark = self.client.post(
+            f"/assets/{peer_asset_id}/bookmark",
+            headers={"Authorization": f"Bearer {designer_token}"},
+        )
+        self.assertEqual(forbidden_bookmark.status_code, 403)
+
+        allowed_like = self.client.post(f"/assets/{peer_asset_id}/like", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(allowed_like.status_code, 200, allowed_like.text)
+
     def test_project_list_is_filtered_by_database_session_user(self) -> None:
         designer_token = self.login("designer", "designer-pass")
         response = self.client.get("/projects", headers={"Authorization": f"Bearer {designer_token}"})
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual([project["code"] for project in response.json()], ["QMDH-001"])
+        self.assertFalse(response.json()[0]["can_manage"])
 
         forbidden = self.client.get("/projects/QMDH-SEC/status", headers={"Authorization": f"Bearer {designer_token}"})
         self.assertEqual(forbidden.status_code, 403)
+
+    def test_designer_can_create_personal_project_container(self) -> None:
+        designer_token = self.login("designer", "designer-pass")
+
+        created = self.client.post(
+            "/projects",
+            headers={"Authorization": f"Bearer {designer_token}"},
+            json={
+                "name": "我的竞赛草案",
+                "classification": "B",
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+        self.assertTrue(created.json()["code"].startswith("USR_DESIGNER_"))
+
+        listed = self.client.get("/projects", headers={"Authorization": f"Bearer {designer_token}"})
+        self.assertEqual(listed.status_code, 200)
+        self.assertIn(created.json()["code"], [project["code"] for project in listed.json()])
+        personal_project = next(project for project in listed.json() if project["code"] == created.json()["code"])
+        self.assertTrue(personal_project["can_manage"])
+
+        with self.SessionLocal() as db:
+            designer = db.scalar(select(User).where(User.name == "designer"))
+            self.assertIsNotNone(designer)
+            self.assertIn(created.json()["code"], designer.project_codes or [])
+            created_project = db.scalar(select(Project).where(Project.code == created.json()["code"]))
+            self.assertIsNotNone(created_project)
+            self.assertEqual(created_project.owner_user_id, designer.id)
+
+    def test_personal_project_owner_can_rename_and_delete_but_peer_cannot(self) -> None:
+        designer_token = self.login("designer", "designer-pass")
+        peer_token = self.login("peer.designer", "peer-pass")
+
+        created = self.client.post(
+            "/projects",
+            headers={"Authorization": f"Bearer {designer_token}"},
+            json={
+                "name": "Designer draft",
+                "classification": "B",
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+        project_code = created.json()["code"]
+
+        peer_rename = self.client.patch(
+            f"/projects/{project_code}",
+            headers={"Authorization": f"Bearer {peer_token}"},
+            json={"name": "Peer rename"},
+        )
+        self.assertEqual(peer_rename.status_code, 403)
+
+        owner_rename = self.client.patch(
+            f"/projects/{project_code}",
+            headers={"Authorization": f"Bearer {designer_token}"},
+            json={"name": "Renamed draft"},
+        )
+        self.assertEqual(owner_rename.status_code, 200, owner_rename.text)
+        self.assertEqual(owner_rename.json()["name"], "Renamed draft")
+        self.assertTrue(owner_rename.json()["can_manage"])
+
+        peer_delete = self.client.delete(
+            f"/projects/{project_code}",
+            headers={"Authorization": f"Bearer {peer_token}"},
+        )
+        self.assertEqual(peer_delete.status_code, 403)
+
+        owner_delete = self.client.delete(
+            f"/projects/{project_code}",
+            headers={"Authorization": f"Bearer {designer_token}"},
+        )
+        self.assertEqual(owner_delete.status_code, 204, owner_delete.text)
+
+        listed = self.client.get("/projects", headers={"Authorization": f"Bearer {designer_token}"})
+        self.assertEqual(listed.status_code, 200)
+        self.assertNotIn(project_code, [project["code"] for project in listed.json()])
+
+    def test_removed_member_management_endpoints_are_not_exposed(self) -> None:
+        admin_token = self.login("admin", "admin-pass")
+
+        users_brief = self.client.get("/users/brief", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(users_brief.status_code, 405)
+
+        project_members = self.client.get("/projects/QMDH-001/members", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(project_members.status_code, 404)
+
+        update_members = self.client.patch(
+            "/projects/QMDH-001/members",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"add_user_ids": [], "remove_user_ids": []},
+        )
+        self.assertEqual(update_members.status_code, 404)
 
     def test_delete_project_archives_history_and_hides_project(self) -> None:
         admin_token = self.login("admin", "admin-pass")
@@ -375,10 +569,13 @@ class DatabaseAuthTests(unittest.TestCase):
         with self.SessionLocal() as db:
             seed_initial_data(db)
             admin_user = db.query(User).filter_by(name="qmdh.admin").one()
+            ops_user = db.query(User).filter_by(name="qmdh.ops").one()
             designer = db.query(User).filter_by(name="designer.arch").one()
 
         self.assertEqual(admin_user.role, "admin")
         self.assertEqual(admin_user.project_codes, ["*"])
+        self.assertEqual(ops_user.role, "admin")
+        self.assertEqual(ops_user.project_codes, ["*"])
         self.assertEqual(designer.role, "designer")
         self.assertEqual(designer.project_codes, ["QMDH-001"])
 

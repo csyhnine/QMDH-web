@@ -19,9 +19,9 @@ interface AuthContextValue {
   login: (username: string, password: string) => Promise<void>;
   /** Logout and clear session */
   logout: () => Promise<void>;
-  /** Whether user has admin/owner role */
+  /** Whether user has admin role */
   canManageUsers: boolean;
-  /** Whether user has ops/admin/owner role */
+  /** Whether user has admin role */
   canUseOpsViews: boolean;
 }
 
@@ -64,8 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentUser(null);
   }, []);
 
-  const canManageUsers = currentUser ? ["owner", "admin"].includes(currentUser.role) : false;
-  const canUseOpsViews = currentUser ? ["owner", "admin", "ops"].includes(currentUser.role) : false;
+  const canManageUsers = currentUser?.role === "admin";
+  const canUseOpsViews = currentUser?.role === "admin";
 
   return (
     <AuthContext.Provider value={{ currentUser, authReady, login, logout, canManageUsers, canUseOpsViews }}>

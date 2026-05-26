@@ -6,11 +6,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditEventType, write_audit_log
-from app.core.auth import ensure_project_access, get_current_auth_user, require_ops_access, require_user_admin
+from app.core.auth import ensure_project_access, get_current_auth_user, has_admin_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import Asset, Project, Task, User
-from app.schemas import ProjectMemberOut, ProjectOut, ProjectStatusOut
+from app.models import Asset, DataClassification, Project, Task, User
+from app.schemas import ProjectOut, ProjectStatusOut
 from app.services.project_status import build_project_status_detail, build_project_status_map
 from app.services.task_archive import ensure_task_archive
 from app.services.usage_ledger import ensure_usage_ledger_for_task
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=150)
-    code: str = Field(min_length=2, max_length=50, pattern=r"^[A-Z0-9_-]+$")
+    code: str | None = Field(default=None, min_length=2, max_length=50, pattern=r"^[A-Z0-9_-]+$")
     classification: str = "B"
 
 
@@ -37,6 +37,58 @@ def _get_active_project(db: Session, project_code: str) -> Project | None:
     )
 
 
+def _sanitize_project_code_segment(value: str, fallback: str) -> str:
+    normalized = "".join(char if char.isalnum() else "_" for char in value.upper())
+    normalized = normalized.strip("_")
+    return normalized or fallback
+
+
+def _build_personal_project_code(db: Session, project_name: str, user_name: str) -> str:
+    user_segment = _sanitize_project_code_segment(user_name, "USER")[:10]
+    name_segment = _sanitize_project_code_segment(project_name, "GROUP")[:12]
+    base = f"USR_{user_segment}_{name_segment}".strip("_")[:42]
+
+    existing_codes = set(db.scalars(select(Project.code)))
+    if base not in existing_codes:
+        return base
+
+    for index in range(1, 1000):
+        candidate = f"{base}_{index:03d}"[:50]
+        if candidate not in existing_codes:
+            return candidate
+
+    raise HTTPException(status_code=409, detail="Unable to allocate a unique personal project code")
+
+
+def _can_manage_project(auth_user: AuthUserProfile, project: Project) -> bool:
+    if has_admin_access(auth_user.role):
+        return True
+    if auth_user.user_id is None:
+        return False
+    return project.owner_user_id == auth_user.user_id
+
+
+def _require_project_manager(auth_user: AuthUserProfile, project: Project) -> None:
+    if not _can_manage_project(auth_user, project):
+        raise HTTPException(status_code=403, detail="Project management access denied")
+
+
+def _to_project_out(project: Project, auth_user: AuthUserProfile, status_map: dict[str, dict] | None = None) -> dict:
+    summary = (status_map or {}).get(project.code, {})
+    return {
+        "id": project.id,
+        "name": project.name,
+        "code": project.code,
+        "classification": project.classification,
+        "can_manage": _can_manage_project(auth_user, project),
+        "current_phase": summary.get("current_phase"),
+        "phase_status": summary.get("phase_status"),
+        "last_updated": summary.get("last_updated"),
+        "summary": summary.get("summary"),
+        "next_action": summary.get("next_action"),
+    }
+
+
 @router.get("", response_model=list[ProjectOut])
 def list_projects(
     db: Session = Depends(get_db),
@@ -47,24 +99,7 @@ def list_projects(
         query = query.where(Project.code.in_(auth_user.project_codes))
     projects = list(db.scalars(query).all())
     status_map = build_project_status_map()
-
-    response: list[dict] = []
-    for project in projects:
-        summary = status_map.get(project.code, {})
-        response.append(
-            {
-                "id": project.id,
-                "name": project.name,
-                "code": project.code,
-                "classification": project.classification,
-                "current_phase": summary.get("current_phase"),
-                "phase_status": summary.get("phase_status"),
-                "last_updated": summary.get("last_updated"),
-                "summary": summary.get("summary"),
-                "next_action": summary.get("next_action"),
-            }
-        )
-    return response
+    return [_to_project_out(project, auth_user, status_map) for project in projects]
 
 
 @router.post("", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
@@ -73,13 +108,15 @@ def create_project(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> dict:
-    """Create a new project. Requires ops access."""
-    require_ops_access(auth_user)
-    existing = db.scalar(select(Project).where(Project.code == payload.code.strip().upper()))
-    if existing:
-        raise HTTPException(status_code=409, detail="项目代码已存在")
+    """Create a new personal task container for the current session user."""
+    if auth_user.user_id is None:
+        raise HTTPException(status_code=403, detail="Only session-backed users can create personal projects")
 
-    from app.models import DataClassification
+    project_code = payload.code.strip().upper() if payload.code else _build_personal_project_code(db, payload.name, auth_user.name)
+    existing = db.scalar(select(Project).where(Project.code == project_code))
+    if existing:
+        raise HTTPException(status_code=409, detail="Project code already exists")
+
     classification = DataClassification.b
     if payload.classification.upper() == "A":
         classification = DataClassification.a
@@ -88,34 +125,23 @@ def create_project(
 
     project = Project(
         name=payload.name.strip(),
-        code=payload.code.strip().upper(),
+        code=project_code,
+        owner_user_id=auth_user.user_id,
         classification=classification,
     )
     db.add(project)
     db.commit()
     db.refresh(project)
 
-    # Add current user to the project
-    if auth_user.user_id:
-        user = db.get(User, auth_user.user_id)
-        if user:
-            codes = list(user.project_codes or [])
-            if "*" not in codes and project.code not in codes:
-                codes.append(project.code)
-                user.project_codes = codes
-                db.commit()
+    user = db.get(User, auth_user.user_id)
+    if user:
+        codes = list(user.project_codes or [])
+        if "*" not in codes and project.code not in codes:
+            codes.append(project.code)
+            user.project_codes = codes
+            db.commit()
 
-    return {
-        "id": project.id,
-        "name": project.name,
-        "code": project.code,
-        "classification": project.classification,
-        "current_phase": None,
-        "phase_status": None,
-        "last_updated": None,
-        "summary": None,
-        "next_action": None,
-    }
+    return _to_project_out(project, auth_user)
 
 
 @router.patch("/{project_code}", response_model=ProjectOut)
@@ -125,30 +151,17 @@ def rename_project(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> dict:
-    """Rename a project. Requires ops access."""
-    require_ops_access(auth_user)
+    """Rename a personal project container owned by the current user or managed by an admin."""
     ensure_project_access(auth_user, project_code)
     project = _get_active_project(db, project_code)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    _require_project_manager(auth_user, project)
 
     project.name = payload.name.strip()
     db.commit()
     db.refresh(project)
-
-    status_map = build_project_status_map()
-    summary = status_map.get(project.code, {})
-    return {
-        "id": project.id,
-        "name": project.name,
-        "code": project.code,
-        "classification": project.classification,
-        "current_phase": summary.get("current_phase"),
-        "phase_status": summary.get("phase_status"),
-        "last_updated": summary.get("last_updated"),
-        "summary": summary.get("summary"),
-        "next_action": summary.get("next_action"),
-    }
+    return _to_project_out(project, auth_user, build_project_status_map())
 
 
 @router.get("/{project_code}/status", response_model=ProjectStatusOut)
@@ -167,114 +180,21 @@ def get_project_status(
     return detail
 
 
-@router.get("/{project_code}/members", response_model=list[ProjectMemberOut])
-def list_project_members(
-    project_code: str,
-    db: Session = Depends(get_db),
-    auth_user: AuthUserProfile = Depends(get_current_auth_user),
-) -> list[ProjectMemberOut]:
-    """Return active users who have access to this project."""
-    ensure_project_access(auth_user, project_code)
-    project = _get_active_project(db, project_code)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    users = db.scalars(select(User).where(User.is_active.is_(True)).order_by(User.role, User.name)).all()
-    members = []
-    for user in users:
-        codes = user.project_codes or []
-        if "*" in codes or project_code in codes:
-            members.append(
-                ProjectMemberOut(
-                    id=user.id,
-                    name=user.name,
-                    display_name=user.display_name or user.name,
-                    role=user.role,
-                    is_global="*" in codes,
-                )
-            )
-    return members
-
-
-class ProjectMemberUpdate(BaseModel):
-    """Payload to add or remove members from a project."""
-    add_user_ids: list[int] = []
-    remove_user_ids: list[int] = []
-
-
-@router.patch("/{project_code}/members", response_model=list[ProjectMemberOut])
-def update_project_members(
-    project_code: str,
-    payload: ProjectMemberUpdate,
-    db: Session = Depends(get_db),
-    auth_user: AuthUserProfile = Depends(get_current_auth_user),
-) -> list[ProjectMemberOut]:
-    """Add or remove members from a project. Requires ops access."""
-    require_ops_access(auth_user)
-    ensure_project_access(auth_user, project_code)
-
-    # Verify project exists
-    project = _get_active_project(db, project_code)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Add users to project
-    if payload.add_user_ids:
-        users_to_add = db.scalars(
-            select(User).where(User.id.in_(payload.add_user_ids), User.is_active.is_(True))
-        ).all()
-        for user in users_to_add:
-            codes = list(user.project_codes or [])
-            if "*" not in codes and project_code not in codes:
-                codes.append(project_code)
-                user.project_codes = codes
-
-    # Remove users from project
-    if payload.remove_user_ids:
-        users_to_remove = db.scalars(
-            select(User).where(User.id.in_(payload.remove_user_ids))
-        ).all()
-        for user in users_to_remove:
-            codes = list(user.project_codes or [])
-            if project_code in codes:
-                codes.remove(project_code)
-                user.project_codes = codes
-
-    db.commit()
-
-    # Return updated member list
-    all_users = db.scalars(select(User).where(User.is_active.is_(True)).order_by(User.role, User.name)).all()
-    members = []
-    for user in all_users:
-        codes = user.project_codes or []
-        if "*" in codes or project_code in codes:
-            members.append(
-                ProjectMemberOut(
-                    id=user.id,
-                    name=user.name,
-                    display_name=user.display_name or user.name,
-                    role=user.role,
-                    is_global="*" in codes,
-                )
-            )
-    return members
-
-
 @router.delete("/{project_code}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(
     project_code: str,
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ):
-    """Archive a project. Requires admin access.
-    Preserves task/provider history for operations reporting."""
-    require_user_admin(auth_user)
+    """Archive a personal project container while preserving reporting history."""
+    ensure_project_access(auth_user, project_code)
     project = _get_active_project(db, project_code)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    _require_project_manager(auth_user, project)
 
     archived_at = datetime.now(timezone.utc)
 
-    # Soft-delete any still-visible tasks so the project disappears from active use.
     soft_deleted_count = 0
     tasks = db.scalars(select(Task).where(Task.project_id == project.id)).all()
     for task in tasks:
@@ -299,14 +219,12 @@ def delete_project(
         )
         provider_call_count += int(archive.provider_call_count or 0)
 
-    # Unlink assets
     assets = db.scalars(select(Asset).where(Asset.project_id == project.id)).all()
     for asset in assets:
         asset.project_id = None
 
     project.archived_at = archived_at
 
-    # Remove project code from all users' project_codes
     users = db.scalars(select(User)).all()
     unlinked_user_count = 0
     for user in users:

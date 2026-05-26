@@ -165,7 +165,6 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=6, max_length=200)
     display_name: str = Field(default="", max_length=150)
     role: str = "designer"
-    project_codes: list[str] = Field(default_factory=lambda: ["QMDH-001"])
     is_active: bool = True
     monthly_quota: float | None = Field(default=None, ge=0)
 
@@ -173,7 +172,6 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     display_name: str | None = Field(default=None, max_length=150)
     role: str | None = None
-    project_codes: list[str] | None = None
     is_active: bool | None = None
     monthly_quota: float | None = Field(default=None, ge=0)
 
@@ -182,7 +180,13 @@ class UserPasswordReset(BaseModel):
     password: str = Field(min_length=6, max_length=200)
 
 
-class UserOut(AuthUserOut):
+class UserOut(BaseModel):
+    id: int
+    name: str
+    display_name: str
+    role: str
+    is_active: bool
+    monthly_quota: float | None = None
     created_at: datetime
     updated_at: datetime
     last_login_at: datetime | None = None
@@ -254,6 +258,7 @@ class ProjectOut(BaseModel):
     name: str
     code: str
     classification: DataClassification
+    can_manage: bool = False
     current_phase: str | None = None
     phase_status: str | None = None
     last_updated: str | None = None
@@ -261,14 +266,6 @@ class ProjectOut(BaseModel):
     next_action: str | None = None
 
     model_config = {"from_attributes": True}
-
-
-class ProjectMemberOut(BaseModel):
-    id: int
-    name: str
-    display_name: str
-    role: str
-    is_global: bool = False
 
 
 class ProjectMilestoneOut(BaseModel):

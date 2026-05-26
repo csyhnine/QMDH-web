@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, st
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import ensure_project_access, get_current_auth_user
+from app.core.auth import ensure_project_access, get_current_auth_user, has_admin_access
 from app.core.audit import write_audit_log
 from app.core.config import AuthUserProfile
 from app.core.config import settings
@@ -20,6 +20,16 @@ from app.services.task_executor import enqueue_task, execute_task
 from app.services.usage_ledger import ensure_usage_ledger_for_task
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+def _is_task_visible_to_user(auth_user: AuthUserProfile, task: Task) -> bool:
+    if has_admin_access(auth_user.role):
+        return True
+    if "*" not in auth_user.project_codes and task.project.code not in auth_user.project_codes:
+        return False
+    if auth_user.user_id is not None:
+        return task.user_id == auth_user.user_id
+    return task.user.name == auth_user.name
 
 
 def _reference_image_count(payload: dict) -> int:
@@ -91,9 +101,20 @@ def list_tasks(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> list[TaskOut]:
-    query = select(Task).join(Task.project).where(Task.deleted_at.is_(None)).order_by(Task.created_at.desc())
-    if "*" not in auth_user.project_codes:
-        query = query.where(Project.code.in_(auth_user.project_codes))
+    query = (
+        select(Task)
+        .join(Task.project)
+        .join(Task.user)
+        .where(Task.deleted_at.is_(None))
+        .order_by(Task.created_at.desc())
+    )
+    if not has_admin_access(auth_user.role):
+        if "*" not in auth_user.project_codes:
+            query = query.where(Project.code.in_(auth_user.project_codes))
+        if auth_user.user_id is not None:
+            query = query.where(Task.user_id == auth_user.user_id)
+        else:
+            query = query.where(User.name == auth_user.name)
     tasks = db.scalars(query).all()
     return [_to_task_out(task) for task in tasks]
 
@@ -107,7 +128,8 @@ def get_task(
     task = db.get(Task, task_id)
     if not task or task.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Task not found")
-    ensure_project_access(auth_user, task.project.code)
+    if not _is_task_visible_to_user(auth_user, task):
+        raise HTTPException(status_code=403, detail="Task access denied")
     return _to_task_out(task)
 
 
@@ -203,19 +225,20 @@ def delete_task(
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ):
     """Soft-delete a task. Sets deleted_at timestamp instead of removing the row.
-    Only task owner or ops+ can delete. Associated ProviderCall and Asset records are retained."""
+    Only the task owner or an admin can delete. Associated ProviderCall and Asset records are retained."""
     from fastapi import Response
 
     task = db.get(Task, task_id)
     if not task or task.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Task not found")
-    ensure_project_access(auth_user, task.project.code)
+    if not _is_task_visible_to_user(auth_user, task):
+        raise HTTPException(status_code=403, detail="Task access denied")
 
-    # Permission check: must be task owner or ops+
+    # Permission check: must be task owner or an admin.
     is_owner = (auth_user.user_id and task.user_id == auth_user.user_id) or (auth_user.name == task.user.name)
-    is_ops = auth_user.role in ("owner", "admin", "ops")
-    if not is_owner and not is_ops:
-        raise HTTPException(status_code=403, detail="Only task owner or ops+ can delete tasks")
+    is_admin = has_admin_access(auth_user.role)
+    if not is_owner and not is_admin:
+        raise HTTPException(status_code=403, detail="Only the task owner or an admin can delete tasks")
 
     # Soft-delete: set deleted_at timestamp
     deleted_at = datetime.now(timezone.utc)

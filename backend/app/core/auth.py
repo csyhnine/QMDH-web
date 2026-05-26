@@ -11,8 +11,16 @@ from app.core.security import hash_session_token
 from app.database import get_db
 from app.models import AuthSession, User
 
-USER_ADMIN_ROLES = {"owner", "admin"}
-OPS_ROLES = {"owner", "admin", "ops"}
+ADMIN_ROLE_ALIASES = {"owner", "admin", "ops"}
+
+
+def normalize_user_role(role: str) -> str:
+    normalized = (role or "").strip().lower()
+    return "admin" if normalized in ADMIN_ROLE_ALIASES else "designer"
+
+
+def has_admin_access(role: str) -> bool:
+    return normalize_user_role(role) == "admin"
 
 
 def get_current_auth_user(
@@ -38,7 +46,7 @@ def get_current_auth_user(
         return AuthUserProfile(
             name=session.user.name,
             token=token,
-            role=session.user.role,
+            role=normalize_user_role(session.user.role),
             project_codes=tuple(session.user.project_codes or []),
             user_id=session.user.id,
             display_name=session.user.display_name or session.user.name,
@@ -54,16 +62,23 @@ def get_current_auth_user(
     if x_qmdh_user and x_qmdh_user.strip() != profile.name:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Authenticated user does not match token")
 
-    return profile
+    return AuthUserProfile(
+        name=profile.name,
+        token=profile.token,
+        role=normalize_user_role(profile.role),
+        project_codes=profile.project_codes,
+        user_id=profile.user_id,
+        display_name=profile.display_name or profile.name,
+    )
 
 
 def require_user_admin(auth_user: AuthUserProfile) -> None:
-    if auth_user.role not in USER_ADMIN_ROLES:
+    if not has_admin_access(auth_user.role):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User admin access required")
 
 
 def require_ops_access(auth_user: AuthUserProfile) -> None:
-    if auth_user.role not in OPS_ROLES:
+    if not has_admin_access(auth_user.role):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operations access required")
 
 

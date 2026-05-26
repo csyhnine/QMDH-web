@@ -86,7 +86,7 @@ export default function StudioHistoryPane({
               <div className="empty-stage-copy">
                 <p className="canvas-kicker">当前筛选</p>
                 <h1>没有匹配的生成记录</h1>
-                <p>调整时间、模型或状态筛选后，可以继续查看这个项目的历史任务。</p>
+                <p>调整时间、模型或状态筛选后，可以继续查看这个个人项目里的历史任务。</p>
               </div>
             </section>
           )}
@@ -94,7 +94,7 @@ export default function StudioHistoryPane({
       ) : (
         <section className="empty-stage empty-stage-inline">
           <div className="empty-stage-copy">
-            <p className="canvas-kicker">当前项目</p>
+            <p className="canvas-kicker">当前个人项目</p>
             <h1>{workspaceName} 还没有生成记录</h1>
             <p>先从下方输入区发起第一轮生成，结果会在这里按时间沉淀下来。</p>
           </div>

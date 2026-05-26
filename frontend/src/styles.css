@@ -4429,6 +4429,18 @@ textarea:focus-visible {
 .workspace-item:hover .project-rename-trigger {
   opacity: 1;
 }
+.workspace-item-actions {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 0.25rem;
+}
+.workspace-item-actions .project-rename-trigger {
+  position: static;
+  transform: none;
+}
 .project-rename-trigger:hover {
   background: var(--accent-soft);
   color: var(--accent);

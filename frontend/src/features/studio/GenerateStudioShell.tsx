@@ -11,7 +11,6 @@ import {
   getStoredAuthToken,
   type ManagedUser,
   type Project,
-  type ProjectMember,
   type PromptTemplateRecord,
   type Provider,
   type ProviderProfileCreatePayload,
@@ -23,7 +22,7 @@ import {
 } from "../../api";
 import StudioComposerDock from "./StudioComposerDock";
 import StudioHistoryPane, { type FeedFilterState } from "./StudioHistoryPane";
-import StudioWorkspacePane, { type ProjectUserBrief } from "./StudioWorkspacePane";
+import StudioWorkspacePane from "./StudioWorkspacePane";
 
 type LoadState = {
   health: string;
@@ -34,7 +33,6 @@ type LoadState = {
   tasks: Task[];
   assets: Asset[];
   users: ManagedUser[];
-  projectMembers: ProjectMember[];
   dashboard: DashboardStats | null;
   error: string;
   ready: boolean;
@@ -82,7 +80,7 @@ type PromptTemplateFormValue = Pick<
 type CustomPromptTemplate = PromptTemplateRecord;
 
 type ComposerMenuKey = "template" | "provider" | "display" | "count" | null;
-type ActiveView = "studio" | "projects" | "models" | "users" | "dashboard" | "settings";
+type ActiveView = "studio" | "models" | "users" | "dashboard" | "settings";
 type SubmissionStage = "uploading_reference" | "submitting" | "pending" | "running" | "completed" | "failed";
 
 type SubmissionTracker = {
@@ -122,7 +120,6 @@ type UserDraft = {
   password: string;
   displayName: string;
   role: string;
-  projectCodes: string;
   monthlyQuota: string;
   isActive: boolean;
 };
@@ -182,7 +179,6 @@ const initialState: LoadState = {
   tasks: [],
   assets: [],
   users: [],
-  projectMembers: [],
   dashboard: null,
   error: "",
   ready: false
@@ -211,7 +207,6 @@ const defaultUserDraft: UserDraft = {
   password: "",
   displayName: "",
   role: "designer",
-  projectCodes: "QMDH-001",
   monthlyQuota: "200",
   isActive: true
 };
@@ -766,13 +761,6 @@ function toggleCapability(value: string, capability: string, enabled: boolean): 
   return formatCapabilities(Array.from(capabilities));
 }
 
-function parseProjectCodes(value: string): string[] {
-  return value
-    .split(/[\n,]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 function toUserPayload(draft: UserDraft): UserCreatePayload {
   const trimmedQuota = draft.monthlyQuota.trim();
 
@@ -781,7 +769,6 @@ function toUserPayload(draft: UserDraft): UserCreatePayload {
     password: draft.password,
     display_name: draft.displayName.trim(),
     role: draft.role,
-    project_codes: parseProjectCodes(draft.projectCodes),
     monthly_quota: trimmedQuota ? Number(trimmedQuota) : null,
     is_active: draft.isActive
   };
@@ -793,7 +780,6 @@ function toUserDraft(user: ManagedUser): UserDraft {
     password: "",
     displayName: user.display_name,
     role: user.role,
-    projectCodes: user.project_codes.join(", "),
     monthlyQuota: user.monthly_quota === null ? "" : String(user.monthly_quota),
     isActive: user.is_active
   };
@@ -804,17 +790,16 @@ function resolveActiveView(): ActiveView {
   if (path === "/admin/models") return "models";
   if (path === "/admin/users") return "users";
   if (path === "/admin/dashboard") return "dashboard";
-  if (path === "/admin/projects") return "projects";
   if (path === "/admin/settings") return "settings";
   return "studio";
 }
 
 function canManageUsers(user: AuthUser | null): boolean {
-  return user ? ["owner", "admin"].includes(user.role) : false;
+  return user?.role === "admin";
 }
 
 function canUseOpsViews(user: AuthUser | null): boolean {
-  return user ? ["owner", "admin", "ops"].includes(user.role) : false;
+  return user?.role === "admin";
 }
 
 function metricValue(item: Record<string, unknown>, key: string): string {
@@ -827,23 +812,6 @@ function metricNumber(item: Record<string, unknown>, key: string): number {
   if (typeof value === "number") return value;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function metricList(item: Record<string, unknown>, key: string): string {
-  const value = item[key];
-  if (!Array.isArray(value)) return "";
-  return value
-    .map((entry) => {
-      if (entry && typeof entry === "object") {
-        const row = entry as Record<string, unknown>;
-        const name = metricValue(row, "name");
-        const count = metricValue(row, "count");
-        return count ? `${name} ${count}` : name;
-      }
-      return String(entry);
-    })
-    .filter(Boolean)
-    .join(", ");
 }
 
 function metricCost(item: Record<string, unknown>, key: string): string {
@@ -1272,7 +1240,7 @@ function FeedCard(props: {
             </details>
           ) : null}
           <div className="feed-card-meta">
-            <span>{props.task.project_code}</span>
+            {props.showDebugDetails ? <span>{props.task.project_code}</span> : null}
             <span>{props.task.requested_provider}</span>
             <span>{formatDuration(props.task.latency_ms)}</span>
             {hasReferenceImage ? <span>参考图 {referenceImageCount} 张</span> : null}
@@ -1392,16 +1360,10 @@ export default function GenerateStudioShell() {
   const [userDraft, setUserDraft] = useState<UserDraft>(defaultUserDraft);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [savingUser, setSavingUser] = useState(false);
-  const [showMemberEditor, setShowMemberEditor] = useState(false);
-  const [memberSearchQuery, setMemberSearchQuery] = useState("");
-  const [memberDraftIds, setMemberDraftIds] = useState<Set<number>>(new Set());
-  const [allUsersBrief, setAllUsersBrief] = useState<ProjectUserBrief[]>([]);
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
-  const [newProjectCode, setNewProjectCode] = useState("");
   const [renamingProjectCode, setRenamingProjectCode] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [selectedAdminProjectCode, setSelectedAdminProjectCode] = useState("");
   const [dashboardStatsDays, setDashboardStatsDays] = useState(30);
   const [galleryPreview, setGalleryPreview] = useState<{ task: Task; asset: Asset } | null>(null);
   const isFetchingRef = useRef(false);
@@ -1423,7 +1385,7 @@ export default function GenerateStudioShell() {
       const shouldLoadAdminData = activeView !== "studio";
       const shouldLoadProviderProfiles = activeView === "models" || activeView === "settings";
       const shouldLoadUsers = (activeView === "users" || activeView === "settings") && canManageUsers(currentUser);
-      const shouldLoadDashboard = activeView === "dashboard" || activeView === "projects" || activeView === "settings";
+      const shouldLoadDashboard = activeView === "dashboard" || activeView === "settings";
       const [health, projects, providers, providerProfiles, workflows, tasks, assets, templates, users, dashboard] = await Promise.all([
         api.health(),
         api.projects(),
@@ -1451,7 +1413,6 @@ export default function GenerateStudioShell() {
         tasks,
         assets,
         users,
-        projectMembers: state.projectMembers,
         dashboard,
         error: templateLoadError,
         ready: true
@@ -1555,7 +1516,7 @@ export default function GenerateStudioShell() {
   const providerGroups = groupProviders(availableProviders);
 
   const activeProject = state.projects.find((project) => project.code === studioForm.projectCode);
-  const workspaceName = activeProject?.name ?? "默认创作";
+  const workspaceName = activeProject?.name ?? "我的创作";
   const selectedProvider = availableProviders.find((provider) => provider.provider_name === studioForm.requestedProvider);
   const selectedWorkflowKey = getStudioWorkflowKeyForProvider(selectedProvider, studioForm.creationMode);
   const selectedWorkflow = state.workflows.find((workflow) => workflow.key === selectedWorkflowKey);
@@ -1689,27 +1650,23 @@ export default function GenerateStudioShell() {
       projectCode: project.code,
       classification: project.classification
     }));
-    // Load project members
-    api.projectMembers(project.code).then((members) => {
-      setState((current) => ({ ...current, projectMembers: members }));
-    }).catch(() => {
-      setState((current) => ({ ...current, projectMembers: [] }));
-    });
   }
 
   function resetNewProjectDraft() {
     setShowNewProjectForm(false);
     setNewProjectName("");
-    setNewProjectCode("");
   }
 
   async function handleCreateProject() {
+    const trimmedName = newProjectName.trim();
+    if (!trimmedName) return;
+
     try {
-      await api.createProject(newProjectName.trim(), newProjectCode.trim());
+      await api.createProject(trimmedName);
       resetNewProjectDraft();
       await loadData();
     } catch (err) {
-      setState((current) => ({ ...current, error: err instanceof Error ? err.message : "创建项目失败" }));
+      setState((current) => ({ ...current, error: err instanceof Error ? err.message : "创建个人项目失败" }));
     }
   }
 
@@ -1731,51 +1688,31 @@ export default function GenerateStudioShell() {
       handleCancelProjectRename();
       await loadData();
     } catch (err) {
-      setState((current) => ({ ...current, error: err instanceof Error ? err.message : "重命名项目失败" }));
+      setState((current) => ({ ...current, error: err instanceof Error ? err.message : "重命名个人项目失败" }));
     }
   }
 
-  function handleOpenMemberEditor() {
-    setMemberDraftIds(new Set(state.projectMembers.filter((member) => !member.is_global).map((member) => member.id)));
-    setShowMemberEditor(true);
-    api.usersBrief().then(setAllUsersBrief).catch(() => {});
-  }
+  async function handleDeleteProject(project: Project) {
+    const confirmed = window.confirm(`删除个人项目“${project.name}”后，当前分组会从活动列表移除。是否继续？`);
+    if (!confirmed) return;
 
-  function handleCloseMemberEditor() {
-    setShowMemberEditor(false);
-    setMemberSearchQuery("");
-  }
-
-  function handleToggleMemberDraft(userId: number) {
-    setMemberDraftIds((current) => {
-      const next = new Set(current);
-      if (next.has(userId)) {
-        next.delete(userId);
-      } else {
-        next.add(userId);
+    try {
+      await api.deleteProject(project.code);
+      if (studioForm.projectCode === project.code) {
+        const fallbackProject = state.projects.find((item) => item.code !== project.code);
+        if (fallbackProject) {
+          setStudioForm((current) => ({
+            ...current,
+            projectCode: fallbackProject.code,
+            classification: fallbackProject.classification,
+          }));
+        }
       }
-      return next;
-    });
-  }
-
-  function handleRemoveMemberDraft(userId: number) {
-    setMemberDraftIds((current) => {
-      const next = new Set(current);
-      next.delete(userId);
-      return next;
-    });
-  }
-
-  function handleSaveMemberChanges(toAdd: number[], toRemove: number[]) {
-    const projectCode = studioForm.projectCode;
-    if (!projectCode) return;
-
-    api.updateProjectMembers(projectCode, toAdd, toRemove).then((members) => {
-      setState((current) => ({ ...current, projectMembers: members }));
-      handleCloseMemberEditor();
-    }).catch((err) => {
-      setState((current) => ({ ...current, error: err instanceof Error ? err.message : "成员操作失败" }));
-    });
+      handleCancelProjectRename();
+      await loadData();
+    } catch (err) {
+      setState((current) => ({ ...current, error: err instanceof Error ? err.message : "删除个人项目失败" }));
+    }
   }
 
   function clearReferenceUpload() {
@@ -2436,7 +2373,6 @@ export default function GenerateStudioShell() {
         await api.updateUser(editingUserId, {
           display_name: payload.display_name,
           role: payload.role,
-          project_codes: payload.project_codes,
           monthly_quota: payload.monthly_quota,
           is_active: payload.is_active
         });
@@ -2505,7 +2441,6 @@ export default function GenerateStudioShell() {
     activeView === "models" ||
     activeView === "users" ||
     activeView === "dashboard" ||
-    activeView === "projects" ||
     activeView === "settings";
   const dashboardModelTotal = state.dashboard ? sumMetric(state.dashboard.model_rankings, "count") : 0;
   const dashboardAccountQuotaTotal = state.dashboard ? sumMetric(state.dashboard.account_usage, "quota_limit") : 0;
@@ -2514,7 +2449,7 @@ export default function GenerateStudioShell() {
   const dashboardFailureTotal = state.dashboard ? sumMetric(state.dashboard.failure_reasons, "count") : 0;
   const activeUsers = state.users.filter((user) => user.is_active);
   const disabledUsers = state.users.filter((user) => !user.is_active);
-  const adminUsers = state.users.filter((user) => ["owner", "admin"].includes(user.role));
+  const adminUsers = state.users.filter((user) => user.role === "admin");
   const enabledProviderProfiles = state.providerProfiles.filter((profile) => profile.enabled);
   const disabledProviderProfiles = state.providerProfiles.filter((profile) => !profile.enabled);
   const filteredProviderProfiles = state.providerProfiles.filter((profile) => {
@@ -2539,15 +2474,6 @@ export default function GenerateStudioShell() {
   }).length;
   const activeProviderSupport = summarizeProfileSupport(providerDraft.adapterKind, parseCapabilities(providerDraft.capabilities));
   const activeAdapterOption = getAdapterOption(providerDraft.adapterKind);
-  const selectedAdminProject =
-    state.projects.find((project) => project.code === selectedAdminProjectCode) ?? state.projects[0] ?? null;
-  const selectedAdminProjectTasks = selectedAdminProject
-    ? state.tasks.filter((task) => task.project_code === selectedAdminProject.code)
-    : [];
-  const selectedAdminProjectCost = selectedAdminProjectTasks.reduce((total, task) => total + Number(task.cost || 0), 0);
-  const selectedAdminProjectFailures = selectedAdminProjectTasks.filter((task) => task.status === "failed").length;
-  const selectedAdminProjectSuccesses = selectedAdminProjectTasks.filter((task) => task.status === "completed").length;
-
   return (
     <div
       className={
@@ -2568,14 +2494,6 @@ export default function GenerateStudioShell() {
               >
                 <b>□</b>
                 <span>运营看板</span>
-              </button>
-              <button
-                type="button"
-                className={activeView === "projects" ? "rail-item active" : "rail-item"}
-                onClick={() => (window.location.href = "/admin/projects")}
-              >
-                <b>◇</b>
-                <span>项目管理</span>
               </button>
               <button
                 type="button"
@@ -2647,36 +2565,24 @@ export default function GenerateStudioShell() {
       {activeView === "studio" ? (
         <StudioWorkspacePane
           activeProject={activeProject}
-          allUsersBrief={allUsersBrief}
-          canManageProjects={userCanManageUsers || userCanUseOpsViews}
-          memberDraftIds={memberDraftIds}
-          memberSearchQuery={memberSearchQuery}
-          newProjectCode={newProjectCode}
+          canCreateProjects={Boolean(currentUser)}
           newProjectName={newProjectName}
-          projectMembers={state.projectMembers}
           projects={state.projects}
           renameValue={renameValue}
           renamingProjectCode={renamingProjectCode}
           selectedProjectCode={studioForm.projectCode}
-          showMemberEditor={showMemberEditor}
           showNewProjectForm={showNewProjectForm}
           workspaceName={workspaceName}
           onCancelNewProject={resetNewProjectDraft}
-          onCloseMemberEditor={handleCloseMemberEditor}
           onCreateProject={handleCreateProject}
-          onMemberDraftRemove={handleRemoveMemberDraft}
-          onMemberDraftToggle={handleToggleMemberDraft}
-          onMemberSearchQueryChange={setMemberSearchQuery}
-          onNewProjectCodeChange={setNewProjectCode}
           onNewProjectNameChange={setNewProjectName}
-          onOpenMemberEditor={handleOpenMemberEditor}
+          onProjectDelete={handleDeleteProject}
           onProjectSelect={handleProjectSelect}
           onRenameCancel={handleCancelProjectRename}
           onRenameCommit={handleCommitProjectRename}
           onRenameStart={handleStartProjectRename}
           onRenameValueChange={setRenameValue}
           onRequestNewProject={() => setShowNewProjectForm(true)}
-          onSaveMemberChanges={handleSaveMemberChanges}
         />
       ) : null}
 
@@ -2694,7 +2600,7 @@ export default function GenerateStudioShell() {
             <header className="admin-page-head">
               <div>
                 <h1>账号管理</h1>
-                <p>管理团队成员账号、角色权限及状态</p>
+                <p>管理团队成员账号、角色、状态和额度</p>
               </div>
               {userCanManageUsers ? (
                 <button type="button" className="admin-primary-button" onClick={resetUserDraft}>+ 创建账号</button>
@@ -2709,26 +2615,25 @@ export default function GenerateStudioShell() {
                   <article className="admin-kpi-card admin-blue"><span>账号总数</span><strong>{state.users.length}</strong><small>全部后台账号</small><i>♙</i></article>
                   <article className="admin-kpi-card admin-green"><span>活跃账号</span><strong>{activeUsers.length}</strong><small>可正常登录</small><i>●</i></article>
                   <article className="admin-kpi-card admin-gray"><span>已禁用账号</span><strong>{disabledUsers.length}</strong><small>停用或不可登录</small><i>○</i></article>
-                  <article className="admin-kpi-card admin-purple"><span>管理员账号</span><strong>{adminUsers.length}</strong><small>owner / admin</small><i>◆</i></article>
+                  <article className="admin-kpi-card admin-purple"><span>管理员账号</span><strong>{adminUsers.length}</strong><small>admin</small><i>◆</i></article>
                 </div>
 
                 <div className="admin-split-layout">
                   <section className="admin-table-panel">
                     <div className="admin-toolbar">
                       <select aria-label="账号状态筛选"><option>全部状态</option><option>活跃</option><option>禁用</option></select>
-                      <select aria-label="账号角色筛选"><option>全部角色</option><option>designer</option><option>ops</option><option>admin</option><option>owner</option></select>
+                      <select aria-label="账号角色筛选"><option>全部角色</option><option>designer</option><option>admin</option></select>
                       <input aria-label="搜索账号" placeholder="搜索账号、姓名或角色" />
                       <button type="button" onClick={() => void loadData({ force: true })}>刷新</button>
                     </div>
                     <div className="admin-data-table admin-user-table">
                       <div className="admin-table-row admin-table-head">
-                        <span>账号</span><span>角色</span><span>项目权限</span><span>额度</span><span>状态</span><span>最后登录</span><span>操作</span>
+                        <span>账号</span><span>角色</span><span>额度</span><span>状态</span><span>最后登录</span><span>操作</span>
                       </div>
                       {state.users.map((user) => (
                         <div key={user.id} className="admin-table-row">
                           <span><strong>{user.display_name || user.name}</strong><small>@{user.name}</small></span>
                           <span><em className="admin-tag">{user.role}</em></span>
-                          <span>{user.project_codes.join(", ")}</span>
                           <span>{user.monthly_quota === null ? "不限额" : `${user.monthly_quota} / 月`}</span>
                           <span><em className={`status-pill ${user.is_active ? "status-completed" : "status-failed"}`}>{user.is_active ? "活跃" : "禁用"}</em></span>
                           <span>{user.last_login_at ? formatDate(user.last_login_at) : "未登录"}</span>
@@ -2745,13 +2650,12 @@ export default function GenerateStudioShell() {
                     <form className="admin-side-form" onSubmit={handleSaveUser}>
                       <div className="admin-detail-head">
                         <h2>{editingUserId === null ? "创建账号" : "编辑账号"}</h2>
-                        <p>项目权限用英文逗号分隔，使用 * 可访问全部项目。</p>
+                        <p>账号管理页不再暴露项目容器分配。这里只维护角色、密码、状态和额度。</p>
                       </div>
                       <label className="composer-menu-field"><span>用户名</span><input value={userDraft.name} disabled={editingUserId !== null} onChange={(event) => setUserDraft((current) => ({ ...current, name: event.target.value }))} /></label>
                       <label className="composer-menu-field"><span>显示名</span><input value={userDraft.displayName} onChange={(event) => setUserDraft((current) => ({ ...current, displayName: event.target.value }))} /></label>
-                      <label className="composer-menu-field"><span>角色</span><select value={userDraft.role} onChange={(event) => setUserDraft((current) => ({ ...current, role: event.target.value }))}><option value="designer">designer</option><option value="ops">ops</option><option value="admin">admin</option><option value="owner">owner</option></select></label>
+                      <label className="composer-menu-field"><span>角色</span><select value={userDraft.role} onChange={(event) => setUserDraft((current) => ({ ...current, role: event.target.value }))}><option value="designer">designer</option><option value="admin">admin</option></select></label>
                       <label className="composer-menu-field"><span>{editingUserId === null ? "初始密码" : "重置密码"}</span><input type="password" value={userDraft.password} onChange={(event) => setUserDraft((current) => ({ ...current, password: event.target.value }))} /></label>
-                      <label className="composer-menu-field"><span>项目权限</span><input value={userDraft.projectCodes} onChange={(event) => setUserDraft((current) => ({ ...current, projectCodes: event.target.value }))} placeholder="QMDH-001 或 *" /></label>
                       <label className="composer-menu-field"><span>月度额度</span><input type="number" min="0" step="0.01" value={userDraft.monthlyQuota} onChange={(event) => setUserDraft((current) => ({ ...current, monthlyQuota: event.target.value }))} placeholder="留空表示不限额" /></label>
                       <label className="model-toggle"><input type="checkbox" checked={userDraft.isActive} onChange={(event) => setUserDraft((current) => ({ ...current, isActive: event.target.checked }))} /><span>启用账号</span></label>
                       {state.error ? <div className="floating-error">{state.error}</div> : null}
@@ -2763,128 +2667,6 @@ export default function GenerateStudioShell() {
                   </aside>
                 </div>
               </>
-            )}
-          </section>
-        ) : activeView === "projects" ? (
-          <section className="admin-page">
-            <header className="admin-page-head">
-              <div>
-                <h1>项目管理</h1>
-                <p>管理和监控所有项目的使用情况与成本</p>
-              </div>
-              <div className="admin-head-actions">
-                <button type="button" className="ghost-button">卡片视图</button>
-                <button type="button" className="ghost-button">列表视图</button>
-              </div>
-            </header>
-            {!userCanUseOpsViews ? (
-              <div className="floating-error">当前账号没有查看项目管理的权限。</div>
-            ) : (
-              <div className="admin-split-layout admin-project-layout">
-                <section className="admin-table-panel">
-                  <div className="admin-toolbar">
-                    <input aria-label="搜索项目" placeholder="搜索项目名称或 Key" />
-                    <select aria-label="项目状态"><option>全部状态</option><option>运行中</option><option>暂停</option></select>
-                    <select aria-label="成本区间"><option>成本区间</option><option>0-10</option><option>10-100</option></select>
-                    <button type="button" onClick={() => void loadData({ force: true })}>刷新</button>
-                  </div>
-                  <div className="project-card-grid">
-                    {state.projects.map((project) => {
-                      const projectTasks = state.tasks.filter((task) => task.project_code === project.code);
-                      const projectCost = projectTasks.reduce((total, task) => total + Number(task.cost || 0), 0);
-                      const projectFailures = projectTasks.filter((task) => task.status === "failed").length;
-                      const failureRate = percentOf(projectFailures, projectTasks.length);
-                      const topProviders = Array.from(
-                        projectTasks.reduce((counter, task) => counter.set(task.requested_provider, (counter.get(task.requested_provider) ?? 0) + 1), new Map<string, number>())
-                      ).sort((a, b) => b[1] - a[1]).slice(0, 2);
-                      return (
-                        <article
-                          key={project.code}
-                          className={selectedAdminProject?.code === project.code ? "project-card active" : "project-card"}
-                          onClick={() => setSelectedAdminProjectCode(project.code)}
-                        >
-                          <div className="feed-card-topline">
-                            <strong>{project.code}</strong>
-                            <span className="status-pill status-completed">运行中</span>
-                          </div>
-                          <p>{project.name}</p>
-                          <div className="project-metrics">
-                            <span><small>今日成本</small><b>{formatCost(projectCost, "CNY")}</b></span>
-                            <span><small>调用次数</small><b>{projectTasks.length}</b></span>
-                            <span><small>失败率</small><b>{formatPercent(failureRate)}</b></span>
-                          </div>
-                          <div className="project-provider-list">
-                            {topProviders.length > 0 ? topProviders.map(([provider, count]) => (
-                              <span key={provider}><em>{provider}</em><b style={{ width: `${percentOf(count, projectTasks.length)}%` }} /></span>
-                            )) : <small>暂无调用数据</small>}
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
-                <aside className="admin-detail-panel">
-                  {selectedAdminProject ? (
-                    <>
-                      <button type="button" className="admin-panel-close">×</button>
-                      <div className="admin-detail-head">
-                        <h2>{selectedAdminProject.code}</h2>
-                        <p>{selectedAdminProject.name}</p>
-                      </div>
-                      <div className="admin-detail-meta">
-                        <span>阶段：{selectedAdminProject.current_phase ?? "未设置"}</span>
-                        <span>状态：{selectedAdminProject.phase_status ?? "进行中"}</span>
-                        <span>更新：{selectedAdminProject.last_updated ?? "未记录"}</span>
-                      </div>
-                      <div className="detail-metric-grid">
-                        <span><small>调用次数</small><strong>{selectedAdminProjectTasks.length}</strong></span>
-                        <span><small>实际成本</small><strong>{formatCost(selectedAdminProjectCost, "CNY")}</strong></span>
-                        <span><small>成功任务</small><strong>{selectedAdminProjectSuccesses}</strong></span>
-                        <span><small>失败任务</small><strong>{selectedAdminProjectFailures}</strong></span>
-                      </div>
-                      <section className="admin-mini-panel">
-                        <h3>项目说明</h3>
-                        <p>{selectedAdminProject.summary ?? "暂无项目说明。"}</p>
-                      </section>
-                      <section className="admin-mini-panel">
-                        <h3>下一步</h3>
-                        <p>{selectedAdminProject.next_action ?? "暂无下一步记录。"}</p>
-                      </section>
-                      <section className="admin-mini-panel admin-project-actions">
-                        <h3>项目操作</h3>
-                        <div className="admin-project-action-row">
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            onClick={() => {
-                              const newName = prompt("输入新的项目名称：", selectedAdminProject.name);
-                              if (newName && newName.trim() && newName.trim() !== selectedAdminProject.name) {
-                                api.renameProject(selectedAdminProject.code, newName.trim()).then(() => loadData());
-                              }
-                            }}
-                          >✎ 重命名</button>
-                          <button
-                            type="button"
-                            className="ghost-button danger-button"
-                            onClick={async () => {
-                              if (!confirm(`确定要删除项目「${selectedAdminProject.name}」(${selectedAdminProject.code})？\n\n此操作不可撤销，项目下的任务将迁移到默认项目。`)) return;
-                              try {
-                                await api.deleteProject(selectedAdminProject.code);
-                                setSelectedAdminProjectCode("");
-                                await loadData();
-                              } catch (err) {
-                                alert(err instanceof Error ? err.message : "删除项目失败");
-                              }
-                            }}
-                          >🗑 删除项目</button>
-                        </div>
-                      </section>
-                    </>
-                  ) : (
-                    <div className="template-empty">暂无项目数据。</div>
-                  )}
-                </aside>
-              </div>
             )}
           </section>
         ) : activeView === "dashboard" ? (
@@ -3180,7 +2962,7 @@ export default function GenerateStudioShell() {
                     <div className="ops-account-list">
                       {state.dashboard.account_usage.slice(0, 4).map((account) => (
                         <div key={metricValue(account, "name")} className="ops-account-row">
-                          <span><strong>{metricValue(account, "display_name")}</strong><small>{metricValue(account, "role")} / {metricList(account, "project_codes")}</small></span>
+                          <span><strong>{metricValue(account, "display_name")}</strong><small>{metricValue(account, "role")}</small></span>
                           <div><b style={{ width: `${percentOf(metricNumber(account, "quota_used"), metricNumber(account, "quota_limit"))}%` }} /></div>
                           <em>{metricQuota(account)}</em>
                         </div>

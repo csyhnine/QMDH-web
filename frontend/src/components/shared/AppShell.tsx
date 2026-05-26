@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 
 type StudioTab = "generate" | "inspiration" | "chat";
-type AdminTab = "dashboard" | "projects" | "inspiration" | "models" | "users" | "settings";
+type AdminTab = "dashboard" | "inspiration" | "models" | "users" | "settings";
 
 type AppShellProps =
   | {
@@ -19,11 +19,10 @@ type AppShellProps =
     };
 
 const adminNavItems: Array<{ key: AdminTab; label: string; icon: string; path: string }> = [
-  { key: "dashboard", label: "运营看板", icon: "▣", path: "/admin/dashboard" },
-  { key: "projects", label: "项目管理", icon: "◌", path: "/admin/projects" },
+  { key: "dashboard", label: "运营看板", icon: "□", path: "/admin/dashboard" },
   { key: "inspiration", label: "灵感库", icon: "✦", path: "/admin/inspiration" },
-  { key: "models", label: "模型管理", icon: "⎔", path: "/admin/models" },
-  { key: "users", label: "账号管理", icon: "◫", path: "/admin/users" },
+  { key: "models", label: "模型管理", icon: "⬡", path: "/admin/models" },
+  { key: "users", label: "账号管理", icon: "▤", path: "/admin/users" },
   { key: "settings", label: "设置中心", icon: "⚙", path: "/admin/settings" },
 ];
 

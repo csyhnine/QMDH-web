@@ -8,6 +8,7 @@
 2. `docs/tasks.md`
 3. `docs/handoff.md`
 4. `docs/projects/QMDH-001/status.md`
+5. `docs/product-boundary.md`
 5. `docs/deployment.md`
 6. `docs/server-operations.md`
 7. `docs/data-governance.md`
@@ -16,7 +17,27 @@
 
 ## Current Baseline
 
-- Current repo head used for the last server deployment: `30f5196`
+- Current repo head for the latest local validated patch set: check `git log -1 --oneline`
+- Current local working tree is intentionally dirty and not yet committed:
+  - role model is normalized to `admin` / `designer`
+  - designer task and asset visibility is now user-centered, not shared by project membership
+  - `/admin/projects` route and project-member management UI/API have been removed from the active product surface
+  - personal projects now carry owner-based manageability in code (`Project.owner_user_id` / `can_manage`)
+  - session-backed designers can create, rename, and delete their own personal projects in the active UI
+  - deploying this patch set will require a real database migration for `projects.owner_user_id`
+  - local `tmp/` remains untracked
+- Current validated local checks for this patch set:
+  - backend: `PYTHONPATH=backend ..\\backend\\.venv\\Scripts\\python.exe -m pytest tests\\test_database_auth.py tests\\test_auth_boundaries.py`
+  - frontend: `npm run build`
+- Current product reality:
+  - projects remain as personal task containers
+  - history visibility is centered on the current user
+  - only admins should access backend management views
+  - new personal projects are self-managed by their owner account; older legacy projects may still remain admin-managed until migrated
+  - project member sharing is no longer an active product concept
+- Canonical product-boundary note: `docs/product-boundary.md`
+- Current repo head used for the last verified server deployment snapshot: `30b66d5`
+- Older bullets below may lag behind the current alignment patch set and should be re-verified before acting on them.
 - Current local working tree is intentionally dirty:
   - timeout-default / failure-display patch set is not yet committed
   - reference-image upload fix for `gpt-image` providers is not yet committed
@@ -25,7 +46,7 @@
 - Server snapshot as of 2026-05-21:
   - server IP: `120.79.227.11`
   - deploy path: `/www/wwwroot/qmdh-web`
-  - deployed code: `30f5196`
+  - deployed code: `30b66d5`
   - `alembic current`: `f6a7b8c9d0e1 (head)`
   - live `gpt-image-2` timeout was manually raised to `300` seconds
 - Server access note:
@@ -80,8 +101,8 @@
 
 1. 在 `/admin/models` 配置至少 1 个可用 `chat.completions` 模型，并完成 `/studio/chat` 真实联调。
 2. 如果当前目标是先稳定服务器灵感库，优先上传并导入本地 `tmp/seed-inspiration-bundle.zip`，不要再依赖服务器直接回源重抓。
-3. `task-016` 已完成；后续若继续做运营体验，优先评估 `/admin/projects` 是否需要“已归档项目”只读视图。
-4. 持续拆分 `frontend/src/features/studio/GenerateStudioShell.tsx`，降低当前前端最大热点文件的维护风险。
+3. Continue splitting `frontend/src/features/studio/GenerateStudioShell.tsx`; it is still the main frontend hot spot.
+4. If continuing product alignment work, prioritize removing any remaining dead code or docs that still assume project-centered shared history.
 
 ## Suggested Commit Rhythm
 

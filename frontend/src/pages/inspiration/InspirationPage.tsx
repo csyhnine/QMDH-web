@@ -29,13 +29,20 @@ function readFileAsDataUrl(file: File): Promise<string> {
 export type InspirationPageProps = {
   posts: InspirationPost[];
   onPostsChange: (posts: InspirationPost[]) => void;
-  canManage: boolean;
+  canContribute: boolean;
+  canManageLibrary?: boolean;
   mode?: "studio" | "admin";
 };
 
 /* ─── Component ─── */
 
-export default function InspirationPage({ posts, onPostsChange, canManage, mode = "studio" }: InspirationPageProps) {
+export default function InspirationPage({
+  posts,
+  onPostsChange,
+  canContribute,
+  canManageLibrary = false,
+  mode = "studio",
+}: InspirationPageProps) {
   const navigate = useNavigate();
   const [category, setCategory] = useState("全部");
   const [sourceFilter, setSourceFilter] = useState<(typeof SOURCE_FILTERS)[number]["key"]>("all");
@@ -312,7 +319,7 @@ export default function InspirationPage({ posts, onPostsChange, canManage, mode 
           <p>{mode === "admin" ? "集中管理外部参考、默认 seed 与设计师分享内容。" : "探索参考案例、材质与构图，激发设计灵感"}</p>
         </div>
         <div className="inspiration-actions">
-          {mode === "studio" && canManage ? (
+          {mode === "studio" && canManageLibrary ? (
             <button type="button" className="ghost-button" onClick={() => navigate("/admin/inspiration")}>
               管理灵感库
             </button>
@@ -322,7 +329,7 @@ export default function InspirationPage({ posts, onPostsChange, canManage, mode 
               {isRefreshing ? "刷新中..." : "刷新"}
             </button>
           ) : null}
-          {canManage ? (
+          {canContribute ? (
             <button type="button" className="admin-primary-button" onClick={() => {
               setActionError("");
               setImportDialog({ open: true, url: "", loading: false, images: [], selectedImage: "", title: "", category: category !== "全部" ? category : "建筑", tags: "", error: "", manualMode: false, uploadingFile: false });
@@ -509,7 +516,7 @@ export default function InspirationPage({ posts, onPostsChange, canManage, mode 
                   >
                     ♡ {post.like_count}
                   </button>
-                  {canManage ? <button type="button" className="ghost-button" title="编辑" onClick={() => setEditDialog({ postId: post.id, title: post.title, image_path: post.image_path, source_url: post.source_url, uploadingFile: false, uploadError: "" })}>✎</button> : null}
+                  {canContribute ? <button type="button" className="ghost-button" title="编辑" onClick={() => setEditDialog({ postId: post.id, title: post.title, image_path: post.image_path, source_url: post.source_url, uploadingFile: false, uploadError: "" })}>✎</button> : null}
                   {mode === "admin" ? (
                     <button
                       type="button"

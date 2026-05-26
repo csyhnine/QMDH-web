@@ -29,7 +29,7 @@ function AdminRoute({ children }: { children: JSX.Element }) {
 }
 
 function InspirationRoute() {
-  const { canManageUsers, canUseOpsViews } = useAuth();
+  const { currentUser, canManageUsers, canUseOpsViews } = useAuth();
   const [posts, setPosts] = useState<InspirationPost[]>([]);
 
   useEffect(() => {
@@ -38,7 +38,12 @@ function InspirationRoute() {
 
   return (
     <AppShell kind="studio" active="inspiration">
-      <InspirationPage posts={posts} onPostsChange={setPosts} canManage={canManageUsers || canUseOpsViews} />
+      <InspirationPage
+        posts={posts}
+        onPostsChange={setPosts}
+        canContribute={Boolean(currentUser)}
+        canManageLibrary={canManageUsers || canUseOpsViews}
+      />
     </AppShell>
   );
 }
@@ -52,7 +57,7 @@ function AdminInspirationRoute() {
 
   return (
     <AppShell kind="admin" active="inspiration">
-      <InspirationPage posts={posts} onPostsChange={setPosts} canManage mode="admin" />
+      <InspirationPage posts={posts} onPostsChange={setPosts} canContribute canManageLibrary mode="admin" />
     </AppShell>
   );
 }

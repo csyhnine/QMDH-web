@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_auth_user, require_ops_access
+from app.core.auth import get_current_auth_user, has_admin_access, require_ops_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import InspirationPost
@@ -21,6 +21,14 @@ _BROWSER_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 )
+
+
+def _can_edit_post(auth_user: AuthUserProfile, post: InspirationPost) -> bool:
+    if has_admin_access(auth_user.role):
+        return True
+    if auth_user.user_id is None or post.user_id is None:
+        return False
+    return auth_user.user_id == post.user_id
 
 
 def _to_out(post: InspirationPost) -> InspirationPostOut:
@@ -62,8 +70,8 @@ def create_inspiration(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> InspirationPostOut:
-    """Create an inspiration post. Users can share their generations, admins can import external references."""
-    if payload.source_type == "external":
+    """Create an inspiration post. Designers can contribute references; admins retain full library control."""
+    if payload.source_type not in {"external", "user"}:
         require_ops_access(auth_user)
 
     managed_image_path = prepare_inspiration_image(
@@ -130,11 +138,12 @@ def update_inspiration(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> InspirationPostOut:
-    """Update an inspiration post. Only admins can update."""
-    require_ops_access(auth_user)
+    """Update an inspiration post. Admins can edit all posts; designers can edit their own uploads."""
     post = db.get(InspirationPost, post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
+    if not _can_edit_post(auth_user, post):
+        raise HTTPException(status_code=403, detail="Post update denied")
 
     update_data = payload.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -159,8 +168,7 @@ async def extract_images_from_url(
     payload: ExtractImagesIn,
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> ExtractImagesOut:
-    """Fetch a URL and extract all image URLs from the page. Admins only."""
-    require_ops_access(auth_user)
+    """Fetch a URL and extract candidate images for inspiration import."""
 
     url = payload.url.strip()
     parsed = urlparse(url)

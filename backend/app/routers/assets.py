@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import can_access_project, get_current_auth_user, has_admin_access
+from app.core.auth import can_access_project, get_current_auth_user
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import Asset, AssetBookmark, Project, Task
@@ -17,7 +17,7 @@ from app.services.media_storage import resolve_storage_path, write_binary_asset
 router = APIRouter(prefix="/assets", tags=["assets"])
 
 
-def _designer_owned_task_ids(db: Session, auth_user: AuthUserProfile) -> set[int]:
+def _owned_task_ids(db: Session, auth_user: AuthUserProfile) -> set[int]:
     query = select(Task.id).join(Task.project).where(Task.deleted_at.is_(None))
     if auth_user.user_id is not None:
         query = query.where(Task.user_id == auth_user.user_id)
@@ -34,8 +34,6 @@ def _can_access_asset(
     auth_user: AuthUserProfile,
     owned_task_ids: set[int],
 ) -> bool:
-    if has_admin_access(auth_user.role):
-        return True
     if asset.source_task_id is None:
         return False
     if asset.source_task_id not in owned_task_ids:
@@ -51,7 +49,7 @@ def _ensure_asset_access(
     auth_user: AuthUserProfile,
     db: Session,
 ) -> None:
-    owned_task_ids = _designer_owned_task_ids(db, auth_user)
+    owned_task_ids = _owned_task_ids(db, auth_user)
     if not _can_access_asset(asset, auth_user=auth_user, owned_task_ids=owned_task_ids):
         raise HTTPException(status_code=403, detail="Asset access denied")
 
@@ -107,7 +105,7 @@ def list_assets(
     bookmarked: bool | None = None,
 ) -> list[AssetOut]:
     assets = db.scalars(select(Asset).order_by(Asset.created_at.desc())).all()
-    owned_task_ids = set() if has_admin_access(auth_user.role) else _designer_owned_task_ids(db, auth_user)
+    owned_task_ids = _owned_task_ids(db, auth_user)
     accessible = [
         asset
         for asset in assets

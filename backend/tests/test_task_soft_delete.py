@@ -239,6 +239,9 @@ class TaskSoftDeleteTests(unittest.TestCase):
         forbidden = self._delete(self.task_delete_id, "other-token")
         self.assertEqual(forbidden.status_code, 403)
 
+        admin_forbidden = self._delete(self.task_delete_id, "ops-token")
+        self.assertEqual(admin_forbidden.status_code, 403)
+
         with self.SessionLocal() as db:
             self.assertIsNone(db.get(Task, self.task_delete_id).deleted_at)
             self.assertEqual(

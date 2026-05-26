@@ -12,10 +12,11 @@ This document records the current active product boundary when older docs still 
 
 ### Visibility
 
-- Designers only see their own task history.
-- Designers only see assets generated from their own tasks.
+- Studio history is account-owned for every role.
+- Every account only sees its own task history in the studio history surface.
+- Every account only sees assets generated from its own tasks in the studio history surface.
 - Shared access to the same project code does not imply shared history visibility.
-- Admins retain global visibility for backend management and troubleshooting.
+- Admins retain global visibility only through dedicated backend management surfaces, not through studio history cards.
 
 ### Project Semantics
 

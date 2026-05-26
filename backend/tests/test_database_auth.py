@@ -364,7 +364,7 @@ class DatabaseAuthTests(unittest.TestCase):
 
         admin_tasks = self.client.get("/tasks", headers={"Authorization": f"Bearer {admin_token}"})
         self.assertEqual(admin_tasks.status_code, 200, admin_tasks.text)
-        self.assertEqual({task["title"] for task in admin_tasks.json()}, {"Done", "Jimeng failed", "Peer task"})
+        self.assertEqual(admin_tasks.json(), [])
 
         designer_assets = self.client.get("/assets", headers={"Authorization": f"Bearer {designer_token}"})
         self.assertEqual(designer_assets.status_code, 200, designer_assets.text)
@@ -376,7 +376,7 @@ class DatabaseAuthTests(unittest.TestCase):
 
         admin_assets = self.client.get("/assets", headers={"Authorization": f"Bearer {admin_token}"})
         self.assertEqual(admin_assets.status_code, 200, admin_assets.text)
-        self.assertEqual({asset["name"] for asset in admin_assets.json()}, {"Project cover", "Peer asset"})
+        self.assertEqual(admin_assets.json(), [])
 
         forbidden_like = self.client.post(f"/assets/{peer_asset_id}/like", headers={"Authorization": f"Bearer {designer_token}"})
         self.assertEqual(forbidden_like.status_code, 403)
@@ -387,8 +387,8 @@ class DatabaseAuthTests(unittest.TestCase):
         )
         self.assertEqual(forbidden_bookmark.status_code, 403)
 
-        allowed_like = self.client.post(f"/assets/{peer_asset_id}/like", headers={"Authorization": f"Bearer {admin_token}"})
-        self.assertEqual(allowed_like.status_code, 200, allowed_like.text)
+        admin_like = self.client.post(f"/assets/{peer_asset_id}/like", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(admin_like.status_code, 403)
 
     def test_project_list_is_filtered_by_database_session_user(self) -> None:
         designer_token = self.login("designer", "designer-pass")

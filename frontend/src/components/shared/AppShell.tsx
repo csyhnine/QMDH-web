@@ -84,14 +84,15 @@ export default function AppShell(props: AppShellProps) {
               ))}
         </nav>
         <div className="rail-footer">
-          {props.kind === "admin" && currentUser ? (
-            <div className="admin-user-card">
-              <div className="admin-user-avatar">
+          {currentUser ? (
+            <div className="rail-user-card">
+              <div className="rail-user-avatar">
                 {(currentUser.display_name || currentUser.name).slice(0, 1).toUpperCase()}
               </div>
               <div>
+                <small>当前账号</small>
                 <strong>{currentUser.display_name || currentUser.name}</strong>
-                <span>{currentUser.role}</span>
+                <span>@{currentUser.name} · {currentUser.role}</span>
               </div>
             </div>
           ) : null}

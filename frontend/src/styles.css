@@ -157,7 +157,7 @@ button {
   background: rgba(37, 99, 235, 0.09);
 }
 
-.admin-user-card {
+.rail-user-card {
   width: 100%;
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
@@ -167,7 +167,7 @@ button {
   border-top: 1px solid var(--line);
 }
 
-.admin-user-avatar {
+.rail-user-avatar {
   width: 42px;
   height: 42px;
   display: grid;
@@ -178,16 +178,25 @@ button {
   font-weight: 700;
 }
 
-.admin-user-card strong,
-.admin-user-card span {
+.rail-user-card small,
+.rail-user-card strong,
+.rail-user-card span {
   display: block;
 }
 
-.admin-user-card strong {
-  font-size: 0.94rem;
+.rail-user-card small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.admin-user-card span {
+.rail-user-card strong {
+  font-size: 0.94rem;
+  margin-top: 2px;
+}
+
+.rail-user-card span {
   margin-top: 4px;
   color: var(--muted);
   font-size: 0.78rem;

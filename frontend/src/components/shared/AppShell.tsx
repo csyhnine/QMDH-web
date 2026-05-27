@@ -92,7 +92,7 @@ export default function AppShell(props: AppShellProps) {
               <div>
                 <small>当前账号</small>
                 <strong>{currentUser.display_name || currentUser.name}</strong>
-                <span>@{currentUser.name} · {currentUser.role}</span>
+                <span>@{currentUser.name}</span>
               </div>
             </div>
           ) : null}

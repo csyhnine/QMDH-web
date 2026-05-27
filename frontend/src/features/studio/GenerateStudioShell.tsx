@@ -2535,15 +2535,14 @@ export default function GenerateStudioShell() {
           )}
         </nav>
         <div className="rail-footer">
-          {isAdminView ? (
-            <div className="admin-user-card">
-              <div className="admin-user-avatar">{currentUser.display_name.slice(0, 1).toUpperCase()}</div>
-              <div>
-                <strong>{currentUser.display_name || currentUser.name}</strong>
-                <span>{currentUser.role}</span>
-              </div>
+          <div className="rail-user-card">
+            <div className="rail-user-avatar">{(currentUser.display_name || currentUser.name).slice(0, 1).toUpperCase()}</div>
+            <div>
+              <small>当前账号</small>
+              <strong>{currentUser.display_name || currentUser.name}</strong>
+              <span>@{currentUser.name}</span>
             </div>
-          ) : null}
+          </div>
           {userCanUseOpsViews && !isAdminView ? (
             <button type="button" className="rail-logout" onClick={() => (window.location.href = "/admin/dashboard")}>
               看板

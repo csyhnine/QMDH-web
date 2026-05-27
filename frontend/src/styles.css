@@ -94,7 +94,7 @@ button {
 .studio-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 76px 280px minmax(0, 1fr);
+  grid-template-columns: 120px 280px minmax(0, 1fr);
   align-items: start;
 }
 
@@ -103,11 +103,11 @@ button {
 }
 
 .inspiration-shell {
-  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-columns: 120px minmax(0, 1fr);
 }
 
 .chat-shell {
-  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-columns: 120px minmax(0, 1fr);
 }
 
 .inspiration-shell .canvas-area,
@@ -159,12 +159,17 @@ button {
 
 .rail-user-card {
   width: 100%;
+  min-width: 0;
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
   gap: 10px;
-  align-items: center;
+  align-items: start;
   padding-top: 14px;
   border-top: 1px solid var(--line);
+}
+
+.rail-user-card > div:last-child {
+  min-width: 0;
 }
 
 .rail-user-avatar {
@@ -182,6 +187,9 @@ button {
 .rail-user-card strong,
 .rail-user-card span {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .rail-user-card small {
@@ -194,6 +202,7 @@ button {
 .rail-user-card strong {
   font-size: 0.94rem;
   margin-top: 2px;
+  line-height: 1.2;
 }
 
 .rail-user-card span {

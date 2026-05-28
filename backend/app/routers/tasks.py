@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, st
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import ensure_project_access, get_current_auth_user
+from app.core.auth import get_current_auth_user
 from app.core.audit import write_audit_log
 from app.core.config import AuthUserProfile
 from app.core.config import settings
@@ -20,6 +20,16 @@ from app.services.task_executor import enqueue_task, execute_task
 from app.services.usage_ledger import ensure_usage_ledger_for_task
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+def _explicit_project_codes(auth_user: AuthUserProfile) -> tuple[str, ...]:
+    return tuple(code for code in auth_user.project_codes if code and code != "*")
+
+
+def _can_use_task_project(auth_user: AuthUserProfile, project: Project) -> bool:
+    if auth_user.user_id is not None and project.owner_user_id == auth_user.user_id:
+        return True
+    return project.owner_user_id is None and project.code in set(_explicit_project_codes(auth_user))
 
 
 def _is_task_visible_to_user(auth_user: AuthUserProfile, task: Task) -> bool:
@@ -157,7 +167,8 @@ def create_task(
     )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    ensure_project_access(auth_user, project.code)
+    if not _can_use_task_project(auth_user, project):
+        raise HTTPException(status_code=403, detail="Project access denied")
 
     user = _get_or_create_user(db, auth_user)
     reference_image_storage_paths = _reference_image_storage_paths(payload.payload)

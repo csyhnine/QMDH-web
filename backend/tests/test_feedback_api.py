@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import inspect, text
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -11,6 +12,7 @@ from app.core.security import hash_password
 from app.database import Base, get_db
 from app.models import User, UserFeedback
 from app.routers import feedback
+from app.services.bootstrap import ensure_schema
 
 
 class FeedbackApiTests(unittest.TestCase):
@@ -150,6 +152,50 @@ class FeedbackApiTests(unittest.TestCase):
         listed = self.client.get("/feedback", headers=self._designer_headers())
         self.assertEqual(listed.status_code, 200, listed.text)
         self.assertEqual(listed.json()[0]["admin_reply"], "We fixed this and deployed a patch.")
+
+    def test_ensure_schema_backfills_feedback_attachment_column_for_legacy_database(self) -> None:
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE projects (
+                        id INTEGER PRIMARY KEY,
+                        name VARCHAR(150) NOT NULL,
+                        code VARCHAR(50) NOT NULL,
+                        classification VARCHAR(10) NOT NULL
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE user_feedbacks (
+                        id INTEGER PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        title VARCHAR(150) NOT NULL,
+                        message TEXT NOT NULL,
+                        status VARCHAR(30) NOT NULL,
+                        admin_reply TEXT NOT NULL,
+                        replied_by_user_id INTEGER,
+                        replied_at DATETIME,
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL
+                    )
+                    """
+                )
+            )
+
+        ensure_schema(engine)
+
+        columns = {column["name"] for column in inspect(engine).get_columns("user_feedbacks")}
+        self.assertIn("attachment_paths", columns)
+        engine.dispose()
 
 
 if __name__ == "__main__":

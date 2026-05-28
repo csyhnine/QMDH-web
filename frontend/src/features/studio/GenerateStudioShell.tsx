@@ -2542,11 +2542,14 @@ export default function GenerateStudioShell() {
               <button type="button" className="rail-item" onClick={() => (window.location.href = "/studio/inspiration")}>
                 <span>灵感</span>
               </button>
+              <button type="button" className="rail-item" onClick={() => (window.location.href = "/studio/feedback")}>
+                <span>反馈</span>
+              </button>
               <button type="button" className="rail-item active" onClick={() => (window.location.href = "/studio/generate")}>
                 <span>生成</span>
               </button>
               <button type="button" className="rail-item" onClick={() => (window.location.href = "/studio/chat")}>
-                <span>Chat</span>
+                <span>对话</span>
               </button>
             </>
           )}
@@ -3693,6 +3696,7 @@ export default function GenerateStudioShell() {
             activeTemplateId={activeTemplate?.id ?? null}
             aspectRatioOptions={aspectRatioOptions}
             availableProviderCount={availableProviders.length}
+            hasActiveProject={Boolean(activeProject)}
             composerToolbarRef={composerToolbarRef}
             customTemplates={customTemplates}
             editingTemplateId={editingTemplateId}

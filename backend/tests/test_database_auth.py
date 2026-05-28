@@ -392,14 +392,22 @@ class DatabaseAuthTests(unittest.TestCase):
 
     def test_project_list_is_filtered_by_database_session_user(self) -> None:
         designer_token = self.login("designer", "designer-pass")
+        admin_token = self.login("admin", "admin-pass")
         response = self.client.get("/projects", headers={"Authorization": f"Bearer {designer_token}"})
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual([project["code"] for project in response.json()], ["QMDH-001"])
         self.assertFalse(response.json()[0]["can_manage"])
 
+        admin_response = self.client.get("/projects", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(admin_response.status_code, 200)
+        self.assertEqual(admin_response.json(), [])
+
         forbidden = self.client.get("/projects/QMDH-SEC/status", headers={"Authorization": f"Bearer {designer_token}"})
         self.assertEqual(forbidden.status_code, 403)
+
+        admin_forbidden = self.client.get("/projects/QMDH-001/status", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(admin_forbidden.status_code, 403)
 
     def test_designer_can_create_personal_project_container(self) -> None:
         designer_token = self.login("designer", "designer-pass")
@@ -476,6 +484,27 @@ class DatabaseAuthTests(unittest.TestCase):
         self.assertEqual(listed.status_code, 200)
         self.assertNotIn(project_code, [project["code"] for project in listed.json()])
 
+    def test_admin_cannot_submit_generation_into_unowned_shared_project(self) -> None:
+        admin_token = self.login("admin", "admin-pass")
+
+        created = self.client.post(
+            "/tasks",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={
+                "title": "Admin shared project task",
+                "workflow_key": "image-generate",
+                "project_code": "QMDH-001",
+                "requested_provider": "jimeng",
+                "classification": "B",
+                "payload": {
+                    "prompt": "Generate an architectural render.",
+                    "image_count": 1,
+                },
+            },
+        )
+
+        self.assertEqual(created.status_code, 403, created.text)
+
     def test_removed_member_management_endpoints_are_not_exposed(self) -> None:
         admin_token = self.login("admin", "admin-pass")
 
@@ -503,7 +532,7 @@ class DatabaseAuthTests(unittest.TestCase):
 
         projects_after = self.client.get("/projects", headers={"Authorization": f"Bearer {admin_token}"})
         self.assertEqual(projects_after.status_code, 200)
-        self.assertEqual([project["code"] for project in projects_after.json()], ["QMDH-SEC"])
+        self.assertEqual(projects_after.json(), [])
 
         archived_status = self.client.get("/projects/QMDH-001/status", headers={"Authorization": f"Bearer {admin_token}"})
         self.assertEqual(archived_status.status_code, 404)

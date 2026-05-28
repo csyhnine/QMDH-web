@@ -2,11 +2,11 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditEventType, write_audit_log
-from app.core.auth import ensure_project_access, get_current_auth_user, has_admin_access
+from app.core.auth import get_current_auth_user, has_admin_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import Asset, DataClassification, Project, Task, User
@@ -68,6 +68,28 @@ def _can_manage_project(auth_user: AuthUserProfile, project: Project) -> bool:
     return project.owner_user_id == auth_user.user_id
 
 
+def _explicit_project_codes(auth_user: AuthUserProfile) -> tuple[str, ...]:
+    return tuple(code for code in auth_user.project_codes if code and code != "*")
+
+
+def _can_view_project(auth_user: AuthUserProfile, project: Project) -> bool:
+    if auth_user.user_id is not None and project.owner_user_id == auth_user.user_id:
+        return True
+    return project.owner_user_id is None and project.code in set(_explicit_project_codes(auth_user))
+
+
+def _apply_project_scope(query, auth_user: AuthUserProfile):
+    explicit_codes = _explicit_project_codes(auth_user)
+    clauses = []
+    if auth_user.user_id is not None:
+        clauses.append(Project.owner_user_id == auth_user.user_id)
+    if explicit_codes:
+        clauses.append(and_(Project.owner_user_id.is_(None), Project.code.in_(explicit_codes)))
+    if not clauses:
+        return query.where(Project.id == -1)
+    return query.where(or_(*clauses))
+
+
 def _require_project_manager(auth_user: AuthUserProfile, project: Project) -> None:
     if not _can_manage_project(auth_user, project):
         raise HTTPException(status_code=403, detail="Project management access denied")
@@ -94,9 +116,10 @@ def list_projects(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> list[dict]:
-    query = select(Project).where(Project.archived_at.is_(None)).order_by(Project.code)
-    if "*" not in auth_user.project_codes:
-        query = query.where(Project.code.in_(auth_user.project_codes))
+    query = _apply_project_scope(
+        select(Project).where(Project.archived_at.is_(None)).order_by(Project.code),
+        auth_user,
+    )
     projects = list(db.scalars(query).all())
     status_map = build_project_status_map()
     return [_to_project_out(project, auth_user, status_map) for project in projects]
@@ -152,7 +175,6 @@ def rename_project(
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> dict:
     """Rename a personal project container owned by the current user or managed by an admin."""
-    ensure_project_access(auth_user, project_code)
     project = _get_active_project(db, project_code)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -170,10 +192,11 @@ def get_project_status(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> dict:
-    ensure_project_access(auth_user, project_code)
     project = _get_active_project(db, project_code)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if not _can_view_project(auth_user, project):
+        raise HTTPException(status_code=403, detail="Project access denied")
     detail = build_project_status_detail(project_code)
     if not detail:
         raise HTTPException(status_code=404, detail="Project status not found")
@@ -187,7 +210,6 @@ def delete_project(
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ):
     """Archive a personal project container while preserving reporting history."""
-    ensure_project_access(auth_user, project_code)
     project = _get_active_project(db, project_code)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

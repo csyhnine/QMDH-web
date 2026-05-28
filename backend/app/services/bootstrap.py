@@ -42,10 +42,19 @@ def ensure_schema(engine: Engine) -> None:
     inspector = inspect(engine)
 
     project_columns = {column["name"] for column in inspector.get_columns("projects")}
+    feedback_columns = (
+        {column["name"] for column in inspector.get_columns("user_feedbacks")}
+        if "user_feedbacks" in inspector.get_table_names()
+        else set()
+    )
     with engine.begin() as connection:
         if "owner_user_id" not in project_columns:
             connection.execute(text("ALTER TABLE projects ADD COLUMN owner_user_id INTEGER"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_projects_owner_user_id ON projects (owner_user_id)"))
+        if feedback_columns and "attachment_paths" not in feedback_columns:
+            connection.execute(
+                text("ALTER TABLE user_feedbacks ADD COLUMN attachment_paths JSON NOT NULL DEFAULT '[]'")
+            )
 
 
 def seed_initial_data(db: Session) -> None:

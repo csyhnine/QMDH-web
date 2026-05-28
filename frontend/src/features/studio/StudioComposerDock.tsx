@@ -63,6 +63,7 @@ type StudioComposerDockProps = {
   activeTemplateId: string | number | null;
   aspectRatioOptions: readonly string[];
   availableProviderCount: number;
+  hasActiveProject: boolean;
   composerToolbarRef: RefObject<HTMLDivElement | null>;
   customTemplates: PromptTemplateRecord[];
   editingTemplateId: number | null;
@@ -110,6 +111,7 @@ export default function StudioComposerDock({
   activeTemplateId,
   aspectRatioOptions,
   availableProviderCount,
+  hasActiveProject,
   composerToolbarRef,
   customTemplates,
   editingTemplateId,
@@ -445,9 +447,9 @@ export default function StudioComposerDock({
           <button
             type="submit"
             className="submit-button"
-            disabled={submitting || uploadingReference || availableProviderCount === 0}
+            disabled={submitting || uploadingReference || availableProviderCount === 0 || !hasActiveProject}
           >
-            {submitting ? "正在创建..." : "开始生成"}
+            {submitting ? "正在创建..." : !hasActiveProject ? "请先新建项目" : "开始生成"}
           </button>
         </div>
       </div>

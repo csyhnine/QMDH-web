@@ -19,20 +19,20 @@ type AppShellProps =
     };
 
 const adminNavItems: Array<{ key: AdminTab; label: string; path: string }> = [
-  { key: "dashboard", label: "Dashboard", path: "/admin/dashboard" },
-  { key: "inspiration", label: "Inspiration", path: "/admin/inspiration" },
-  { key: "feedback", label: "Feedback", path: "/admin/feedback" },
-  { key: "models", label: "Models", path: "/admin/models" },
-  { key: "agents", label: "Agents", path: "/admin/agents" },
-  { key: "users", label: "Users", path: "/admin/users" },
-  { key: "settings", label: "Settings", path: "/admin/settings" },
+  { key: "dashboard", label: "看板", path: "/admin/dashboard" },
+  { key: "inspiration", label: "灵感", path: "/admin/inspiration" },
+  { key: "feedback", label: "反馈", path: "/admin/feedback" },
+  { key: "models", label: "模型", path: "/admin/models" },
+  { key: "agents", label: "代理", path: "/admin/agents" },
+  { key: "users", label: "账号", path: "/admin/users" },
+  { key: "settings", label: "设置", path: "/admin/settings" },
 ];
 
 const studioNavItems: Array<{ key: Exclude<StudioTab, "generate"> | "generate"; label: string; path: string }> = [
-  { key: "inspiration", label: "Inspiration", path: "/studio/inspiration" },
-  { key: "feedback", label: "Feedback", path: "/studio/feedback" },
-  { key: "generate", label: "Generate", path: "/studio/generate" },
-  { key: "chat", label: "Chat", path: "/studio/chat" },
+  { key: "inspiration", label: "灵感", path: "/studio/inspiration" },
+  { key: "feedback", label: "反馈", path: "/studio/feedback" },
+  { key: "generate", label: "生成", path: "/studio/generate" },
+  { key: "chat", label: "对话", path: "/studio/chat" },
 ];
 
 export default function AppShell(props: AppShellProps) {
@@ -92,7 +92,7 @@ export default function AppShell(props: AppShellProps) {
                 {(currentUser.display_name || currentUser.name).slice(0, 1).toUpperCase()}
               </div>
               <div>
-                <small>Current account</small>
+                <small>当前账号</small>
                 <strong>{currentUser.display_name || currentUser.name}</strong>
                 <span>@{currentUser.name}</span>
               </div>
@@ -100,16 +100,16 @@ export default function AppShell(props: AppShellProps) {
           ) : null}
           {props.kind === "admin" && canUseOpsViews ? (
             <button type="button" className="rail-logout" onClick={() => navigate("/studio/generate")}>
-              Studio
+              创作台
             </button>
           ) : null}
           {props.kind === "studio" && canUseOpsViews ? (
             <button type="button" className="rail-logout" onClick={() => navigate("/admin/dashboard")}>
-              Admin
+              后台
             </button>
           ) : null}
           <button type="button" className="rail-logout" onClick={() => void handleLogout()}>
-            Sign out
+            退出
           </button>
         </div>
       </aside>

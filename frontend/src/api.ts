@@ -408,6 +408,7 @@ export type FeedbackRecord = {
   user_display_name: string;
   title: string;
   message: string;
+  attachment_paths: string[];
   status: "open" | "replied" | "closed";
   admin_reply: string;
   replied_by_user_name: string | null;
@@ -419,6 +420,7 @@ export type FeedbackRecord = {
 export type FeedbackCreatePayload = {
   title: string;
   message: string;
+  attachment_paths: string[];
 };
 
 export type FeedbackAdminUpdatePayload = {

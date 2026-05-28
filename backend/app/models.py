@@ -317,6 +317,7 @@ class UserFeedback(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(150))
     message: Mapped[str] = mapped_column(Text, default="")
+    attachment_paths: Mapped[list[str]] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(30), default="open", index=True)
     admin_reply: Mapped[str] = mapped_column(Text, default="")
     replied_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)

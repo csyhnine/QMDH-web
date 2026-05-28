@@ -51,11 +51,11 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
   async function handleReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedFeedback) {
-      onSetError("Select a feedback thread first.");
+      onSetError("请先选择一条反馈记录。");
       return;
     }
     if (!replyDraft.admin_reply.trim()) {
-      onSetError("Please write a reply before saving.");
+      onSetError("请先填写回复内容。");
       return;
     }
 
@@ -68,7 +68,7 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
       onSetError("");
       onRefresh();
     } catch (err) {
-      onSetError(err instanceof Error ? err.message : "Failed to save reply");
+      onSetError(err instanceof Error ? err.message : "保存回复失败");
     } finally {
       setSaving(false);
     }
@@ -78,44 +78,44 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
     <section className="admin-page">
       <header className="admin-page-head">
         <div>
-          <h1>Feedback Inbox</h1>
-          <p>Only administrators can see this queue. Replies written here will be visible to the submitting user.</p>
+          <h1>反馈收件箱</h1>
+          <p>这里只有管理员可见。在这里回复后，提交反馈的用户会在自己的反馈页看到你的回复。</p>
         </div>
         <button type="button" className="admin-primary-button" onClick={onRefresh}>
-          Refresh inbox
+          刷新收件箱
         </button>
       </header>
 
       <div className="admin-kpi-grid">
         <article className="admin-kpi-card admin-blue">
           <div>
-            <span>Total threads</span>
+            <span>反馈总数</span>
             <strong>{feedbackItems.length}</strong>
-            <small>All submitted user feedback</small>
+            <small>全部用户反馈</small>
           </div>
           <i>FB</i>
         </article>
         <article className="admin-kpi-card admin-orange">
           <div>
-            <span>Open</span>
+            <span>待处理</span>
             <strong>{openCount}</strong>
-            <small>Still waiting for admin response</small>
+            <small>等待管理员回复</small>
           </div>
           <i>OP</i>
         </article>
         <article className="admin-kpi-card admin-green">
           <div>
-            <span>Replied</span>
+            <span>已回复</span>
             <strong>{repliedCount}</strong>
-            <small>Already answered</small>
+            <small>已经处理完成</small>
           </div>
           <i>RP</i>
         </article>
         <article className="admin-kpi-card admin-gray">
           <div>
-            <span>Closed</span>
+            <span>已关闭</span>
             <strong>{closedCount}</strong>
-            <small>Resolved or archived</small>
+            <small>已归档或关闭</small>
           </div>
           <i>CL</i>
         </article>
@@ -125,17 +125,17 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
         <section className="admin-table-panel">
           <div className="agent-ops-section-head">
             <div>
-              <h2>User threads</h2>
-              <p>Newest feedback stays at the top so admins can answer quickly.</p>
+              <h2>用户反馈列表</h2>
+              <p>最新反馈会排在最前面，方便后台优先处理。</p>
             </div>
           </div>
           <div className="admin-data-table feedback-admin-table">
             <div className="admin-table-row admin-table-head">
-              <span>User</span>
-              <span>Title</span>
-              <span>Status</span>
-              <span>Updated</span>
-              <span>Reply</span>
+              <span>用户</span>
+              <span>标题</span>
+              <span>状态</span>
+              <span>更新时间</span>
+              <span>回复情况</span>
             </div>
             {feedbackItems.map((item) => (
               <button
@@ -154,7 +154,7 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
                 </span>
                 <span>
                   <em className={`status-pill ${item.status === "replied" ? "status-completed" : item.status === "closed" ? "status-failed" : "status-running"}`}>
-                    {item.status}
+                    {item.status === "replied" ? "已回复" : item.status === "closed" ? "已关闭" : "待处理"}
                   </em>
                 </span>
                 <span>
@@ -162,8 +162,8 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
                   <small>{formatDate(item.created_at)}</small>
                 </span>
                 <span>
-                  <strong>{item.admin_reply ? "Replied" : "Pending"}</strong>
-                  <small>{item.replied_by_user_name || "No owner yet"}</small>
+                  <strong>{item.admin_reply ? "已回复" : "待回复"}</strong>
+                  <small>{item.replied_by_user_name || "尚未认领"}</small>
                 </span>
               </button>
             ))}
@@ -175,16 +175,28 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
             <form className="admin-side-form" onSubmit={handleReply}>
               <div className="admin-detail-head">
                 <h2>{selectedFeedback.title}</h2>
-                <p>{selectedFeedback.user_display_name || selectedFeedback.user_name} submitted this on {formatDate(selectedFeedback.created_at)}.</p>
+                <p>{selectedFeedback.user_display_name || selectedFeedback.user_name} 于 {formatDate(selectedFeedback.created_at)} 提交了这条反馈。</p>
               </div>
 
               <div className="feedback-detail-card">
-                <span>User message</span>
+                <span>用户描述</span>
                 <p>{selectedFeedback.message}</p>
               </div>
+              {selectedFeedback.attachment_paths.length > 0 ? (
+                <div className="feedback-detail-card">
+                  <span>用户截图</span>
+                  <div className="feedback-thread-attachments">
+                    {selectedFeedback.attachment_paths.map((path) => (
+                      <a key={path} href={path} target="_blank" rel="noreferrer" className="feedback-thread-image">
+                        <img src={path} alt="反馈截图" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <label className="composer-menu-field">
-                <span>Status</span>
+                <span>状态</span>
                 <select
                   value={replyDraft.status}
                   onChange={(event) =>
@@ -194,19 +206,19 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
                     }))
                   }
                 >
-                  <option value="open">open</option>
-                  <option value="replied">replied</option>
-                  <option value="closed">closed</option>
+                  <option value="open">待处理</option>
+                  <option value="replied">已回复</option>
+                  <option value="closed">已关闭</option>
                 </select>
               </label>
 
               <label className="composer-menu-field">
-                <span>Admin reply</span>
+                <span>管理员回复</span>
                 <textarea
                   className="feedback-textarea"
                   value={replyDraft.admin_reply}
                   onChange={(event) => setReplyDraft((current) => ({ ...current, admin_reply: event.target.value }))}
-                  placeholder="Reply with the fix, explanation, or follow-up request."
+                  placeholder="在这里回复问题原因、修复进展，或需要用户补充的信息。"
                 />
               </label>
 
@@ -214,14 +226,14 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
 
               <div className="template-editor-actions">
                 <button type="submit" className="submit-button" disabled={saving}>
-                  {saving ? "Saving..." : "Save reply"}
+                  {saving ? "保存中..." : "保存回复"}
                 </button>
               </div>
             </form>
           ) : (
             <div className="history-digest-empty">
-              <strong>No feedback selected</strong>
-              <p>Choose a feedback thread from the left to read and reply.</p>
+              <strong>还没有选中反馈</strong>
+              <p>请从左侧列表中选择一条反馈进行查看和回复。</p>
             </div>
           )}
         </aside>

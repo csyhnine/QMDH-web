@@ -95,10 +95,15 @@ class FeedbackApiTests(unittest.TestCase):
         created = self.client.post(
             "/feedback",
             headers=self._designer_headers(),
-            json={"title": "Upload issue", "message": "Large references feel unreliable."},
+            json={
+                "title": "Upload issue",
+                "message": "Large references feel unreliable.",
+                "attachment_paths": ["references/test-1.png"],
+            },
         )
         self.assertEqual(created.status_code, 201, created.text)
         self.assertEqual(created.json()["status"], "open")
+        self.assertEqual(created.json()["attachment_paths"], ["/media/references/test-1.png"])
 
         listed = self.client.get("/feedback", headers=self._designer_headers())
         self.assertEqual(listed.status_code, 200, listed.text)

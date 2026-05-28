@@ -12,6 +12,7 @@ from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import User, UserFeedback
 from app.schemas import UserFeedbackAdminUpdate, UserFeedbackCreate, UserFeedbackOut
+from app.services.media_storage import resolve_storage_path
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
@@ -35,6 +36,7 @@ def _to_feedback_out(feedback: UserFeedback) -> UserFeedbackOut:
         user_display_name=(user.display_name or user.name) if user else "",
         title=feedback.title,
         message=feedback.message,
+        attachment_paths=[resolve_storage_path(path) for path in (feedback.attachment_paths or []) if str(path).strip()],
         status=feedback.status,
         admin_reply=feedback.admin_reply or "",
         replied_by_user_name=replied_by.name if replied_by else None,
@@ -69,6 +71,7 @@ def create_feedback(
         user_id=user.id,
         title=payload.title.strip(),
         message=payload.message.strip(),
+        attachment_paths=[path.strip() for path in payload.attachment_paths if path.strip()][:6],
         status="open",
     )
     db.add(feedback)

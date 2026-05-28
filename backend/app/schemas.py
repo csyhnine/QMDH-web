@@ -195,6 +195,7 @@ class UserOut(BaseModel):
 class UserFeedbackCreate(BaseModel):
     title: str = Field(min_length=2, max_length=150)
     message: str = Field(min_length=4, max_length=4000)
+    attachment_paths: list[str] = Field(default_factory=list, max_length=6)
 
 
 class UserFeedbackAdminUpdate(BaseModel):
@@ -209,6 +210,7 @@ class UserFeedbackOut(BaseModel):
     user_display_name: str
     title: str
     message: str
+    attachment_paths: list[str] = Field(default_factory=list)
     status: str
     admin_reply: str = ""
     replied_by_user_name: str | None = None

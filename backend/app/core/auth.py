@@ -6,10 +6,10 @@ from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import AuthUserProfile, settings
+from app.core.config import AgentAuthProfile, AuthUserProfile, settings
 from app.core.security import hash_session_token
 from app.database import get_db
-from app.models import AuthSession, User
+from app.models import AgentClient, AuthSession, User
 
 ADMIN_ROLE_ALIASES = {"owner", "admin", "ops"}
 
@@ -69,6 +69,56 @@ def get_current_auth_user(
         project_codes=profile.project_codes,
         user_id=profile.user_id,
         display_name=profile.display_name or profile.name,
+    )
+
+
+def get_current_agent_auth(
+    x_qmdh_agent_token: str | None = Header(default=None),
+    x_qmdh_agent_key: str | None = Header(default=None),
+    x_qmdh_execution_id: str | None = Header(default=None),
+    x_request_id: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> AgentAuthProfile:
+    if not x_qmdh_agent_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing agent authentication token")
+
+    client = db.scalar(
+        select(AgentClient)
+        .join(AgentClient.user, isouter=True)
+        .where(
+            AgentClient.token_hash == hash_session_token(x_qmdh_agent_token.strip()),
+            AgentClient.is_active.is_(True),
+        )
+    )
+    if not client:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid agent authentication token")
+
+    if x_qmdh_agent_key and x_qmdh_agent_key.strip() != client.key:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Agent identity does not match token")
+
+    if client.user and not client.user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Agent user is inactive")
+
+    user_name = client.user.name if client.user else client.key
+    user_role = normalize_user_role(client.user.role if client.user else client.role)
+    project_codes = tuple(client.project_codes or client.user.project_codes or [])
+
+    client.last_seen_at = datetime.now(timezone.utc)
+    client.last_request_id = (x_request_id or "").strip()
+    db.commit()
+
+    return AgentAuthProfile(
+        client_id=client.id,
+        key=client.key,
+        display_name=client.display_name or (client.user.display_name if client.user else client.key),
+        device_id=client.device_id,
+        environment=client.environment,
+        user_id=client.user_id,
+        user_name=user_name,
+        user_role=user_role,
+        project_codes=project_codes,
+        request_id=(x_request_id or "").strip(),
+        external_execution_id=(x_qmdh_execution_id or "").strip(),
     )
 
 

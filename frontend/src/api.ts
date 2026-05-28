@@ -347,6 +347,85 @@ export type ReferenceUploadResponse = {
   storage_path: string;
 };
 
+export type AgentClientRecord = {
+  id: number;
+  key: string;
+  display_name: string;
+  device_id: string;
+  environment: string;
+  user_name: string | null;
+  role: string;
+  project_codes: string[];
+  capabilities: string[];
+  is_active: boolean;
+  last_seen_at: string | null;
+  last_request_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AgentOfficialSkill = {
+  key: string;
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  path: string;
+  inputs: string[];
+  outputs: string[];
+};
+
+export type AgentSkillReleaseRecord = {
+  id: number;
+  key: string;
+  display_name: string;
+  environment: "test" | "prod";
+  openclaw_version: string;
+  skill_keys: string[];
+  notes: string;
+  is_active: boolean;
+  created_by_user_name: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AgentSkillReleaseCreatePayload = {
+  key: string;
+  display_name: string;
+  environment: "test" | "prod";
+  openclaw_version: string;
+  skill_keys: string[];
+  notes: string;
+  is_active: boolean;
+};
+
+export type AgentSkillReleaseUpdatePayload = Partial<AgentSkillReleaseCreatePayload>;
+
+export type FeedbackRecord = {
+  id: number;
+  user_id: number;
+  user_name: string;
+  user_display_name: string;
+  title: string;
+  message: string;
+  status: "open" | "replied" | "closed";
+  admin_reply: string;
+  replied_by_user_name: string | null;
+  replied_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FeedbackCreatePayload = {
+  title: string;
+  message: string;
+};
+
+export type FeedbackAdminUpdatePayload = {
+  status: "open" | "replied" | "closed";
+  admin_reply: string;
+};
+
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api/v1").replace(/\/$/, "");
 const AUTH_STORAGE_KEY = "qmdh.session.token";
 const LEGACY_AUTH_USER = import.meta.env.VITE_QMDH_LEGACY_USER ?? "";
@@ -393,6 +472,10 @@ async function buildError(response: Response): Promise<Error> {
 
   if (detail) {
     return new Error(`请求失败（${response.status}）：${detail}`);
+  }
+
+  if (response.status === 413) {
+    return new Error("上传图片过大，请将单张图片压缩到 10MB 以内后重试。");
   }
 
   if (response.status >= 500) {
@@ -467,6 +550,18 @@ export const api = {
   logout: () => postJson<void>("/auth/logout"),
   me: () => request<AuthUser>("/auth/me"),
   users: () => request<ManagedUser[]>("/users"),
+  feedback: () => request<FeedbackRecord[]>("/feedback"),
+  createFeedback: (payload: FeedbackCreatePayload) => postJson<FeedbackRecord>("/feedback", payload),
+  adminFeedback: () => request<FeedbackRecord[]>("/feedback/admin"),
+  replyFeedback: (feedbackId: number, payload: FeedbackAdminUpdatePayload) =>
+    patchJson<FeedbackRecord>(`/feedback/admin/${feedbackId}`, payload),
+  agentClients: () => request<AgentClientRecord[]>("/agent/admin/clients"),
+  officialSkills: () => request<AgentOfficialSkill[]>("/agent/admin/skills"),
+  agentSkillReleases: () => request<AgentSkillReleaseRecord[]>("/agent/admin/releases"),
+  createAgentSkillRelease: (payload: AgentSkillReleaseCreatePayload) =>
+    postJson<AgentSkillReleaseRecord>("/agent/admin/releases", payload),
+  updateAgentSkillRelease: (releaseId: number, payload: AgentSkillReleaseUpdatePayload) =>
+    patchJson<AgentSkillReleaseRecord>(`/agent/admin/releases/${releaseId}`, payload),
   createUser: (payload: UserCreatePayload) => postJson<ManagedUser>("/users", payload),
   updateUser: (userId: number, payload: UserUpdatePayload) => patchJson<ManagedUser>(`/users/${userId}`, payload),
   resetUserPassword: (userId: number, password: string) =>

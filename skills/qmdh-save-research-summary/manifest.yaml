@@ -1,0 +1,12 @@
+key: qmdh-save-research-summary
+name: QMDH Save Research Summary
+version: 0.1.0
+author: QMDH
+description: Save a research summary into a QMDH project as a managed note.
+inputs:
+  - project_id
+  - title
+  - content
+outputs:
+  - job_id
+  - research_note_id

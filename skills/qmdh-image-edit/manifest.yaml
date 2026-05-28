@@ -1,0 +1,14 @@
+key: qmdh-image-edit
+name: QMDH Image Edit
+version: 0.1.0
+author: QMDH
+description: Trigger managed QMDH image editing from OpenClaw.
+inputs:
+  - title
+  - project_id
+  - requested_provider
+  - payload
+outputs:
+  - job_id
+  - task_id
+  - status

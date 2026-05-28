@@ -26,6 +26,9 @@ from app.core.config import settings
 
 # Import all models so they are registered with Base.metadata
 from app.models import (  # noqa: F401
+    AgentClient,
+    AgentJob,
+    AgentSkillRelease,
     Asset,
     AssetBookmark,
     AuthSession,
@@ -35,6 +38,8 @@ from app.models import (  # noqa: F401
     DataClassification,
     InspirationPost,
     Project,
+    ProjectResearchNote,
+    UserFeedback,
     ProviderCall,
     ProviderProfile,
     PromptTemplate,

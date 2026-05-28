@@ -20,6 +20,7 @@ import {
   type UserCreatePayload,
   type Workflow
 } from "../../api";
+import { MAX_REFERENCE_UPLOAD_BYTES, formatUploadSize, validateReferenceImageSize } from "../../utils/uploads";
 import StudioComposerDock from "./StudioComposerDock";
 import StudioHistoryPane, { type FeedFilterState } from "./StudioHistoryPane";
 import StudioWorkspacePane from "./StudioWorkspacePane";
@@ -1790,6 +1791,18 @@ export default function GenerateStudioShell() {
       }));
     }
 
+    const sizedFiles = validFiles.filter((file) => file.size <= MAX_REFERENCE_UPLOAD_BYTES);
+    if (sizedFiles.length !== validFiles.length) {
+      const oversizedNames = validFiles
+        .filter((file) => file.size > MAX_REFERENCE_UPLOAD_BYTES)
+        .map((file) => file.name)
+        .slice(0, 2);
+      setState((current) => ({
+        ...current,
+        error: `单张参考图不能超过 ${formatUploadSize(MAX_REFERENCE_UPLOAD_BYTES)}，已忽略：${oversizedNames.join("、")}`
+      }));
+    }
+
     const remainingSlots = 4 - referenceUploads.length;
     if (remainingSlots <= 0) {
       setState((current) => ({
@@ -1800,13 +1813,13 @@ export default function GenerateStudioShell() {
       return;
     }
 
-    const acceptedFiles = validFiles.slice(0, remainingSlots);
+    const acceptedFiles = sizedFiles.slice(0, remainingSlots);
     if (acceptedFiles.length === 0) {
       resetReferenceFileInput();
       return;
     }
 
-    if (validFiles.length > remainingSlots) {
+    if (sizedFiles.length > remainingSlots) {
       setState((current) => ({
         ...current,
         error: "最多只能保留 4 张参考图，超出的图片已忽略"
@@ -1826,6 +1839,10 @@ export default function GenerateStudioShell() {
     const nextUploads = [...referenceUploads];
     try {
       for (const file of acceptedFiles) {
+        const sizeError = validateReferenceImageSize(file);
+        if (sizeError) {
+          throw new Error(`${file.name}: ${sizeError}`);
+        }
         const dataUrl = await fileToDataUrl(file);
         const uploaded = await api.uploadReferenceImage({
           file_name: file.name,

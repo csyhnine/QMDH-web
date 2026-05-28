@@ -310,6 +310,117 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class UserFeedback(Base):
+    __tablename__ = "user_feedbacks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(150))
+    message: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(30), default="open", index=True)
+    admin_reply: Mapped[str] = mapped_column(Text, default="")
+    replied_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    replied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
+    replied_by: Mapped[User | None] = relationship(foreign_keys=[replied_by_user_id])
+
+
+class AgentClient(Base):
+    __tablename__ = "agent_clients"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(150), default="")
+    device_id: Mapped[str] = mapped_column(String(150), default="", index=True)
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    role: Mapped[str] = mapped_column(String(50), default="designer")
+    environment: Mapped[str] = mapped_column(String(30), default="test", index=True)
+    project_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    capabilities: Mapped[list[str]] = mapped_column(JSON, default=list)
+    client_metadata: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    last_request_id: Mapped[str] = mapped_column(String(100), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user: Mapped[User | None] = relationship()
+
+
+class ProjectResearchNote(Base):
+    __tablename__ = "project_research_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    summary: Mapped[str] = mapped_column(Text, default="")
+    content: Mapped[str] = mapped_column(Text, default="")
+    source_url: Mapped[str] = mapped_column(String(500), default="")
+    source_name: Mapped[str] = mapped_column(String(150), default="")
+    source_execution_id: Mapped[str] = mapped_column(String(150), default="", index=True)
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    project: Mapped[Project] = relationship()
+    user: Mapped[User | None] = relationship()
+
+
+class AgentJob(Base):
+    __tablename__ = "agent_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_type: Mapped[str] = mapped_column(String(100), index=True)
+    status: Mapped[str] = mapped_column(String(30), index=True, default="accepted")
+    client_id: Mapped[int] = mapped_column(ForeignKey("agent_clients.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
+    task_id: Mapped[int | None] = mapped_column(ForeignKey("tasks.id"), nullable=True, index=True)
+    asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True, index=True)
+    inspiration_post_id: Mapped[int | None] = mapped_column(ForeignKey("inspiration_posts.id"), nullable=True, index=True)
+    research_note_id: Mapped[int | None] = mapped_column(ForeignKey("project_research_notes.id"), nullable=True, index=True)
+    workflow_key: Mapped[str] = mapped_column(String(100), default="")
+    requested_provider: Mapped[str] = mapped_column(String(100), default="")
+    request_id: Mapped[str] = mapped_column(String(100), index=True)
+    external_execution_id: Mapped[str] = mapped_column(String(150), default="", index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    result: Mapped[dict] = mapped_column(JSON, default=dict)
+    error_detail: Mapped[str] = mapped_column(Text, default="")
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    client: Mapped[AgentClient] = relationship()
+    user: Mapped[User | None] = relationship()
+    project: Mapped[Project | None] = relationship()
+    task: Mapped[Task | None] = relationship()
+    asset: Mapped[Asset | None] = relationship()
+    inspiration_post: Mapped[InspirationPost | None] = relationship()
+    research_note: Mapped[ProjectResearchNote | None] = relationship()
+
+
+class AgentSkillRelease(Base):
+    __tablename__ = "agent_skill_releases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(150))
+    environment: Mapped[str] = mapped_column(String(30), default="test", index=True)
+    openclaw_version: Mapped[str] = mapped_column(String(50), default="latest")
+    skill_keys: Mapped[list[str]] = mapped_column(JSON, default=list)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    created_by: Mapped[User | None] = relationship()
+
+
 class PromptTemplate(Base):
     __tablename__ = "prompt_templates"
 

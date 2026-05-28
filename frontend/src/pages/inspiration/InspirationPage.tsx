@@ -1,6 +1,7 @@
 import { type ChangeEvent, type DragEvent, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type InspirationPost } from "../../api";
+import { validateReferenceImageSize } from "../../utils/uploads";
 
 /* ─── Props ─── */
 
@@ -118,6 +119,10 @@ export default function InspirationPage({
   async function handleImportFileUpload(file: File) {
     setImportDialog((current) => ({ ...current, error: "", uploadingFile: true }));
     try {
+      const sizeError = validateReferenceImageSize(file);
+      if (sizeError) {
+        throw new Error(sizeError);
+      }
       const storagePath = await uploadImageFile(file);
       setImportDialog((current) => ({
         ...current,
@@ -138,6 +143,10 @@ export default function InspirationPage({
   async function handleEditFileUpload(file: File) {
     setEditDialog((current) => (current ? { ...current, uploadError: "", uploadingFile: true } : current));
     try {
+      const sizeError = validateReferenceImageSize(file);
+      if (sizeError) {
+        throw new Error(sizeError);
+      }
       const storagePath = await uploadImageFile(file);
       setEditDialog((current) =>
         current

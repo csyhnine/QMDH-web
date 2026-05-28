@@ -192,6 +192,31 @@ class UserOut(BaseModel):
     last_login_at: datetime | None = None
 
 
+class UserFeedbackCreate(BaseModel):
+    title: str = Field(min_length=2, max_length=150)
+    message: str = Field(min_length=4, max_length=4000)
+
+
+class UserFeedbackAdminUpdate(BaseModel):
+    status: str = Field(default="replied", pattern=r"^(open|replied|closed)$")
+    admin_reply: str = Field(min_length=1, max_length=4000)
+
+
+class UserFeedbackOut(BaseModel):
+    id: int
+    user_id: int
+    user_name: str
+    user_display_name: str
+    title: str
+    message: str
+    status: str
+    admin_reply: str = ""
+    replied_by_user_name: str | None = None
+    replied_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class ProviderCapability(BaseModel):
     provider_name: str
     model_name: str
@@ -454,3 +479,164 @@ class ChatMessageOut(BaseModel):
     role: str
     content: str
     created_at: datetime
+
+
+class AgentImageTaskCreate(BaseModel):
+    title: str = Field(min_length=3, max_length=150)
+    project_id: int
+    requested_provider: str
+    classification: DataClassification = DataClassification.b
+    payload: dict[str, Any] = Field(default_factory=dict)
+    workflow_key: str = "image-generate"
+    external_execution_id: str = ""
+
+
+class AgentInspirationImportIn(BaseModel):
+    project_id: int | None = None
+    title: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    image_path: str = ""
+    category: str = "Architecture"
+    tags: list[str] = Field(default_factory=list)
+    source_type: str = "external"
+    source_name: str = ""
+    source_url: str = ""
+    prompt_text: str | None = None
+    model_name: str = ""
+    external_execution_id: str = ""
+
+
+class AgentProjectArtifactCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+    asset_type: AssetType = AssetType.image
+    data_url: str | None = None
+    storage_path: str | None = None
+    prompt_text: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    source_task_id: int | None = None
+    external_execution_id: str = ""
+
+
+class AgentResearchNoteCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    summary: str = ""
+    content: str = ""
+    source_url: str = ""
+    source_name: str = ""
+    tags: list[str] = Field(default_factory=list)
+    external_execution_id: str = ""
+
+
+class AgentWorkflowIntentCreate(BaseModel):
+    project_id: int
+    title: str = Field(min_length=1, max_length=200)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    requested_provider: str = ""
+    workflow_key: str = ""
+    external_execution_id: str = ""
+
+
+class AgentJobCompleteIn(BaseModel):
+    status: str = Field(pattern=r"^(completed|failed)$")
+    result: dict[str, Any] = Field(default_factory=dict)
+    error_detail: str = ""
+
+
+class AgentJobOut(BaseModel):
+    id: int
+    job_type: str
+    status: str
+    client_key: str
+    environment: str
+    user_name: str
+    project_id: int | None = None
+    project_code: str | None = None
+    workflow_key: str = ""
+    requested_provider: str = ""
+    task_id: int | None = None
+    asset_id: int | None = None
+    inspiration_post_id: int | None = None
+    research_note_id: int | None = None
+    asset_ids: list[int] = Field(default_factory=list)
+    request_id: str
+    external_execution_id: str = ""
+    result: dict[str, Any] = Field(default_factory=dict)
+    error_detail: str = ""
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None = None
+
+
+class ProjectResearchNoteOut(BaseModel):
+    id: int
+    project_id: int
+    user_name: str | None = None
+    title: str
+    summary: str
+    content: str
+    source_url: str
+    source_name: str
+    source_execution_id: str
+    tags: list[str]
+    created_at: datetime
+
+
+class AgentClientOut(BaseModel):
+    id: int
+    key: str
+    display_name: str
+    device_id: str
+    environment: str
+    user_name: str | None = None
+    role: str
+    project_codes: list[str]
+    capabilities: list[str]
+    is_active: bool
+    last_seen_at: datetime | None = None
+    last_request_id: str = ""
+    created_at: datetime
+    updated_at: datetime
+
+
+class AgentOfficialSkillOut(BaseModel):
+    key: str
+    name: str
+    version: str
+    description: str
+    author: str = ""
+    path: str
+    inputs: list[str] = Field(default_factory=list)
+    outputs: list[str] = Field(default_factory=list)
+
+
+class AgentSkillReleaseCreate(BaseModel):
+    key: str = Field(min_length=2, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$")
+    display_name: str = Field(min_length=1, max_length=150)
+    environment: str = Field(default="test", pattern=r"^(test|prod)$")
+    openclaw_version: str = Field(default="latest", min_length=1, max_length=50)
+    skill_keys: list[str] = Field(default_factory=list)
+    notes: str = ""
+    is_active: bool = True
+
+
+class AgentSkillReleaseUpdate(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=150)
+    environment: str | None = Field(default=None, pattern=r"^(test|prod)$")
+    openclaw_version: str | None = Field(default=None, min_length=1, max_length=50)
+    skill_keys: list[str] | None = None
+    notes: str | None = None
+    is_active: bool | None = None
+
+
+class AgentSkillReleaseOut(BaseModel):
+    id: int
+    key: str
+    display_name: str
+    environment: str
+    openclaw_version: str
+    skill_keys: list[str]
+    notes: str
+    is_active: bool
+    created_by_user_name: str | None = None
+    created_at: datetime
+    updated_at: datetime

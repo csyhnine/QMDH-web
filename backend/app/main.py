@@ -17,7 +17,7 @@ from app.core.middleware import (
 )
 from app.core.rate_limit import RateLimitMiddleware
 from app.database import Base, SessionLocal, engine
-from app.routers import assets, auth, chat, dashboard, health, inspiration, projects, prompt_templates, providers, tasks, users, workflows
+from app.routers import agent, assets, auth, chat, dashboard, feedback, health, inspiration, projects, prompt_templates, providers, tasks, users, workflows
 from app.services.bootstrap import ensure_schema, seed_initial_data
 from app.services.media_storage import media_root_path, validate_storage_backend_configuration
 from app.services.session_cleanup import run_session_cleanup_once
@@ -119,7 +119,9 @@ app.include_router(projects.router, prefix=settings.api_prefix)
 app.include_router(providers.router, prefix=settings.api_prefix)
 app.include_router(workflows.router, prefix=settings.api_prefix)
 app.include_router(tasks.router, prefix=settings.api_prefix)
+app.include_router(agent.router, prefix=settings.api_prefix)
 app.include_router(assets.router, prefix=settings.api_prefix)
+app.include_router(feedback.router, prefix=settings.api_prefix)
 app.include_router(dashboard.router, prefix=settings.api_prefix)
 app.include_router(prompt_templates.router, prefix=settings.api_prefix)
 app.include_router(users.router, prefix=settings.api_prefix)

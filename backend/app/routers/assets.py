@@ -16,6 +16,8 @@ from app.services.media_storage import resolve_storage_path, write_binary_asset
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
+MAX_REFERENCE_IMAGE_BYTES = 10 * 1024 * 1024
+
 
 def _owned_task_ids(db: Session, auth_user: AuthUserProfile) -> set[int]:
     query = select(Task.id).join(Task.project).where(Task.deleted_at.is_(None))
@@ -35,7 +37,9 @@ def _can_access_asset(
     owned_task_ids: set[int],
 ) -> bool:
     if asset.source_task_id is None:
-        return False
+        if asset.project is None:
+            return False
+        return can_access_project(auth_user, asset.project.code)
     if asset.source_task_id not in owned_task_ids:
         return False
     if asset.project is None:
@@ -93,9 +97,15 @@ def _decode_reference_upload(data_url: str) -> bytes:
         raise HTTPException(status_code=400, detail="Reference image must be a base64 data URL")
 
     try:
-        return b64decode(matched.group(1), validate=True)
+        content = b64decode(matched.group(1), validate=True)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Reference image payload is invalid") from exc
+    if len(content) > MAX_REFERENCE_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Reference image must be 10MB or smaller",
+        )
+    return content
 
 
 @router.get("", response_model=list[AssetOut])

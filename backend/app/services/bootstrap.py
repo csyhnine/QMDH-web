@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import normalize_user_role
 from app.core.config import settings
-from app.core.security import hash_password
-from app.models import Asset, AssetType, DataClassification, InspirationPost, Project, User, Workflow
+from app.core.security import hash_password, hash_session_token
+from app.models import AgentClient, AgentSkillRelease, Asset, AssetType, DataClassification, InspirationPost, Project, User, Workflow
 from app.services.inspiration_media import prepare_inspiration_image
 from app.services.media_storage import write_preview_svg
 
@@ -99,6 +99,59 @@ def seed_initial_data(db: Session) -> None:
         if user.monthly_quota is None:
             user.monthly_quota = account["monthly_quota"]
         user.is_active = True
+
+    for client_profile in settings.get_agent_client_profiles().values():
+        linked_user = db.scalar(select(User).where(User.name == client_profile.user_name))
+        if not linked_user:
+            continue
+        client = db.scalar(select(AgentClient).where(AgentClient.key == client_profile.key))
+        if not client:
+            client = AgentClient(
+                key=client_profile.key,
+                display_name=client_profile.display_name or client_profile.key,
+                device_id=client_profile.device_id,
+                token_hash=hash_session_token(client_profile.token),
+                user_id=linked_user.id,
+                role=client_profile.role,
+                environment=client_profile.environment,
+                project_codes=list(client_profile.project_codes),
+                capabilities=list(client_profile.capabilities),
+                client_metadata={},
+                is_active=True,
+            )
+            db.add(client)
+            continue
+
+        client.display_name = client_profile.display_name or client.display_name or client.key
+        client.device_id = client_profile.device_id
+        client.token_hash = hash_session_token(client_profile.token)
+        client.user_id = linked_user.id
+        client.role = client_profile.role
+        client.environment = client_profile.environment
+        client.project_codes = list(client_profile.project_codes)
+        client.capabilities = list(client_profile.capabilities)
+        client.client_metadata = client.client_metadata or {}
+        client.is_active = True
+
+    default_release = db.scalar(select(AgentSkillRelease).where(AgentSkillRelease.key == "qmdh-official-test"))
+    if not default_release:
+        db.add(
+            AgentSkillRelease(
+                key="qmdh-official-test",
+                display_name="QMDH 官方技能集（测试）",
+                environment="test",
+                openclaw_version="latest",
+                skill_keys=[
+                    "qmdh-image-generate",
+                    "qmdh-image-edit",
+                    "qmdh-save-inspiration",
+                    "qmdh-save-project-asset",
+                    "qmdh-save-research-summary",
+                ],
+                notes="默认测试环境技能集，用于 OpenClaw 与 QMDH 联调。",
+                is_active=True,
+            )
+        )
 
     projects = [
         ("QMDH 示范项目", "QMDH-001", DataClassification.b),

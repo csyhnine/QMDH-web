@@ -1,7 +1,20 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-import { api, type DashboardStats, type InspirationPost, type ManagedUser, type Project, type Provider, type ProviderProfileRecord, type Task } from "./api";
+import {
+  api,
+  type AgentClientRecord,
+  type AgentOfficialSkill,
+  type AgentSkillReleaseRecord,
+  type DashboardStats,
+  type FeedbackRecord,
+  type InspirationPost,
+  type ManagedUser,
+  type Project,
+  type Provider,
+  type ProviderProfileRecord,
+  type Task,
+} from "./api";
 import { AppShell, AuthGuard, LoadingFallback } from "./components/shared";
 import { useAuth } from "./context/AuthContext";
 
@@ -9,9 +22,12 @@ const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/admin/DashboardPage"));
 const UsersPage = lazy(() => import("./pages/admin/UsersPage"));
 const ModelsPage = lazy(() => import("./pages/admin/ModelsPage"));
+const AgentOpsPage = lazy(() => import("./pages/admin/AgentOpsPage"));
+const FeedbackOpsPage = lazy(() => import("./pages/admin/FeedbackOpsPage"));
 const SettingsPage = lazy(() => import("./pages/admin/SettingsPage"));
 const InspirationPage = lazy(() => import("./pages/inspiration/InspirationPage"));
 const ChatPage = lazy(() => import("./pages/chat/ChatPage"));
+const FeedbackPage = lazy(() => import("./pages/studio/FeedbackPage"));
 const GeneratePage = lazy(() => import("./pages/studio/GeneratePage"));
 
 function ProtectedRoute({ children }: { children: JSX.Element }) {
@@ -58,6 +74,30 @@ function AdminInspirationRoute() {
   return (
     <AppShell kind="admin" active="inspiration">
       <InspirationPage posts={posts} onPostsChange={setPosts} canContribute canManageLibrary mode="admin" />
+    </AppShell>
+  );
+}
+
+function StudioFeedbackRoute() {
+  const [feedbackItems, setFeedbackItems] = useState<FeedbackRecord[]>([]);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    try {
+      setFeedbackItems(await api.feedback());
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load feedback");
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  return (
+    <AppShell kind="studio" active="feedback">
+      <FeedbackPage feedbackItems={feedbackItems} error={error} onRefresh={() => void refresh()} onSetError={setError} />
     </AppShell>
   );
 }
@@ -148,6 +188,70 @@ function ModelsRoute() {
   );
 }
 
+function AgentsRoute() {
+  const [clients, setClients] = useState<AgentClientRecord[]>([]);
+  const [skills, setSkills] = useState<AgentOfficialSkill[]>([]);
+  const [releases, setReleases] = useState<AgentSkillReleaseRecord[]>([]);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    try {
+      const [nextClients, nextSkills, nextReleases] = await Promise.all([
+        api.agentClients(),
+        api.officialSkills(),
+        api.agentSkillReleases(),
+      ]);
+      setClients(nextClients);
+      setSkills(nextSkills);
+      setReleases(nextReleases);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load agent operations data");
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  return (
+    <AppShell kind="admin" active="agents">
+      <AgentOpsPage
+        clients={clients}
+        skills={skills}
+        releases={releases}
+        error={error}
+        onRefresh={() => void refresh()}
+        onSetError={setError}
+      />
+    </AppShell>
+  );
+}
+
+function AdminFeedbackRoute() {
+  const [feedbackItems, setFeedbackItems] = useState<FeedbackRecord[]>([]);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    try {
+      setFeedbackItems(await api.adminFeedback());
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load feedback inbox");
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  return (
+    <AppShell kind="admin" active="feedback">
+      <FeedbackOpsPage feedbackItems={feedbackItems} error={error} onRefresh={() => void refresh()} onSetError={setError} />
+    </AppShell>
+  );
+}
+
 function SettingsRoute() {
   const { canManageUsers } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -192,6 +296,7 @@ export default function AppRouter() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/studio/generate" element={<ProtectedRoute><GeneratePage /></ProtectedRoute>} />
           <Route path="/studio/inspiration" element={<ProtectedRoute><InspirationRoute /></ProtectedRoute>} />
+          <Route path="/studio/feedback" element={<ProtectedRoute><StudioFeedbackRoute /></ProtectedRoute>} />
           <Route
             path="/studio/chat"
             element={
@@ -205,6 +310,8 @@ export default function AppRouter() {
           <Route path="/admin/dashboard" element={<ProtectedRoute><OpsRoute><DashboardRoute /></OpsRoute></ProtectedRoute>} />
           <Route path="/admin/users" element={<ProtectedRoute><AdminRoute><UsersRoute /></AdminRoute></ProtectedRoute>} />
           <Route path="/admin/models" element={<ProtectedRoute><OpsRoute><ModelsRoute /></OpsRoute></ProtectedRoute>} />
+          <Route path="/admin/feedback" element={<ProtectedRoute><AdminRoute><AdminFeedbackRoute /></AdminRoute></ProtectedRoute>} />
+          <Route path="/admin/agents" element={<ProtectedRoute><OpsRoute><AgentsRoute /></OpsRoute></ProtectedRoute>} />
           <Route path="/admin/inspiration" element={<ProtectedRoute><OpsRoute><AdminInspirationRoute /></OpsRoute></ProtectedRoute>} />
           <Route path="/admin/settings" element={<ProtectedRoute><AdminRoute><SettingsRoute /></AdminRoute></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/studio/generate" replace />} />

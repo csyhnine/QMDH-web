@@ -1,0 +1,12 @@
+key: qmdh-save-inspiration
+name: QMDH Save Inspiration
+version: 0.1.0
+author: QMDH
+description: Save a discovered reference into the QMDH inspiration library.
+inputs:
+  - title
+  - image_path
+  - source_url
+outputs:
+  - job_id
+  - inspiration_post_id

@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
 
-type StudioTab = "generate" | "inspiration" | "chat";
-type AdminTab = "dashboard" | "inspiration" | "models" | "users" | "settings";
+type StudioTab = "generate" | "inspiration" | "feedback" | "chat";
+type AdminTab = "dashboard" | "inspiration" | "feedback" | "models" | "agents" | "users" | "settings";
 
 type AppShellProps =
   | {
@@ -18,17 +18,20 @@ type AppShellProps =
       children: ReactNode;
     };
 
-const adminNavItems: Array<{ key: AdminTab; label: string; icon: string; path: string }> = [
-  { key: "dashboard", label: "运营看板", icon: "□", path: "/admin/dashboard" },
-  { key: "inspiration", label: "灵感库", icon: "✦", path: "/admin/inspiration" },
-  { key: "models", label: "模型管理", icon: "⬡", path: "/admin/models" },
-  { key: "users", label: "账号管理", icon: "▤", path: "/admin/users" },
-  { key: "settings", label: "设置中心", icon: "⚙", path: "/admin/settings" },
+const adminNavItems: Array<{ key: AdminTab; label: string; path: string }> = [
+  { key: "dashboard", label: "Dashboard", path: "/admin/dashboard" },
+  { key: "inspiration", label: "Inspiration", path: "/admin/inspiration" },
+  { key: "feedback", label: "Feedback", path: "/admin/feedback" },
+  { key: "models", label: "Models", path: "/admin/models" },
+  { key: "agents", label: "Agents", path: "/admin/agents" },
+  { key: "users", label: "Users", path: "/admin/users" },
+  { key: "settings", label: "Settings", path: "/admin/settings" },
 ];
 
 const studioNavItems: Array<{ key: Exclude<StudioTab, "generate"> | "generate"; label: string; path: string }> = [
-  { key: "inspiration", label: "灵感", path: "/studio/inspiration" },
-  { key: "generate", label: "生成", path: "/studio/generate" },
+  { key: "inspiration", label: "Inspiration", path: "/studio/inspiration" },
+  { key: "feedback", label: "Feedback", path: "/studio/feedback" },
+  { key: "generate", label: "Generate", path: "/studio/generate" },
   { key: "chat", label: "Chat", path: "/studio/chat" },
 ];
 
@@ -68,7 +71,6 @@ export default function AppShell(props: AppShellProps) {
                   className={props.active === item.key ? "rail-item active" : "rail-item"}
                   onClick={() => navigate(item.path)}
                 >
-                  <b>{item.icon}</b>
                   <span>{item.label}</span>
                 </button>
               ))
@@ -90,7 +92,7 @@ export default function AppShell(props: AppShellProps) {
                 {(currentUser.display_name || currentUser.name).slice(0, 1).toUpperCase()}
               </div>
               <div>
-                <small>当前账号</small>
+                <small>Current account</small>
                 <strong>{currentUser.display_name || currentUser.name}</strong>
                 <span>@{currentUser.name}</span>
               </div>
@@ -107,7 +109,7 @@ export default function AppShell(props: AppShellProps) {
             </button>
           ) : null}
           <button type="button" className="rail-logout" onClick={() => void handleLogout()}>
-            退出
+            Sign out
           </button>
         </div>
       </aside>

@@ -930,6 +930,139 @@ button {
   font-size: 1rem;
 }
 
+.feedback-page {
+  width: min(1380px, 100%);
+  margin-inline: auto;
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.feedback-page-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.feedback-page-copy h1 {
+  margin: 0;
+  font-family: "Sora", sans-serif;
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  line-height: 1.05;
+}
+
+.feedback-page-copy p {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.feedback-stat-strip {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.feedback-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.92fr) minmax(0, 1.08fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.feedback-panel {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 16px;
+}
+
+.feedback-panel-head h2 {
+  margin: 0;
+  font-family: "Sora", sans-serif;
+}
+
+.feedback-panel-head p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.feedback-form,
+.feedback-thread-list {
+  display: grid;
+  gap: 14px;
+}
+
+.feedback-textarea {
+  min-height: 180px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel-strong);
+  color: var(--text);
+  resize: vertical;
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+.feedback-thread-card,
+.feedback-detail-card,
+.feedback-reply-card {
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.feedback-thread-card {
+  display: grid;
+  gap: 14px;
+}
+
+.feedback-thread-top {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feedback-thread-top strong,
+.feedback-thread-top small,
+.feedback-detail-card span,
+.feedback-reply-card span,
+.feedback-reply-card strong {
+  display: block;
+}
+
+.feedback-thread-top small,
+.feedback-detail-card span,
+.feedback-reply-card span,
+.feedback-reply-card small {
+  color: var(--muted);
+}
+
+.feedback-thread-card p,
+.feedback-detail-card p,
+.feedback-reply-card p {
+  margin: 0;
+  line-height: 1.72;
+}
+
+.feedback-reply-card {
+  display: grid;
+  gap: 6px;
+  background: rgba(37, 99, 235, 0.05);
+  border-color: rgba(37, 99, 235, 0.12);
+}
+
+.feedback-reply-card.is-pending {
+  background: rgba(148, 163, 184, 0.08);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
 .stat-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1576,8 +1709,8 @@ button {
 
 .composer-body {
   display: grid;
-  grid-template-columns: 136px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 176px minmax(0, 1fr);
+  gap: 16px;
   align-items: start;
 }
 
@@ -1585,6 +1718,7 @@ button {
   display: grid;
   gap: 8px;
   align-content: start;
+  min-width: 0;
 }
 
 .composer-mode-switch {
@@ -1611,7 +1745,7 @@ button {
 
 .reference-dropzone {
   width: 100%;
-  min-height: 96px;
+  min-height: 116px;
   border: 1px dashed rgba(15, 23, 42, 0.14);
   border-radius: 20px;
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.92));
@@ -1657,14 +1791,12 @@ button {
 
 .reference-upload-list {
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
 
 .reference-upload-chip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  display: grid;
+  gap: 6px;
   padding: 6px 8px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 12px;
@@ -1673,22 +1805,34 @@ button {
   font-size: 0.74rem;
 }
 
+.reference-upload-chip span {
+  display: -webkit-box;
+  width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
 .reference-upload-chip button {
   border: 0;
   background: transparent;
   color: #1d4ed8;
   font-size: 0.78rem;
   font-weight: 600;
+  justify-self: end;
 }
 
 .composer-textarea {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .composer-textarea textarea,
 .composer-notes textarea {
-  min-height: 92px;
+  min-height: 156px;
   width: 100%;
   padding: 16px 18px;
   resize: vertical;
@@ -3497,6 +3641,129 @@ button {
   margin-top: 18px;
 }
 
+.agent-ops-layout {
+  grid-template-columns: minmax(0, 1.1fr) 460px;
+}
+
+.agent-ops-section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.agent-ops-section-head h2,
+.agent-ops-section-head h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.agent-ops-section-head p {
+  margin: 6px 0 0;
+  color: #667085;
+  line-height: 1.6;
+}
+
+.agent-ops-section-head > span {
+  color: #667085;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+}
+
+.agent-client-table .admin-table-row {
+  grid-template-columns: minmax(180px, 1.1fr) 110px minmax(140px, 1fr) minmax(140px, 1fr) minmax(140px, 1fr) 110px;
+}
+
+.agent-release-table .admin-table-row {
+  grid-template-columns: minmax(190px, 1.2fr) 100px 110px minmax(130px, 1fr) 130px 100px;
+}
+
+.agent-release-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.agent-release-notes {
+  min-height: 120px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #dbe2ec;
+  border-radius: 14px;
+  background: #fff;
+  color: #111827;
+  font-size: 0.94rem;
+  resize: vertical;
+}
+
+.agent-skill-picker {
+  display: grid;
+  gap: 12px;
+}
+
+.agent-skill-list {
+  display: grid;
+  gap: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.agent-skill-card {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid #e6ebf2;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.agent-skill-card.selected {
+  border-color: rgba(37, 99, 235, 0.24);
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.agent-skill-card input {
+  margin: 3px 0 0;
+}
+
+.agent-skill-card strong,
+.agent-skill-card small,
+.agent-skill-card span {
+  display: block;
+}
+
+.agent-skill-card small,
+.agent-skill-card span {
+  color: #667085;
+}
+
+.agent-skill-card p {
+  margin: 8px 0;
+  color: #344054;
+  line-height: 1.55;
+}
+
+.feedback-admin-table .admin-table-row {
+  grid-template-columns: minmax(160px, 0.95fr) minmax(220px, 1.2fr) 110px 130px 120px;
+}
+
+.feedback-admin-row {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  transition: background-color 120ms ease, border-radius 120ms ease;
+}
+
+.feedback-admin-row.is-active,
+.feedback-admin-row:hover {
+  background: rgba(37, 99, 235, 0.05);
+  border-radius: 12px;
+}
+
 .admin-detail-head h2,
 .admin-mini-panel h3 {
   margin: 0;
@@ -5121,7 +5388,9 @@ textarea:focus-visible {
 
   .composer-inline-grid,
   .composer-control-grid,
-  .template-editor-row {
+  .template-editor-row,
+  .feedback-layout,
+  .feedback-stat-strip {
     grid-template-columns: 1fr;
   }
 

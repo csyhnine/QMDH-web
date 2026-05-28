@@ -52,6 +52,45 @@ class AuthUserProfile:
     display_name: str = ""
 
 
+@dataclass(frozen=True)
+class AgentAuthProfile:
+    client_id: int
+    key: str
+    display_name: str
+    device_id: str
+    environment: str
+    user_id: int | None
+    user_name: str
+    user_role: str
+    project_codes: tuple[str, ...]
+    request_id: str = ""
+    external_execution_id: str = ""
+
+    @property
+    def auth_user(self) -> AuthUserProfile:
+        return AuthUserProfile(
+            name=self.user_name,
+            token=self.key,
+            role=self.user_role,
+            project_codes=self.project_codes,
+            user_id=self.user_id,
+            display_name=self.display_name or self.user_name,
+        )
+
+
+@dataclass(frozen=True)
+class AgentClientSeedProfile:
+    key: str
+    token: str
+    user_name: str
+    device_id: str = ""
+    display_name: str = ""
+    role: str = "designer"
+    environment: str = "test"
+    project_codes: tuple[str, ...] = ("QMDH-001",)
+    capabilities: tuple[str, ...] = ()
+
+
 class Settings(BaseSettings):
     app_name: str = "QMDH Internal AI Platform"
     api_prefix: str = "/api/v1"
@@ -83,6 +122,12 @@ class Settings(BaseSettings):
     bootstrap_admin_password: str = "dev-admin-password"
     auth_session_days: int = 7
     encryption_key: str = ""  # Fernet key for encrypting sensitive data like API keys
+    agent_clients_json: str = (
+        '[{"key":"openclaw-dev","token":"dev-openclaw-agent-token","user_name":"designer.arch",'
+        '"display_name":"OpenClaw Dev","device_id":"LOCAL-OPENCLAW","role":"designer",'
+        '"environment":"test","project_codes":["QMDH-001"],'
+        '"capabilities":["image.generate","image.edit","inspiration.import","project.asset","research.note"]}]'
+    )
     cors_origins: str = ""  # Comma-separated list of allowed origins; falls back to frontend_origin if empty
     rate_limit_enabled: bool = False
     rate_limit_general_per_minute: int = 60
@@ -233,10 +278,66 @@ class Settings(BaseSettings):
             if not isinstance(raw_project_codes, list):
                 raise ValueError(f"Auth user {name or '<unnamed>'} project_codes must be a JSON array")
             project_codes = tuple(str(value).strip() for value in raw_project_codes if str(value).strip())
+            raw_user_id = item.get("user_id")
+            user_id = int(raw_user_id) if raw_user_id not in (None, "") else None
+            display_name = str(item.get("display_name") or "").strip()
 
             if not name or not token:
                 continue
-            profiles[token] = AuthUserProfile(name=name, token=token, role=role, project_codes=project_codes)
+            profiles[token] = AuthUserProfile(
+                name=name,
+                token=token,
+                role=role,
+                project_codes=project_codes,
+                user_id=user_id,
+                display_name=display_name,
+            )
+
+        return profiles
+
+    def get_agent_client_profiles(self) -> dict[str, AgentClientSeedProfile]:
+        raw_profiles = self.agent_clients_json.strip()
+        if not raw_profiles:
+            return {}
+
+        parsed_profiles = json.loads(raw_profiles)
+        if not isinstance(parsed_profiles, list):
+            raise ValueError("QMDH_AGENT_CLIENTS_JSON must be a JSON array")
+
+        profiles: dict[str, AgentClientSeedProfile] = {}
+        for item in parsed_profiles:
+            if not isinstance(item, dict):
+                raise ValueError("Each agent client profile must be a JSON object")
+
+            key = str(item.get("key") or "").strip()
+            token = str(item.get("token") or "").strip()
+            user_name = str(item.get("user_name") or "").strip()
+            if not key or not token or not user_name:
+                continue
+
+            raw_project_codes = item.get("project_codes") or ["QMDH-001"]
+            if isinstance(raw_project_codes, str):
+                raw_project_codes = [raw_project_codes]
+            if not isinstance(raw_project_codes, list):
+                raise ValueError(f"Agent client {key} project_codes must be a JSON array")
+
+            raw_capabilities = item.get("capabilities") or []
+            if isinstance(raw_capabilities, str):
+                raw_capabilities = [raw_capabilities]
+            if not isinstance(raw_capabilities, list):
+                raise ValueError(f"Agent client {key} capabilities must be a JSON array")
+
+            profiles[key] = AgentClientSeedProfile(
+                key=key,
+                token=token,
+                user_name=user_name,
+                display_name=str(item.get("display_name") or "").strip(),
+                device_id=str(item.get("device_id") or "").strip(),
+                role=str(item.get("role") or "designer").strip() or "designer",
+                environment=str(item.get("environment") or "test").strip() or "test",
+                project_codes=tuple(str(value).strip() for value in raw_project_codes if str(value).strip()),
+                capabilities=tuple(str(value).strip() for value in raw_capabilities if str(value).strip()),
+            )
 
         return profiles
 

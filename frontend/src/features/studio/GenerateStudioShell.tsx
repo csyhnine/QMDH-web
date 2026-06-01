@@ -1128,6 +1128,7 @@ function FeedCard(props: {
   galleryAssets: Asset[];
   showDebugDetails?: boolean;
   onReuse: () => void;
+  reuseDisabled?: boolean;
   onBookmark: () => void;
   onShare: () => void;
   onDelete: () => void;
@@ -1260,7 +1261,7 @@ function FeedCard(props: {
 
       <div className="feed-card-actions">
         <div className="feed-action-group">
-          <button type="button" className="ghost-button" onClick={props.onReuse}>
+          <button type="button" className="ghost-button" onClick={props.onReuse} disabled={props.reuseDisabled}>
             再次生成
           </button>
           <button type="button" className={`ghost-button${props.asset?.is_bookmarked ? " bookmarked" : ""}`} onClick={props.onBookmark} disabled={!props.asset}>
@@ -1338,12 +1339,14 @@ export default function GenerateStudioShell() {
   const [dashboardStatsDays, setDashboardStatsDays] = useState(30);
   const [galleryPreview, setGalleryPreview] = useState<{ task: Task; asset: Asset } | null>(null);
   const isFetchingRef = useRef(false);
+  const submissionInFlightRef = useRef(false);
   const loadRequestIdRef = useRef(0);
   const hasAppliedInitialTemplateRef = useRef(false);
   const composerToolbarRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const latestTaskRef = useRef<HTMLElement | null>(null);
   const hasAutoPositionedRef = useRef(false);
+  const [regeneratingTaskId, setRegeneratingTaskId] = useState<number | null>(null);
 
   async function loadData(options: { force?: boolean; dashboardDays?: number } = {}) {
     if (isFetchingRef.current && !options.force) return;
@@ -1819,14 +1822,16 @@ export default function GenerateStudioShell() {
   }
 
   async function handleRegenerateTask(task: Task, asset?: Asset) {
-    const { nextForm, nextUploads } = buildStudioFormFromTask(task, asset);
-    setActiveComposerMenu(null);
-    replaceReferenceUploads(nextUploads);
-    setStudioForm(nextForm);
-    window.requestAnimationFrame(() => {
-      scrollComposerIntoView();
-    });
-    await submitStudioTask(nextForm);
+    if (submissionInFlightRef.current) {
+      return;
+    }
+    const { nextForm } = buildStudioFormFromTask(task, asset);
+    setRegeneratingTaskId(task.id);
+    try {
+      await submitStudioTask(nextForm);
+    } finally {
+      setRegeneratingTaskId((current) => (current === task.id ? null : current));
+    }
   }
 
   function toggleComposerMenu(menu: Exclude<ComposerMenuKey, null>) {
@@ -2339,6 +2344,10 @@ export default function GenerateStudioShell() {
       return;
     }
 
+    if (submissionInFlightRef.current) {
+      return;
+    }
+    submissionInFlightRef.current = true;
     setSubmitting(true);
     const workflowKey = getStudioWorkflowKeyForProvider(providerForSubmit, form.creationMode);
     const taskTitle = deriveTaskTitleFromPrompt(
@@ -2387,6 +2396,7 @@ export default function GenerateStudioShell() {
         error: error instanceof Error ? error.message : "提交任务失败"
       }));
     } finally {
+      submissionInFlightRef.current = false;
       setSubmitting(false);
     }
   }
@@ -3738,6 +3748,7 @@ export default function GenerateStudioShell() {
                   galleryAssets={galleryAssets}
                   showDebugDetails={userCanUseOpsViews}
                   onReuse={() => void handleRegenerateTask(task, linkedAsset ?? galleryAssets[0])}
+                  reuseDisabled={submitting || regeneratingTaskId === task.id}
                   onBookmark={() => (linkedAsset ? void handleGalleryAction("bookmark", linkedAsset.id) : undefined)}
                   onShare={() => (linkedAsset ? void handleGalleryAction("share", linkedAsset.id) : undefined)}
                   onDelete={async () => {

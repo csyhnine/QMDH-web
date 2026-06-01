@@ -5,7 +5,9 @@
 - This update overrides older historical references below when they conflict with current runtime behavior.
 - The active permission model is now `admin` and `designer`.
 - Admins can access backend management views such as `/admin/dashboard`, `/admin/models`, `/admin/users`, and `/admin/settings`.
+- Admins can now manage shared studio prompt templates at `/admin/templates`.
 - Designers use the studio and only see their own task and asset history.
+- Prompt templates now have two scopes: `shared` templates are visible to all studio users, while `private` templates remain visible only to their owner.
 - `/admin/projects` has been removed from the active frontend surface, and project-member management APIs/UI are no longer active product capabilities.
 - Projects still exist in the data model, but they now act as personal or admin-managed task containers rather than shared-history collaboration spaces.
 

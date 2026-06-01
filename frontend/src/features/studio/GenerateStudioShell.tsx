@@ -61,8 +61,7 @@ type ReferenceUploadItem = {
   storagePath: string;
 };
 
-type PromptTemplate = {
-  id: string;
+type PromptTemplateFormValue = {
   label: string;
   title: string;
   prompt: string;
@@ -73,12 +72,8 @@ type PromptTemplate = {
   notes: string;
 };
 
-type PromptTemplateFormValue = Pick<
-  PromptTemplate,
-  "label" | "title" | "prompt" | "style" | "aspectRatio" | "resolution" | "deliverable" | "notes"
->;
-
 type CustomPromptTemplate = PromptTemplateRecord;
+type SharedPromptTemplate = PromptTemplateRecord;
 
 type ComposerMenuKey = "template" | "provider" | "display" | "count" | null;
 type ActiveView = "studio" | "models" | "users" | "dashboard" | "settings";
@@ -286,45 +281,6 @@ const resolutionOptions = [
   { id: "4k", label: "超清 4K" }
 ];
 
-const featuredAtmosphereTemplates: PromptTemplate[] = [
-  {
-    id: "architectural-enhancement-conservative",
-    label: "建筑效果图氛围增强一",
-    title: "建筑效果图氛围增强模板一",
-    prompt:
-      "一张超写实的建筑摄影场景，严格保持原始构图和相机视角，16:9画幅比例。\n晴朗通透的白天环境，阳光从侧上方强烈照射，形成高对比度、清晰锐利的阴影，地面呈现出层次丰富的树影斑驳效果。\n【核心约束】\n不得改变建筑结构、材料或立面细节。不得删除任何原有元素。\n【前景与空间层次】\n画面左上角自然延伸出树枝与树叶，叶片具有轻微透光效果（次表面散射），阳光穿透叶片，增强画面景深与空间层次感。\n【建筑细节】\n强化材质的真实表现，包括混凝土、涂料表面、砖材、金属与玻璃，呈现清晰的微观细节与照片级写实渲染质量。\n【地面与环境】\n柏油路面呈现细腻颗粒质感，并带有轻微磨损痕迹，在阳光下具有符合物理规律的反射效果。\n【人物与生活气息】\n画面中包含若干行人，自然地行走、站立或互动，穿着现代休闲服装，为场景增加真实的城市生活氛围与尺度参照。\n【视觉风格】\n顶级当代建筑摄影风格，强调人与空间互动的纪实感，色彩干净自然，高动态范围光照表现，超高分辨率，电影级写实质感，适用于建筑作品集展示。\n【文字内容】\n图中出现的文字内容如下“韶关市兰康阁电子商务”“烟花炮竹”“LESSO联塑 联塑管道”“兰乡·古韵”。",
-    style: "modern",
-    aspectRatio: "16:9",
-    resolution: "4k",
-    deliverable: "保守型 / 文字与前景保留",
-    notes: "强调保留原图中的文字信息、前景树内容、建筑材质与构图，不做结构性改动。"
-  },
-  {
-    id: "architectural-enhancement-bold",
-    label: "建筑效果图氛围增强二",
-    title: "建筑效果图氛围增强模板二",
-    prompt:
-      "一张荣获建筑竞赛大奖的超写实建筑摄影作品，严格保持当前构图和视角。画面展示了一个晴朗通透的白天，阳光从侧上方洒下，形成高对比度的清晰光影，地面投射出斑驳而富有层次的树影。\n【最高原则】\n禁止改变建筑的材质，禁止删除原图包含的内容。\n【建筑主体细节】\n建筑主体维持原有的体量、结构与立面逻辑，只强化照片级材质细节、通透度与空间气质。\n【配景与氛围】\n画面左上角自然地探出几枝高精度的树叶和枝干，叶片具有次表面散射（Subsurface Scattering）的透光感，为画面增加前景景深。柏油马路呈现出细腻的颗粒质感和轻微的旧化痕迹。道路边缘（非路面上）整齐摆放着一排极具设计感的现代花箱，花草色彩鲜艳且自然。\n【人物与活力】\n街道上有几位黑头发的行人，动态自然，衣着时尚，为建筑增添生活气息。\n【整体基调】\n影像风格模仿顶级建筑摄影师 Iwan Baan 的风格，画面锐利，色彩通透，具有 ArchDaily 或 Dezeen 首页推荐的视觉冲击力，高动态范围（HDR），8K 超高清分辨率。",
-    style: "editorial",
-    aspectRatio: "16:9",
-    resolution: "4k",
-    deliverable: "激进型 / 花箱与氛围强化",
-    notes: "允许增加更强的前景、花箱、人物和摄影氛围，但仍然禁止修改建筑材质与删除原图内容。"
-  },
-  {
-    id: "landscape-enhancement",
-    label: "景观效果图氛围增强",
-    title: "景观效果图氛围增强模板",
-    prompt:
-      "一张超写实的景观效果图摄影场景，严格保持原始构图和相机视角，16:9 画幅比例。晴朗通透的白天环境，阳光从侧上方照射，形成清晰而丰富的光影层次。\n【核心约束】\n不得改变原有硬质铺装、水体、植物骨架、构筑物和场地结构，不得删除任何原有元素。\n【植物与空间层次】\n强化乔木、灌木、地被之间的层次关系，树叶具备轻微透光感，前景与中景形成自然景深，提升空间纵深与通透感。\n【地面与材质】\n强化石材、木平台、铺装缝隙、水面反射和金属细节，呈现高精度、照片级真实材质效果。\n【人物与生活气息】\n适度加入自然活动的人物，如散步、停留、交谈或休憩，增强尺度感与场所活力。\n【视觉风格】\n顶级景观摄影风格，色彩干净自然，强调光影、植物层次与公共空间氛围，超高分辨率，适用于景观方案展示与作品集表达。",
-    style: "minimal",
-    aspectRatio: "16:9",
-    resolution: "4k",
-    deliverable: "景观专用 / 层次与通透增强",
-  notes: "面向景观效果图，重点强化植物层次、空间通透感、地面材质和公共活动氛围。"
-  }
-];
-
 const providerPresets: ProviderPreset[] = [
   {
     key: "deepseek-chat",
@@ -416,18 +372,18 @@ const providerPresets: ProviderPreset[] = [
 
 const defaultStudioForm: StudioFormState = {
   creationMode: "generate",
-  title: featuredAtmosphereTemplates[0].title,
-  prompt: featuredAtmosphereTemplates[0].prompt,
+  title: "",
+  prompt: "",
   projectCode: "QMDH-001",
   requestedProvider: "",
   classification: "B",
-  style: featuredAtmosphereTemplates[0].style,
-  aspectRatio: featuredAtmosphereTemplates[0].aspectRatio,
-  resolution: featuredAtmosphereTemplates[0].resolution,
+  style: "modern",
+  aspectRatio: "16:9",
+  resolution: "4k",
   imageCount: 1,
-  deliverable: featuredAtmosphereTemplates[0].deliverable,
+  deliverable: "",
   referenceImages: [],
-  notes: featuredAtmosphereTemplates[0].notes
+  notes: ""
 };
 
 function formatDate(value: string | null): string {
@@ -700,7 +656,7 @@ function applyTemplateToForm(template: PromptTemplateFormValue, current: StudioF
   };
 }
 
-function toTemplateFormValue(template: CustomPromptTemplate): PromptTemplateFormValue {
+function toTemplateFormValue(template: PromptTemplateRecord): PromptTemplateFormValue {
   return {
     label: template.label,
     title: template.title,
@@ -719,6 +675,14 @@ function sortTemplatesByUpdatedAt(templates: CustomPromptTemplate[]): CustomProm
   );
 }
 
+function buildReferenceUploadsFromPaths(paths: string[]): ReferenceUploadItem[] {
+  return paths.slice(0, 4).map((path, index) => ({
+    fileName: summarizeReferenceImageLabel(path) || `参考图 ${index + 1}`,
+    previewUrl: path,
+    storagePath: path,
+  }));
+}
+
 function buildGalleryAssets(taskAssets: Asset[]): Asset[] {
   return [...taskAssets]
     .sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime())
@@ -735,6 +699,11 @@ function inferRequestedImageCount(task: Task): number {
   const requestedCount = Number(task.result["requested_image_count"] ?? task.result["output_count"] ?? 1);
   if (Number.isNaN(requestedCount)) return 1;
   return clampImageCount(requestedCount);
+}
+
+function taskResultString(task: Task, key: string): string {
+  const value = task.result[key];
+  return typeof value === "string" ? value : "";
 }
 
 function parseCapabilities(value: string): string[] {
@@ -1330,6 +1299,7 @@ export default function GenerateStudioShell() {
   const [referenceUploads, setReferenceUploads] = useState<ReferenceUploadItem[]>([]);
   const [uploadingReference, setUploadingReference] = useState(false);
   const [customTemplates, setCustomTemplates] = useState<CustomPromptTemplate[]>([]);
+  const [sharedTemplates, setSharedTemplates] = useState<SharedPromptTemplate[]>([]);
   const [templateFeedback, setTemplateFeedback] = useState<TemplateFeedback | null>(null);
   const [templateDraftLabel, setTemplateDraftLabel] = useState("");
   const [templateDraftTitle, setTemplateDraftTitle] = useState("");
@@ -1369,6 +1339,7 @@ export default function GenerateStudioShell() {
   const [galleryPreview, setGalleryPreview] = useState<{ task: Task; asset: Asset } | null>(null);
   const isFetchingRef = useRef(false);
   const loadRequestIdRef = useRef(0);
+  const hasAppliedInitialTemplateRef = useRef(false);
   const composerToolbarRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const latestTaskRef = useRef<HTMLElement | null>(null);
@@ -1418,7 +1389,8 @@ export default function GenerateStudioShell() {
         error: templateLoadError,
         ready: true
       });
-      setCustomTemplates(sortTemplatesByUpdatedAt(templates));
+      setSharedTemplates(sortTemplatesByUpdatedAt(templates.filter((template) => template.scope === "shared")));
+      setCustomTemplates(sortTemplatesByUpdatedAt(templates.filter((template) => template.scope === "private")));
       setLastSyncedAt(new Date().toISOString());
     } catch (error) {
       if (requestId !== loadRequestIdRef.current) return;
@@ -1457,6 +1429,10 @@ export default function GenerateStudioShell() {
   }, []);
 
   useEffect(() => {
+    hasAppliedInitialTemplateRef.current = false;
+  }, [currentUser?.name]);
+
+  useEffect(() => {
     if (!currentUser) return;
     void loadData({ force: true });
   }, [currentUser?.name, activeView]);
@@ -1488,7 +1464,7 @@ export default function GenerateStudioShell() {
   useEffect(() => {
     return () => {
       for (const item of referenceUploads) {
-        URL.revokeObjectURL(item.previewUrl);
+        releaseReferencePreview(item.previewUrl);
       }
     };
   }, [referenceUploads]);
@@ -1565,7 +1541,7 @@ export default function GenerateStudioShell() {
   const hasFilteredHistory = filteredTasks.length > 0;
   const isStudioDockLayout = activeView === "studio";
   const activeTemplate =
-    [...featuredAtmosphereTemplates, ...customTemplates].find(
+    [...sharedTemplates, ...customTemplates].find(
       (template) => template.title === studioForm.title && template.prompt === studioForm.prompt
     ) ?? null;
   const trackedSubmissionTask =
@@ -1590,6 +1566,14 @@ export default function GenerateStudioShell() {
                     : submissionTracker.stage,
       }
     : null;
+
+  useEffect(() => {
+    if (sharedTemplates.length === 0) return;
+    if (hasAppliedInitialTemplateRef.current) return;
+    if (studioForm.title.trim() || studioForm.prompt.trim()) return;
+    hasAppliedInitialTemplateRef.current = true;
+    setStudioForm((current) => applyTemplateToForm(toTemplateFormValue(sharedTemplates[0]), current));
+  }, [sharedTemplates, studioForm.prompt, studioForm.title]);
 
   useEffect(() => {
     if (availableProviders.length === 0) return;
@@ -1643,6 +1627,12 @@ export default function GenerateStudioShell() {
       ...current,
       referenceImages: nextUploads.map((item) => item.storagePath),
     }));
+  }
+
+  function releaseReferencePreview(url: string) {
+    if (url.startsWith("blob:")) {
+      URL.revokeObjectURL(url);
+    }
   }
 
   function handleProjectSelect(project: Project) {
@@ -1718,7 +1708,7 @@ export default function GenerateStudioShell() {
 
   function clearReferenceUpload() {
     for (const item of referenceUploads) {
-      URL.revokeObjectURL(item.previewUrl);
+      releaseReferencePreview(item.previewUrl);
     }
     setUploadingReference(false);
     syncReferenceUploads([]);
@@ -1728,7 +1718,7 @@ export default function GenerateStudioShell() {
   function removeReferenceUpload(index: number) {
     const target = referenceUploads[index];
     if (!target) return;
-    URL.revokeObjectURL(target.previewUrl);
+    releaseReferencePreview(target.previewUrl);
     syncReferenceUploads(referenceUploads.filter((_, currentIndex) => currentIndex !== index));
   }
 
@@ -1748,26 +1738,95 @@ export default function GenerateStudioShell() {
     }));
   }
 
-  function handleReuseTask(task: Task, asset?: Asset) {
-    setActiveComposerMenu(null);
-    setStudioForm((current) => {
-      const nextProvider =
-        availableProviders.find((provider) => provider.provider_name === task.requested_provider)?.provider_name ??
-        current.requestedProvider;
+  function resolveStudioProviderForForm(form: StudioFormState): Provider | undefined {
+    const compatibleProviders = state.providers.filter(
+      (provider) =>
+        isRuntimeImageProvider(provider) &&
+        provider.capabilities.some((capability) =>
+          form.creationMode === "edit" ? capability === "image.edit" : capability === "image.generate"
+        )
+    );
+    return (
+      compatibleProviders.find((provider) => provider.provider_name === form.requestedProvider) ?? compatibleProviders[0]
+    );
+  }
 
-      return {
-        ...current,
-        creationMode: task.workflow_key === IMAGE_EDIT_WORKFLOW_KEY ? "edit" : "generate",
+  function buildStudioFormFromTask(task: Task, asset?: Asset): { nextForm: StudioFormState; nextUploads: ReferenceUploadItem[] } {
+    const nextMode = task.workflow_key === IMAGE_EDIT_WORKFLOW_KEY ? "edit" : "generate";
+    const referencePaths = taskReferenceImages(task);
+    const nextUploads = buildReferenceUploadsFromPaths(referencePaths);
+    const promptFromTask = taskResultString(task, "prompt") || taskResultString(task, "edit_prompt");
+    const nextProvider =
+      resolveStudioProviderForForm({
+        ...studioForm,
+        creationMode: nextMode,
+        requestedProvider: task.requested_provider,
+      })?.provider_name ?? studioForm.requestedProvider;
+
+    return {
+      nextForm: {
+        ...studioForm,
+        creationMode: nextMode,
         title: task.title,
-        prompt: asset?.prompt_text ?? current.prompt,
+        prompt: promptFromTask || asset?.prompt_text || studioForm.prompt,
         projectCode: task.project_code,
         requestedProvider: nextProvider,
-        style: inferStyleFromAsset(asset, current.style),
-        imageCount: inferRequestedImageCount(task)
-      };
-    });
+        style: taskResultString(task, "style") || inferStyleFromAsset(asset, studioForm.style),
+        aspectRatio: taskResultString(task, "aspect_ratio") || studioForm.aspectRatio,
+        resolution: taskResultString(task, "resolution") || studioForm.resolution,
+        imageCount: inferRequestedImageCount(task),
+        deliverable: taskResultString(task, "deliverable") || studioForm.deliverable,
+        notes: taskResultString(task, "prompt_supplement") || studioForm.notes,
+        referenceImages: nextUploads.map((item) => item.storagePath),
+      },
+      nextUploads,
+    };
+  }
 
-    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+  function scrollComposerIntoView() {
+    const anchor = composerToolbarRef.current;
+    try {
+      if (anchor?.scrollIntoView) {
+        anchor.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        return;
+      }
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    } catch {
+      try {
+        window.scrollTo(0, document.body.scrollHeight);
+      } catch {
+        // Ignore scroll failures so regenerate can continue.
+      }
+    }
+  }
+
+  function replaceReferenceUploads(nextUploads: ReferenceUploadItem[]) {
+    for (const item of referenceUploads) {
+      releaseReferencePreview(item.previewUrl);
+    }
+    setReferenceUploads(nextUploads);
+  }
+
+  function applyTaskToComposer(task: Task, asset?: Asset): StudioFormState {
+    const { nextForm, nextUploads } = buildStudioFormFromTask(task, asset);
+    setActiveComposerMenu(null);
+    replaceReferenceUploads(nextUploads);
+    setStudioForm(nextForm);
+    window.requestAnimationFrame(() => {
+      scrollComposerIntoView();
+    });
+    return nextForm;
+  }
+
+  async function handleRegenerateTask(task: Task, asset?: Asset) {
+    const { nextForm, nextUploads } = buildStudioFormFromTask(task, asset);
+    setActiveComposerMenu(null);
+    replaceReferenceUploads(nextUploads);
+    setStudioForm(nextForm);
+    window.requestAnimationFrame(() => {
+      scrollComposerIntoView();
+    });
+    await submitStudioTask(nextForm);
   }
 
   function toggleComposerMenu(menu: Exclude<ComposerMenuKey, null>) {
@@ -1862,7 +1921,7 @@ export default function GenerateStudioShell() {
       }));
     } catch (error) {
       for (const item of nextUploads.slice(referenceUploads.length)) {
-        URL.revokeObjectURL(item.previewUrl);
+        releaseReferencePreview(item.previewUrl);
       }
       setState((current) => ({
         ...current,
@@ -1890,8 +1949,8 @@ export default function GenerateStudioShell() {
     fileInputRef.current?.click();
   }
 
-  function handleApplyTemplate(template: PromptTemplateFormValue | CustomPromptTemplate) {
-    const nextTemplate = "aspect_ratio" in template || "updated_at" in template ? toTemplateFormValue(template) : template;
+  function handleApplyTemplate(template: PromptTemplateRecord) {
+    const nextTemplate = toTemplateFormValue(template);
     setTemplateFeedback(null);
     setStudioForm((current) => applyTemplateToForm(nextTemplate, current));
     setActiveComposerMenu(null);
@@ -1967,7 +2026,8 @@ export default function GenerateStudioShell() {
           aspect_ratio: studioForm.aspectRatio,
           resolution: studioForm.resolution,
           deliverable: studioForm.deliverable,
-          notes: studioForm.notes
+          notes: studioForm.notes,
+          preview_image_path: ""
         });
 
         setCustomTemplates((current) => sortTemplatesByUpdatedAt([createdTemplate, ...current]));
@@ -1983,7 +2043,8 @@ export default function GenerateStudioShell() {
           aspect_ratio: studioForm.aspectRatio,
           resolution: studioForm.resolution,
           deliverable: studioForm.deliverable,
-          notes: studioForm.notes
+          notes: studioForm.notes,
+          preview_image_path: ""
         });
 
         setCustomTemplates((current) =>
@@ -2218,8 +2279,7 @@ export default function GenerateStudioShell() {
     }
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitStudioTask(form: StudioFormState) {
     setActiveComposerMenu(null);
     setTemplateFeedback(null);
 
@@ -2231,15 +2291,22 @@ export default function GenerateStudioShell() {
       return;
     }
 
-    if (!selectedProvider) {
+    const providerForSubmit = resolveStudioProviderForForm(form);
+    if (!providerForSubmit) {
       setState((current) => ({
         ...current,
         error: "请先选择一个可用模型"
       }));
       return;
     }
+    if (providerForSubmit.provider_name !== form.requestedProvider) {
+      setStudioForm((current) => ({
+        ...current,
+        requestedProvider: providerForSubmit.provider_name,
+      }));
+    }
 
-    if (studioForm.creationMode === "edit" && !selectedProvider.capabilities.includes("image.edit")) {
+    if (form.creationMode === "edit" && !providerForSubmit.capabilities.includes("image.edit")) {
       setState((current) => ({
         ...current,
         error: "当前模型不支持图像编辑，请切换到支持 image.edit 的模型"
@@ -2247,7 +2314,7 @@ export default function GenerateStudioShell() {
       return;
     }
 
-    if (studioForm.creationMode === "generate" && !selectedProvider.capabilities.includes("image.generate")) {
+    if (form.creationMode === "generate" && !providerForSubmit.capabilities.includes("image.generate")) {
       setState((current) => ({
         ...current,
         error: "当前模型不支持文生图，请切换到支持 image.generate 的模型"
@@ -2255,8 +2322,8 @@ export default function GenerateStudioShell() {
       return;
     }
 
-    const referenceImageCount = clampReferenceImageCount(studioForm.referenceImages.length);
-    if (studioForm.creationMode === "edit" && referenceImageCount < 1) {
+    const referenceImageCount = clampReferenceImageCount(form.referenceImages.length);
+    if (form.creationMode === "edit" && referenceImageCount < 1) {
       setState((current) => ({
         ...current,
         error: "图像编辑至少需要上传 1 张参考图"
@@ -2273,15 +2340,16 @@ export default function GenerateStudioShell() {
     }
 
     setSubmitting(true);
+    const workflowKey = getStudioWorkflowKeyForProvider(providerForSubmit, form.creationMode);
     const taskTitle = deriveTaskTitleFromPrompt(
-      studioForm.prompt,
-      studioForm.title.trim() || defaultStudioForm.title
+      form.prompt,
+      form.title.trim() || defaultStudioForm.title
     );
     setSubmissionTracker({
       taskId: null,
       taskTitle,
-      providerName: selectedProvider?.model_name ?? studioForm.requestedProvider,
-      imageCount: clampImageCount(studioForm.imageCount),
+      providerName: providerForSubmit.model_name ?? form.requestedProvider,
+      imageCount: clampImageCount(form.imageCount),
       hasReferenceImage: referenceImageCount > 0,
       stage: "submitting",
     });
@@ -2289,17 +2357,17 @@ export default function GenerateStudioShell() {
     try {
       const createdTask = await api.createTask({
         title: taskTitle,
-        workflow_key: selectedWorkflowKey,
-        project_code: studioForm.projectCode,
-        requested_provider: studioForm.requestedProvider,
-        classification: studioForm.classification,
-        payload: buildImagePayload(studioForm, selectedWorkflowKey)
+        workflow_key: workflowKey,
+        project_code: form.projectCode,
+        requested_provider: providerForSubmit.provider_name,
+        classification: form.classification,
+        payload: buildImagePayload(form, workflowKey)
       });
       setSubmissionTracker({
         taskId: createdTask.id,
         taskTitle: createdTask.title,
-        providerName: selectedProvider?.model_name ?? createdTask.requested_provider,
-        imageCount: clampImageCount(Number(createdTask.result["requested_image_count"] ?? studioForm.imageCount)),
+        providerName: providerForSubmit.model_name ?? createdTask.requested_provider,
+        imageCount: clampImageCount(Number(createdTask.result["requested_image_count"] ?? form.imageCount)),
         hasReferenceImage: Boolean(createdTask.result["reference_image_supplied"] ?? referenceImageCount > 0),
         stage: createdTask.status === "running" ? "running" : "pending",
       });
@@ -2321,6 +2389,11 @@ export default function GenerateStudioShell() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await submitStudioTask(studioForm);
   }
 
   async function handleGalleryAction(action: "bookmark" | "share", assetId: number) {
@@ -3664,7 +3737,7 @@ export default function GenerateStudioShell() {
                   asset={linkedAsset}
                   galleryAssets={galleryAssets}
                   showDebugDetails={userCanUseOpsViews}
-                  onReuse={() => handleReuseTask(task, linkedAsset ?? galleryAssets[0])}
+                  onReuse={() => void handleRegenerateTask(task, linkedAsset ?? galleryAssets[0])}
                   onBookmark={() => (linkedAsset ? void handleGalleryAction("bookmark", linkedAsset.id) : undefined)}
                   onShare={() => (linkedAsset ? void handleGalleryAction("share", linkedAsset.id) : undefined)}
                   onDelete={async () => {
@@ -3680,7 +3753,7 @@ export default function GenerateStudioShell() {
                     if (getRenderableUrl(asset)) {
                       setGalleryPreview({ task, asset });
                     } else {
-                      handleReuseTask(task, asset);
+                      applyTaskToComposer(task, asset);
                     }
                   }}
                   anchorRef={isLatestTask ? latestTaskRef : undefined}
@@ -3700,7 +3773,7 @@ export default function GenerateStudioShell() {
             composerToolbarRef={composerToolbarRef}
             customTemplates={customTemplates}
             editingTemplateId={editingTemplateId}
-            featuredAtmosphereTemplates={featuredAtmosphereTemplates}
+            sharedTemplates={sharedTemplates}
             fileInputRef={fileInputRef}
             onApplyTemplate={handleApplyTemplate}
             onAspectRatioSelect={(ratio) => setStudioForm((current) => ({ ...current, aspectRatio: ratio }))}
@@ -3782,7 +3855,7 @@ export default function GenerateStudioShell() {
                 type="button"
                 className="ghost-button"
                 onClick={() => {
-                  handleReuseTask(galleryPreview.task, galleryPreview.asset);
+                  applyTaskToComposer(galleryPreview.task, galleryPreview.asset);
                   setGalleryPreview(null);
                 }}
               >

@@ -356,6 +356,18 @@ def _reference_image_result_fields(payload: dict) -> dict[str, object]:
     }
 
 
+def _task_payload_result_fields(payload: dict) -> dict[str, str]:
+    return {
+        "prompt": str(payload.get("prompt") or "").strip(),
+        "edit_prompt": str(payload.get("edit_prompt") or "").strip(),
+        "style": str(payload.get("style") or "").strip(),
+        "aspect_ratio": str(payload.get("aspect_ratio") or "").strip(),
+        "resolution": str(payload.get("resolution") or "").strip(),
+        "deliverable": str(payload.get("deliverable") or "").strip(),
+        "prompt_supplement": str(payload.get("prompt_supplement") or "").strip(),
+    }
+
+
 def _uses_image_edit_bridge(profile: ImageProviderProfile) -> bool:
     identity = f"{profile.provider_name} {profile.model_name}".lower()
     return "firered" in identity or "image-edit" in identity
@@ -972,6 +984,7 @@ def execute_task(task_id: int) -> None:
         task.result = {
             **(task.result if isinstance(task.result, dict) else {}),
             "queued_stage": "running",
+            **_task_payload_result_fields(task.payload),
         }
         db.commit()
 
@@ -987,6 +1000,7 @@ def execute_task(task_id: int) -> None:
                 **task.result,
                 "queued_stage": "completed",
                 **_reference_image_result_fields(task.payload),
+                **_task_payload_result_fields(task.payload),
             }
 
             db.add(
@@ -1036,6 +1050,7 @@ def execute_task(task_id: int) -> None:
                 **task.result,
                 "queued_stage": "failed",
                 **_reference_image_result_fields(task.payload),
+                **_task_payload_result_fields(task.payload),
             }
 
             try:

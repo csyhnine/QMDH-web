@@ -71,6 +71,18 @@ def _reference_image_storage_paths(payload: dict) -> list[str]:
     return []
 
 
+def _task_payload_result_fields(payload: dict) -> dict:
+    return {
+        "prompt": str(payload.get("prompt") or "").strip(),
+        "edit_prompt": str(payload.get("edit_prompt") or "").strip(),
+        "style": str(payload.get("style") or "").strip(),
+        "aspect_ratio": str(payload.get("aspect_ratio") or "").strip(),
+        "resolution": str(payload.get("resolution") or "").strip(),
+        "deliverable": str(payload.get("deliverable") or "").strip(),
+        "prompt_supplement": str(payload.get("prompt_supplement") or "").strip(),
+    }
+
+
 def _get_or_create_user(db: Session, auth_user: AuthUserProfile) -> User:
     user = db.scalar(select(User).where(User.name == auth_user.name))
     if user:
@@ -190,6 +202,7 @@ def create_task(
             "reference_image_storage_paths": reference_image_storage_paths,
             "requested_image_count": int(payload.payload.get("image_count") or 1),
             "queued_stage": "accepted",
+            **_task_payload_result_fields(payload.payload),
         },
     )
     db.add(task)

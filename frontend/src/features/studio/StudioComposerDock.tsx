@@ -1,4 +1,4 @@
-import { type ChangeEvent, type DragEvent, type FormEvent, type RefObject } from "react";
+import { type ChangeEvent, type DragEvent, type FormEvent, type RefObject, useMemo, useState } from "react";
 
 import { type PromptTemplateRecord, type Provider } from "../../api";
 
@@ -18,18 +18,6 @@ type ReferenceUploadItem = {
   fileName: string;
   previewUrl: string;
   storagePath: string;
-};
-
-type TemplateOption = {
-  id: string;
-  label: string;
-  title: string;
-  prompt: string;
-  style: string;
-  aspectRatio: string;
-  resolution: string;
-  deliverable: string;
-  notes: string;
 };
 
 type ResolutionOption = {
@@ -60,16 +48,16 @@ type SubmissionProgress = {
 
 type StudioComposerDockProps = {
   activeComposerMenu: ComposerMenuKey;
-  activeTemplateId: string | number | null;
+  activeTemplateId: number | null;
   aspectRatioOptions: readonly string[];
   availableProviderCount: number;
   hasActiveProject: boolean;
   composerToolbarRef: RefObject<HTMLDivElement | null>;
   customTemplates: PromptTemplateRecord[];
   editingTemplateId: number | null;
-  featuredAtmosphereTemplates: TemplateOption[];
+  sharedTemplates: PromptTemplateRecord[];
   fileInputRef: RefObject<HTMLInputElement | null>;
-  onApplyTemplate: (template: TemplateOption | PromptTemplateRecord) => void;
+  onApplyTemplate: (template: PromptTemplateRecord) => void;
   onAspectRatioSelect: (ratio: string) => void;
   onCancelTemplateEdit: () => void;
   onDeleteCustomTemplate: (templateId: number) => void;
@@ -106,6 +94,19 @@ type StudioComposerDockProps = {
   workspaceName: string;
 };
 
+function previewStyleClass(style: string): string {
+  switch (style) {
+    case "editorial":
+      return "template-preview-style-editorial";
+    case "minimal":
+      return "template-preview-style-minimal";
+    case "cinematic":
+      return "template-preview-style-cinematic";
+    default:
+      return "template-preview-style-modern";
+  }
+}
+
 export default function StudioComposerDock({
   activeComposerMenu,
   activeTemplateId,
@@ -115,7 +116,7 @@ export default function StudioComposerDock({
   composerToolbarRef,
   customTemplates,
   editingTemplateId,
-  featuredAtmosphereTemplates,
+  sharedTemplates,
   fileInputRef,
   onApplyTemplate,
   onAspectRatioSelect,
@@ -153,11 +154,19 @@ export default function StudioComposerDock({
   workflowName,
   workspaceName,
 }: StudioComposerDockProps) {
+  const [hoveredTemplateId, setHoveredTemplateId] = useState<number | null>(null);
+
   const modeLabel = studioForm.creationMode === "edit" ? "图像编辑" : "文生图";
   const referenceHint =
     studioForm.creationMode === "edit"
       ? `图像编辑要求 1-4 张参考图，当前已上传 ${referenceUploads.length} 张。`
       : "文生图模式不会强制发送参考图；切换到图像编辑后会使用已上传的参考图。";
+
+  const hoveredTemplate = useMemo(
+    () => sharedTemplates.find((template) => template.id === hoveredTemplateId) ?? null,
+    [hoveredTemplateId, sharedTemplates]
+  );
+
   return (
     <form className="composer-dock" onSubmit={onSubmit}>
       <div className="composer-leading">
@@ -169,10 +178,13 @@ export default function StudioComposerDock({
           <span>{modeLabel}</span>
           <span>{workflowName}</span>
           <span>{selectedProviderModelName ?? studioForm.requestedProvider}</span>
-          <span>{studioForm.aspectRatio} / {selectedResolutionLabel ?? studioForm.resolution}</span>
+          <span>
+            {studioForm.aspectRatio} / {selectedResolutionLabel ?? studioForm.resolution}
+          </span>
           <span>{studioForm.imageCount} 张</span>
         </div>
       </div>
+
       <div className="composer-body">
         <div className="reference-column">
           <div className="composer-mode-switch" role="tablist" aria-label="创作模式">
@@ -212,8 +224,12 @@ export default function StudioComposerDock({
             <div className="reference-upload-list">
               {referenceUploads.map((item, index) => (
                 <div key={item.storagePath} className="reference-upload-chip">
-                  <span>{index + 1}. {item.fileName}</span>
-                  <button type="button" onClick={() => onRemoveReferenceUpload(index)}>移除</button>
+                  <span>
+                    {index + 1}. {item.fileName}
+                  </span>
+                  <button type="button" onClick={() => onRemoveReferenceUpload(index)}>
+                    移除
+                  </button>
                 </div>
               ))}
             </div>
@@ -240,7 +256,7 @@ export default function StudioComposerDock({
             className={activeComposerMenu === "template" ? "composer-menu-trigger is-open" : "composer-menu-trigger"}
             onClick={() => onToggleComposerMenu("template")}
           >
-            {featuredAtmosphereTemplates.find((template) => template.id === activeTemplateId)?.label ??
+            {sharedTemplates.find((template) => template.id === activeTemplateId)?.label ??
               customTemplates.find((template) => template.id === activeTemplateId)?.label ??
               "选择模板"}
           </button>
@@ -248,22 +264,53 @@ export default function StudioComposerDock({
             <div className="composer-menu-panel composer-menu-panel-template">
               <div className="template-section">
                 <div className="template-section-head">
-                  <strong>热门提示词</strong>
-                  <span>快速套用常用创作方向</span>
+                  <strong>模板提示词</strong>
+                  <span>后台统一维护，所有设计师都可见；悬停可查看参考图。</span>
                 </div>
-                <div className="template-grid">
-                  {featuredAtmosphereTemplates.map((template) => (
-                    <button
-                      key={template.id}
-                      type="button"
-                      className={activeTemplateId === template.id ? "template-card is-active" : "template-card"}
-                      onClick={() => onApplyTemplate(template)}
-                    >
-                      <strong>{template.label}</strong>
-                      <span>{template.deliverable}</span>
-                    </button>
-                  ))}
-                </div>
+                {sharedTemplates.length > 0 ? (
+                  <div className="template-browser">
+                    <div className="template-grid">
+                      {sharedTemplates.map((template) => (
+                        <button
+                          key={template.id}
+                          type="button"
+                          className={activeTemplateId === template.id ? "template-card is-active" : "template-card"}
+                          onClick={() => onApplyTemplate(template)}
+                          onMouseEnter={() => setHoveredTemplateId(template.id)}
+                          onMouseLeave={() => setHoveredTemplateId((current) => (current === template.id ? null : current))}
+                          onFocus={() => setHoveredTemplateId(template.id)}
+                          onBlur={() => setHoveredTemplateId((current) => (current === template.id ? null : current))}
+                        >
+                          <strong>{template.label}</strong>
+                          <span>{template.deliverable || template.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                    {hoveredTemplate ? (
+                      <aside className="template-hover-preview" aria-live="polite">
+                        {hoveredTemplate.preview_image_path ? (
+                          <img
+                            className="template-hover-preview-image"
+                            src={hoveredTemplate.preview_image_path}
+                            alt={`${hoveredTemplate.label} 参考图`}
+                          />
+                        ) : (
+                          <div className={`template-hover-preview-fallback ${previewStyleClass(hoveredTemplate.style)}`}>
+                            <span>Template Preview</span>
+                            <strong>{hoveredTemplate.label}</strong>
+                          </div>
+                        )}
+                        <div className="template-hover-preview-body">
+                          <strong>{hoveredTemplate.label}</strong>
+                          <span>{hoveredTemplate.title}</span>
+                          <small>{hoveredTemplate.deliverable || hoveredTemplate.notes || "已配置共享模板"}</small>
+                        </div>
+                      </aside>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="template-empty">后台还没有配置共享模板，当前页面只显示“我的提示词”。</div>
+                )}
               </div>
 
               <div className="template-section">
@@ -298,7 +345,7 @@ export default function StudioComposerDock({
               <div className="template-editor">
                 <div className="template-section-head">
                   <strong>{editingTemplateId ? "编辑自定义提示词" : "保存当前提示词"}</strong>
-                  <span>会保存当前的提示词、比例、分辨率、风格和补充说明</span>
+                  <span>会保存当前的提示词、比例、分辨率、风格和补充说明。</span>
                 </div>
                 {templateFeedback ? (
                   <p className={templateFeedback.type === "success" ? "template-feedback success" : "template-feedback error"}>

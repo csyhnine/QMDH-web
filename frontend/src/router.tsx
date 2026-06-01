@@ -10,6 +10,7 @@ import {
   type FeedbackRecord,
   type InspirationPost,
   type ManagedUser,
+  type PromptTemplateRecord,
   type Project,
   type Provider,
   type ProviderProfileRecord,
@@ -22,6 +23,7 @@ const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/admin/DashboardPage"));
 const UsersPage = lazy(() => import("./pages/admin/UsersPage"));
 const ModelsPage = lazy(() => import("./pages/admin/ModelsPage"));
+const PromptTemplatesPage = lazy(() => import("./pages/admin/PromptTemplatesPage"));
 const AgentOpsPage = lazy(() => import("./pages/admin/AgentOpsPage"));
 const FeedbackOpsPage = lazy(() => import("./pages/admin/FeedbackOpsPage"));
 const SettingsPage = lazy(() => import("./pages/admin/SettingsPage"));
@@ -188,6 +190,30 @@ function ModelsRoute() {
   );
 }
 
+function PromptTemplatesRoute() {
+  const [templates, setTemplates] = useState<PromptTemplateRecord[]>([]);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    try {
+      setTemplates(await api.adminPromptTemplates());
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "加载模板提示词失败");
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  return (
+    <AppShell kind="admin" active="templates">
+      <PromptTemplatesPage templates={templates} error={error} onRefresh={() => void refresh()} onSetError={setError} />
+    </AppShell>
+  );
+}
+
 function AgentsRoute() {
   const [clients, setClients] = useState<AgentClientRecord[]>([]);
   const [skills, setSkills] = useState<AgentOfficialSkill[]>([]);
@@ -310,6 +336,7 @@ export default function AppRouter() {
           <Route path="/admin/dashboard" element={<ProtectedRoute><OpsRoute><DashboardRoute /></OpsRoute></ProtectedRoute>} />
           <Route path="/admin/users" element={<ProtectedRoute><AdminRoute><UsersRoute /></AdminRoute></ProtectedRoute>} />
           <Route path="/admin/models" element={<ProtectedRoute><OpsRoute><ModelsRoute /></OpsRoute></ProtectedRoute>} />
+          <Route path="/admin/templates" element={<ProtectedRoute><AdminRoute><PromptTemplatesRoute /></AdminRoute></ProtectedRoute>} />
           <Route path="/admin/feedback" element={<ProtectedRoute><AdminRoute><AdminFeedbackRoute /></AdminRoute></ProtectedRoute>} />
           <Route path="/admin/agents" element={<ProtectedRoute><OpsRoute><AgentsRoute /></OpsRoute></ProtectedRoute>} />
           <Route path="/admin/inspiration" element={<ProtectedRoute><OpsRoute><AdminInspirationRoute /></OpsRoute></ProtectedRoute>} />

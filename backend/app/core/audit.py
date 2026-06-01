@@ -69,3 +69,8 @@ class AuditEventType:
     # Inspiration events
     INSPIRATION_CREATED = "inspiration.created"
     INSPIRATION_DELETED = "inspiration.deleted"
+
+    # Prompt template events
+    PROMPT_TEMPLATE_CREATED = "prompt_template.created"
+    PROMPT_TEMPLATE_UPDATED = "prompt_template.updated"
+    PROMPT_TEMPLATE_DELETED = "prompt_template.deleted"

@@ -58,20 +58,6 @@ type AdapterOption = {
   note: string;
 };
 
-type ProviderPreset = {
-  key: string;
-  label: string;
-  adapterKind: string;
-  baseUrl: string;
-  recommendedCapabilities: string[];
-  pricingUnit: string;
-  quality?: string;
-  outputFormat?: string;
-  referenceMode?: string;
-  referenceCaptionModel?: string;
-  support: SupportLevel;
-  note: string;
-};
 
 /* ─── Constants ─── */
 
@@ -108,16 +94,6 @@ const adapterOptions: AdapterOption[] = [
   { key: "custom_http", label: "Custom HTTP", support: "planned", note: "用于后续接入非标准厂商接口，当前前后端都还没有通用执行器。" },
 ];
 
-const providerPresets: ProviderPreset[] = [
-  { key: "deepseek-chat", label: "DeepSeek / Chat", adapterKind: "openai_compatible", baseUrl: "https://api.deepseek.com/v1", recommendedCapabilities: ["chat.completions"], pricingUnit: "per_request", support: "ready", note: "适合 DeepSeek-R1、V3 等聊天模型。" },
-  { key: "glm-chat", label: "GLM / Chat", adapterKind: "openai_compatible", baseUrl: "https://open.bigmodel.cn/api/paas/v4", recommendedCapabilities: ["chat.completions"], pricingUnit: "per_request", support: "ready", note: "适合 GLM-4.x / GLM-5 系列。" },
-  { key: "qwen-chat", label: "Qwen / Chat", adapterKind: "openai_compatible", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", recommendedCapabilities: ["chat.completions"], pricingUnit: "per_request", support: "ready", note: "适合通义千问聊天模型。" },
-  { key: "modelscope-image", label: "ModelScope / 图像生成", adapterKind: "openai_compatible", baseUrl: "https://api-inference.modelscope.cn/v1", recommendedCapabilities: ["image.generate"], pricingUnit: "per_image", quality: "medium", outputFormat: "png", referenceMode: "caption_prompt", referenceCaptionModel: "Qwen/Qwen3-VL-8B-Instruct", support: "ready", note: "适合 Qwen-Image、Z-Image、FLUX 类图像模型。" },
-  { key: "openai-image", label: "OpenAI / 图像", adapterKind: "openai_compatible", baseUrl: "https://api.openai.com/v1", recommendedCapabilities: ["image.generate", "image.edit"], pricingUnit: "per_image", quality: "high", outputFormat: "png", support: "ready", note: "适合 GPT-Image 系列。" },
-  { key: "anthropic-native", label: "Claude / 原生 API", adapterKind: "anthropic_native", baseUrl: "https://api.anthropic.com/v1", recommendedCapabilities: ["chat.completions"], pricingUnit: "per_request", support: "planned", note: "后端还没有原生 Anthropic adapter。" },
-  { key: "kling-video", label: "Kling / 视频", adapterKind: "kling_native", baseUrl: "https://api.klingai.com", recommendedCapabilities: ["video.generate"], pricingUnit: "per_video", support: "partial", note: "视频能力在数据结构里已预留。" },
-  { key: "seedance-video", label: "即梦 / Seedance", adapterKind: "jimeng_native", baseUrl: "https://api.jimeng.ai", recommendedCapabilities: ["video.generate"], pricingUnit: "per_video", support: "partial", note: "适合即梦视频链路。" },
-];
 
 /* ─── Helpers ─── */
 
@@ -323,19 +299,6 @@ export default function ModelsPage({ providerProfiles, providers, error, onRefre
     setProviderDraft(defaultProviderProfileDraft);
   }
 
-  function applyProviderPreset(preset: ProviderPreset) {
-    setProviderDraft((current) => ({
-      ...current,
-      adapterKind: preset.adapterKind,
-      baseUrl: preset.baseUrl,
-      capabilities: formatCapabilities(preset.recommendedCapabilities),
-      pricingUnit: preset.pricingUnit,
-      quality: preset.quality ?? current.quality,
-      outputFormat: preset.outputFormat ?? current.outputFormat,
-      referenceMode: preset.referenceMode ?? current.referenceMode,
-      referenceCaptionModel: preset.referenceCaptionModel ?? current.referenceCaptionModel,
-    }));
-  }
 
   function handleEditProviderProfile(profile: ProviderProfileRecord) {
     setEditingProviderProfileId(profile.id);
@@ -586,18 +549,6 @@ export default function ModelsPage({ providerProfiles, providers, error, onRefre
               {editingProviderProfileId !== null ? <button type="button" className="ghost-button" onClick={resetProviderProfileDraft}>取消编辑</button> : null}
             </div>
           </form>
-          <section className="admin-mini-panel">
-            <div className="admin-detail-head"><h2>厂商模板</h2><p>先套模板，再补 provider 唯一标识、model 名称和 API Key。</p></div>
-            <div className="provider-preset-list">
-              {providerPresets.map((preset) => (
-                <button key={preset.key} type="button" className="provider-preset-card" title={`${preset.baseUrl}\n${preset.note}`} onClick={() => applyProviderPreset(preset)}>
-                  <div className="provider-preset-head"><strong>{preset.label}</strong><em className={`model-support-badge support-${preset.support}`}>{supportLevelLabel(preset.support)}</em></div>
-                  <div className="provider-preset-meta"><span>{getAdapterOption(preset.adapterKind).label}</span><small>{preset.pricingUnit}</small></div>
-                  <div className="model-capability-list">{preset.recommendedCapabilities.map((cap) => { const def = getCapabilityDefinition(cap); return <em key={cap} className={`model-capability-chip support-${def.support}`}>{def.label}</em>; })}</div>
-                </button>
-              ))}
-            </div>
-          </section>
         </aside>
       </div>
     </section>

@@ -28,6 +28,12 @@ AUTH_USERS_JSON = json.dumps(
             "role": "designer",
             "project_codes": ["QMDH-SEC"],
         },
+        {
+            "name": "admin.ops",
+            "token": "admin-token",
+            "role": "admin",
+            "project_codes": ["*"],
+        },
     ]
 )
 
@@ -111,6 +117,60 @@ class AuthBoundaryTests(unittest.TestCase):
 
         self.assertEqual(len(reviewer_templates.json()), 1)
         self.assertEqual(sec_templates.json(), [])
+
+    def test_shared_prompt_template_is_visible_to_all_but_admin_managed(self) -> None:
+        created = self.client.post(
+            "/prompt-templates/admin/shared",
+            headers={"X-QMDH-Auth": "admin-token", "X-QMDH-User": "admin.ops"},
+            json={
+                "label": "公共模板",
+                "title": "公共模板标题",
+                "prompt": "生成一张城市更新效果图",
+                "style": "modern",
+                "aspect_ratio": "16:9",
+                "resolution": "4k",
+                "deliverable": "汇报图",
+                "notes": "全员可见",
+            },
+        )
+
+        self.assertEqual(created.status_code, 201, created.text)
+        self.assertEqual(created.json()["scope"], "shared")
+        self.assertTrue(created.json()["can_manage"])
+
+        reviewer_templates = self.client.get(
+            "/prompt-templates",
+            headers={"X-QMDH-Auth": "reviewer-token", "X-QMDH-User": "reviewer"},
+        )
+        self.assertEqual(reviewer_templates.status_code, 200)
+        self.assertEqual(len(reviewer_templates.json()), 1)
+        self.assertEqual(reviewer_templates.json()[0]["scope"], "shared")
+        self.assertFalse(reviewer_templates.json()[0]["can_manage"])
+
+        forbidden_update = self.client.patch(
+            f"/prompt-templates/{created.json()['id']}",
+            headers={"X-QMDH-Auth": "reviewer-token", "X-QMDH-User": "reviewer"},
+            json={"label": "attacker"},
+        )
+        self.assertEqual(forbidden_update.status_code, 404)
+
+    def test_non_admin_cannot_manage_shared_prompt_templates(self) -> None:
+        response = self.client.post(
+            "/prompt-templates/admin/shared",
+            headers={"X-QMDH-Auth": "reviewer-token", "X-QMDH-User": "reviewer"},
+            json={
+                "label": "公共模板",
+                "title": "公共模板标题",
+                "prompt": "生成一张城市更新效果图",
+                "style": "modern",
+                "aspect_ratio": "16:9",
+                "resolution": "4k",
+                "deliverable": "汇报图",
+                "notes": "全员可见",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
 
     def test_project_list_is_filtered_by_authenticated_user(self) -> None:
         response = self.client.get(

@@ -312,6 +312,8 @@ export type TaskCreatePayload = {
 export type PromptTemplateRecord = {
   id: number;
   user_name: string;
+  scope: "private" | "shared";
+  can_manage: boolean;
   label: string;
   title: string;
   prompt: string;
@@ -320,6 +322,7 @@ export type PromptTemplateRecord = {
   resolution: string;
   deliverable: string;
   notes: string;
+  preview_image_path: string;
   created_at: string;
   updated_at: string;
 };
@@ -333,6 +336,7 @@ export type PromptTemplateCreatePayload = {
   resolution: string;
   deliverable: string;
   notes: string;
+  preview_image_path: string;
 };
 
 export type PromptTemplateUpdatePayload = Partial<PromptTemplateCreatePayload>;
@@ -601,12 +605,20 @@ export const api = {
   assets: () => request<Asset[]>("/assets"),
   promptTemplates: () =>
     request<PromptTemplateRecord[]>("/prompt-templates"),
+  adminPromptTemplates: () =>
+    request<PromptTemplateRecord[]>("/prompt-templates/admin/shared"),
   createPromptTemplate: (payload: PromptTemplateCreatePayload) =>
     postJson<PromptTemplateRecord>("/prompt-templates", payload),
+  createAdminPromptTemplate: (payload: PromptTemplateCreatePayload) =>
+    postJson<PromptTemplateRecord>("/prompt-templates/admin/shared", payload),
   updatePromptTemplate: (templateId: number, payload: PromptTemplateUpdatePayload) =>
     patchJson<PromptTemplateRecord>(`/prompt-templates/${templateId}`, payload),
+  updateAdminPromptTemplate: (templateId: number, payload: PromptTemplateUpdatePayload) =>
+    patchJson<PromptTemplateRecord>(`/prompt-templates/admin/shared/${templateId}`, payload),
   deletePromptTemplate: (templateId: number) =>
     deleteRequest(`/prompt-templates/${templateId}`),
+  deleteAdminPromptTemplate: (templateId: number) =>
+    deleteRequest(`/prompt-templates/admin/shared/${templateId}`),
   uploadReferenceImage: (payload: ReferenceUploadPayload) =>
     postJson<ReferenceUploadResponse>("/assets/reference-upload", payload),
   createTask: (payload: TaskCreatePayload) => postJson<Task>("/tasks", payload),

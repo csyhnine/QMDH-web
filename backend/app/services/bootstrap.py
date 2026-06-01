@@ -2,10 +2,12 @@ from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from app.core.audit import AuditEventType, write_audit_log
 from app.core.auth import normalize_user_role
 from app.core.config import settings
 from app.core.security import hash_password, hash_session_token
-from app.models import AgentClient, AgentSkillRelease, Asset, AssetType, DataClassification, InspirationPost, Project, User, Workflow
+from app.models import AgentClient, AgentSkillRelease, Asset, AssetType, DataClassification, InspirationPost, Project, PromptTemplate, User, Workflow
+from app.services.default_prompt_templates import DEFAULT_SHARED_PROMPT_TEMPLATES
 from app.services.inspiration_media import prepare_inspiration_image
 from app.services.media_storage import write_preview_svg
 
@@ -47,6 +49,11 @@ def ensure_schema(engine: Engine) -> None:
         if "user_feedbacks" in inspector.get_table_names()
         else set()
     )
+    prompt_template_columns = (
+        {column["name"] for column in inspector.get_columns("prompt_templates")}
+        if "prompt_templates" in inspector.get_table_names()
+        else set()
+    )
     with engine.begin() as connection:
         if "owner_user_id" not in project_columns:
             connection.execute(text("ALTER TABLE projects ADD COLUMN owner_user_id INTEGER"))
@@ -55,6 +62,58 @@ def ensure_schema(engine: Engine) -> None:
             connection.execute(
                 text("ALTER TABLE user_feedbacks ADD COLUMN attachment_paths JSON NOT NULL DEFAULT '[]'")
             )
+        if prompt_template_columns and "scope" not in prompt_template_columns:
+            connection.execute(
+                text("ALTER TABLE prompt_templates ADD COLUMN scope VARCHAR(20) NOT NULL DEFAULT 'private'")
+            )
+        if prompt_template_columns and "preview_image_path" not in prompt_template_columns:
+            connection.execute(
+                text("ALTER TABLE prompt_templates ADD COLUMN preview_image_path VARCHAR(255) NOT NULL DEFAULT ''")
+            )
+        if prompt_template_columns:
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_prompt_templates_scope ON prompt_templates (scope)"))
+
+
+def _seed_shared_prompt_templates(db: Session) -> None:
+    if not DEFAULT_SHARED_PROMPT_TEMPLATES:
+        return
+
+    has_shared_templates = db.scalar(
+        select(PromptTemplate.id).where(PromptTemplate.scope == "shared").limit(1)
+    )
+    if has_shared_templates is not None:
+        return
+
+    admin_user = db.scalar(select(User).where(User.role == "admin").order_by(User.id.asc()))
+    if admin_user is None:
+        return
+
+    for template in DEFAULT_SHARED_PROMPT_TEMPLATES:
+        db.add(
+            PromptTemplate(
+                user_id=admin_user.id,
+                scope="shared",
+                label=template["label"],
+                title=template["title"],
+                prompt=template["prompt"],
+                style=template["style"],
+                aspect_ratio=template["aspect_ratio"],
+                resolution=template["resolution"],
+                deliverable=template["deliverable"],
+                notes=template["notes"],
+                preview_image_path=template.get("preview_image_path", ""),
+            )
+        )
+
+    write_audit_log(
+        db=db,
+        event_type=AuditEventType.PROMPT_TEMPLATE_CREATED,
+        actor_name=admin_user.name,
+        actor_id=admin_user.id,
+        target_type="prompt_template",
+        target_name="bootstrap_shared_templates",
+        details={"scope": "shared", "count": len(DEFAULT_SHARED_PROMPT_TEMPLATES)},
+    )
 
 
 def seed_initial_data(db: Session) -> None:
@@ -141,6 +200,8 @@ def seed_initial_data(db: Session) -> None:
         client.capabilities = list(client_profile.capabilities)
         client.client_metadata = client.client_metadata or {}
         client.is_active = True
+
+    _seed_shared_prompt_templates(db)
 
     default_release = db.scalar(select(AgentSkillRelease).where(AgentSkillRelease.key == "qmdh-official-test"))
     if not default_release:

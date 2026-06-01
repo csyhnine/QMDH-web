@@ -330,6 +330,7 @@ class PromptTemplateBase(BaseModel):
     resolution: str = "2k"
     deliverable: str = ""
     notes: str = ""
+    preview_image_path: str = ""
 
 
 class PromptTemplateCreate(PromptTemplateBase):
@@ -345,11 +346,14 @@ class PromptTemplateUpdate(BaseModel):
     resolution: str | None = None
     deliverable: str | None = None
     notes: str | None = None
+    preview_image_path: str | None = None
 
 
 class PromptTemplateOut(PromptTemplateBase):
     id: int
     user_name: str
+    scope: str
+    can_manage: bool = False
     created_at: datetime
     updated_at: datetime
 

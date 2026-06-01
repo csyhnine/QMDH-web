@@ -60,6 +60,10 @@ export type AuthUser = {
   project_codes: string[];
   is_active: boolean;
   monthly_quota: number | null;
+  billing_plan: string;
+  billing_status: string;
+  quota_policy: string;
+  quota_reset_cycle: string;
 };
 
 export type LoginResponse = {
@@ -75,6 +79,10 @@ export type ManagedUser = {
   role: string;
   is_active: boolean;
   monthly_quota: number | null;
+  billing_plan: string;
+  billing_status: string;
+  quota_policy: string;
+  quota_reset_cycle: string;
   created_at: string;
   updated_at: string;
   last_login_at: string | null;
@@ -87,10 +95,24 @@ export type UserCreatePayload = {
   role: string;
   is_active: boolean;
   monthly_quota: number | null;
+  billing_plan: string;
+  billing_status: string;
+  quota_policy: string;
+  quota_reset_cycle: string;
 };
 
 export type UserUpdatePayload = Partial<
-  Pick<UserCreatePayload, "display_name" | "role" | "is_active" | "monthly_quota">
+  Pick<
+    UserCreatePayload,
+    | "display_name"
+    | "role"
+    | "is_active"
+    | "monthly_quota"
+    | "billing_plan"
+    | "billing_status"
+    | "quota_policy"
+    | "quota_reset_cycle"
+  >
 >;
 
 export type DashboardDailyPoint = {
@@ -102,7 +124,11 @@ export type DashboardDailyPoint = {
   image_generate_count: number;
   image_edit_count: number;
   video_generate_count: number;
+  image_output_count: number;
   chat_turn_count: number;
+  chat_input_tokens: number;
+  chat_output_tokens: number;
+  chat_cached_input_tokens: number;
   chat_total_tokens: number;
 };
 
@@ -121,7 +147,11 @@ export type DashboardExecutionRanking = {
   image_generate_count: number;
   image_edit_count: number;
   video_generate_count: number;
+  image_output_count: number;
   chat_turn_count: number;
+  chat_input_tokens: number;
+  chat_output_tokens: number;
+  chat_cached_input_tokens: number;
   chat_prompt_tokens: number;
   chat_completion_tokens: number;
   chat_total_tokens: number;
@@ -156,6 +186,9 @@ export type DashboardStats = {
   today_video_generate_count: number;
   week_video_generate_count: number;
   window_chat_turn_count: number;
+  window_chat_input_tokens: number;
+  window_chat_output_tokens: number;
+  window_chat_cached_input_tokens: number;
   window_chat_prompt_tokens: number;
   window_chat_completion_tokens: number;
   window_chat_total_tokens: number;
@@ -212,6 +245,31 @@ export type ProviderProfileCreatePayload = {
 };
 
 export type ProviderProfileUpdatePayload = Partial<Omit<ProviderProfileCreatePayload, "provider_name">>;
+
+export type ProviderPricingRuleRecord = {
+  id: number;
+  provider_profile_id: number;
+  capability: string;
+  metric: string;
+  unit_size: number;
+  unit_price: number;
+  currency: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProviderPricingRuleCreatePayload = {
+  provider_profile_id: number;
+  capability: string;
+  metric: string;
+  unit_size: number;
+  unit_price: number;
+  currency: string;
+  is_active: boolean;
+};
+
+export type ProviderPricingRuleUpdatePayload = Partial<ProviderPricingRuleCreatePayload>;
 
 export type DiscoveredModel = {
   model_id: string;
@@ -314,6 +372,9 @@ export type PromptTemplateRecord = {
   user_name: string;
   scope: "private" | "shared";
   can_manage: boolean;
+  category: string;
+  subcategory: string;
+  is_featured: boolean;
   label: string;
   title: string;
   prompt: string;
@@ -322,12 +383,19 @@ export type PromptTemplateRecord = {
   resolution: string;
   deliverable: string;
   notes: string;
+  source_image_path: string;
   preview_image_path: string;
+  popularity_score: number;
+  recent_apply_count: number;
+  recent_submit_success_count: number;
   created_at: string;
   updated_at: string;
 };
 
 export type PromptTemplateCreatePayload = {
+  category: string;
+  subcategory: string;
+  is_featured: boolean;
   label: string;
   title: string;
   prompt: string;
@@ -336,10 +404,16 @@ export type PromptTemplateCreatePayload = {
   resolution: string;
   deliverable: string;
   notes: string;
+  source_image_path: string;
   preview_image_path: string;
 };
 
 export type PromptTemplateUpdatePayload = Partial<PromptTemplateCreatePayload>;
+
+export type PromptTemplateEventPayload = {
+  event_type: string;
+  context: string;
+};
 
 export type ReferenceUploadPayload = {
   file_name: string;
@@ -588,6 +662,7 @@ export const api = {
   projectStatus: (projectCode: string) => request<ProjectStatus>(`/projects/${projectCode}/status`),
   providers: () => request<Provider[]>("/providers"),
   providerProfiles: () => request<ProviderProfileRecord[]>("/providers/profiles"),
+  providerPricingRules: () => request<ProviderPricingRuleRecord[]>("/providers/pricing-rules"),
   probeProviderProfile: (profileId: number) =>
     postJson<ProviderProfileProbeResult>(`/providers/profiles/${profileId}/probe`, {}),
   discoverProviderModels: (baseUrl: string, apiKey: string) =>
@@ -600,6 +675,12 @@ export const api = {
     patchJson<ProviderProfileRecord>(`/providers/profiles/${profileId}`, payload),
   deleteProviderProfile: (profileId: number) =>
     deleteRequest(`/providers/profiles/${profileId}`),
+  createProviderPricingRule: (payload: ProviderPricingRuleCreatePayload) =>
+    postJson<ProviderPricingRuleRecord>("/providers/pricing-rules", payload),
+  updateProviderPricingRule: (ruleId: number, payload: ProviderPricingRuleUpdatePayload) =>
+    patchJson<ProviderPricingRuleRecord>(`/providers/pricing-rules/${ruleId}`, payload),
+  deleteProviderPricingRule: (ruleId: number) =>
+    deleteRequest(`/providers/pricing-rules/${ruleId}`),
   workflows: () => request<Workflow[]>("/workflows"),
   tasks: () => request<Task[]>("/tasks"),
   assets: () => request<Asset[]>("/assets"),
@@ -619,6 +700,8 @@ export const api = {
     deleteRequest(`/prompt-templates/${templateId}`),
   deleteAdminPromptTemplate: (templateId: number) =>
     deleteRequest(`/prompt-templates/admin/shared/${templateId}`),
+  trackPromptTemplateEvent: (templateId: number, payload: PromptTemplateEventPayload) =>
+    postJson<void>(`/prompt-templates/${templateId}/events`, payload),
   uploadReferenceImage: (payload: ReferenceUploadPayload) =>
     postJson<ReferenceUploadResponse>("/assets/reference-upload", payload),
   createTask: (payload: TaskCreatePayload) => postJson<Task>("/tasks", payload),

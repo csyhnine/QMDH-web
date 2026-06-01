@@ -85,24 +85,33 @@ def _empty_execution_bucket() -> dict[str, int]:
         "image_generate_count": 0,
         "image_edit_count": 0,
         "video_generate_count": 0,
+        "image_output_count": 0,
         "chat_turn_count": 0,
+        "chat_input_tokens": 0,
+        "chat_output_tokens": 0,
+        "chat_cached_input_tokens": 0,
         "chat_prompt_tokens": 0,
         "chat_completion_tokens": 0,
         "chat_total_tokens": 0,
     }
 
 
-def _apply_task_count(bucket: dict[str, int], capability: str) -> None:
+def _apply_task_count(bucket: dict[str, int], capability: str, output_count: int = 0) -> None:
     if capability == "image.edit":
         bucket["image_edit_count"] += 1
     elif capability == "video.generate":
         bucket["video_generate_count"] += 1
     else:
         bucket["image_generate_count"] += 1
+    if capability in {"image.generate", "image.edit"}:
+        bucket["image_output_count"] += max(int(output_count or 0), 0)
 
 
 def _apply_chat_usage(bucket: dict[str, int], entry: UsageLedger) -> None:
     bucket["chat_turn_count"] += 1
+    bucket["chat_input_tokens"] += int(entry.input_tokens or 0)
+    bucket["chat_output_tokens"] += int(entry.output_tokens or 0)
+    bucket["chat_cached_input_tokens"] += int(entry.cached_input_tokens or 0)
     bucket["chat_prompt_tokens"] += int(entry.prompt_tokens or 0)
     bucket["chat_completion_tokens"] += int(entry.completion_tokens or 0)
     bucket["chat_total_tokens"] += int(entry.total_tokens or 0)
@@ -289,7 +298,7 @@ def get_dashboard_stats(
     for entry in task_entries:
         row = ensure_execution_row(entry.user_name)
         capability = task_capability_by_task_id.get(entry.task_id or 0, "image.generate")
-        _apply_task_count(row, capability)
+        _apply_task_count(row, capability, int(entry.output_count or 0))
         recorded_at = entry.recorded_at
         if row["last_activity_at"] is None or recorded_at > row["last_activity_at"]:
             row["last_activity_at"] = recorded_at
@@ -307,8 +316,9 @@ def get_dashboard_stats(
         user_total = len(user_tasks)
         user_success = sum(1 for entry in user_tasks if entry.task_status == TaskStatus.completed)
         user_failed = sum(1 for entry in user_tasks if entry.task_status == TaskStatus.failed)
-        user_cost = sum(float(entry.cost or 0) for entry in user_tasks)
+        user_cost = sum(float(entry.cost or 0) for entry in user_tasks) + sum(float(entry.cost or 0) for entry in user_chats)
         user_currency_counts = Counter((entry.cost_currency or "CNY").upper() for entry in user_tasks)
+        user_currency_counts.update((entry.cost_currency or "CNY").upper() for entry in user_chats)
         user_currency = user_currency_counts.most_common(1)[0][0] if user_currency_counts else "CNY"
         user_latency = (
             sum(int(entry.latency_ms or 0) for entry in user_tasks) / user_total
@@ -323,7 +333,11 @@ def get_dashboard_stats(
         )
         task_bucket = _empty_execution_bucket()
         for entry in user_tasks:
-            _apply_task_count(task_bucket, task_capability_by_task_id.get(entry.task_id or 0, "image.generate"))
+            _apply_task_count(
+                task_bucket,
+                task_capability_by_task_id.get(entry.task_id or 0, "image.generate"),
+                int(entry.output_count or 0),
+            )
         for entry in user_chats:
             _apply_chat_usage(task_bucket, entry)
 
@@ -345,6 +359,10 @@ def get_dashboard_stats(
                 "quota_currency": user_currency,
                 "quota_remaining": quota_remaining,
                 "quota_status": _quota_status(quota_limit, user_cost),
+                "billing_plan": user.billing_plan,
+                "billing_status": user.billing_status,
+                "quota_policy": user.quota_policy,
+                "quota_reset_cycle": user.quota_reset_cycle,
                 "total_tasks": user_total,
                 "successful_tasks": user_success,
                 "failed_tasks": user_failed,
@@ -373,7 +391,11 @@ def get_dashboard_stats(
     for day_key in date_keys:
         task_bucket = _empty_execution_bucket()
         for entry in daily_tasks_map.get(day_key, []):
-            _apply_task_count(task_bucket, task_capability_by_task_id.get(entry.task_id or 0, "image.generate"))
+            _apply_task_count(
+                task_bucket,
+                task_capability_by_task_id.get(entry.task_id or 0, "image.generate"),
+                int(entry.output_count or 0),
+            )
         for entry in daily_chat_map.get(day_key, []):
             _apply_chat_usage(task_bucket, entry)
         daily_series.append(
@@ -390,7 +412,11 @@ def get_dashboard_stats(
                 image_generate_count=task_bucket["image_generate_count"],
                 image_edit_count=task_bucket["image_edit_count"],
                 video_generate_count=task_bucket["video_generate_count"],
+                image_output_count=task_bucket["image_output_count"],
                 chat_turn_count=task_bucket["chat_turn_count"],
+                chat_input_tokens=task_bucket["chat_input_tokens"],
+                chat_output_tokens=task_bucket["chat_output_tokens"],
+                chat_cached_input_tokens=task_bucket["chat_cached_input_tokens"],
                 chat_total_tokens=task_bucket["chat_total_tokens"],
             )
         )
@@ -440,7 +466,11 @@ def get_dashboard_stats(
                 image_generate_count=int(values["image_generate_count"]),
                 image_edit_count=int(values["image_edit_count"]),
                 video_generate_count=int(values["video_generate_count"]),
+                image_output_count=int(values["image_output_count"]),
                 chat_turn_count=int(values["chat_turn_count"]),
+                chat_input_tokens=int(values["chat_input_tokens"]),
+                chat_output_tokens=int(values["chat_output_tokens"]),
+                chat_cached_input_tokens=int(values["chat_cached_input_tokens"]),
                 chat_prompt_tokens=int(values["chat_prompt_tokens"]),
                 chat_completion_tokens=int(values["chat_completion_tokens"]),
                 chat_total_tokens=int(values["chat_total_tokens"]),
@@ -506,6 +536,9 @@ def get_dashboard_stats(
         today_video_generate_count=today_video_generate_count,
         week_video_generate_count=week_video_generate_count,
         window_chat_turn_count=len(chat_entries),
+        window_chat_input_tokens=sum(int(entry.input_tokens or 0) for entry in chat_entries),
+        window_chat_output_tokens=sum(int(entry.output_tokens or 0) for entry in chat_entries),
+        window_chat_cached_input_tokens=sum(int(entry.cached_input_tokens or 0) for entry in chat_entries),
         window_chat_prompt_tokens=sum(int(entry.prompt_tokens or 0) for entry in chat_entries),
         window_chat_completion_tokens=sum(int(entry.completion_tokens or 0) for entry in chat_entries),
         window_chat_total_tokens=sum(int(entry.total_tokens or 0) for entry in chat_entries),

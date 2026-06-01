@@ -245,6 +245,10 @@ class DatabaseAuthTests(unittest.TestCase):
         ops_me = self.client.get("/auth/me", headers={"Authorization": f"Bearer {ops_token}"})
         self.assertEqual(ops_me.status_code, 200)
         self.assertEqual(ops_me.json()["role"], "admin")
+        self.assertIn("billing_plan", ops_me.json())
+        self.assertIn("billing_status", ops_me.json())
+        self.assertIn("quota_policy", ops_me.json())
+        self.assertIn("quota_reset_cycle", ops_me.json())
 
         ops_dashboard = self.client.get("/dashboard/stats", headers={"Authorization": f"Bearer {ops_token}"})
         self.assertEqual(ops_dashboard.status_code, 200)
@@ -290,10 +294,20 @@ class DatabaseAuthTests(unittest.TestCase):
                 "display_name": "New Designer",
                 "role": "designer",
                 "is_active": True,
+                "monthly_quota": 150.0,
+                "billing_plan": "trial",
+                "billing_status": "active",
+                "quota_policy": "soft_warn",
+                "quota_reset_cycle": "monthly",
             },
         )
         self.assertEqual(created.status_code, 201, created.text)
         self.assertNotIn("project_codes", created.json())
+        self.assertEqual(created.json()["billing_plan"], "trial")
+        self.assertEqual(created.json()["billing_status"], "active")
+        self.assertEqual(created.json()["quota_policy"], "soft_warn")
+        self.assertEqual(created.json()["quota_reset_cycle"], "monthly")
+        self.assertEqual(created.json()["monthly_quota"], 150.0)
 
         listed_users = self.client.get("/users", headers={"Authorization": f"Bearer {admin_token}"})
         self.assertEqual(listed_users.status_code, 200)
@@ -303,6 +317,39 @@ class DatabaseAuthTests(unittest.TestCase):
             new_user = db.scalar(select(User).where(User.name == "new.designer"))
             self.assertIsNotNone(new_user)
             self.assertEqual(new_user.project_codes, [])
+            assert new_user is not None
+            self.assertEqual(new_user.billing_plan, "trial")
+            self.assertEqual(new_user.billing_status, "active")
+            self.assertEqual(new_user.quota_policy, "soft_warn")
+            self.assertEqual(new_user.quota_reset_cycle, "monthly")
+            self.assertEqual(new_user.monthly_quota, 150.0)
+
+        updated = self.client.patch(
+            f"/users/{created.json()['id']}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={
+                "billing_plan": "pro",
+                "billing_status": "grace",
+                "quota_policy": "hard_block",
+                "quota_reset_cycle": "monthly",
+                "monthly_quota": 80.0,
+            },
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(updated.json()["billing_plan"], "pro")
+        self.assertEqual(updated.json()["billing_status"], "grace")
+        self.assertEqual(updated.json()["quota_policy"], "hard_block")
+        self.assertEqual(updated.json()["monthly_quota"], 80.0)
+
+        with self.SessionLocal() as db:
+            new_user = db.scalar(select(User).where(User.name == "new.designer"))
+            self.assertIsNotNone(new_user)
+            assert new_user is not None
+            self.assertEqual(new_user.billing_plan, "pro")
+            self.assertEqual(new_user.billing_status, "grace")
+            self.assertEqual(new_user.quota_policy, "hard_block")
+            self.assertEqual(new_user.quota_reset_cycle, "monthly")
+            self.assertEqual(new_user.monthly_quota, 80.0)
 
         reset = self.client.post(
             f"/users/{created.json()['id']}/reset-password",

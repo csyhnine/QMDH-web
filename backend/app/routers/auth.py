@@ -25,6 +25,10 @@ def _to_auth_user_out(user: User) -> AuthUserOut:
         project_codes=user.project_codes or [],
         is_active=user.is_active,
         monthly_quota=user.monthly_quota,
+        billing_plan=user.billing_plan or "standard",
+        billing_status=user.billing_status or "active",
+        quota_policy=user.quota_policy or "soft_warn",
+        quota_reset_cycle=user.quota_reset_cycle or "monthly",
     )
 
 
@@ -79,4 +83,8 @@ def me(
         project_codes=list(auth_user.project_codes),
         is_active=True,
         monthly_quota=None,
+        billing_plan="standard",
+        billing_status="active",
+        quota_policy="soft_warn",
+        quota_reset_cycle="monthly",
     )

@@ -15,7 +15,7 @@ from app.core.encryption import (
     encrypt_value,
 )
 from app.database import get_db
-from app.models import ProviderProfile
+from app.models import ProviderPricingRule, ProviderProfile
 from app.schemas import (
     DiscoveredModel,
     ProviderBulkImportIn,
@@ -23,6 +23,9 @@ from app.schemas import (
     ProviderCapability,
     ProviderDiscoverIn,
     ProviderDiscoverOut,
+    ProviderPricingRuleCreate,
+    ProviderPricingRuleOut,
+    ProviderPricingRuleUpdate,
     ProviderProfileCreate,
     ProviderProfileProbeOut,
     ProviderProfileOut,
@@ -107,6 +110,21 @@ def _to_profile_out(profile: ProviderProfile) -> ProviderProfileOut:
     )
 
 
+def _to_pricing_rule_out(rule: ProviderPricingRule) -> ProviderPricingRuleOut:
+    return ProviderPricingRuleOut(
+        id=rule.id,
+        provider_profile_id=rule.provider_profile_id,
+        capability=rule.capability,
+        metric=rule.metric,
+        unit_size=float(rule.unit_size or 1.0),
+        unit_price=float(rule.unit_price or 0.0),
+        currency=(rule.currency or "CNY").upper(),
+        is_active=rule.is_active,
+        created_at=rule.created_at,
+        updated_at=rule.updated_at,
+    )
+
+
 def _build_probe_request(profile: ProviderProfile, api_key: str) -> tuple[str, str, dict[str, object], str]:
     base_url = profile.base_url.rstrip("/")
     if "chat.completions" in (profile.capabilities or []):
@@ -149,6 +167,23 @@ def list_provider_profiles(
     require_ops_access(auth_user)
     profiles = db.scalars(select(ProviderProfile).order_by(ProviderProfile.provider_name)).all()
     return [_to_profile_out(profile) for profile in profiles]
+
+
+@router.get("/pricing-rules", response_model=list[ProviderPricingRuleOut])
+def list_provider_pricing_rules(
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> list[ProviderPricingRuleOut]:
+    require_ops_access(auth_user)
+    rules = db.scalars(
+        select(ProviderPricingRule).order_by(
+            ProviderPricingRule.provider_profile_id.asc(),
+            ProviderPricingRule.capability.asc(),
+            ProviderPricingRule.metric.asc(),
+            ProviderPricingRule.id.asc(),
+        )
+    ).all()
+    return [_to_pricing_rule_out(rule) for rule in rules]
 
 
 @router.post("/profiles/{profile_id}/probe", response_model=ProviderProfileProbeOut)
@@ -349,6 +384,110 @@ def update_provider_profile(
     db.commit()
 
     return _to_profile_out(profile)
+
+
+@router.post("/pricing-rules", response_model=ProviderPricingRuleOut, status_code=status.HTTP_201_CREATED)
+def create_provider_pricing_rule(
+    payload: ProviderPricingRuleCreate,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> ProviderPricingRuleOut:
+    _require_provider_admin(auth_user)
+    profile = db.get(ProviderProfile, payload.provider_profile_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Provider profile not found")
+
+    rule = ProviderPricingRule(
+        provider_profile_id=payload.provider_profile_id,
+        capability=payload.capability.strip(),
+        metric=payload.metric.strip(),
+        unit_size=float(payload.unit_size or 1.0),
+        unit_price=float(payload.unit_price or 0.0),
+        currency=payload.currency.strip().upper() or "CNY",
+        is_active=payload.is_active,
+    )
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+
+    write_audit_log(
+        db,
+        event_type=AuditEventType.PROVIDER_PRICING_RULE_CREATED,
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="provider_pricing_rule",
+        target_id=rule.id,
+        target_name=profile.provider_name,
+        details={"capability": rule.capability, "metric": rule.metric},
+    )
+    db.commit()
+    return _to_pricing_rule_out(rule)
+
+
+@router.patch("/pricing-rules/{rule_id}", response_model=ProviderPricingRuleOut)
+def update_provider_pricing_rule(
+    rule_id: int,
+    payload: ProviderPricingRuleUpdate,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> ProviderPricingRuleOut:
+    _require_provider_admin(auth_user)
+    rule = db.get(ProviderPricingRule, rule_id)
+    if not rule:
+        raise HTTPException(status_code=404, detail="Provider pricing rule not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if "provider_profile_id" in updates and updates["provider_profile_id"] is not None:
+        profile = db.get(ProviderProfile, updates["provider_profile_id"])
+        if not profile:
+            raise HTTPException(status_code=404, detail="Provider profile not found")
+    for field, value in updates.items():
+        if isinstance(value, str):
+            value = value.strip()
+        if field == "currency" and isinstance(value, str):
+            value = value.upper() or "CNY"
+        setattr(rule, field, value)
+
+    db.commit()
+    db.refresh(rule)
+    write_audit_log(
+        db,
+        event_type=AuditEventType.PROVIDER_PRICING_RULE_UPDATED,
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="provider_pricing_rule",
+        target_id=rule.id,
+        target_name=str(rule.provider_profile_id),
+        details={"updated_fields": list(updates.keys())},
+    )
+    db.commit()
+    return _to_pricing_rule_out(rule)
+
+
+@router.delete("/pricing-rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_provider_pricing_rule(
+    rule_id: int,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> Response:
+    _require_provider_admin(auth_user)
+    rule = db.get(ProviderPricingRule, rule_id)
+    if not rule:
+        raise HTTPException(status_code=404, detail="Provider pricing rule not found")
+
+    write_audit_log(
+        db,
+        event_type=AuditEventType.PROVIDER_PRICING_RULE_DELETED,
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="provider_pricing_rule",
+        target_id=rule.id,
+        target_name=str(rule.provider_profile_id),
+        details={"capability": rule.capability, "metric": rule.metric},
+    )
+    db.delete(rule)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)

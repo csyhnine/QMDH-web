@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.encryption import encrypt_value
 from app.core.security import hash_password
 from app.database import Base, get_db
-from app.models import ChatMessage, Conversation, ProviderProfile, UsageLedger, User
+from app.models import ChatMessage, Conversation, ProviderPricingRule, ProviderProfile, UsageLedger, User
 from app.routers import auth, chat
 
 
@@ -45,6 +45,31 @@ class ChatStreamingTests(unittest.TestCase):
                     adapter_kind="openai_compatible",
                     capabilities=["chat.completions"],
                     enabled=True,
+                )
+            )
+            db.commit()
+            provider = db.scalar(select(ProviderProfile).where(ProviderProfile.provider_name == "ms_zhipuai_glm-5"))
+            assert provider is not None
+            db.add(
+                ProviderPricingRule(
+                    provider_profile_id=provider.id,
+                    capability="chat.completions",
+                    metric="input_tokens",
+                    unit_size=1000,
+                    unit_price=1.0,
+                    currency="CNY",
+                    is_active=True,
+                )
+            )
+            db.add(
+                ProviderPricingRule(
+                    provider_profile_id=provider.id,
+                    capability="chat.completions",
+                    metric="output_tokens",
+                    unit_size=1000,
+                    unit_price=2.0,
+                    currency="CNY",
+                    is_active=True,
                 )
             )
             db.commit()
@@ -144,6 +169,12 @@ class ChatStreamingTests(unittest.TestCase):
             self.assertEqual(usage_ledger.prompt_tokens, 11)
             self.assertEqual(usage_ledger.completion_tokens, 7)
             self.assertEqual(usage_ledger.total_tokens, 18)
+            self.assertEqual(usage_ledger.input_tokens, 11)
+            self.assertEqual(usage_ledger.output_tokens, 7)
+            self.assertEqual(usage_ledger.cached_input_tokens, 0)
+            self.assertEqual(usage_ledger.uncached_input_tokens, 11)
+            self.assertEqual(usage_ledger.usage_payload["prompt_tokens"], 11)
+            self.assertAlmostEqual(usage_ledger.cost, 0.025, places=4)
 
     def test_chat_message_route_writes_zero_token_ledger_when_stream_has_no_usage(self) -> None:
         token = self.login()
@@ -192,6 +223,11 @@ class ChatStreamingTests(unittest.TestCase):
             self.assertEqual(usage_ledger.prompt_tokens, 0)
             self.assertEqual(usage_ledger.completion_tokens, 0)
             self.assertEqual(usage_ledger.total_tokens, 0)
+            self.assertEqual(usage_ledger.input_tokens, 0)
+            self.assertEqual(usage_ledger.output_tokens, 0)
+            self.assertEqual(usage_ledger.cached_input_tokens, 0)
+            self.assertEqual(usage_ledger.uncached_input_tokens, 0)
+            self.assertEqual(usage_ledger.cost, 0.0)
 
     def test_conversation_list_reorders_by_latest_message_activity(self) -> None:
         token = self.login()

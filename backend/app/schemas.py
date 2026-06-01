@@ -80,6 +80,10 @@ class DashboardDailyPoint(BaseModel):
     image_edit_count: int = 0
     video_generate_count: int = 0
     chat_turn_count: int = 0
+    image_output_count: int = 0
+    chat_input_tokens: int = 0
+    chat_output_tokens: int = 0
+    chat_cached_input_tokens: int = 0
     chat_total_tokens: int = 0
 
 
@@ -98,7 +102,11 @@ class DashboardExecutionRanking(BaseModel):
     image_generate_count: int = 0
     image_edit_count: int = 0
     video_generate_count: int = 0
+    image_output_count: int = 0
     chat_turn_count: int = 0
+    chat_input_tokens: int = 0
+    chat_output_tokens: int = 0
+    chat_cached_input_tokens: int = 0
     chat_prompt_tokens: int = 0
     chat_completion_tokens: int = 0
     chat_total_tokens: int = 0
@@ -133,6 +141,9 @@ class DashboardStats(BaseModel):
     today_video_generate_count: int = 0
     week_video_generate_count: int = 0
     window_chat_turn_count: int = 0
+    window_chat_input_tokens: int = 0
+    window_chat_output_tokens: int = 0
+    window_chat_cached_input_tokens: int = 0
     window_chat_prompt_tokens: int = 0
     window_chat_completion_tokens: int = 0
     window_chat_total_tokens: int = 0
@@ -152,6 +163,10 @@ class AuthUserOut(BaseModel):
     project_codes: list[str]
     is_active: bool
     monthly_quota: float | None = None
+    billing_plan: str = "standard"
+    billing_status: str = "active"
+    quota_policy: str = "soft_warn"
+    quota_reset_cycle: str = "monthly"
 
 
 class AuthLoginOut(BaseModel):
@@ -167,6 +182,10 @@ class UserCreate(BaseModel):
     role: str = "designer"
     is_active: bool = True
     monthly_quota: float | None = Field(default=None, ge=0)
+    billing_plan: str = "standard"
+    billing_status: str = "active"
+    quota_policy: str = "soft_warn"
+    quota_reset_cycle: str = "monthly"
 
 
 class UserUpdate(BaseModel):
@@ -174,6 +193,10 @@ class UserUpdate(BaseModel):
     role: str | None = None
     is_active: bool | None = None
     monthly_quota: float | None = Field(default=None, ge=0)
+    billing_plan: str | None = None
+    billing_status: str | None = None
+    quota_policy: str | None = None
+    quota_reset_cycle: str | None = None
 
 
 class UserPasswordReset(BaseModel):
@@ -187,6 +210,10 @@ class UserOut(BaseModel):
     role: str
     is_active: bool
     monthly_quota: float | None = None
+    billing_plan: str = "standard"
+    billing_status: str = "active"
+    quota_policy: str = "soft_warn"
+    quota_reset_cycle: str = "monthly"
     created_at: datetime
     updated_at: datetime
     last_login_at: datetime | None = None
@@ -258,6 +285,9 @@ class ProviderProfileUpdate(BaseModel):
     quality: str | None = None
     output_format: str | None = None
     timeout_seconds: float | None = None
+    pricing_currency: str | None = None
+    pricing_unit: str | None = None
+    unit_price: float | None = Field(default=None, ge=0)
     enabled: bool | None = None
     reference_mode: str | None = None
     reference_caption_model: str | None = None
@@ -278,6 +308,36 @@ class ProviderProfileProbeOut(BaseModel):
     detail: str
     checked_url: str | None = None
     checked_at: datetime
+
+
+class ProviderPricingRuleBase(BaseModel):
+    provider_profile_id: int
+    capability: str = Field(min_length=1, max_length=50)
+    metric: str = Field(min_length=1, max_length=40)
+    unit_size: float = Field(default=1.0, gt=0)
+    unit_price: float = Field(default=0.0, ge=0)
+    currency: str = Field(default="CNY", max_length=12)
+    is_active: bool = True
+
+
+class ProviderPricingRuleCreate(ProviderPricingRuleBase):
+    pass
+
+
+class ProviderPricingRuleUpdate(BaseModel):
+    provider_profile_id: int | None = None
+    capability: str | None = Field(default=None, min_length=1, max_length=50)
+    metric: str | None = Field(default=None, min_length=1, max_length=40)
+    unit_size: float | None = Field(default=None, gt=0)
+    unit_price: float | None = Field(default=None, ge=0)
+    currency: str | None = Field(default=None, max_length=12)
+    is_active: bool | None = None
+
+
+class ProviderPricingRuleOut(ProviderPricingRuleBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
 
 
 class ProjectOut(BaseModel):
@@ -322,6 +382,9 @@ class ProjectStatusOut(BaseModel):
 
 
 class PromptTemplateBase(BaseModel):
+    category: str = ""
+    subcategory: str = ""
+    is_featured: bool = False
     label: str = Field(min_length=1, max_length=100)
     title: str = Field(min_length=1, max_length=150)
     prompt: str = Field(min_length=1)
@@ -330,6 +393,7 @@ class PromptTemplateBase(BaseModel):
     resolution: str = "2k"
     deliverable: str = ""
     notes: str = ""
+    source_image_path: str = ""
     preview_image_path: str = ""
 
 
@@ -338,6 +402,9 @@ class PromptTemplateCreate(PromptTemplateBase):
 
 
 class PromptTemplateUpdate(BaseModel):
+    category: str | None = None
+    subcategory: str | None = None
+    is_featured: bool | None = None
     label: str | None = Field(default=None, min_length=1, max_length=100)
     title: str | None = Field(default=None, min_length=1, max_length=150)
     prompt: str | None = Field(default=None, min_length=1)
@@ -346,6 +413,7 @@ class PromptTemplateUpdate(BaseModel):
     resolution: str | None = None
     deliverable: str | None = None
     notes: str | None = None
+    source_image_path: str | None = None
     preview_image_path: str | None = None
 
 
@@ -354,8 +422,24 @@ class PromptTemplateOut(PromptTemplateBase):
     user_name: str
     scope: str
     can_manage: bool = False
+    popularity_score: float = 0.0
+    recent_apply_count: int = 0
+    recent_submit_success_count: int = 0
     created_at: datetime
     updated_at: datetime
+
+
+class PromptTemplateEventCreate(BaseModel):
+    event_type: str = Field(min_length=1, max_length=30)
+    context: str = Field(default="studio", min_length=1, max_length=30)
+
+
+class PromptTemplateEventOut(BaseModel):
+    template_id: int
+    event_type: str
+    context: str
+    recorded: bool = True
+    created_at: datetime | None = None
 
 
 class ReferenceUploadIn(BaseModel):

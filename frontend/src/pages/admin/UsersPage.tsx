@@ -8,6 +8,10 @@ type UserDraft = {
   displayName: string;
   role: string;
   monthlyQuota: string;
+  billingPlan: string;
+  billingStatus: string;
+  quotaPolicy: string;
+  quotaResetCycle: string;
   isActive: boolean;
 };
 
@@ -17,6 +21,10 @@ const defaultUserDraft: UserDraft = {
   displayName: "",
   role: "designer",
   monthlyQuota: "200",
+  billingPlan: "standard",
+  billingStatus: "active",
+  quotaPolicy: "soft_warn",
+  quotaResetCycle: "monthly",
   isActive: true,
 };
 
@@ -34,6 +42,10 @@ function toUserPayload(draft: UserDraft): UserCreatePayload {
     display_name: draft.displayName.trim(),
     role: draft.role,
     monthly_quota: draft.monthlyQuota.trim() ? Number(draft.monthlyQuota) : null,
+    billing_plan: draft.billingPlan,
+    billing_status: draft.billingStatus,
+    quota_policy: draft.quotaPolicy,
+    quota_reset_cycle: draft.quotaResetCycle,
     is_active: draft.isActive,
   };
 }
@@ -45,6 +57,10 @@ function toUserDraft(user: ManagedUser): UserDraft {
     displayName: user.display_name,
     role: user.role,
     monthlyQuota: user.monthly_quota === null ? "" : String(user.monthly_quota),
+    billingPlan: user.billing_plan,
+    billingStatus: user.billing_status,
+    quotaPolicy: user.quota_policy,
+    quotaResetCycle: user.quota_reset_cycle,
     isActive: user.is_active,
   };
 }
@@ -93,6 +109,10 @@ export default function UsersPage({ users, userCanManageUsers, error, onRefresh,
           display_name: payload.display_name,
           role: payload.role,
           monthly_quota: payload.monthly_quota,
+          billing_plan: payload.billing_plan,
+          billing_status: payload.billing_status,
+          quota_policy: payload.quota_policy,
+          quota_reset_cycle: payload.quota_reset_cycle,
           is_active: payload.is_active,
         });
         if (payload.password) {
@@ -123,7 +143,7 @@ export default function UsersPage({ users, userCanManageUsers, error, onRefresh,
       <header className="admin-page-head">
         <div>
           <h1>账号管理</h1>
-          <p>这里只维护管理员与设计师账号的角色、状态、密码和额度。</p>
+          <p>这里只维护管理员与设计师账号的权限角色、商业套餐、额度策略和登录状态。</p>
         </div>
         {userCanManageUsers ? (
           <button type="button" className="admin-primary-button" onClick={resetUserDraft}>
@@ -185,7 +205,8 @@ export default function UsersPage({ users, userCanManageUsers, error, onRefresh,
                 <div className="admin-table-row admin-table-head">
                   <span>账号</span>
                   <span>角色</span>
-                  <span>额度</span>
+                  <span>套餐 / 计费</span>
+                  <span>额度策略</span>
                   <span>状态</span>
                   <span>最后登录</span>
                   <span>操作</span>
@@ -199,7 +220,14 @@ export default function UsersPage({ users, userCanManageUsers, error, onRefresh,
                     <span>
                       <em className="admin-tag">{user.role}</em>
                     </span>
-                    <span>{user.monthly_quota === null ? "不限额" : `${user.monthly_quota} / 月`}</span>
+                    <span>
+                      <strong>{user.billing_plan}</strong>
+                      <small>{user.billing_status}</small>
+                    </span>
+                    <span>
+                      <strong>{user.quota_policy}</strong>
+                      <small>{user.monthly_quota === null ? "不限额" : `${user.monthly_quota} / 月`}</small>
+                    </span>
                     <span>
                       <em className={`status-pill ${user.is_active ? "status-completed" : "status-failed"}`}>
                         {user.is_active ? "活跃" : "禁用"}
@@ -223,7 +251,7 @@ export default function UsersPage({ users, userCanManageUsers, error, onRefresh,
               <form className="admin-side-form" onSubmit={handleSaveUser}>
                 <div className="admin-detail-head">
                   <h2>{editingUserId === null ? "创建账号" : "编辑账号"}</h2>
-                  <p>账号管理页不再暴露项目容器分配。这里只维护角色、密码、状态和额度。</p>
+                  <p>账号管理页不再暴露项目容器分配。这里只维护角色、密码、商业套餐和额度策略。</p>
                 </div>
                 <label className="composer-menu-field">
                   <span>用户名</span>
@@ -268,6 +296,54 @@ export default function UsersPage({ users, userCanManageUsers, error, onRefresh,
                     onChange={(event) => setUserDraft((current) => ({ ...current, monthlyQuota: event.target.value }))}
                     placeholder="留空表示不限额"
                   />
+                </label>
+                <div className="template-editor-row template-editor-row-3">
+                  <label className="composer-menu-field">
+                    <span>商业套餐</span>
+                    <select
+                      value={userDraft.billingPlan}
+                      onChange={(event) => setUserDraft((current) => ({ ...current, billingPlan: event.target.value }))}
+                    >
+                      <option value="internal">internal</option>
+                      <option value="trial">trial</option>
+                      <option value="standard">standard</option>
+                      <option value="pro">pro</option>
+                      <option value="enterprise">enterprise</option>
+                    </select>
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>计费状态</span>
+                    <select
+                      value={userDraft.billingStatus}
+                      onChange={(event) => setUserDraft((current) => ({ ...current, billingStatus: event.target.value }))}
+                    >
+                      <option value="active">active</option>
+                      <option value="grace">grace</option>
+                      <option value="suspended">suspended</option>
+                    </select>
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>额度周期</span>
+                    <select
+                      value={userDraft.quotaResetCycle}
+                      onChange={(event) =>
+                        setUserDraft((current) => ({ ...current, quotaResetCycle: event.target.value }))
+                      }
+                    >
+                      <option value="monthly">monthly</option>
+                    </select>
+                  </label>
+                </div>
+                <label className="composer-menu-field">
+                  <span>额度策略</span>
+                  <select
+                    value={userDraft.quotaPolicy}
+                    onChange={(event) => setUserDraft((current) => ({ ...current, quotaPolicy: event.target.value }))}
+                  >
+                    <option value="soft_warn">soft_warn</option>
+                    <option value="hard_block">hard_block</option>
+                    <option value="unlimited">unlimited</option>
+                  </select>
                 </label>
                 <label className="model-toggle">
                   <input

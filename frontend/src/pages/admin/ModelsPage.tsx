@@ -1,9 +1,11 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import {
   api,
   type DiscoveredModel,
   type Provider,
   type ProviderBulkImportItem,
+  type ProviderPricingRuleCreatePayload,
+  type ProviderPricingRuleRecord,
   type ProviderProfileCreatePayload,
   type ProviderProfileProbeResult,
   type ProviderProfileRecord,
@@ -27,6 +29,16 @@ type ProviderProfileDraft = {
   enabled: boolean;
   referenceMode: string;
   referenceCaptionModel: string;
+};
+
+type ProviderPricingRuleDraft = {
+  providerProfileId: string;
+  capability: string;
+  metric: string;
+  unitSize: string;
+  unitPrice: string;
+  currency: string;
+  isActive: boolean;
 };
 
 type DiscoveredModelAssignment = {
@@ -77,6 +89,16 @@ const defaultProviderProfileDraft: ProviderProfileDraft = {
   enabled: true,
   referenceMode: "disabled",
   referenceCaptionModel: "",
+};
+
+const defaultPricingRuleDraft: ProviderPricingRuleDraft = {
+  providerProfileId: "",
+  capability: "chat.completions",
+  metric: "input_tokens",
+  unitSize: "1000",
+  unitPrice: "0",
+  currency: "CNY",
+  isActive: true,
 };
 
 const capabilityDefinitions: CapabilityDefinition[] = [
@@ -245,6 +267,7 @@ function assignmentLabel(assignment: DiscoveredModelAssignment): string {
 
 export type ModelsPageProps = {
   providerProfiles: ProviderProfileRecord[];
+  pricingRules: ProviderPricingRuleRecord[];
   providers: Provider[];
   error: string;
   onRefresh: () => void;
@@ -253,10 +276,37 @@ export type ModelsPageProps = {
 
 /* ─── Component ─── */
 
-export default function ModelsPage({ providerProfiles, providers, error, onRefresh, onSetError }: ModelsPageProps) {
+function toPricingRuleDraft(rule: ProviderPricingRuleRecord): ProviderPricingRuleDraft {
+  return {
+    providerProfileId: String(rule.provider_profile_id),
+    capability: rule.capability,
+    metric: rule.metric,
+    unitSize: String(rule.unit_size),
+    unitPrice: String(rule.unit_price),
+    currency: rule.currency,
+    isActive: rule.is_active,
+  };
+}
+
+function toPricingRulePayload(draft: ProviderPricingRuleDraft): ProviderPricingRuleCreatePayload {
+  return {
+    provider_profile_id: Number(draft.providerProfileId),
+    capability: draft.capability.trim(),
+    metric: draft.metric.trim(),
+    unit_size: Number(draft.unitSize) || 1,
+    unit_price: Number(draft.unitPrice) || 0,
+    currency: draft.currency.trim() || "CNY",
+    is_active: draft.isActive,
+  };
+}
+
+export default function ModelsPage({ providerProfiles, pricingRules, providers, error, onRefresh, onSetError }: ModelsPageProps) {
   const [providerDraft, setProviderDraft] = useState<ProviderProfileDraft>(defaultProviderProfileDraft);
   const [editingProviderProfileId, setEditingProviderProfileId] = useState<number | null>(null);
   const [savingProviderProfile, setSavingProviderProfile] = useState(false);
+  const [pricingRuleDraft, setPricingRuleDraft] = useState<ProviderPricingRuleDraft>(defaultPricingRuleDraft);
+  const [editingPricingRuleId, setEditingPricingRuleId] = useState<number | null>(null);
+  const [savingPricingRule, setSavingPricingRule] = useState(false);
   const [probingProfileId, setProbingProfileId] = useState<number | null>(null);
   const [probeResults, setProbeResults] = useState<Record<number, ProviderProfileProbeResult>>({});
   const [modelFilters, setModelFilters] = useState<ModelFilterState>({ search: "", capability: "all", adapterKind: "all", status: "all" });
@@ -282,6 +332,14 @@ export default function ModelsPage({ providerProfiles, providers, error, onRefre
     return support !== "ready" || p.capabilities.includes("video.generate");
   }).length;
 
+  useEffect(() => {
+    if (pricingRuleDraft.providerProfileId || providerProfiles.length === 0) return;
+    setPricingRuleDraft((current) => ({
+      ...current,
+      providerProfileId: String(providerProfiles[0].id),
+    }));
+  }, [pricingRuleDraft.providerProfileId, providerProfiles]);
+
   const filteredProviderProfiles = providerProfiles.filter((profile) => {
     const searchText = `${profile.provider_name} ${profile.model_name}`.toLowerCase();
     const searchMatches = !modelFilters.search.trim() || searchText.includes(modelFilters.search.trim().toLowerCase());
@@ -290,6 +348,12 @@ export default function ModelsPage({ providerProfiles, providers, error, onRefre
     const statusMatches = modelFilters.status === "all" || (modelFilters.status === "enabled" ? profile.enabled : !profile.enabled);
     return searchMatches && capabilityMatches && adapterMatches && statusMatches;
   });
+  const selectedPricingProfileId =
+    pricingRuleDraft.providerProfileId ||
+    (editingProviderProfileId !== null ? String(editingProviderProfileId) : providerProfiles[0] ? String(providerProfiles[0].id) : "");
+  const filteredPricingRules = pricingRules
+    .filter((rule) => String(rule.provider_profile_id) === selectedPricingProfileId)
+    .sort((left, right) => left.capability.localeCompare(right.capability) || left.metric.localeCompare(right.metric));
 
   const activeProviderSupport = summarizeProfileSupport(providerDraft.adapterKind, parseCapabilities(providerDraft.capabilities));
   const activeAdapterOption = getAdapterOption(providerDraft.adapterKind);
@@ -299,10 +363,24 @@ export default function ModelsPage({ providerProfiles, providers, error, onRefre
     setProviderDraft(defaultProviderProfileDraft);
   }
 
+  function resetPricingRuleDraft(profileId?: number | null) {
+    setEditingPricingRuleId(null);
+    setPricingRuleDraft({
+      ...defaultPricingRuleDraft,
+      providerProfileId: profileId ? String(profileId) : providerProfiles[0] ? String(providerProfiles[0].id) : "",
+    });
+  }
+
 
   function handleEditProviderProfile(profile: ProviderProfileRecord) {
     setEditingProviderProfileId(profile.id);
     setProviderDraft(toProviderProfileDraft(profile));
+    setPricingRuleDraft((current) => ({ ...current, providerProfileId: String(profile.id) }));
+  }
+
+  function handleEditPricingRule(rule: ProviderPricingRuleRecord) {
+    setEditingPricingRuleId(rule.id);
+    setPricingRuleDraft(toPricingRuleDraft(rule));
   }
 
   async function handleSaveProviderProfile(event: FormEvent<HTMLFormElement>) {
@@ -338,6 +416,43 @@ export default function ModelsPage({ providerProfiles, providers, error, onRefre
       onRefresh();
       onSetError("");
     } catch (err) { onSetError(err instanceof Error ? err.message : "删除模型配置失败"); }
+  }
+
+  async function handleSavePricingRule(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    const payload = toPricingRulePayload(pricingRuleDraft);
+    if (!payload.provider_profile_id || !payload.capability || !payload.metric) {
+      onSetError("请先选择模型并填写计费能力、指标和单价");
+      return;
+    }
+    setSavingPricingRule(true);
+    try {
+      if (editingPricingRuleId === null) {
+        await api.createProviderPricingRule(payload);
+      } else {
+        await api.updateProviderPricingRule(editingPricingRuleId, payload);
+      }
+      resetPricingRuleDraft(payload.provider_profile_id);
+      onRefresh();
+      onSetError("");
+    } catch (err) {
+      onSetError(err instanceof Error ? err.message : "保存计费规则失败");
+    } finally {
+      setSavingPricingRule(false);
+    }
+  }
+
+  async function handleDeletePricingRule(ruleId: number, providerProfileId: number) {
+    try {
+      await api.deleteProviderPricingRule(ruleId);
+      if (editingPricingRuleId === ruleId) {
+        resetPricingRuleDraft(providerProfileId);
+      }
+      onRefresh();
+      onSetError("");
+    } catch (err) {
+      onSetError(err instanceof Error ? err.message : "删除计费规则失败");
+    }
   }
 
   async function handleProbeProviderProfile(profileId: number) {
@@ -547,6 +662,136 @@ export default function ModelsPage({ providerProfiles, providers, error, onRefre
             <div className="template-editor-actions">
               <button type="submit" className="submit-button" disabled={savingProviderProfile}>{savingProviderProfile ? "保存中..." : editingProviderProfileId === null ? "保存配置" : "更新配置"}</button>
               {editingProviderProfileId !== null ? <button type="button" className="ghost-button" onClick={resetProviderProfileDraft}>取消编辑</button> : null}
+            </div>
+            <div className="template-editor" style={{ marginTop: 24 }}>
+              <div className="template-section-head">
+                <strong>计费规则</strong>
+                <span>图片仍沿用上方兼容单价，Chat 与细分 usage 在这里单独配置。</span>
+              </div>
+              <div className="template-list admin-template-list">
+                {filteredPricingRules.length > 0 ? filteredPricingRules.map((rule) => (
+                  <div key={rule.id} className="template-list-item">
+                    <button type="button" className="template-card template-card-main" onClick={() => handleEditPricingRule(rule)}>
+                      <strong>{rule.capability}</strong>
+                      <span>{rule.metric}</span>
+                      <small>{`${rule.unit_price} ${rule.currency} / ${rule.unit_size}`}</small>
+                    </button>
+                    <div className="template-card-actions">
+                      <button type="button" className="template-action-button" onClick={() => handleEditPricingRule(rule)}>
+                        编辑
+                      </button>
+                      <button
+                        type="button"
+                        className="template-action-button"
+                        onClick={() => void handleDeletePricingRule(rule.id, rule.provider_profile_id)}
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                )) : <div className="template-empty">当前模型还没有独立计费规则。</div>}
+              </div>
+              <div className="admin-side-form">
+                <div className="template-editor-row template-editor-row-3">
+                  <label className="composer-menu-field">
+                    <span>模型</span>
+                    <select
+                      value={selectedPricingProfileId}
+                      onChange={(e) =>
+                        setPricingRuleDraft((current) => ({ ...current, providerProfileId: e.target.value }))
+                      }
+                    >
+                      {providerProfiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.provider_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>能力</span>
+                    <select
+                      value={pricingRuleDraft.capability}
+                      onChange={(e) => setPricingRuleDraft((current) => ({ ...current, capability: e.target.value }))}
+                    >
+                      <option value="chat.completions">chat.completions</option>
+                      <option value="image.generate">image.generate</option>
+                      <option value="image.edit">image.edit</option>
+                    </select>
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>指标</span>
+                    <select
+                      value={pricingRuleDraft.metric}
+                      onChange={(e) => setPricingRuleDraft((current) => ({ ...current, metric: e.target.value }))}
+                    >
+                      <option value="input_tokens">input_tokens</option>
+                      <option value="output_tokens">output_tokens</option>
+                      <option value="cached_input_tokens">cached_input_tokens</option>
+                      <option value="per_image">per_image</option>
+                      <option value="per_request">per_request</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="template-editor-row template-editor-row-3">
+                  <label className="composer-menu-field">
+                    <span>单位大小</span>
+                    <input
+                      type="number"
+                      min="0.0001"
+                      step="0.0001"
+                      value={pricingRuleDraft.unitSize}
+                      onChange={(e) => setPricingRuleDraft((current) => ({ ...current, unitSize: e.target.value }))}
+                    />
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>单价</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={pricingRuleDraft.unitPrice}
+                      onChange={(e) => setPricingRuleDraft((current) => ({ ...current, unitPrice: e.target.value }))}
+                    />
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>币种</span>
+                    <input
+                      value={pricingRuleDraft.currency}
+                      onChange={(e) => setPricingRuleDraft((current) => ({ ...current, currency: e.target.value }))}
+                    />
+                  </label>
+                </div>
+                <label className="model-toggle">
+                  <input
+                    type="checkbox"
+                    checked={pricingRuleDraft.isActive}
+                    onChange={(e) => setPricingRuleDraft((current) => ({ ...current, isActive: e.target.checked }))}
+                  />
+                  <span>启用这条计费规则</span>
+                </label>
+                <div className="template-editor-actions">
+                  <button
+                    type="button"
+                    className="submit-button"
+                    disabled={savingPricingRule || providerProfiles.length === 0}
+                    onClick={() => void handleSavePricingRule()}
+                  >
+                    {savingPricingRule ? "保存中..." : editingPricingRuleId === null ? "新增规则" : "更新规则"}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() =>
+                      resetPricingRuleDraft(
+                        selectedPricingProfileId ? Number(selectedPricingProfileId) : providerProfiles[0]?.id ?? null
+                      )
+                    }
+                  >
+                    {editingPricingRuleId === null ? "重置表单" : "取消编辑"}
+                  </button>
+                </div>
+              </div>
             </div>
           </form>
         </aside>

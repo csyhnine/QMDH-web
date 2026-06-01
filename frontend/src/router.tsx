@@ -13,6 +13,7 @@ import {
   type PromptTemplateRecord,
   type Project,
   type Provider,
+  type ProviderPricingRuleRecord,
   type ProviderProfileRecord,
   type Task,
 } from "./api";
@@ -159,14 +160,20 @@ function UsersRoute() {
 
 function ModelsRoute() {
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfileRecord[]>([]);
+  const [pricingRules, setPricingRules] = useState<ProviderPricingRuleRecord[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [error, setError] = useState("");
 
   async function refresh() {
     try {
-      const [nextProviders, nextProfiles] = await Promise.all([api.providers(), api.providerProfiles()]);
+      const [nextProviders, nextProfiles, nextPricingRules] = await Promise.all([
+        api.providers(),
+        api.providerProfiles(),
+        api.providerPricingRules(),
+      ]);
       setProviders(nextProviders);
       setProviderProfiles(nextProfiles);
+      setPricingRules(nextPricingRules);
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载模型配置失败");
@@ -181,6 +188,7 @@ function ModelsRoute() {
     <AppShell kind="admin" active="models">
       <ModelsPage
         providerProfiles={providerProfiles}
+        pricingRules={pricingRules}
         providers={providers}
         error={error}
         onRefresh={() => void refresh()}

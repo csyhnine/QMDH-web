@@ -40,6 +40,10 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     project_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
     monthly_quota: Mapped[float | None] = mapped_column(Float, nullable=True)
+    billing_plan: Mapped[str] = mapped_column(String(30), default="standard")
+    billing_status: Mapped[str] = mapped_column(String(20), default="active")
+    quota_policy: Mapped[str] = mapped_column(String(20), default="soft_warn")
+    quota_reset_cycle: Mapped[str] = mapped_column(String(20), default="monthly")
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -282,6 +286,11 @@ class UsageLedger(Base):
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
     total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cached_input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    uncached_input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    usage_payload: Mapped[dict] = mapped_column(JSON, default=dict)
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     error_code: Mapped[str] = mapped_column(String(100), default="")
     error_summary: Mapped[str] = mapped_column(Text, default="")
@@ -428,6 +437,9 @@ class PromptTemplate(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     scope: Mapped[str] = mapped_column(String(20), default="private", index=True)
+    category: Mapped[str] = mapped_column(String(80), default="", index=True)
+    subcategory: Mapped[str] = mapped_column(String(80), default="")
+    is_featured: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     label: Mapped[str] = mapped_column(String(100))
     title: Mapped[str] = mapped_column(String(150))
     prompt: Mapped[str] = mapped_column(Text)
@@ -436,11 +448,30 @@ class PromptTemplate(Base):
     resolution: Mapped[str] = mapped_column(String(20), default="2k")
     deliverable: Mapped[str] = mapped_column(String(100), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+    source_image_path: Mapped[str] = mapped_column(String(255), default="")
     preview_image_path: Mapped[str] = mapped_column(String(255), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     user: Mapped[User] = relationship(back_populates="prompt_templates")
+    events: Mapped[list["PromptTemplateEvent"]] = relationship(
+        back_populates="template",
+        cascade="all, delete-orphan",
+    )
+
+
+class PromptTemplateEvent(Base):
+    __tablename__ = "prompt_template_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("prompt_templates.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(30), index=True)
+    context: Mapped[str] = mapped_column(String(30), default="studio", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    template: Mapped[PromptTemplate] = relationship(back_populates="events")
+    user: Mapped[User | None] = relationship()
 
 
 class ProviderProfile(Base):
@@ -464,6 +495,27 @@ class ProviderProfile(Base):
     reference_caption_model: Mapped[str | None] = mapped_column(String(150), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    pricing_rules: Mapped[list["ProviderPricingRule"]] = relationship(
+        back_populates="provider_profile",
+        cascade="all, delete-orphan",
+    )
+
+
+class ProviderPricingRule(Base):
+    __tablename__ = "provider_pricing_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider_profile_id: Mapped[int] = mapped_column(ForeignKey("provider_profiles.id"), index=True)
+    capability: Mapped[str] = mapped_column(String(50), index=True)
+    metric: Mapped[str] = mapped_column(String(40), index=True)
+    unit_size: Mapped[float] = mapped_column(Float, default=1.0)
+    unit_price: Mapped[float] = mapped_column(Float, default=0.0)
+    currency: Mapped[str] = mapped_column(String(12), default="CNY")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    provider_profile: Mapped[ProviderProfile] = relationship(back_populates="pricing_rules")
 
 
 class Conversation(Base):

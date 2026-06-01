@@ -19,6 +19,10 @@ LOCAL_DEV_ACCOUNTS = [
         "password": "qmdh-admin-2026",
         "project_codes": ["*"],
         "monthly_quota": None,
+        "billing_plan": "internal",
+        "billing_status": "active",
+        "quota_policy": "unlimited",
+        "quota_reset_cycle": "monthly",
     },
     {
         "name": "qmdh.ops",
@@ -27,6 +31,10 @@ LOCAL_DEV_ACCOUNTS = [
         "password": "qmdh-ops-2026",
         "project_codes": ["*"],
         "monthly_quota": None,
+        "billing_plan": "internal",
+        "billing_status": "active",
+        "quota_policy": "unlimited",
+        "quota_reset_cycle": "monthly",
     },
     {
         "name": "designer.arch",
@@ -35,6 +43,10 @@ LOCAL_DEV_ACCOUNTS = [
         "password": "qmdh-arch-2026",
         "project_codes": ["QMDH-001"],
         "monthly_quota": 200.0,
+        "billing_plan": "standard",
+        "billing_status": "active",
+        "quota_policy": "soft_warn",
+        "quota_reset_cycle": "monthly",
     },
 ]
 
@@ -44,9 +56,15 @@ def ensure_schema(engine: Engine) -> None:
     inspector = inspect(engine)
 
     project_columns = {column["name"] for column in inspector.get_columns("projects")}
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
     feedback_columns = (
         {column["name"] for column in inspector.get_columns("user_feedbacks")}
         if "user_feedbacks" in inspector.get_table_names()
+        else set()
+    )
+    usage_ledger_columns = (
+        {column["name"] for column in inspector.get_columns("usage_ledgers")}
+        if "usage_ledgers" in inspector.get_table_names()
         else set()
     )
     prompt_template_columns = (
@@ -58,6 +76,14 @@ def ensure_schema(engine: Engine) -> None:
         if "owner_user_id" not in project_columns:
             connection.execute(text("ALTER TABLE projects ADD COLUMN owner_user_id INTEGER"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_projects_owner_user_id ON projects (owner_user_id)"))
+        if "billing_plan" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN billing_plan VARCHAR(30) NOT NULL DEFAULT 'standard'"))
+        if "billing_status" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN billing_status VARCHAR(20) NOT NULL DEFAULT 'active'"))
+        if "quota_policy" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN quota_policy VARCHAR(20) NOT NULL DEFAULT 'soft_warn'"))
+        if "quota_reset_cycle" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN quota_reset_cycle VARCHAR(20) NOT NULL DEFAULT 'monthly'"))
         if feedback_columns and "attachment_paths" not in feedback_columns:
             connection.execute(
                 text("ALTER TABLE user_feedbacks ADD COLUMN attachment_paths JSON NOT NULL DEFAULT '[]'")
@@ -66,12 +92,40 @@ def ensure_schema(engine: Engine) -> None:
             connection.execute(
                 text("ALTER TABLE prompt_templates ADD COLUMN scope VARCHAR(20) NOT NULL DEFAULT 'private'")
             )
+        if prompt_template_columns and "category" not in prompt_template_columns:
+            connection.execute(
+                text("ALTER TABLE prompt_templates ADD COLUMN category VARCHAR(80) NOT NULL DEFAULT ''")
+            )
+        if prompt_template_columns and "subcategory" not in prompt_template_columns:
+            connection.execute(
+                text("ALTER TABLE prompt_templates ADD COLUMN subcategory VARCHAR(80) NOT NULL DEFAULT ''")
+            )
+        if prompt_template_columns and "is_featured" not in prompt_template_columns:
+            connection.execute(
+                text("ALTER TABLE prompt_templates ADD COLUMN is_featured BOOLEAN NOT NULL DEFAULT false")
+            )
+        if prompt_template_columns and "source_image_path" not in prompt_template_columns:
+            connection.execute(
+                text("ALTER TABLE prompt_templates ADD COLUMN source_image_path VARCHAR(255) NOT NULL DEFAULT ''")
+            )
         if prompt_template_columns and "preview_image_path" not in prompt_template_columns:
             connection.execute(
                 text("ALTER TABLE prompt_templates ADD COLUMN preview_image_path VARCHAR(255) NOT NULL DEFAULT ''")
             )
         if prompt_template_columns:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_prompt_templates_scope ON prompt_templates (scope)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_prompt_templates_category ON prompt_templates (category)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_prompt_templates_is_featured ON prompt_templates (is_featured)"))
+        if usage_ledger_columns and "input_tokens" not in usage_ledger_columns:
+            connection.execute(text("ALTER TABLE usage_ledgers ADD COLUMN input_tokens INTEGER NOT NULL DEFAULT 0"))
+        if usage_ledger_columns and "output_tokens" not in usage_ledger_columns:
+            connection.execute(text("ALTER TABLE usage_ledgers ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0"))
+        if usage_ledger_columns and "cached_input_tokens" not in usage_ledger_columns:
+            connection.execute(text("ALTER TABLE usage_ledgers ADD COLUMN cached_input_tokens INTEGER NOT NULL DEFAULT 0"))
+        if usage_ledger_columns and "uncached_input_tokens" not in usage_ledger_columns:
+            connection.execute(text("ALTER TABLE usage_ledgers ADD COLUMN uncached_input_tokens INTEGER NOT NULL DEFAULT 0"))
+        if usage_ledger_columns and "usage_payload" not in usage_ledger_columns:
+            connection.execute(text("ALTER TABLE usage_ledgers ADD COLUMN usage_payload JSON NOT NULL DEFAULT '{}'"))
 
 
 def _seed_shared_prompt_templates(db: Session) -> None:
@@ -93,6 +147,9 @@ def _seed_shared_prompt_templates(db: Session) -> None:
             PromptTemplate(
                 user_id=admin_user.id,
                 scope="shared",
+                category=template.get("category", ""),
+                subcategory=template.get("subcategory", ""),
+                is_featured=bool(template.get("is_featured", False)),
                 label=template["label"],
                 title=template["title"],
                 prompt=template["prompt"],
@@ -101,6 +158,7 @@ def _seed_shared_prompt_templates(db: Session) -> None:
                 resolution=template["resolution"],
                 deliverable=template["deliverable"],
                 notes=template["notes"],
+                source_image_path=template.get("source_image_path", ""),
                 preview_image_path=template.get("preview_image_path", ""),
             )
         )
@@ -128,6 +186,10 @@ def seed_initial_data(db: Session) -> None:
                     password_hash=hash_password(settings.bootstrap_admin_password),
                     is_active=True,
                     project_codes=["*"],
+                    billing_plan="internal",
+                    billing_status="active",
+                    quota_policy="unlimited",
+                    quota_reset_cycle="monthly",
                 )
             )
         elif not admin.password_hash:
@@ -136,11 +198,19 @@ def seed_initial_data(db: Session) -> None:
             admin.password_hash = hash_password(settings.bootstrap_admin_password)
             admin.is_active = True
             admin.project_codes = ["*"]
+            admin.billing_plan = admin.billing_plan or "internal"
+            admin.billing_status = admin.billing_status or "active"
+            admin.quota_policy = admin.quota_policy or "unlimited"
+            admin.quota_reset_cycle = admin.quota_reset_cycle or "monthly"
         else:
             admin.role = "admin"
             admin.display_name = admin.display_name or admin.name
             admin.is_active = True
             admin.project_codes = ["*"]
+            admin.billing_plan = admin.billing_plan or "internal"
+            admin.billing_status = admin.billing_status or "active"
+            admin.quota_policy = admin.quota_policy or "unlimited"
+            admin.quota_reset_cycle = admin.quota_reset_cycle or "monthly"
 
     for account in LOCAL_DEV_ACCOUNTS:
         user = db.scalar(select(User).where(User.name == account["name"]))
@@ -154,6 +224,10 @@ def seed_initial_data(db: Session) -> None:
                     is_active=True,
                     project_codes=account["project_codes"],
                     monthly_quota=account["monthly_quota"],
+                    billing_plan=account["billing_plan"],
+                    billing_status=account["billing_status"],
+                    quota_policy=account["quota_policy"],
+                    quota_reset_cycle=account["quota_reset_cycle"],
                 )
             )
             continue
@@ -166,6 +240,10 @@ def seed_initial_data(db: Session) -> None:
             user.password_hash = hash_password(account["password"])
         if user.monthly_quota is None:
             user.monthly_quota = account["monthly_quota"]
+        user.billing_plan = user.billing_plan or account["billing_plan"]
+        user.billing_status = user.billing_status or account["billing_status"]
+        user.quota_policy = user.quota_policy or account["quota_policy"]
+        user.quota_reset_cycle = user.quota_reset_cycle or account["quota_reset_cycle"]
         user.is_active = True
 
     for client_profile in settings.get_agent_client_profiles().values():

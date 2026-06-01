@@ -2024,6 +2024,9 @@ export default function GenerateStudioShell() {
     try {
       if (editingTemplateId === null) {
         const createdTemplate = await api.createPromptTemplate({
+          category: "",
+          subcategory: "",
+          is_featured: false,
           label,
           title: title || `${workspaceName} 自定义提示词`,
           prompt,
@@ -2032,6 +2035,7 @@ export default function GenerateStudioShell() {
           resolution: studioForm.resolution,
           deliverable: studioForm.deliverable,
           notes: studioForm.notes,
+          source_image_path: "",
           preview_image_path: ""
         });
 
@@ -2041,6 +2045,9 @@ export default function GenerateStudioShell() {
         setTemplateFeedback({ type: "success", message: "提示词已保存到“我的提示词”。" });
       } else {
         const updatedTemplate = await api.updatePromptTemplate(editingTemplateId, {
+          category: "",
+          subcategory: "",
+          is_featured: false,
           label,
           title: title || `${workspaceName} 自定义提示词`,
           prompt,
@@ -2049,6 +2056,7 @@ export default function GenerateStudioShell() {
           resolution: studioForm.resolution,
           deliverable: studioForm.deliverable,
           notes: studioForm.notes,
+          source_image_path: "",
           preview_image_path: ""
         });
 
@@ -2380,6 +2388,12 @@ export default function GenerateStudioShell() {
         hasReferenceImage: Boolean(createdTask.result["reference_image_supplied"] ?? referenceImageCount > 0),
         stage: createdTask.status === "running" ? "running" : "pending",
       });
+      if (activeTemplate?.scope === "shared") {
+        void api.trackPromptTemplateEvent(activeTemplate.id, {
+          event_type: "submit_success",
+          context: "studio",
+        }).catch(() => undefined);
+      }
       hasAutoPositionedRef.current = false;
       await loadData({ force: true });
     } catch (error) {

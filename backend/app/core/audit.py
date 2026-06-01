@@ -58,6 +58,9 @@ class AuditEventType:
     PROVIDER_UPDATED = "provider.updated"
     PROVIDER_DELETED = "provider.deleted"
     PROVIDER_API_KEY_CHANGED = "provider.api_key_changed"
+    PROVIDER_PRICING_RULE_CREATED = "provider_pricing_rule.created"
+    PROVIDER_PRICING_RULE_UPDATED = "provider_pricing_rule.updated"
+    PROVIDER_PRICING_RULE_DELETED = "provider_pricing_rule.deleted"
 
     # Project events
     PROJECT_CREATED = "project.created"

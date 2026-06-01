@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_auth_user
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import ChatMessage, Conversation, ProviderProfile
+from app.models import ChatMessage, Conversation, ProviderProfile, User
 from app.schemas import (
     ChatMessageCreate,
     ChatMessageOut,
@@ -27,6 +27,7 @@ from app.services.chat_service import (
     snapshot_chat_provider_config,
     stream_chat_completion,
 )
+from app.services.billing import enforce_user_quota, normalize_chat_usage
 from app.services.usage_ledger import record_chat_usage_ledger
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -155,7 +156,11 @@ async def send_message(
         )
     provider_name = provider.provider_name
     provider_model_name = provider.model_name
+    provider_profile_id = conversation.model_provider_id
     provider_config = snapshot_chat_provider_config(provider)
+    current_user = db.get(User, auth_user.user_id) if auth_user.user_id is not None else None
+    if current_user is not None:
+        enforce_user_quota(db, user=current_user)
 
     content = payload.content.strip()
     user_message = ChatMessage(
@@ -180,7 +185,15 @@ async def send_message(
 
     full_content_parts: list[str] = []
     last_error_payload: dict[str, object] | None = None
-    last_usage_payload = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    last_usage_payload = {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cached_input_tokens": 0,
+        "uncached_input_tokens": 0,
+    }
 
     async def generate():
         nonlocal last_error_payload, last_usage_payload
@@ -192,15 +205,16 @@ async def send_message(
                     if "delta" in data:
                         full_content_parts.append(str(data["delta"]))
                     if "usage" in data and isinstance(data["usage"], dict):
-                        prompt_tokens = int(data["usage"].get("prompt_tokens") or 0)
-                        completion_tokens = int(data["usage"].get("completion_tokens") or 0)
-                        total_tokens = int(data["usage"].get("total_tokens") or 0)
-                        if total_tokens == 0:
-                            total_tokens = prompt_tokens + completion_tokens
+                        usage = normalize_chat_usage(data["usage"])
                         last_usage_payload = {
-                            "prompt_tokens": max(prompt_tokens, 0),
-                            "completion_tokens": max(completion_tokens, 0),
-                            "total_tokens": max(total_tokens, 0),
+                            "prompt_tokens": usage.prompt_tokens,
+                            "completion_tokens": usage.completion_tokens,
+                            "total_tokens": usage.total_tokens,
+                            "input_tokens": usage.input_tokens,
+                            "output_tokens": usage.output_tokens,
+                            "cached_input_tokens": usage.cached_input_tokens,
+                            "uncached_input_tokens": usage.uncached_input_tokens,
+                            **usage.usage_payload,
                         }
                     if "error" in data:
                         raw_error = data["error"]
@@ -233,6 +247,7 @@ async def send_message(
                 message=assistant_message,
                 conversation=conversation,
                 provider=provider,
+                provider_profile_id=provider_profile_id,
                 user_id=auth_user.user_id,
                 user_name=auth_user.name,
                 provider_name=provider_name,
@@ -240,6 +255,7 @@ async def send_message(
                 prompt_tokens=last_usage_payload["prompt_tokens"],
                 completion_tokens=last_usage_payload["completion_tokens"],
                 total_tokens=last_usage_payload["total_tokens"],
+                usage_payload=last_usage_payload,
             )
             db.commit()
         elif last_error_payload:
@@ -258,6 +274,7 @@ async def send_message(
                 message=assistant_message,
                 conversation=conversation,
                 provider=provider,
+                provider_profile_id=provider_profile_id,
                 user_id=auth_user.user_id,
                 user_name=auth_user.name,
                 provider_name=provider_name,
@@ -265,6 +282,7 @@ async def send_message(
                 prompt_tokens=last_usage_payload["prompt_tokens"],
                 completion_tokens=last_usage_payload["completion_tokens"],
                 total_tokens=last_usage_payload["total_tokens"],
+                usage_payload=last_usage_payload,
             )
             db.commit()
 

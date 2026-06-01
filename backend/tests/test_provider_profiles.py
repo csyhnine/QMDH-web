@@ -123,6 +123,70 @@ class ProviderProfileTests(unittest.TestCase):
     def test_designer_cannot_manage_provider_profiles(self) -> None:
         response = self.client.get("/providers/profiles", headers=self.designer_headers())
         self.assertEqual(response.status_code, 403)
+        pricing_rules = self.client.get("/providers/pricing-rules", headers=self.designer_headers())
+        self.assertEqual(pricing_rules.status_code, 403)
+
+    def test_provider_pricing_rule_crud(self) -> None:
+        created_profile = self.client.post(
+            "/providers/profiles",
+            headers=self.auth_headers(),
+            json={
+                "provider_name": "chat_metered",
+                "api_key": "sk-test-secret",
+                "base_url": "https://api.example.test/v1/",
+                "model_name": "chat-metered-v1",
+                "capabilities": ["chat.completions"],
+                "quality": "medium",
+                "output_format": "png",
+                "timeout_seconds": 60,
+                "pricing_currency": "CNY",
+                "pricing_unit": "per_request",
+                "unit_price": 0,
+                "enabled": True,
+                "reference_mode": "disabled",
+            },
+        )
+        self.assertEqual(created_profile.status_code, 201, created_profile.text)
+        profile_id = created_profile.json()["id"]
+
+        created_rule = self.client.post(
+            "/providers/pricing-rules",
+            headers=self.auth_headers(),
+            json={
+                "provider_profile_id": profile_id,
+                "capability": "chat.completions",
+                "metric": "input_tokens",
+                "unit_size": 1000,
+                "unit_price": 0.8,
+                "currency": "CNY",
+                "is_active": True,
+            },
+        )
+        self.assertEqual(created_rule.status_code, 201, created_rule.text)
+        rule_payload = created_rule.json()
+        self.assertEqual(rule_payload["provider_profile_id"], profile_id)
+        self.assertEqual(rule_payload["metric"], "input_tokens")
+
+        listing = self.client.get("/providers/pricing-rules", headers=self.auth_headers())
+        self.assertEqual(listing.status_code, 200, listing.text)
+        self.assertEqual(len(listing.json()), 1)
+
+        updated_rule = self.client.patch(
+            f"/providers/pricing-rules/{rule_payload['id']}",
+            headers=self.auth_headers(),
+            json={"metric": "output_tokens", "unit_price": 1.2},
+        )
+        self.assertEqual(updated_rule.status_code, 200, updated_rule.text)
+        self.assertEqual(updated_rule.json()["metric"], "output_tokens")
+        self.assertEqual(updated_rule.json()["unit_price"], 1.2)
+
+        deleted = self.client.delete(
+            f"/providers/pricing-rules/{rule_payload['id']}",
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(deleted.status_code, 204, deleted.text)
+        listing_after = self.client.get("/providers/pricing-rules", headers=self.auth_headers())
+        self.assertEqual(listing_after.json(), [])
 
     def test_provider_profile_create_requires_configured_encryption_key(self) -> None:
         with patch.object(settings, "encryption_key", ""):

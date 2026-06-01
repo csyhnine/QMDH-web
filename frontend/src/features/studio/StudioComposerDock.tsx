@@ -1,8 +1,9 @@
-import { type ChangeEvent, type DragEvent, type FormEvent, type RefObject, useMemo, useState } from "react";
+import { type ChangeEvent, type DragEvent, type FormEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
-import { type PromptTemplateRecord, type Provider } from "../../api";
+import { api, type PromptTemplateRecord, type Provider } from "../../api";
 
 type ComposerMenuKey = "template" | "provider" | "display" | "count" | null;
+type TemplateQuickFilter = "all" | "featured" | "recent";
 
 type StudioFormValue = {
   creationMode: "generate" | "edit";
@@ -107,6 +108,14 @@ function previewStyleClass(style: string): string {
   }
 }
 
+function templatePrimaryCategory(template: PromptTemplateRecord): string {
+  return template.category.trim() || "未分类";
+}
+
+function templateSecondaryCategory(template: PromptTemplateRecord): string {
+  return template.subcategory.trim() || "其他";
+}
+
 export default function StudioComposerDock({
   activeComposerMenu,
   activeTemplateId,
@@ -155,6 +164,12 @@ export default function StudioComposerDock({
   workspaceName,
 }: StudioComposerDockProps) {
   const [hoveredTemplateId, setHoveredTemplateId] = useState<number | null>(null);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [templateQuickFilter, setTemplateQuickFilter] = useState<TemplateQuickFilter>("all");
+  const [activeTemplateCategory, setActiveTemplateCategory] = useState("all");
+  const [activeTemplateSubcategory, setActiveTemplateSubcategory] = useState("all");
+  const [expandedTemplateCategories, setExpandedTemplateCategories] = useState<Record<string, boolean>>({});
+  const impressedTemplateIdsRef = useRef<Set<number>>(new Set());
 
   const modeLabel = studioForm.creationMode === "edit" ? "图像编辑" : "文生图";
   const referenceHint =
@@ -162,10 +177,143 @@ export default function StudioComposerDock({
       ? `图像编辑要求 1-4 张参考图，当前已上传 ${referenceUploads.length} 张。`
       : "文生图模式不会强制发送参考图；切换到图像编辑后会使用已上传的参考图。";
 
+  const sharedTemplateCategories = useMemo(() => {
+    const grouped = new Map<string, Set<string>>();
+    for (const template of sharedTemplates) {
+      const primary = templatePrimaryCategory(template);
+      const secondary = templateSecondaryCategory(template);
+      if (!grouped.has(primary)) {
+        grouped.set(primary, new Set());
+      }
+      grouped.get(primary)?.add(secondary);
+    }
+    return Array.from(grouped.entries())
+      .map(([category, subcategories]) => ({
+        category,
+        subcategories: Array.from(subcategories.values()).sort((left, right) => left.localeCompare(right, "zh-CN")),
+      }))
+      .sort((left, right) => left.category.localeCompare(right.category, "zh-CN"));
+  }, [sharedTemplates]);
+
+  useEffect(() => {
+    if (sharedTemplateCategories.length === 0) return;
+    setExpandedTemplateCategories((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const item of sharedTemplateCategories) {
+        if (!(item.category in next)) {
+          next[item.category] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [sharedTemplateCategories]);
+
+  useEffect(() => {
+    if (
+      activeTemplateCategory !== "all" &&
+      !sharedTemplateCategories.some((item) => item.category === activeTemplateCategory)
+    ) {
+      setActiveTemplateCategory("all");
+      setActiveTemplateSubcategory("all");
+    }
+  }, [activeTemplateCategory, sharedTemplateCategories]);
+
+  useEffect(() => {
+    if (activeTemplateCategory === "all" || activeTemplateSubcategory === "all") return;
+    const category = sharedTemplateCategories.find((item) => item.category === activeTemplateCategory);
+    if (!category?.subcategories.includes(activeTemplateSubcategory)) {
+      setActiveTemplateSubcategory("all");
+    }
+  }, [activeTemplateCategory, activeTemplateSubcategory, sharedTemplateCategories]);
+
+  const filteredSharedTemplates = useMemo(() => {
+    const keyword = templateSearch.trim().toLowerCase();
+    const searched = sharedTemplates.filter((template) => {
+      if (!keyword) return true;
+      const haystack = [
+        template.label,
+        template.title,
+        template.deliverable,
+        template.notes,
+        template.category,
+        template.subcategory,
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(keyword);
+    });
+
+    const quickFiltered =
+      templateQuickFilter === "featured"
+        ? searched.filter((template) => template.is_featured)
+        : searched;
+
+    const categoryFiltered = quickFiltered.filter((template) => {
+      if (activeTemplateCategory === "all") return true;
+      if (templatePrimaryCategory(template) !== activeTemplateCategory) return false;
+      if (activeTemplateSubcategory === "all") return true;
+      return templateSecondaryCategory(template) === activeTemplateSubcategory;
+    });
+
+    return [...categoryFiltered].sort((left, right) => {
+      if (templateQuickFilter === "recent") {
+        return new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime();
+      }
+      if (left.is_featured !== right.is_featured) {
+        return left.is_featured ? -1 : 1;
+      }
+      const categoryCompare = templatePrimaryCategory(left).localeCompare(templatePrimaryCategory(right), "zh-CN");
+      if (categoryCompare !== 0) return categoryCompare;
+      const subcategoryCompare = templateSecondaryCategory(left).localeCompare(templateSecondaryCategory(right), "zh-CN");
+      if (subcategoryCompare !== 0) return subcategoryCompare;
+      return left.label.localeCompare(right.label, "zh-CN");
+    });
+  }, [activeTemplateCategory, activeTemplateSubcategory, sharedTemplates, templateQuickFilter, templateSearch]);
+
   const hoveredTemplate = useMemo(
-    () => sharedTemplates.find((template) => template.id === hoveredTemplateId) ?? null,
-    [hoveredTemplateId, sharedTemplates]
+    () => filteredSharedTemplates.find((template) => template.id === hoveredTemplateId) ?? null,
+    [filteredSharedTemplates, hoveredTemplateId]
   );
+
+  const activeTemplateHeading =
+    activeTemplateSubcategory !== "all"
+      ? activeTemplateSubcategory
+      : activeTemplateCategory !== "all"
+        ? activeTemplateCategory
+        : templateQuickFilter === "featured"
+          ? "热度"
+          : templateQuickFilter === "recent"
+            ? "最新"
+            : "全部";
+
+  useEffect(() => {
+    for (const template of filteredSharedTemplates.slice(0, 12)) {
+      if (impressedTemplateIdsRef.current.has(template.id)) continue;
+      impressedTemplateIdsRef.current.add(template.id);
+      void api.trackPromptTemplateEvent(template.id, {
+        event_type: "impression",
+        context: "studio",
+      }).catch(() => undefined);
+    }
+  }, [filteredSharedTemplates]);
+
+  function handleApplySharedTemplate(template: PromptTemplateRecord) {
+    void api.trackPromptTemplateEvent(template.id, {
+      event_type: "apply",
+      context: "studio",
+    }).catch(() => undefined);
+    onApplyTemplate(template);
+  }
+
+  function handleHoverSharedTemplate(templateId: number) {
+    setHoveredTemplateId(templateId);
+    void api.trackPromptTemplateEvent(templateId, {
+      event_type: "hover_preview",
+      context: "studio",
+    }).catch(() => undefined);
+  }
 
   return (
     <form className="composer-dock" onSubmit={onSubmit}>
@@ -265,35 +413,154 @@ export default function StudioComposerDock({
               <div className="template-section">
                 <div className="template-section-head">
                   <strong>模板提示词</strong>
-                  <span>后台统一维护，所有设计师都可见；悬停可查看参考图。</span>
+                  <span>后台统一维护，支持搜索、二级分类、热门筛选和原图/最终图对照预览。</span>
                 </div>
                 {sharedTemplates.length > 0 ? (
-                  <div className="template-browser">
-                    <div className="template-grid">
-                      {sharedTemplates.map((template) => (
+                  <div className="template-browser template-browser-categorized">
+                    <aside className="template-browser-sidebar">
+                      <label className="template-browser-search">
+                        <span aria-hidden>⌕</span>
+                        <input
+                          value={templateSearch}
+                          onChange={(event) => setTemplateSearch(event.target.value)}
+                          placeholder="搜索"
+                        />
+                      </label>
+
+                      <div className="template-browser-nav">
                         <button
-                          key={template.id}
                           type="button"
-                          className={activeTemplateId === template.id ? "template-card is-active" : "template-card"}
-                          onClick={() => onApplyTemplate(template)}
-                          onMouseEnter={() => setHoveredTemplateId(template.id)}
-                          onMouseLeave={() => setHoveredTemplateId((current) => (current === template.id ? null : current))}
-                          onFocus={() => setHoveredTemplateId(template.id)}
-                          onBlur={() => setHoveredTemplateId((current) => (current === template.id ? null : current))}
+                          className={activeTemplateCategory === "all" && templateQuickFilter === "all" ? "template-nav-item is-active" : "template-nav-item"}
+                          onClick={() => {
+                            setTemplateQuickFilter("all");
+                            setActiveTemplateCategory("all");
+                            setActiveTemplateSubcategory("all");
+                          }}
                         >
-                          <strong>{template.label}</strong>
-                          <span>{template.deliverable || template.title}</span>
+                          <span>全部</span>
                         </button>
-                      ))}
+                        <button
+                          type="button"
+                          className={templateQuickFilter === "featured" ? "template-nav-item is-active" : "template-nav-item"}
+                          onClick={() => {
+                            setTemplateQuickFilter("featured");
+                            setActiveTemplateCategory("all");
+                            setActiveTemplateSubcategory("all");
+                          }}
+                        >
+                          <span>热度</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={templateQuickFilter === "recent" ? "template-nav-item is-active" : "template-nav-item"}
+                          onClick={() => {
+                            setTemplateQuickFilter("recent");
+                            setActiveTemplateCategory("all");
+                            setActiveTemplateSubcategory("all");
+                          }}
+                        >
+                          <span>最新</span>
+                        </button>
+
+                        {sharedTemplateCategories.map((group) => {
+                          const expanded = expandedTemplateCategories[group.category] ?? true;
+                          const isCategoryActive = activeTemplateCategory === group.category;
+                          return (
+                            <div key={group.category} className="template-nav-group">
+                              <button
+                                type="button"
+                                className={isCategoryActive && activeTemplateSubcategory === "all" ? "template-nav-item is-active" : "template-nav-item"}
+                                onClick={() => {
+                                  setTemplateQuickFilter("all");
+                                  setActiveTemplateCategory(group.category);
+                                  setActiveTemplateSubcategory("all");
+                                  setExpandedTemplateCategories((current) => ({
+                                    ...current,
+                                    [group.category]: !expanded,
+                                  }));
+                                }}
+                              >
+                                <span>{group.category}</span>
+                                <b>{expanded ? "⌃" : "⌄"}</b>
+                              </button>
+                              {expanded ? (
+                                <div className="template-nav-sublist">
+                                  {group.subcategories.map((subcategory) => (
+                                    <button
+                                      key={`${group.category}-${subcategory}`}
+                                      type="button"
+                                      className={isCategoryActive && activeTemplateSubcategory === subcategory ? "template-nav-subitem is-active" : "template-nav-subitem"}
+                                      onClick={() => {
+                                        setTemplateQuickFilter("all");
+                                        setActiveTemplateCategory(group.category);
+                                        setActiveTemplateSubcategory(subcategory);
+                                      }}
+                                    >
+                                      <span>{subcategory}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </aside>
+
+                    <div className="template-browser-main">
+                      <div className="template-browser-main-head">
+                        <strong>{activeTemplateHeading}</strong>
+                        <span>{filteredSharedTemplates.length} 个模板</span>
+                      </div>
+                      {filteredSharedTemplates.length > 0 ? (
+                        <div className="template-grid">
+                          {filteredSharedTemplates.map((template) => (
+                            <button
+                              key={template.id}
+                              type="button"
+                              className={activeTemplateId === template.id ? "template-card is-active" : "template-card"}
+                              onClick={() => handleApplySharedTemplate(template)}
+                              onMouseEnter={() => handleHoverSharedTemplate(template.id)}
+                              onMouseLeave={() => setHoveredTemplateId((current) => (current === template.id ? null : current))}
+                              onFocus={() => handleHoverSharedTemplate(template.id)}
+                              onBlur={() => setHoveredTemplateId((current) => (current === template.id ? null : current))}
+                            >
+                              <strong>{template.label}</strong>
+                              <span>{template.deliverable || template.title}</span>
+                              <small>{`${templatePrimaryCategory(template)} / ${templateSecondaryCategory(template)} · 热度 ${template.popularity_score.toFixed(1)}`}</small>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="template-empty">当前筛选条件下还没有匹配到模板。</div>
+                      )}
                     </div>
+
                     {hoveredTemplate ? (
                       <aside className="template-hover-preview" aria-live="polite">
-                        {hoveredTemplate.preview_image_path ? (
-                          <img
-                            className="template-hover-preview-image"
-                            src={hoveredTemplate.preview_image_path}
-                            alt={`${hoveredTemplate.label} 参考图`}
-                          />
+                        {hoveredTemplate.source_image_path || hoveredTemplate.preview_image_path ? (
+                          <div className="template-hover-preview-compare">
+                            {hoveredTemplate.source_image_path ? (
+                              <figure className="template-hover-preview-figure">
+                                <img
+                                  className="template-hover-preview-image"
+                                  src={hoveredTemplate.source_image_path}
+                                  alt={`${hoveredTemplate.label} 原图`}
+                                />
+                                <figcaption>原图</figcaption>
+                              </figure>
+                            ) : null}
+                            {hoveredTemplate.preview_image_path ? (
+                              <figure className="template-hover-preview-figure">
+                                <img
+                                  className="template-hover-preview-image"
+                                  src={hoveredTemplate.preview_image_path}
+                                  alt={`${hoveredTemplate.label} 最终图`}
+                                />
+                                <figcaption>最终图</figcaption>
+                              </figure>
+                            ) : null}
+                          </div>
                         ) : (
                           <div className={`template-hover-preview-fallback ${previewStyleClass(hoveredTemplate.style)}`}>
                             <span>Template Preview</span>
@@ -303,6 +570,8 @@ export default function StudioComposerDock({
                         <div className="template-hover-preview-body">
                           <strong>{hoveredTemplate.label}</strong>
                           <span>{hoveredTemplate.title}</span>
+                          <small>{`${templatePrimaryCategory(hoveredTemplate)} / ${templateSecondaryCategory(hoveredTemplate)}`}</small>
+                          <small>{`近 30 天应用 ${hoveredTemplate.recent_apply_count} · 成功提交 ${hoveredTemplate.recent_submit_success_count}`}</small>
                           <small>{hoveredTemplate.deliverable || hoveredTemplate.notes || "已配置共享模板"}</small>
                         </div>
                       </aside>
@@ -316,7 +585,7 @@ export default function StudioComposerDock({
               <div className="template-section">
                 <div className="template-section-head">
                   <strong>我的提示词</strong>
-                  <span>保存、编辑你自己的常用提示词</span>
+                  <span>保存、编辑你自己的常用提示词。</span>
                 </div>
                 {customTemplates.length > 0 ? (
                   <div className="template-list">
@@ -489,6 +758,7 @@ export default function StudioComposerDock({
           <div className="composer-quickmeta">
             <span>{selectedStyleLabel}</span>
             <span>{serviceHealthy ? "服务在线" : "服务异常"}</span>
+            {submissionProgress ? <span>{submissionProgress.stage}</span> : null}
           </div>
 
           <button

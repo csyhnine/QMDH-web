@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.services.billing import calculate_chat_billing, normalize_chat_usage
 from app.models import (
     ChatMessage,
     Conversation,
@@ -117,6 +118,11 @@ def ensure_usage_ledger_for_task(
     task_entry.prompt_tokens = 0
     task_entry.completion_tokens = 0
     task_entry.total_tokens = 0
+    task_entry.input_tokens = 0
+    task_entry.output_tokens = 0
+    task_entry.cached_input_tokens = 0
+    task_entry.uncached_input_tokens = 0
+    task_entry.usage_payload = {}
     task_entry.latency_ms = latency_ms
     task_entry.error_code = error_code
     task_entry.error_summary = error_summary
@@ -179,6 +185,11 @@ def ensure_usage_ledger_for_task(
         provider_entry.prompt_tokens = 0
         provider_entry.completion_tokens = 0
         provider_entry.total_tokens = 0
+        provider_entry.input_tokens = 0
+        provider_entry.output_tokens = 0
+        provider_entry.cached_input_tokens = 0
+        provider_entry.uncached_input_tokens = 0
+        provider_entry.usage_payload = {}
         provider_entry.latency_ms = int(call.latency_ms or 0)
         provider_entry.error_code = str((failure or {}).get("error_code") or "").strip()
         provider_entry.error_summary = str((failure or {}).get("error_summary") or "").strip()
@@ -194,6 +205,7 @@ def record_chat_usage_ledger(
     message: ChatMessage,
     conversation: Conversation,
     provider: ProviderProfile,
+    provider_profile_id: int | None = None,
     user_id: int | None = None,
     user_name: str | None = None,
     provider_name: str | None = None,
@@ -201,6 +213,7 @@ def record_chat_usage_ledger(
     prompt_tokens: int = 0,
     completion_tokens: int = 0,
     total_tokens: int = 0,
+    usage_payload: dict | None = None,
     recorded_at: datetime | None = None,
 ) -> UsageLedger:
     ledger = db.scalar(
@@ -241,14 +254,33 @@ def record_chat_usage_ledger(
     ledger.capability = "chat.completions"
     ledger.classification = DataClassification.b
     ledger.task_status = None
-    ledger.cost = 0.0
-    ledger.cost_currency = "CNY"
-    ledger.billable_units = 0.0
+    usage = normalize_chat_usage(
+        usage_payload
+        if usage_payload is not None
+        else {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+        }
+    )
+    billing = calculate_chat_billing(
+        db,
+        provider_profile_id=provider_profile_id if provider_profile_id is not None else provider.__dict__.get("id"),
+        usage=usage,
+    )
+    ledger.cost = float(billing["cost"])
+    ledger.cost_currency = str(billing["currency"] or "CNY").upper()
+    ledger.billable_units = float(billing.get("billable_units") or 0.0)
     ledger.billing_unit = "chat_tokens"
     ledger.output_count = 1
-    ledger.prompt_tokens = max(int(prompt_tokens or 0), 0)
-    ledger.completion_tokens = max(int(completion_tokens or 0), 0)
-    ledger.total_tokens = max(int(total_tokens or 0), 0)
+    ledger.prompt_tokens = usage.prompt_tokens
+    ledger.completion_tokens = usage.completion_tokens
+    ledger.total_tokens = usage.total_tokens
+    ledger.input_tokens = usage.input_tokens
+    ledger.output_tokens = usage.output_tokens
+    ledger.cached_input_tokens = usage.cached_input_tokens
+    ledger.uncached_input_tokens = usage.uncached_input_tokens
+    ledger.usage_payload = usage.usage_payload
     ledger.latency_ms = 0
     ledger.error_code = ""
     ledger.error_summary = ""

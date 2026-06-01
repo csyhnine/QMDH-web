@@ -15,6 +15,7 @@ from app.models import AuditLog, Project, Task, TaskStatus, User, Workflow
 from app.schemas import TaskCreate, TaskDeleteIn, TaskOut
 from app.services.task_archive import ensure_task_archive
 from app.services.media_storage import resolve_storage_payload
+from app.services.billing import enforce_user_quota
 from app.services.model_registry import get_provider_definition, get_provider_map
 from app.services.task_executor import enqueue_task, execute_task
 from app.services.usage_ledger import ensure_usage_ledger_for_task
@@ -183,6 +184,7 @@ def create_task(
         raise HTTPException(status_code=403, detail="Project access denied")
 
     user = _get_or_create_user(db, auth_user)
+    enforce_user_quota(db, user=user)
     reference_image_storage_paths = _reference_image_storage_paths(payload.payload)
 
     task = Task(

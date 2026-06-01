@@ -14,6 +14,10 @@ from app.schemas import UserCreate, UserOut, UserPasswordReset, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
 VALID_ROLES = {"admin", "designer"}
+VALID_BILLING_PLANS = {"internal", "trial", "standard", "pro", "enterprise"}
+VALID_BILLING_STATUSES = {"active", "suspended", "grace"}
+VALID_QUOTA_POLICIES = {"soft_warn", "hard_block", "unlimited"}
+VALID_QUOTA_RESET_CYCLES = {"monthly"}
 ROLE_ALIASES = {
     "owner": "admin",
     "admin": "admin",
@@ -29,6 +33,13 @@ def _validate_role(role: str) -> str:
     return normalized
 
 
+def _validate_choice(value: str, allowed: set[str], field_name: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in allowed:
+        raise HTTPException(status_code=400, detail=f"Invalid {field_name}")
+    return normalized
+
+
 def _to_user_out(user: User) -> UserOut:
     return UserOut(
         id=user.id,
@@ -37,6 +48,10 @@ def _to_user_out(user: User) -> UserOut:
         role=normalize_user_role(user.role),
         is_active=user.is_active,
         monthly_quota=user.monthly_quota,
+        billing_plan=user.billing_plan or "standard",
+        billing_status=user.billing_status or "active",
+        quota_policy=user.quota_policy or "soft_warn",
+        quota_reset_cycle=user.quota_reset_cycle or "monthly",
         created_at=user.created_at,
         updated_at=user.updated_at or user.created_at,
         last_login_at=user.last_login_at,
@@ -72,6 +87,10 @@ def create_user(
         is_active=payload.is_active,
         project_codes=[],
         monthly_quota=payload.monthly_quota,
+        billing_plan=_validate_choice(payload.billing_plan, VALID_BILLING_PLANS, "billing_plan"),
+        billing_status=_validate_choice(payload.billing_status, VALID_BILLING_STATUSES, "billing_status"),
+        quota_policy=_validate_choice(payload.quota_policy, VALID_QUOTA_POLICIES, "quota_policy"),
+        quota_reset_cycle=_validate_choice(payload.quota_reset_cycle, VALID_QUOTA_RESET_CYCLES, "quota_reset_cycle"),
     )
     db.add(user)
     db.commit()
@@ -115,6 +134,18 @@ def update_user(
         user.is_active = bool(updates["is_active"])
     if "monthly_quota" in updates:
         user.monthly_quota = updates["monthly_quota"]
+    if "billing_plan" in updates and updates["billing_plan"] is not None:
+        user.billing_plan = _validate_choice(updates["billing_plan"], VALID_BILLING_PLANS, "billing_plan")
+    if "billing_status" in updates and updates["billing_status"] is not None:
+        user.billing_status = _validate_choice(updates["billing_status"], VALID_BILLING_STATUSES, "billing_status")
+    if "quota_policy" in updates and updates["quota_policy"] is not None:
+        user.quota_policy = _validate_choice(updates["quota_policy"], VALID_QUOTA_POLICIES, "quota_policy")
+    if "quota_reset_cycle" in updates and updates["quota_reset_cycle"] is not None:
+        user.quota_reset_cycle = _validate_choice(
+            updates["quota_reset_cycle"],
+            VALID_QUOTA_RESET_CYCLES,
+            "quota_reset_cycle",
+        )
 
     db.commit()
     db.refresh(user)

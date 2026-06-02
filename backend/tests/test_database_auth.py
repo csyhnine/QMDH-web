@@ -10,8 +10,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.security import hash_password, hash_session_token
 from app.database import Base, get_db
-from app.models import Asset, AssetType, AuditLog, AuthSession, DataClassification, Project, ProviderCall, ProviderCallArchive, Task, TaskArchive, TaskStatus, UsageLedger, User, Workflow
-from app.routers import assets, auth, dashboard, projects, tasks, users
+from app.models import Asset, AssetType, AuditLog, AuthSession, DataClassification, InspirationPost, Project, ProviderCall, ProviderCallArchive, Task, TaskArchive, TaskStatus, UsageLedger, User, Workflow
+from app.routers import assets, auth, dashboard, inspiration, projects, tasks, users
 from app.services.bootstrap import seed_initial_data
 from app.services.usage_ledger import ensure_usage_ledger_for_task
 
@@ -185,6 +185,7 @@ class DatabaseAuthTests(unittest.TestCase):
         self.app.include_router(projects.router)
         self.app.include_router(tasks.router)
         self.app.include_router(assets.router)
+        self.app.include_router(inspiration.router)
         self.app.include_router(dashboard.router)
         self.client = TestClient(self.app)
 
@@ -434,8 +435,61 @@ class DatabaseAuthTests(unittest.TestCase):
         )
         self.assertEqual(forbidden_bookmark.status_code, 403)
 
+        forbidden_share = self.client.post(
+            f"/assets/{peer_asset_id}/share",
+            headers={"Authorization": f"Bearer {designer_token}"},
+        )
+        self.assertEqual(forbidden_share.status_code, 403)
+
         admin_like = self.client.post(f"/assets/{peer_asset_id}/like", headers={"Authorization": f"Bearer {admin_token}"})
         self.assertEqual(admin_like.status_code, 403)
+
+    def test_share_asset_creates_inspiration_post_once_and_marks_asset(self) -> None:
+        designer_token = self.login("designer", "designer-pass")
+
+        assets_response = self.client.get("/assets", headers={"Authorization": f"Bearer {designer_token}"})
+        self.assertEqual(assets_response.status_code, 200, assets_response.text)
+        asset = assets_response.json()[0]
+        self.assertFalse(asset["is_shared_to_inspiration"])
+        self.assertIsNone(asset["inspiration_post_id"])
+
+        first_share = self.client.post(
+            f"/assets/{asset['id']}/share",
+            headers={"Authorization": f"Bearer {designer_token}"},
+        )
+        self.assertEqual(first_share.status_code, 200, first_share.text)
+        first_payload = first_share.json()
+        self.assertFalse(first_payload["already_shared"])
+        self.assertEqual(first_payload["asset"]["share_count"], 1)
+        self.assertTrue(first_payload["asset"]["is_shared_to_inspiration"])
+        self.assertIsNotNone(first_payload["asset"]["inspiration_post_id"])
+        self.assertEqual(first_payload["inspiration_post_id"], first_payload["asset"]["inspiration_post_id"])
+
+        second_share = self.client.post(
+            f"/assets/{asset['id']}/share",
+            headers={"Authorization": f"Bearer {designer_token}"},
+        )
+        self.assertEqual(second_share.status_code, 200, second_share.text)
+        second_payload = second_share.json()
+        self.assertTrue(second_payload["already_shared"])
+        self.assertEqual(second_payload["asset"]["share_count"], 1)
+        self.assertEqual(second_payload["inspiration_post_id"], first_payload["inspiration_post_id"])
+
+        listed_posts = self.client.get("/inspiration", headers={"Authorization": f"Bearer {designer_token}"})
+        self.assertEqual(listed_posts.status_code, 200, listed_posts.text)
+        user_posts = [post for post in listed_posts.json() if post["source_type"] == "user"]
+        self.assertEqual(len(user_posts), 1)
+        self.assertEqual(user_posts[0]["title"], "Project cover")
+        self.assertEqual(user_posts[0]["prompt_text"], "cover")
+        self.assertEqual(user_posts[0]["model_name"], "MAILAND/majicflus_v1")
+
+        with self.SessionLocal() as db:
+            posts = db.scalars(select(InspirationPost).where(InspirationPost.source_asset_id == asset["id"])).all()
+            designer = db.scalar(select(User).where(User.name == "designer"))
+            self.assertEqual(len(posts), 1)
+            self.assertEqual(posts[0].image_path, "media/project-cover.png")
+            self.assertIsNotNone(designer)
+            self.assertEqual(posts[0].user_id, designer.id)
 
     def test_project_list_is_filtered_by_database_session_user(self) -> None:
         designer_token = self.login("designer", "designer-pass")

@@ -64,10 +64,18 @@ class AssetOut(BaseModel):
     share_count: int
     bookmark_count: int = 0
     is_bookmarked: bool = False
+    inspiration_post_id: int | None = None
+    is_shared_to_inspiration: bool = False
     tags: list[str]
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AssetShareOut(BaseModel):
+    asset: AssetOut
+    inspiration_post_id: int
+    already_shared: bool
 
 
 class DashboardDailyPoint(BaseModel):

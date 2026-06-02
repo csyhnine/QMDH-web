@@ -4,6 +4,7 @@ import { api, type PromptTemplateRecord, type Provider } from "../../api";
 
 type ComposerMenuKey = "template" | "provider" | "display" | "count" | null;
 type TemplateQuickFilter = "all" | "featured" | "recent";
+type TemplatePreviewLayout = "single" | "columns" | "stacked";
 
 type StudioFormValue = {
   creationMode: "generate" | "edit";
@@ -127,6 +128,30 @@ function templatePreviewImages(template: PromptTemplateRecord): Array<{ key: str
   return images;
 }
 
+function parseAspectRatioValue(value: string | null | undefined): number | null {
+  const raw = String(value || "").trim();
+  if (!raw.includes(":")) return null;
+  const [width, height] = raw.split(":").map((item) => Number(item.trim()));
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+  return width / height;
+}
+
+function inferTemplatePreviewLayout(
+  imageCount: number,
+  measuredAspectRatios: number[],
+  templateAspectRatio: string | null | undefined
+): TemplatePreviewLayout {
+  if (imageCount <= 1) return "single";
+  if (measuredAspectRatios.length > 0) {
+    return measuredAspectRatios.some((ratio) => ratio >= 1) ? "stacked" : "columns";
+  }
+  const templateRatio = parseAspectRatioValue(templateAspectRatio);
+  if (templateRatio !== null) {
+    return templateRatio >= 1 ? "stacked" : "columns";
+  }
+  return "columns";
+}
+
 export default function StudioComposerDock({
   activeComposerMenu,
   activeTemplateId,
@@ -180,7 +205,9 @@ export default function StudioComposerDock({
   const [activeTemplateCategory, setActiveTemplateCategory] = useState("all");
   const [activeTemplateSubcategory, setActiveTemplateSubcategory] = useState("all");
   const [expandedTemplateCategories, setExpandedTemplateCategories] = useState<Record<string, boolean>>({});
+  const [hoveredTemplateAspectRatios, setHoveredTemplateAspectRatios] = useState<Record<string, number>>({});
   const impressedTemplateIdsRef = useRef<Set<number>>(new Set());
+  const hoverPreviewHideTimeoutRef = useRef<number | null>(null);
 
   const modeLabel = studioForm.creationMode === "edit" ? "图像编辑" : "文生图";
   const referenceHint =
@@ -291,6 +318,17 @@ export default function StudioComposerDock({
     () => (hoveredTemplate ? templatePreviewImages(hoveredTemplate) : []),
     [hoveredTemplate]
   );
+  const hoveredTemplatePreviewLayout = useMemo(
+    () =>
+      inferTemplatePreviewLayout(
+        hoveredTemplateImages.length,
+        hoveredTemplateImages
+          .map((image) => hoveredTemplateAspectRatios[image.key])
+          .filter((ratio): ratio is number => Number.isFinite(ratio)),
+        hoveredTemplate?.aspect_ratio
+      ),
+    [hoveredTemplate?.aspect_ratio, hoveredTemplateAspectRatios, hoveredTemplateImages]
+  );
 
   const activeTemplateHeading =
     activeTemplateSubcategory !== "all"
@@ -314,6 +352,70 @@ export default function StudioComposerDock({
     }
   }, [filteredSharedTemplates]);
 
+  useEffect(() => {
+    if (hoverPreviewHideTimeoutRef.current === null) return undefined;
+    return () => {
+      if (hoverPreviewHideTimeoutRef.current !== null) {
+        window.clearTimeout(hoverPreviewHideTimeoutRef.current);
+        hoverPreviewHideTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (hoveredTemplateImages.length === 0) {
+      setHoveredTemplateAspectRatios({});
+      return undefined;
+    }
+
+    Promise.all(
+      hoveredTemplateImages.map(
+        (image) =>
+          new Promise<{ key: string; aspectRatio: number | null }>((resolve) => {
+            const probe = new Image();
+            probe.onload = () => {
+              if (!probe.naturalWidth || !probe.naturalHeight) {
+                resolve({ key: image.key, aspectRatio: null });
+                return;
+              }
+              resolve({ key: image.key, aspectRatio: probe.naturalWidth / probe.naturalHeight });
+            };
+            probe.onerror = () => resolve({ key: image.key, aspectRatio: null });
+            probe.src = image.src;
+          })
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      const next: Record<string, number> = {};
+      for (const item of results) {
+        if (item.aspectRatio !== null && Number.isFinite(item.aspectRatio)) {
+          next[item.key] = item.aspectRatio;
+        }
+      }
+      setHoveredTemplateAspectRatios(next);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hoveredTemplateImages]);
+
+  function cancelHoverPreviewHide() {
+    if (hoverPreviewHideTimeoutRef.current !== null) {
+      window.clearTimeout(hoverPreviewHideTimeoutRef.current);
+      hoverPreviewHideTimeoutRef.current = null;
+    }
+  }
+
+  function scheduleHoverPreviewHide() {
+    cancelHoverPreviewHide();
+    hoverPreviewHideTimeoutRef.current = window.setTimeout(() => {
+      setHoveredTemplateId(null);
+      hoverPreviewHideTimeoutRef.current = null;
+    }, 120);
+  }
+
   function handleApplySharedTemplate(template: PromptTemplateRecord) {
     void api.trackPromptTemplateEvent(template.id, {
       event_type: "apply",
@@ -323,6 +425,7 @@ export default function StudioComposerDock({
   }
 
   function handleHoverSharedTemplate(templateId: number) {
+    cancelHoverPreviewHide();
     setHoveredTemplateId(templateId);
     void api.trackPromptTemplateEvent(templateId, {
       event_type: "hover_preview",
@@ -536,9 +639,17 @@ export default function StudioComposerDock({
                               className={activeTemplateId === template.id ? "template-card is-active" : "template-card"}
                               onClick={() => handleApplySharedTemplate(template)}
                               onMouseEnter={() => handleHoverSharedTemplate(template.id)}
-                              onMouseLeave={() => setHoveredTemplateId((current) => (current === template.id ? null : current))}
+                              onMouseLeave={() => {
+                                if (hoveredTemplateId === template.id) {
+                                  scheduleHoverPreviewHide();
+                                }
+                              }}
                               onFocus={() => handleHoverSharedTemplate(template.id)}
-                              onBlur={() => setHoveredTemplateId((current) => (current === template.id ? null : current))}
+                              onBlur={() => {
+                                if (hoveredTemplateId === template.id) {
+                                  scheduleHoverPreviewHide();
+                                }
+                              }}
                             >
                               <strong>{template.label}</strong>
                               <span>{template.title}</span>
@@ -550,28 +661,37 @@ export default function StudioComposerDock({
                       )}
                     </div>
 
-                    {hoveredTemplate ? (
-                      <aside className="template-hover-preview" aria-live="polite">
-                        {hoveredTemplateImages.length > 0 ? (
+                    <aside
+                      className={`template-hover-preview template-hover-preview-${hoveredTemplatePreviewLayout}${hoveredTemplate ? " is-visible" : ""}`}
+                      aria-live="polite"
+                    >
+                      {hoveredTemplate ? (
+                        hoveredTemplateImages.length > 0 ? (
                           <div
                             className={
                               hoveredTemplateImages.length === 1
                                 ? "template-hover-preview-compare template-hover-preview-compare-single"
-                                : "template-hover-preview-compare"
+                                : hoveredTemplatePreviewLayout === "stacked"
+                                  ? "template-hover-preview-compare template-hover-preview-compare-stacked"
+                                  : "template-hover-preview-compare"
                             }
                           >
                             {hoveredTemplateImages.map((image) => (
                               <figure key={image.key} className="template-hover-preview-figure">
-                                <img className="template-hover-preview-image" src={image.src} alt={`${hoveredTemplate.label} ${image.label}`} />
+                                <div className="template-hover-preview-media">
+                                  <img className="template-hover-preview-image" src={image.src} alt={`${hoveredTemplate.label} ${image.label}`} />
+                                </div>
                                 <figcaption>{image.label}</figcaption>
                               </figure>
                             ))}
                           </div>
                         ) : (
                           <div className={`template-hover-preview-fallback ${previewStyleClass(hoveredTemplate.style)}`} aria-label={`${hoveredTemplate.label} 暂无预览图`} />
-                        )}
-                      </aside>
-                    ) : null}
+                        )
+                      ) : (
+                        <div className="template-hover-preview-placeholder" aria-hidden="true" />
+                      )}
+                    </aside>
                   </div>
                 ) : (
                   <div className="template-empty">后台还没有配置共享模板，当前页面只显示“我的提示词”。</div>

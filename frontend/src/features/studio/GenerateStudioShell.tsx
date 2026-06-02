@@ -93,6 +93,15 @@ type TemplateFeedback = {
   message: string;
 };
 
+type HistoryActionKey = "reuse" | "bookmark" | "share" | "delete";
+
+type HistoryActionFeedback = {
+  action: HistoryActionKey;
+  tone: "success" | "error" | "info";
+  message: string;
+  stamp: number;
+};
+
 type ProviderProfileDraft = {
   providerName: string;
   apiKey: string;
@@ -1134,6 +1143,8 @@ function FeedCard(props: {
   onDelete: () => void;
   onAssetPreview?: (asset: Asset) => void;
   anchorRef?: RefObject<HTMLElement | null>;
+  pendingAction?: HistoryActionKey | null;
+  feedback?: HistoryActionFeedback | null;
 }) {
   const displayTitle = taskDisplayTitle(props.task, props.asset);
   const summary = taskSummary(props.task, props.asset);
@@ -1167,7 +1178,11 @@ function FeedCard(props: {
       className={[
         "feed-card",
         showRunningState ? "feed-card-running" : "",
-        hasReferenceImage ? "feed-card-with-reference" : ""
+        hasReferenceImage ? "feed-card-with-reference" : "",
+        props.asset?.is_bookmarked ? "feed-card-bookmarked" : "",
+        props.feedback?.action === "bookmark" && props.feedback.tone === "success" && props.asset?.is_bookmarked
+          ? "feed-card-bookmarked-pulse"
+          : ""
       ].filter(Boolean).join(" ")}
       ref={props.anchorRef}
     >
@@ -1263,22 +1278,49 @@ function FeedCard(props: {
         </div>
       )}
 
-      <div className="feed-card-actions">
-        <div className="feed-action-group">
-          <button type="button" className="ghost-button" onClick={props.onReuse} disabled={props.reuseDisabled}>
-            再次生成
-          </button>
-          <button type="button" className={`ghost-button${props.asset?.is_bookmarked ? " bookmarked" : ""}`} onClick={props.onBookmark} disabled={!props.asset}>
-            {props.asset?.is_bookmarked ? "★ 已标记" : "☆ 标记"}
-          </button>
-          <button type="button" className="ghost-button" onClick={props.onShare} disabled={!props.asset}>
-            分享 {props.asset?.share_count ?? 0}
-          </button>
-          <button type="button" className="ghost-button danger-text" onClick={props.onDelete}>
-            删除
-          </button>
+      <div className="feed-card-footer">
+        <div className="feed-card-actions">
+          <div className="feed-action-group">
+            <button
+              type="button"
+              className={`ghost-button feed-action-button${props.pendingAction === "reuse" ? " is-pending" : ""}${props.feedback?.action === "reuse" && props.feedback.tone === "success" ? " is-success" : ""}`}
+              onClick={props.onReuse}
+              disabled={props.reuseDisabled || props.pendingAction !== null}
+            >
+              {props.pendingAction === "reuse" ? "提交中..." : "再次生成"}
+            </button>
+            <button
+              type="button"
+              className={`ghost-button feed-action-button${props.asset?.is_bookmarked ? " bookmarked" : ""}${props.pendingAction === "bookmark" ? " is-pending" : ""}${props.feedback?.action === "bookmark" && props.feedback.tone === "success" ? " is-success" : ""}`}
+              onClick={props.onBookmark}
+              disabled={!props.asset || props.pendingAction !== null}
+            >
+              {props.pendingAction === "bookmark" ? "标记中..." : props.asset?.is_bookmarked ? "★ 已标记" : "☆ 标记"}
+            </button>
+            <button
+              type="button"
+              className={`ghost-button feed-action-button${props.pendingAction === "share" ? " is-pending" : ""}${props.feedback?.action === "share" && props.feedback.tone === "success" ? " is-success" : ""}`}
+              onClick={props.onShare}
+              disabled={!props.asset || props.pendingAction !== null}
+            >
+              {props.pendingAction === "share"
+                ? "分享中..."
+                : props.asset?.is_shared_to_inspiration
+                  ? `已分享 ${props.asset?.share_count ?? 0}`
+                  : `分享 ${props.asset?.share_count ?? 0}`}
+            </button>
+            <button
+              type="button"
+              className={`ghost-button danger-text feed-action-button${props.pendingAction === "delete" ? " is-pending" : ""}${props.feedback?.action === "delete" && props.feedback.tone === "success" ? " is-success" : ""}`}
+              onClick={props.onDelete}
+              disabled={props.pendingAction !== null}
+            >
+              {props.pendingAction === "delete" ? "删除中..." : "删除"}
+            </button>
+          </div>
+          <span className="feed-card-time">{formatDate(props.task.created_at)}</span>
         </div>
-        <span className="feed-card-time">{formatDate(props.task.created_at)}</span>
+        {props.feedback ? <p className={`feed-card-feedback ${props.feedback.tone}`}>{props.feedback.message}</p> : null}
       </div>
     </article>
   );
@@ -1342,6 +1384,9 @@ export default function GenerateStudioShell() {
   const [renameValue, setRenameValue] = useState("");
   const [dashboardStatsDays, setDashboardStatsDays] = useState(30);
   const [galleryPreview, setGalleryPreview] = useState<{ task: Task; asset: Asset } | null>(null);
+  const [historyActionPendingByTaskId, setHistoryActionPendingByTaskId] = useState<Record<number, HistoryActionKey | null>>({});
+  const [historyFeedbackByTaskId, setHistoryFeedbackByTaskId] = useState<Record<number, HistoryActionFeedback | undefined>>({});
+  const [historyNotice, setHistoryNotice] = useState<{ tone: "success" | "error" | "info"; message: string } | null>(null);
   const isFetchingRef = useRef(false);
   const submissionInFlightRef = useRef(false);
   const loadRequestIdRef = useRef(0);
@@ -1351,6 +1396,73 @@ export default function GenerateStudioShell() {
   const latestTaskRef = useRef<HTMLElement | null>(null);
   const hasAutoPositionedRef = useRef(false);
   const [regeneratingTaskId, setRegeneratingTaskId] = useState<number | null>(null);
+  const historyFeedbackTimersRef = useRef<Record<number, number>>({});
+  const historyNoticeTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      Object.values(historyFeedbackTimersRef.current).forEach((timerId) => window.clearTimeout(timerId));
+      if (historyNoticeTimerRef.current !== null) {
+        window.clearTimeout(historyNoticeTimerRef.current);
+      }
+    };
+  }, []);
+
+  function setHistoryActionPending(taskId: number, action: HistoryActionKey | null) {
+    setHistoryActionPendingByTaskId((current) => ({
+      ...current,
+      [taskId]: action,
+    }));
+  }
+
+  function pushHistoryFeedback(taskId: number, action: HistoryActionKey, tone: "success" | "error" | "info", message: string) {
+    if (historyFeedbackTimersRef.current[taskId]) {
+      window.clearTimeout(historyFeedbackTimersRef.current[taskId]);
+    }
+    setHistoryFeedbackByTaskId((current) => ({
+      ...current,
+      [taskId]: {
+        action,
+        tone,
+        message,
+        stamp: Date.now(),
+      },
+    }));
+    historyFeedbackTimersRef.current[taskId] = window.setTimeout(() => {
+      setHistoryFeedbackByTaskId((current) => {
+        const next = { ...current };
+        delete next[taskId];
+        return next;
+      });
+      delete historyFeedbackTimersRef.current[taskId];
+    }, 2600);
+  }
+
+  function pushHistoryNotice(tone: "success" | "error" | "info", message: string) {
+    if (historyNoticeTimerRef.current !== null) {
+      window.clearTimeout(historyNoticeTimerRef.current);
+    }
+    setHistoryNotice({ tone, message });
+    historyNoticeTimerRef.current = window.setTimeout(() => {
+      setHistoryNotice(null);
+      historyNoticeTimerRef.current = null;
+    }, 2600);
+  }
+
+  function replaceAssetInState(updatedAsset: Asset) {
+    setState((current) => ({
+      ...current,
+      assets: current.assets.map((asset) => (asset.id === updatedAsset.id ? updatedAsset : asset)),
+    }));
+    setGalleryPreview((current) =>
+      current && current.asset.id === updatedAsset.id
+        ? {
+            ...current,
+            asset: updatedAsset,
+          }
+        : current
+    );
+  }
 
   async function loadData(options: { force?: boolean; dashboardDays?: number } = {}) {
     if (isFetchingRef.current && !options.force) return;
@@ -1827,14 +1939,57 @@ export default function GenerateStudioShell() {
 
   async function handleRegenerateTask(task: Task, asset?: Asset) {
     if (submissionInFlightRef.current) {
+      pushHistoryFeedback(task.id, "reuse", "info", "当前已有任务在提交，请稍候。");
       return;
     }
     const { nextForm } = buildStudioFormFromTask(task, asset);
     setRegeneratingTaskId(task.id);
+    setHistoryActionPending(task.id, "reuse");
     try {
-      await submitStudioTask(nextForm);
+      const submitted = await submitStudioTask(nextForm);
+      pushHistoryFeedback(
+        task.id,
+        "reuse",
+        submitted ? "success" : "error",
+        submitted ? "已带入创作区，并开始再次生成。" : "再次生成没有提交成功。"
+      );
     } finally {
       setRegeneratingTaskId((current) => (current === task.id ? null : current));
+      setHistoryActionPending(task.id, null);
+    }
+  }
+
+  async function handleDeleteHistoryTask(task: Task) {
+    if (!window.confirm("确定删除这条生成记录？")) {
+      return;
+    }
+    setHistoryActionPending(task.id, "delete");
+    try {
+      await api.deleteTask(task.id);
+      if (historyFeedbackTimersRef.current[task.id]) {
+        window.clearTimeout(historyFeedbackTimersRef.current[task.id]);
+        delete historyFeedbackTimersRef.current[task.id];
+      }
+      setHistoryFeedbackByTaskId((current) => {
+        const next = { ...current };
+        delete next[task.id];
+        return next;
+      });
+      setState((current) => ({
+        ...current,
+        tasks: current.tasks.filter((item) => item.id !== task.id),
+        assets: current.assets.filter((asset) => asset.source_task_id !== task.id),
+      }));
+      setGalleryPreview((current) => (current?.task.id === task.id ? null : current));
+      pushHistoryNotice("success", "已删除这条生成记录。");
+    } catch (error) {
+      pushHistoryFeedback(task.id, "delete", "error", error instanceof Error ? error.message : "删除失败");
+      setState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : "删除失败",
+      }));
+    } finally {
+      setHistoryActionPending(task.id, null);
     }
   }
 
@@ -2296,7 +2451,7 @@ export default function GenerateStudioShell() {
     }
   }
 
-  async function submitStudioTask(form: StudioFormState) {
+  async function submitStudioTask(form: StudioFormState): Promise<boolean> {
     setActiveComposerMenu(null);
     setTemplateFeedback(null);
 
@@ -2305,7 +2460,7 @@ export default function GenerateStudioShell() {
         ...current,
         error: "参考图仍在上传，请稍后再提交。"
       }));
-      return;
+      return false;
     }
 
     const providerForSubmit = resolveStudioProviderForForm(form);
@@ -2314,7 +2469,7 @@ export default function GenerateStudioShell() {
         ...current,
         error: "请先选择一个可用模型"
       }));
-      return;
+      return false;
     }
     if (providerForSubmit.provider_name !== form.requestedProvider) {
       setStudioForm((current) => ({
@@ -2328,7 +2483,7 @@ export default function GenerateStudioShell() {
         ...current,
         error: "当前模型不支持图像编辑，请切换到支持 image.edit 的模型"
       }));
-      return;
+      return false;
     }
 
     if (form.creationMode === "generate" && !providerForSubmit.capabilities.includes("image.generate")) {
@@ -2336,7 +2491,7 @@ export default function GenerateStudioShell() {
         ...current,
         error: "当前模型不支持文生图，请切换到支持 image.generate 的模型"
       }));
-      return;
+      return false;
     }
 
     const referenceImageCount = clampReferenceImageCount(form.referenceImages.length);
@@ -2345,7 +2500,7 @@ export default function GenerateStudioShell() {
         ...current,
         error: "图像编辑至少需要上传 1 张参考图"
       }));
-      return;
+      return false;
     }
 
     if (referenceImageCount > 4) {
@@ -2353,11 +2508,11 @@ export default function GenerateStudioShell() {
         ...current,
         error: "参考图最多只能上传 4 张"
       }));
-      return;
+      return false;
     }
 
     if (submissionInFlightRef.current) {
-      return;
+      return false;
     }
     submissionInFlightRef.current = true;
     setSubmitting(true);
@@ -2400,6 +2555,7 @@ export default function GenerateStudioShell() {
       }
       hasAutoPositionedRef.current = false;
       await loadData({ force: true });
+      return true;
     } catch (error) {
       setSubmissionTracker((current) =>
         current
@@ -2413,6 +2569,7 @@ export default function GenerateStudioShell() {
         ...current,
         error: error instanceof Error ? error.message : "提交任务失败"
       }));
+      return false;
     } finally {
       submissionInFlightRef.current = false;
       setSubmitting(false);
@@ -2424,19 +2581,26 @@ export default function GenerateStudioShell() {
     await submitStudioTask(studioForm);
   }
 
-  async function handleGalleryAction(action: "bookmark" | "share", assetId: number) {
+  async function handleGalleryAction(action: "bookmark" | "share", taskId: number, assetId: number) {
+    setHistoryActionPending(taskId, action);
     try {
       if (action === "bookmark") {
-        await api.bookmarkAsset(assetId);
+        const updatedAsset = await api.bookmarkAsset(assetId);
+        replaceAssetInState(updatedAsset);
+        pushHistoryFeedback(taskId, "bookmark", "success", updatedAsset.is_bookmarked ? "已标记为重点历史。" : "已取消标记。");
       } else {
-        await api.shareAsset(assetId);
+        const result = await api.shareAsset(assetId);
+        replaceAssetInState(result.asset);
+        pushHistoryFeedback(taskId, "share", "success", result.already_shared ? "这张图已经在灵感库里。" : "已分享到灵感库。");
       }
-      await loadData();
     } catch (error) {
+      pushHistoryFeedback(taskId, action, "error", error instanceof Error ? error.message : "图库操作失败");
       setState((current) => ({
         ...current,
         error: error instanceof Error ? error.message : "图库操作失败"
       }));
+    } finally {
+      setHistoryActionPending(taskId, null);
     }
   }
 
@@ -3747,6 +3911,7 @@ export default function GenerateStudioShell() {
           <StudioHistoryPane
             availableProviders={availableProviders}
             error={state.error}
+            notice={historyNotice}
             filters={filters}
             hasFilteredHistory={hasFilteredHistory}
             hasProjectHistory={hasProjectHistory}
@@ -3767,17 +3932,9 @@ export default function GenerateStudioShell() {
                   showDebugDetails={userCanUseOpsViews}
                   onReuse={() => void handleRegenerateTask(task, linkedAsset ?? galleryAssets[0])}
                   reuseDisabled={submitting || regeneratingTaskId === task.id}
-                  onBookmark={() => (linkedAsset ? void handleGalleryAction("bookmark", linkedAsset.id) : undefined)}
-                  onShare={() => (linkedAsset ? void handleGalleryAction("share", linkedAsset.id) : undefined)}
-                  onDelete={async () => {
-                    if (!confirm("确定删除这条生成记录？")) return;
-                    try {
-                      await api.deleteTask(task.id);
-                      await loadData();
-                    } catch (err) {
-                      alert(err instanceof Error ? err.message : "删除失败");
-                    }
-                  }}
+                  onBookmark={() => (linkedAsset ? void handleGalleryAction("bookmark", task.id, linkedAsset.id) : undefined)}
+                  onShare={() => (linkedAsset ? void handleGalleryAction("share", task.id, linkedAsset.id) : undefined)}
+                  onDelete={() => void handleDeleteHistoryTask(task)}
                   onAssetPreview={(asset) => {
                     if (getRenderableUrl(asset)) {
                       setGalleryPreview({ task, asset });
@@ -3786,6 +3943,8 @@ export default function GenerateStudioShell() {
                     }
                   }}
                   anchorRef={isLatestTask ? latestTaskRef : undefined}
+                  pendingAction={historyActionPendingByTaskId[task.id] ?? null}
+                  feedback={historyFeedbackByTaskId[task.id] ?? null}
                 />
               );
             })}

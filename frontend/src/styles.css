@@ -586,6 +586,27 @@ button {
   color: var(--danger);
 }
 
+.floating-notice {
+  width: 100%;
+  padding: 14px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  background: rgba(239, 246, 255, 0.92);
+  color: #1d4ed8;
+}
+
+.floating-notice-success {
+  border-color: rgba(74, 124, 89, 0.18);
+  background: rgba(236, 253, 245, 0.92);
+  color: #2f6a44;
+}
+
+.floating-notice-error {
+  border-color: rgba(194, 65, 12, 0.16);
+  background: rgba(255, 237, 213, 0.9);
+  color: var(--danger);
+}
+
 .media-lightbox {
   position: fixed;
   inset: 0;
@@ -1241,6 +1262,35 @@ button {
   position: relative;
   display: grid;
   gap: 12px;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.feed-card-bookmarked {
+  border-color: rgba(74, 124, 89, 0.24);
+  background:
+    linear-gradient(180deg, rgba(245, 252, 247, 0.98), rgba(239, 248, 242, 0.98)),
+    var(--panel);
+  box-shadow:
+    0 18px 38px rgba(74, 124, 89, 0.08),
+    inset 0 0 0 1px rgba(116, 162, 126, 0.08);
+}
+
+.feed-card-bookmarked .feed-card-avatar {
+  background: rgba(116, 162, 126, 0.14);
+  color: #2f6a44;
+}
+
+.feed-card-bookmarked .feed-card-meta span {
+  background: rgba(116, 162, 126, 0.08);
+  border-color: rgba(116, 162, 126, 0.16);
+}
+
+.feed-card-bookmarked-pulse {
+  animation: bookmarked-card-pulse 720ms ease;
 }
 
 .feed-card-with-reference {
@@ -1624,6 +1674,67 @@ button {
   align-items: center;
 }
 
+.feed-card-footer {
+  display: grid;
+  gap: 8px;
+}
+
+.feed-action-button {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.feed-action-button:hover {
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.feed-action-button:active {
+  transform: scale(0.97);
+}
+
+.feed-action-button.is-pending {
+  border-color: rgba(37, 99, 235, 0.18);
+  background: rgba(239, 246, 255, 0.96);
+  color: #1d4ed8;
+}
+
+.feed-action-button.is-pending::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.12) 36%, rgba(255, 255, 255, 0.72) 50%, rgba(255, 255, 255, 0.12) 64%, transparent 100%);
+  transform: translateX(-120%);
+  animation: action-button-sheen 1s ease infinite;
+  pointer-events: none;
+}
+
+.feed-action-button.is-success {
+  border-color: rgba(74, 124, 89, 0.22);
+  background: rgba(236, 253, 245, 0.96);
+  color: #2f6a44;
+  animation: action-button-success-pop 320ms ease;
+}
+
+.feed-card-feedback {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.feed-card-feedback.success {
+  color: #2f6a44;
+}
+
+.feed-card-feedback.info {
+  color: #1d4ed8;
+}
+
+.feed-card-feedback.error {
+  color: var(--danger);
+}
+
 .feed-card-time {
   color: var(--muted);
   font-family: "IBM Plex Mono", monospace;
@@ -1784,14 +1895,17 @@ button {
   display: grid;
   grid-template-columns: 176px minmax(0, 1fr);
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
+  min-height: 236px;
 }
 
 .reference-column {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) minmax(78px, auto);
   gap: 8px;
-  align-content: start;
+  align-content: stretch;
   min-width: 0;
+  min-height: 100%;
 }
 
 .composer-mode-switch {
@@ -1819,6 +1933,7 @@ button {
 .reference-dropzone {
   width: 100%;
   min-height: 116px;
+  height: 100%;
   border: 1px dashed rgba(15, 23, 42, 0.14);
   border-radius: 20px;
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.92));
@@ -1865,6 +1980,11 @@ button {
 .reference-upload-list {
   display: grid;
   gap: 6px;
+  min-height: 78px;
+  max-height: 110px;
+  overflow-y: auto;
+  align-content: start;
+  padding-right: 4px;
 }
 
 .reference-upload-chip {
@@ -1899,14 +2019,18 @@ button {
 
 .composer-textarea {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 10px;
   min-width: 0;
+  min-height: 100%;
+  align-self: stretch;
 }
 
 .composer-textarea textarea,
 .composer-notes textarea {
   min-height: 132px;
-  max-height: 156px;
+  height: 100%;
+  max-height: none;
   width: 100%;
   padding: 16px 18px;
   overflow-y: auto;
@@ -2370,14 +2494,28 @@ button {
   position: absolute;
   top: -18px;
   right: 0;
-  width: min(440px, 44vw);
+  width: min(460px, 46vw);
   border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 18px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 22px 48px rgba(15, 23, 42, 0.18);
-  animation: template-preview-enter 160ms ease;
   z-index: 3;
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.template-hover-preview-stacked {
+  width: min(560px, 54vw);
+}
+
+.template-hover-preview.is-visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .template-hover-preview-image,
@@ -2387,7 +2525,10 @@ button {
 }
 
 .template-hover-preview-image {
-  height: 100%;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
 }
 
@@ -2402,12 +2543,28 @@ button {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.template-hover-preview-compare-stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .template-hover-preview-figure {
   margin: 0;
   display: grid;
   grid-template-rows: minmax(220px, 320px) auto;
   gap: 0;
   background: rgba(15, 23, 42, 0.04);
+}
+
+.template-hover-preview-compare-stacked .template-hover-preview-figure {
+  grid-template-rows: minmax(180px, 260px) auto;
+}
+
+.template-hover-preview-media {
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(248, 250, 252, 0.92));
 }
 
 .template-hover-preview-figure figcaption {
@@ -2424,6 +2581,11 @@ button {
   padding: 18px;
   color: #fff;
   display: block;
+}
+
+.template-hover-preview-placeholder {
+  min-height: 220px;
+  background: transparent;
 }
 
 .template-preview-style-modern {
@@ -4804,6 +4966,12 @@ textarea:focus-visible {
 
   .composer-body {
     grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .reference-column {
+    grid-template-rows: auto minmax(96px, 96px) auto;
+    min-height: 0;
   }
 
   .reference-dropzone {
@@ -4944,8 +5112,54 @@ textarea:focus-visible {
 
 /* ─── Bookmark button state ─── */
 .ghost-button.bookmarked {
-  color: var(--accent);
+  color: #2f6a44;
   font-weight: 600;
+  border-color: rgba(74, 124, 89, 0.18);
+  background: rgba(236, 253, 245, 0.92);
+}
+
+@keyframes action-button-sheen {
+  from {
+    transform: translateX(-120%);
+  }
+
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes action-button-success-pop {
+  0% {
+    transform: scale(1);
+  }
+
+  45% {
+    transform: scale(1.04);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes bookmarked-card-pulse {
+  0% {
+    box-shadow:
+      0 18px 38px rgba(74, 124, 89, 0.08),
+      inset 0 0 0 1px rgba(116, 162, 126, 0.08);
+  }
+
+  50% {
+    box-shadow:
+      0 22px 46px rgba(74, 124, 89, 0.16),
+      inset 0 0 0 1px rgba(116, 162, 126, 0.18);
+  }
+
+  100% {
+    box-shadow:
+      0 18px 38px rgba(74, 124, 89, 0.08),
+      inset 0 0 0 1px rgba(116, 162, 126, 0.08);
+  }
 }
 
 /* ─── Member Editor Overlay ─── */
@@ -5840,6 +6054,12 @@ textarea:focus-visible {
 @media (max-width: 960px) {
   .composer-body {
     grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .reference-column {
+    grid-template-rows: auto minmax(180px, 180px) auto;
+    min-height: 0;
   }
 
   .reference-dropzone {

@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.auth import can_access_project, get_current_auth_user
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import Asset, AssetBookmark, Project, Task
-from app.schemas import AssetOut, ReferenceUploadIn, ReferenceUploadOut
+from app.models import Asset, AssetBookmark, InspirationPost, Project, ProviderCall, Task
+from app.schemas import AssetOut, AssetShareOut, ReferenceUploadIn, ReferenceUploadOut
 from app.services.media_storage import resolve_storage_path, write_binary_asset
 
 router = APIRouter(prefix="/assets", tags=["assets"])
@@ -67,12 +67,59 @@ def _to_asset_out(db: Session, asset: Asset, auth_user: AuthUserProfile) -> Asse
                 AssetBookmark.asset_id == asset.id,
             )
         ) is not None
+    inspiration_post = db.scalar(
+        select(InspirationPost).where(InspirationPost.source_asset_id == asset.id).order_by(InspirationPost.id.asc())
+    )
 
     out = AssetOut.model_validate(asset)
     out.storage_path = resolve_storage_path(asset.storage_path)
     out.is_bookmarked = is_bookmarked
     out.bookmark_count = len(asset.bookmarks)
+    out.inspiration_post_id = inspiration_post.id if inspiration_post else None
+    out.is_shared_to_inspiration = inspiration_post is not None
     return out
+
+
+def _get_existing_inspiration_post(db: Session, asset_id: int) -> InspirationPost | None:
+    return db.scalar(
+        select(InspirationPost).where(InspirationPost.source_asset_id == asset_id).order_by(InspirationPost.id.asc())
+    )
+
+
+def _derive_inspiration_title(asset: Asset, task: Task | None) -> str:
+    for candidate in (asset.name, task.title if task else None):
+        text = (candidate or "").strip()
+        if text:
+            return text[:200]
+    return f"Studio share #{asset.id}"
+
+
+def _derive_inspiration_description(asset: Asset, task: Task | None) -> str:
+    prompt_text = (asset.prompt_text or "").strip()
+    task_title = (task.title or "").strip() if task else ""
+    if prompt_text and task_title and task_title != asset.name:
+        return f"{task_title}\n\n{prompt_text}"
+    if prompt_text:
+        return prompt_text
+    if task_title and task_title != asset.name:
+        return task_title
+    return ""
+
+
+def _derive_inspiration_model_name(db: Session, asset: Asset, task: Task | None) -> str:
+    if asset.source_task_id is not None:
+        provider_call = db.scalar(
+            select(ProviderCall).where(ProviderCall.task_id == asset.source_task_id).order_by(ProviderCall.id.desc())
+        )
+        if provider_call and provider_call.model_name.strip():
+            return provider_call.model_name.strip()
+    if task:
+        response_model = task.result.get("response_model")
+        if isinstance(response_model, str) and response_model.strip():
+            return response_model.strip()
+        if task.requested_provider.strip():
+            return task.requested_provider.strip()
+    return ""
 
 
 def _extension_for_reference_upload(file_name: str, data_url: str) -> str:
@@ -175,20 +222,50 @@ def like_asset(
     return _to_asset_out(db, asset, auth_user)
 
 
-@router.post("/{asset_id}/share", response_model=AssetOut, status_code=status.HTTP_200_OK)
+@router.post("/{asset_id}/share", response_model=AssetShareOut, status_code=status.HTTP_200_OK)
 def share_asset(
     asset_id: int,
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
-) -> AssetOut:
+) -> AssetShareOut:
     asset = db.get(Asset, asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
     _ensure_asset_access(asset, auth_user=auth_user, db=db)
+
+    existing_post = _get_existing_inspiration_post(db, asset.id)
+    if existing_post:
+        return AssetShareOut(
+            asset=_to_asset_out(db, asset, auth_user),
+            inspiration_post_id=existing_post.id,
+            already_shared=True,
+        )
+
+    task = db.get(Task, asset.source_task_id) if asset.source_task_id is not None else None
+    post = InspirationPost(
+        title=_derive_inspiration_title(asset, task),
+        description=_derive_inspiration_description(asset, task),
+        image_path=asset.storage_path,
+        category="\u5efa\u7b51",
+        tags=list(dict.fromkeys(tag.strip() for tag in (asset.tags or []) if tag.strip())),
+        source_type="user",
+        source_name=task.requested_provider.strip() if task and task.requested_provider else "",
+        source_url="",
+        source_asset_id=asset.id,
+        prompt_text=asset.prompt_text,
+        model_name=_derive_inspiration_model_name(db, asset, task),
+        user_id=auth_user.user_id,
+    )
+    db.add(post)
     asset.share_count += 1
     db.commit()
     db.refresh(asset)
-    return _to_asset_out(db, asset, auth_user)
+    db.refresh(post)
+    return AssetShareOut(
+        asset=_to_asset_out(db, asset, auth_user),
+        inspiration_post_id=post.id,
+        already_shared=False,
+    )
 
 
 @router.post("/{asset_id}/bookmark", response_model=AssetOut, status_code=status.HTTP_200_OK)

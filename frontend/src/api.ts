@@ -39,8 +39,16 @@ export type Asset = {
   share_count: number;
   bookmark_count: number;
   is_bookmarked: boolean;
+  inspiration_post_id: number | null;
+  is_shared_to_inspiration: boolean;
   tags: string[];
   created_at: string;
+};
+
+export type AssetShareResult = {
+  asset: Asset;
+  inspiration_post_id: number;
+  already_shared: boolean;
 };
 
 export type Provider = {
@@ -708,7 +716,7 @@ export const api = {
   deleteTask: (taskId: number) => deleteRequest(`/tasks/${taskId}`),
   likeAsset: (assetId: number) => postJson<Asset>(`/assets/${assetId}/like`),
   bookmarkAsset: (assetId: number) => postJson<Asset>(`/assets/${assetId}/bookmark`),
-  shareAsset: (assetId: number) => postJson<Asset>(`/assets/${assetId}/share`),
+  shareAsset: (assetId: number) => postJson<AssetShareResult>(`/assets/${assetId}/share`),
   inspiration: (category?: string) => request<InspirationPost[]>(category && category !== "全部" ? `/inspiration?category=${encodeURIComponent(category)}` : "/inspiration"),
   createInspiration: (payload: { title: string; description?: string; image_path?: string; category?: string; tags?: string[]; source_type: string; source_name?: string; source_url?: string; source_asset_id?: number; prompt_text?: string; model_name?: string }) =>
     postJson<InspirationPost>("/inspiration", payload),

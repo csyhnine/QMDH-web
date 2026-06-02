@@ -11,6 +11,7 @@ export type FeedFilterState = {
 type StudioHistoryPaneProps = {
   availableProviders: Provider[];
   error: string;
+  notice?: { tone: "success" | "error" | "info"; message: string } | null;
   filters: FeedFilterState;
   hasFilteredHistory: boolean;
   hasProjectHistory: boolean;
@@ -22,6 +23,7 @@ type StudioHistoryPaneProps = {
 export default function StudioHistoryPane({
   availableProviders,
   error,
+  notice,
   filters,
   hasFilteredHistory,
   hasProjectHistory,
@@ -76,6 +78,7 @@ export default function StudioHistoryPane({
       ) : null}
 
       {error ? <div className="floating-error">{error}</div> : null}
+      {notice ? <div className={`floating-notice floating-notice-${notice.tone}`}>{notice.message}</div> : null}
 
       {hasProjectHistory ? (
         <section className="feed-stream">

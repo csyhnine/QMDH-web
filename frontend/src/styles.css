@@ -1905,10 +1905,12 @@ button {
 
 .composer-textarea textarea,
 .composer-notes textarea {
-  min-height: 156px;
+  min-height: 132px;
+  max-height: 156px;
   width: 100%;
   padding: 16px 18px;
-  resize: vertical;
+  overflow-y: auto;
+  resize: none;
   line-height: 1.7;
 }
 
@@ -2368,7 +2370,7 @@ button {
   position: absolute;
   top: -18px;
   right: 0;
-  width: min(360px, 38vw);
+  width: min(440px, 44vw);
   border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 18px;
   overflow: hidden;
@@ -2382,11 +2384,11 @@ button {
 .template-hover-preview-fallback {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 10;
 }
 
 .template-hover-preview-image {
-  object-fit: cover;
+  height: 100%;
+  object-fit: contain;
 }
 
 .template-hover-preview-compare {
@@ -2403,7 +2405,9 @@ button {
 .template-hover-preview-figure {
   margin: 0;
   display: grid;
+  grid-template-rows: minmax(220px, 320px) auto;
   gap: 0;
+  background: rgba(15, 23, 42, 0.04);
 }
 
 .template-hover-preview-figure figcaption {
@@ -2416,6 +2420,7 @@ button {
 }
 
 .template-hover-preview-fallback {
+  min-height: 220px;
   padding: 18px;
   color: #fff;
   display: block;
@@ -2568,6 +2573,56 @@ button {
   border: 1px solid var(--line);
   border-radius: 16px;
   background: rgba(15, 23, 42, 0.04);
+}
+
+.template-preview-dropzone {
+  min-height: 220px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px dashed var(--line-strong);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.03);
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.template-preview-dropzone:hover {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: rgba(37, 99, 235, 0.04);
+}
+
+.template-preview-dropzone.is-dragging {
+  border-color: rgba(37, 99, 235, 0.52);
+  background: rgba(37, 99, 235, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
+}
+
+.template-preview-dropzone.has-image {
+  border-style: solid;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.template-preview-dropzone-copy {
+  min-height: 220px;
+  padding: 20px;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.template-preview-dropzone-copy strong {
+  color: var(--text);
+  font-size: 0.94rem;
+}
+
+.template-preview-dropzone-copy span {
+  font-size: 0.82rem;
+  line-height: 1.6;
 }
 
 .template-preview-image-card img {

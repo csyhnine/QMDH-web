@@ -1,4 +1,4 @@
-import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type DragEvent, type FormEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, type PromptTemplateCreatePayload, type PromptTemplateRecord } from "../../api";
 import { validateReferenceImageSize } from "../../utils/uploads";
@@ -42,6 +42,74 @@ function imageCoverageLabel(template: Pick<PromptTemplateRecord, "source_image_p
   return "未配置展示图";
 }
 
+type ImageUploaderProps = {
+  altLabel: string;
+  clearLabel: string;
+  dragging: boolean;
+  field: UploadField;
+  imagePath: string;
+  inputRef: RefObject<HTMLInputElement | null>;
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onClear: () => void;
+  onDrop: (field: UploadField, event: DragEvent<HTMLButtonElement>) => Promise<void>;
+  onPick: () => void;
+  onSetDragging: (field: UploadField | null) => void;
+  title: string;
+  uploading: boolean;
+};
+
+function TemplateImageUploader(props: ImageUploaderProps) {
+  return (
+    <article className="template-preview-upload-card">
+      <div className="template-preview-upload-head">
+        <strong>{props.title}</strong>
+        <div className="template-editor-actions">
+          <button type="button" className="ghost-button" onClick={props.onPick} disabled={props.uploading}>
+            {props.uploading ? "上传中..." : props.imagePath ? `更换${props.title}` : `上传${props.title}`}
+          </button>
+          {props.imagePath ? (
+            <button type="button" className="ghost-button" onClick={props.onClear}>
+              {props.clearLabel}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <input ref={props.inputRef} type="file" accept="image/*" hidden onChange={props.onChange} />
+
+      <button
+        type="button"
+        className={
+          props.dragging
+            ? "template-preview-dropzone is-dragging"
+            : props.imagePath
+              ? "template-preview-dropzone has-image"
+              : "template-preview-dropzone"
+        }
+        onClick={props.onPick}
+        onDragOver={(event) => {
+          event.preventDefault();
+          props.onSetDragging(props.field);
+        }}
+        onDragLeave={() => props.onSetDragging(null)}
+        onDrop={(event) => void props.onDrop(props.field, event)}
+        disabled={props.uploading}
+      >
+        {props.imagePath ? (
+          <div className="template-preview-image-card">
+            <img src={props.imagePath} alt={props.altLabel} />
+          </div>
+        ) : (
+          <div className="template-preview-dropzone-copy">
+            <strong>{`点击或拖拽上传${props.title}`}</strong>
+            <span>支持 PNG / JPG / WEBP，单张不超过 10MB。</span>
+          </div>
+        )}
+      </button>
+    </article>
+  );
+}
+
 export type PromptTemplatesPageProps = {
   templates: PromptTemplateRecord[];
   error: string;
@@ -55,6 +123,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [uploadingField, setUploadingField] = useState<UploadField | null>(null);
+  const [draggingField, setDraggingField] = useState<UploadField | null>(null);
   const sourceInputRef = useRef<HTMLInputElement | null>(null);
   const resultInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -99,14 +168,10 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
     onSetError("");
   }
 
-  async function handleImageUpload(field: UploadField, event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  async function uploadTemplateImage(field: UploadField, file: File) {
     const sizeError = validateReferenceImageSize(file);
     if (sizeError) {
       onSetError(sizeError);
-      event.target.value = "";
       return;
     }
 
@@ -115,7 +180,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
       const reader = new FileReader();
       const dataUrl = await new Promise<string>((resolve, reject) => {
         reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(new Error("读取模板展示图失败"));
+        reader.onerror = () => reject(new Error("模板展示图读取失败"));
         reader.readAsDataURL(file);
       });
 
@@ -130,8 +195,25 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
       onSetError(err instanceof Error ? err.message : "上传模板展示图失败");
     } finally {
       setUploadingField(null);
-      event.target.value = "";
+      setDraggingField(null);
     }
+  }
+
+  async function handleImageUpload(field: UploadField, event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await uploadTemplateImage(field, file);
+    event.target.value = "";
+  }
+
+  async function handleImageDrop(field: UploadField, event: DragEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (!file) {
+      setDraggingField(null);
+      return;
+    }
+    await uploadTemplateImage(field, file);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -199,7 +281,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
       <header className="admin-page-head">
         <div>
           <h1>模板提示词管理</h1>
-          <p>维护设计师共用模板的分类层级、原图、最终图与热门推荐状态。</p>
+          <p>维护设计师共用模板的分类层级、原图、最终图和热门推荐状态。</p>
         </div>
         <div className="template-editor-actions">
           <button type="button" className="ghost-button" onClick={handleCreateNew}>
@@ -269,14 +351,14 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
                     {categoryPath(template)} · {template.is_featured ? "热门" : "普通"} · {imageCoverageLabel(template)}
                   </small>
                   <small className="admin-template-meta">
-                    {`热度分 ${template.popularity_score.toFixed(1)} · 应用 ${template.recent_apply_count} · 成功提交 ${template.recent_submit_success_count}`}
+                    {`热度 ${template.popularity_score.toFixed(1)} · 应用 ${template.recent_apply_count} · 成功提交 ${template.recent_submit_success_count}`}
                   </small>
                   <small className="admin-template-meta">最近更新 {formatDate(template.updated_at)}</small>
                 </button>
               ))}
             </div>
           ) : (
-            <div className="template-empty">还没有共享模板。先新建一条，设计师工作台才会出现新的模板项。</div>
+            <div className="template-empty">还没有共享模板。先新建一条，设计师工作台里才会出现新的模板项。</div>
           )}
         </section>
 
@@ -286,8 +368,8 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
               <h2>{selectedTemplate ? "编辑共享模板" : "新建共享模板"}</h2>
               <p>
                 {selectedTemplate
-                  ? `创建人：${selectedTemplate.user_name}，最近更新 ${formatDate(selectedTemplate.updated_at)}，热度分 ${selectedTemplate.popularity_score.toFixed(1)}`
-                  : "保存后会立即出现在设计师工作台的共享模板库里。"}
+                  ? `创建人：${selectedTemplate.user_name}，最近更新 ${formatDate(selectedTemplate.updated_at)}，热度 ${selectedTemplate.popularity_score.toFixed(1)}`
+                  : "保存后会立刻出现在设计师工作台的共享模板库里。"}
               </p>
             </div>
 
@@ -295,38 +377,22 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
               <div className="template-editor-row">
                 <label className="composer-menu-field">
                   <span>模板名称</span>
-                  <input
-                    value={draft.label}
-                    onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))}
-                    placeholder="例如：建筑分镜"
-                  />
+                  <input value={draft.label} onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))} placeholder="例如：建筑分镜" />
                 </label>
                 <label className="composer-menu-field">
                   <span>标题</span>
-                  <input
-                    value={draft.title}
-                    onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-                    placeholder="例如：建筑立面分镜模板"
-                  />
+                  <input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="例如：建筑立面分镜模板" />
                 </label>
               </div>
 
               <div className="template-editor-row template-editor-row-3">
                 <label className="composer-menu-field">
                   <span>一级分类</span>
-                  <input
-                    value={draft.category}
-                    onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}
-                    placeholder="例如：效果渲染"
-                  />
+                  <input value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} placeholder="例如：效果渲染" />
                 </label>
                 <label className="composer-menu-field">
                   <span>二级分类</span>
-                  <input
-                    value={draft.subcategory}
-                    onChange={(event) => setDraft((current) => ({ ...current, subcategory: event.target.value }))}
-                    placeholder="例如：建筑渲染"
-                  />
+                  <input value={draft.subcategory} onChange={(event) => setDraft((current) => ({ ...current, subcategory: event.target.value }))} placeholder="例如：建筑渲染" />
                 </label>
                 <label className="composer-menu-field">
                   <span>热度推荐</span>
@@ -354,38 +420,22 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
               <div className="template-editor-row">
                 <label className="composer-menu-field">
                   <span>风格</span>
-                  <input
-                    value={draft.style}
-                    onChange={(event) => setDraft((current) => ({ ...current, style: event.target.value }))}
-                    placeholder="modern / editorial / minimal"
-                  />
+                  <input value={draft.style} onChange={(event) => setDraft((current) => ({ ...current, style: event.target.value }))} placeholder="modern / editorial / minimal" />
                 </label>
                 <label className="composer-menu-field">
                   <span>比例</span>
-                  <input
-                    value={draft.aspect_ratio}
-                    onChange={(event) => setDraft((current) => ({ ...current, aspect_ratio: event.target.value }))}
-                    placeholder="16:9"
-                  />
+                  <input value={draft.aspect_ratio} onChange={(event) => setDraft((current) => ({ ...current, aspect_ratio: event.target.value }))} placeholder="16:9" />
                 </label>
               </div>
 
               <div className="template-editor-row">
                 <label className="composer-menu-field">
                   <span>分辨率</span>
-                  <input
-                    value={draft.resolution}
-                    onChange={(event) => setDraft((current) => ({ ...current, resolution: event.target.value }))}
-                    placeholder="4k"
-                  />
+                  <input value={draft.resolution} onChange={(event) => setDraft((current) => ({ ...current, resolution: event.target.value }))} placeholder="4k" />
                 </label>
                 <label className="composer-menu-field">
                   <span>交付说明</span>
-                  <input
-                    value={draft.deliverable}
-                    onChange={(event) => setDraft((current) => ({ ...current, deliverable: event.target.value }))}
-                    placeholder="例如：汇报图 / 分镜图 / 景观专用"
-                  />
+                  <input value={draft.deliverable} onChange={(event) => setDraft((current) => ({ ...current, deliverable: event.target.value }))} placeholder="例如：汇报图 / 分镜图 / 景观专用" />
                 </label>
               </div>
 
@@ -403,88 +453,41 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
                 <div className="template-preview-editor-head">
                   <div>
                     <strong>模板展示图</strong>
-                    <span>支持分别上传原图和最终图，设计师端会以对照方式展示。</span>
+                    <span>支持点击选择或直接拖拽上传原图和最终图，设计师端会以对照方式展示。</span>
                   </div>
                 </div>
 
                 <div className="template-preview-upload-grid">
-                  <article className="template-preview-upload-card">
-                    <div className="template-preview-upload-head">
-                      <strong>原图</strong>
-                      <div className="template-editor-actions">
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => sourceInputRef.current?.click()}
-                          disabled={uploadingField !== null}
-                        >
-                          {uploadingField === "source_image_path" ? "上传中..." : draft.source_image_path ? "更换原图" : "上传原图"}
-                        </button>
-                        {draft.source_image_path ? (
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            onClick={() => setDraft((current) => ({ ...current, source_image_path: "" }))}
-                          >
-                            清空
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                    <input
-                      ref={sourceInputRef}
-                      type="file"
-                      accept="image/*"
-                      hidden
-                      onChange={(event) => void handleImageUpload("source_image_path", event)}
-                    />
-                    {draft.source_image_path ? (
-                      <div className="template-preview-image-card">
-                        <img src={draft.source_image_path} alt={`${draft.label || "模板"} 原图`} />
-                      </div>
-                    ) : (
-                      <div className="template-empty">还没有上传原图。</div>
-                    )}
-                  </article>
-
-                  <article className="template-preview-upload-card">
-                    <div className="template-preview-upload-head">
-                      <strong>最终图</strong>
-                      <div className="template-editor-actions">
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => resultInputRef.current?.click()}
-                          disabled={uploadingField !== null}
-                        >
-                          {uploadingField === "preview_image_path" ? "上传中..." : draft.preview_image_path ? "更换最终图" : "上传最终图"}
-                        </button>
-                        {draft.preview_image_path ? (
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            onClick={() => setDraft((current) => ({ ...current, preview_image_path: "" }))}
-                          >
-                            清空
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                    <input
-                      ref={resultInputRef}
-                      type="file"
-                      accept="image/*"
-                      hidden
-                      onChange={(event) => void handleImageUpload("preview_image_path", event)}
-                    />
-                    {draft.preview_image_path ? (
-                      <div className="template-preview-image-card">
-                        <img src={draft.preview_image_path} alt={`${draft.label || "模板"} 最终图`} />
-                      </div>
-                    ) : (
-                      <div className="template-empty">还没有上传最终图。</div>
-                    )}
-                  </article>
+                  <TemplateImageUploader
+                    altLabel={`${draft.label || "模板"} 原图`}
+                    clearLabel="清空"
+                    dragging={draggingField === "source_image_path"}
+                    field="source_image_path"
+                    imagePath={draft.source_image_path}
+                    inputRef={sourceInputRef}
+                    onChange={(event) => void handleImageUpload("source_image_path", event)}
+                    onClear={() => setDraft((current) => ({ ...current, source_image_path: "" }))}
+                    onDrop={handleImageDrop}
+                    onPick={() => sourceInputRef.current?.click()}
+                    onSetDragging={(field) => setDraggingField(field)}
+                    title="原图"
+                    uploading={uploadingField !== null}
+                  />
+                  <TemplateImageUploader
+                    altLabel={`${draft.label || "模板"} 最终图`}
+                    clearLabel="清空"
+                    dragging={draggingField === "preview_image_path"}
+                    field="preview_image_path"
+                    imagePath={draft.preview_image_path}
+                    inputRef={resultInputRef}
+                    onChange={(event) => void handleImageUpload("preview_image_path", event)}
+                    onClear={() => setDraft((current) => ({ ...current, preview_image_path: "" }))}
+                    onDrop={handleImageDrop}
+                    onPick={() => resultInputRef.current?.click()}
+                    onSetDragging={(field) => setDraggingField(field)}
+                    title="最终图"
+                    uploading={uploadingField !== null}
+                  />
                 </div>
               </div>
             </div>

@@ -263,6 +263,21 @@ function assignmentLabel(assignment: DiscoveredModelAssignment): string {
   return parts.length > 0 ? parts.join(" + ") : "未分配";
 }
 
+function formatPricingUnitLabel(unit: string): string {
+  if (unit === "per_image") return "按张图片";
+  if (unit === "per_request") return "按次请求";
+  return unit || "未设置";
+}
+
+function formatPricingMetricLabel(metric: string): string {
+  if (metric === "input_tokens") return "输入 tokens";
+  if (metric === "output_tokens") return "输出 tokens";
+  if (metric === "cached_input_tokens") return "缓存命中 tokens";
+  if (metric === "per_image") return "按张图片";
+  if (metric === "per_request") return "按次请求";
+  return metric;
+}
+
 /* ─── Props ─── */
 
 export type ModelsPageProps = {
@@ -354,6 +369,29 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
   const filteredPricingRules = pricingRules
     .filter((rule) => String(rule.provider_profile_id) === selectedPricingProfileId)
     .sort((left, right) => left.capability.localeCompare(right.capability) || left.metric.localeCompare(right.metric));
+
+  function renderBillingSummary(profile: ProviderProfileRecord) {
+    const hasImageCapability = profile.capabilities.some((capability) => capability === "image.generate" || capability === "image.edit");
+    const chatRuleCount = pricingRules.filter(
+      (rule) => rule.provider_profile_id === profile.id && rule.capability === "chat.completions" && rule.is_active
+    ).length;
+    return (
+      <>
+        {hasImageCapability ? (
+          <>
+            <strong>{`${profile.unit_price} ${profile.pricing_currency}`}</strong>
+            <small>{`图片 ${formatPricingUnitLabel(profile.pricing_unit)}`}</small>
+          </>
+        ) : (
+          <>
+            <strong>按下方规则</strong>
+            <small>图片未启用</small>
+          </>
+        )}
+        {profile.capabilities.includes("chat.completions") ? <small>{`Chat 规则 ${chatRuleCount} 条`}</small> : null}
+      </>
+    );
+  }
 
   const activeProviderSupport = summarizeProfileSupport(providerDraft.adapterKind, parseCapabilities(providerDraft.capabilities));
   const activeAdapterOption = getAdapterOption(providerDraft.adapterKind);
@@ -600,7 +638,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
           </div>
           <div className="model-table-summary"><span>筛选后 {filteredProviderProfiles.length} 个配置</span></div>
           <div className="admin-data-table admin-model-table model-table-modern">
-            <div className="admin-table-row admin-table-head"><span>模型名称</span><span>页面分配</span><span>适配器</span><span>计费</span><span>Key</span><span>状态</span><span>操作</span></div>
+            <div className="admin-table-row admin-table-head"><span>模型名称</span><span>页面分配</span><span>适配器</span><span>计费逻辑</span><span>Key</span><span>状态</span><span>操作</span></div>
             {filteredProviderProfiles.length > 0 ? filteredProviderProfiles.map((profile) => {
               const support = summarizeProfileSupport(profile.adapter_kind, profile.capabilities);
               const adapter = getAdapterOption(profile.adapter_kind);
@@ -610,7 +648,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                   <span><strong>{profile.provider_name}</strong><small>{profile.model_name}</small></span>
                   <span className="model-capability-list">{profile.capabilities.map((c) => { const def = getCapabilityDefinition(c); return <em key={c} className={`model-capability-chip support-${def.support}`}>{def.label}</em>; })}</span>
                   <span><strong>{adapter.label}</strong><small className={`model-support-badge support-${support}`}>{supportLevelLabel(support)}</small></span>
-                  <span><strong>{profile.unit_price} {profile.pricing_currency}</strong><small>{profile.pricing_unit}</small></span>
+                  <span>{renderBillingSummary(profile)}</span>
                   <span>
                     <strong>{profile.masked_api_key || (profile.has_api_key ? "已保存" : "no key")}</strong>
                     {probe ? <small>{probe.detail}</small> : null}
@@ -668,12 +706,16 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                 <strong>计费规则</strong>
                 <span>图片仍沿用上方兼容单价，Chat 与细分 usage 在这里单独配置。</span>
               </div>
+              <div className="template-empty">
+                图片任务当前按上方模型配置计费，只支持“按张图片”或“按次请求”两种口径。Chat 当前按这里的独立规则计费，
+                支持输入 tokens、输出 tokens、缓存命中 tokens。若某个 Chat 模型还没配置规则，调用仍可继续，但成本会记为 0，且不会回补历史账单。
+              </div>
               <div className="template-list admin-template-list">
                 {filteredPricingRules.length > 0 ? filteredPricingRules.map((rule) => (
                   <div key={rule.id} className="template-list-item">
                     <button type="button" className="template-card template-card-main" onClick={() => handleEditPricingRule(rule)}>
                       <strong>{rule.capability}</strong>
-                      <span>{rule.metric}</span>
+                      <span>{formatPricingMetricLabel(rule.metric)}</span>
                       <small>{`${rule.unit_price} ${rule.currency} / ${rule.unit_size}`}</small>
                     </button>
                     <div className="template-card-actions">

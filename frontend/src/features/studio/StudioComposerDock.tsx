@@ -116,6 +116,17 @@ function templateSecondaryCategory(template: PromptTemplateRecord): string {
   return template.subcategory.trim() || "其他";
 }
 
+function templatePreviewImages(template: PromptTemplateRecord): Array<{ key: string; src: string; label: string }> {
+  const images: Array<{ key: string; src: string; label: string }> = [];
+  if (template.source_image_path.trim()) {
+    images.push({ key: "source", src: template.source_image_path, label: "原图" });
+  }
+  if (template.preview_image_path.trim()) {
+    images.push({ key: "preview", src: template.preview_image_path, label: "最终图" });
+  }
+  return images;
+}
+
 export default function StudioComposerDock({
   activeComposerMenu,
   activeTemplateId,
@@ -275,6 +286,10 @@ export default function StudioComposerDock({
   const hoveredTemplate = useMemo(
     () => filteredSharedTemplates.find((template) => template.id === hoveredTemplateId) ?? null,
     [filteredSharedTemplates, hoveredTemplateId]
+  );
+  const hoveredTemplateImages = useMemo(
+    () => (hoveredTemplate ? templatePreviewImages(hoveredTemplate) : []),
+    [hoveredTemplate]
   );
 
   const activeTemplateHeading =
@@ -526,8 +541,7 @@ export default function StudioComposerDock({
                               onBlur={() => setHoveredTemplateId((current) => (current === template.id ? null : current))}
                             >
                               <strong>{template.label}</strong>
-                              <span>{template.deliverable || template.title}</span>
-                              <small>{`${templatePrimaryCategory(template)} / ${templateSecondaryCategory(template)} · 热度 ${template.popularity_score.toFixed(1)}`}</small>
+                              <span>{template.title}</span>
                             </button>
                           ))}
                         </div>
@@ -538,42 +552,24 @@ export default function StudioComposerDock({
 
                     {hoveredTemplate ? (
                       <aside className="template-hover-preview" aria-live="polite">
-                        {hoveredTemplate.source_image_path || hoveredTemplate.preview_image_path ? (
-                          <div className="template-hover-preview-compare">
-                            {hoveredTemplate.source_image_path ? (
-                              <figure className="template-hover-preview-figure">
-                                <img
-                                  className="template-hover-preview-image"
-                                  src={hoveredTemplate.source_image_path}
-                                  alt={`${hoveredTemplate.label} 原图`}
-                                />
-                                <figcaption>原图</figcaption>
+                        {hoveredTemplateImages.length > 0 ? (
+                          <div
+                            className={
+                              hoveredTemplateImages.length === 1
+                                ? "template-hover-preview-compare template-hover-preview-compare-single"
+                                : "template-hover-preview-compare"
+                            }
+                          >
+                            {hoveredTemplateImages.map((image) => (
+                              <figure key={image.key} className="template-hover-preview-figure">
+                                <img className="template-hover-preview-image" src={image.src} alt={`${hoveredTemplate.label} ${image.label}`} />
+                                <figcaption>{image.label}</figcaption>
                               </figure>
-                            ) : null}
-                            {hoveredTemplate.preview_image_path ? (
-                              <figure className="template-hover-preview-figure">
-                                <img
-                                  className="template-hover-preview-image"
-                                  src={hoveredTemplate.preview_image_path}
-                                  alt={`${hoveredTemplate.label} 最终图`}
-                                />
-                                <figcaption>最终图</figcaption>
-                              </figure>
-                            ) : null}
+                            ))}
                           </div>
                         ) : (
-                          <div className={`template-hover-preview-fallback ${previewStyleClass(hoveredTemplate.style)}`}>
-                            <span>Template Preview</span>
-                            <strong>{hoveredTemplate.label}</strong>
-                          </div>
+                          <div className={`template-hover-preview-fallback ${previewStyleClass(hoveredTemplate.style)}`} aria-label={`${hoveredTemplate.label} 暂无预览图`} />
                         )}
-                        <div className="template-hover-preview-body">
-                          <strong>{hoveredTemplate.label}</strong>
-                          <span>{hoveredTemplate.title}</span>
-                          <small>{`${templatePrimaryCategory(hoveredTemplate)} / ${templateSecondaryCategory(hoveredTemplate)}`}</small>
-                          <small>{`近 30 天应用 ${hoveredTemplate.recent_apply_count} · 成功提交 ${hoveredTemplate.recent_submit_success_count}`}</small>
-                          <small>{hoveredTemplate.deliverable || hoveredTemplate.notes || "已配置共享模板"}</small>
-                        </div>
                       </aside>
                     ) : null}
                   </div>

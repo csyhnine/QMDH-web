@@ -17,6 +17,7 @@ from app.schemas import (
     PromptTemplateOut,
     PromptTemplateUpdate,
 )
+from app.services.media_storage import resolve_storage_path
 
 router = APIRouter(prefix="/prompt-templates", tags=["prompt_templates"])
 POPULARITY_LOOKBACK_DAYS = 30
@@ -106,8 +107,8 @@ def _to_prompt_template_out(
         resolution=template.resolution,
         deliverable=template.deliverable,
         notes=template.notes,
-        source_image_path=template.source_image_path or "",
-        preview_image_path=template.preview_image_path or "",
+        source_image_path=resolve_storage_path(template.source_image_path) if template.source_image_path else "",
+        preview_image_path=resolve_storage_path(template.preview_image_path) if template.preview_image_path else "",
         popularity_score=round(float(template_stats.get("popularity_score", 0.0) or 0.0), 2),
         recent_apply_count=int(template_stats.get("recent_apply_count", 0) or 0),
         recent_submit_success_count=int(template_stats.get("recent_submit_success_count", 0) or 0),

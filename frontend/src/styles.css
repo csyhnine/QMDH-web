@@ -2396,6 +2396,10 @@ button {
   background: rgba(15, 23, 42, 0.04);
 }
 
+.template-hover-preview-compare-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .template-hover-preview-figure {
   margin: 0;
   display: grid;
@@ -2414,21 +2418,7 @@ button {
 .template-hover-preview-fallback {
   padding: 18px;
   color: #fff;
-  display: grid;
-  align-content: end;
-  gap: 8px;
-}
-
-.template-hover-preview-fallback span {
-  font-size: 0.76rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.78;
-}
-
-.template-hover-preview-fallback strong {
-  font-size: 1.16rem;
-  line-height: 1.2;
+  display: block;
 }
 
 .template-preview-style-modern {
@@ -2453,22 +2443,6 @@ button {
   background:
     linear-gradient(160deg, rgba(127, 29, 29, 0.22), rgba(23, 23, 23, 0.9)),
     radial-gradient(circle at top, rgba(251, 146, 60, 0.46), transparent 32%);
-}
-
-.template-hover-preview-body {
-  display: grid;
-  gap: 6px;
-  padding: 14px 16px 16px;
-}
-
-.template-hover-preview-body strong {
-  font-size: 0.96rem;
-}
-
-.template-hover-preview-body span,
-.template-hover-preview-body small {
-  color: var(--muted);
-  line-height: 1.55;
 }
 
 .template-list-item {

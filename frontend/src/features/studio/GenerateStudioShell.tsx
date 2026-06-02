@@ -1227,9 +1227,13 @@ function FeedCard(props: {
               key={asset.id}
               type="button"
               className="feed-gallery-item"
-              onClick={() =>
-                props.onAssetPreview?.(asset) ?? props.onReuse()
-              }
+              onClick={() => {
+                if (props.onAssetPreview) {
+                  props.onAssetPreview(asset);
+                  return;
+                }
+                props.onReuse();
+              }}
               aria-label="查看大图"
             >
               <AssetTile asset={asset} emphasis={index === 0 ? "primary" : "secondary"} />

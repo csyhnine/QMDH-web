@@ -283,10 +283,7 @@ export default function StudioComposerDock({
       return haystack.includes(keyword);
     });
 
-    const quickFiltered =
-      templateQuickFilter === "featured"
-        ? searched.filter((template) => template.is_featured)
-        : searched;
+    const quickFiltered = searched;
 
     const categoryFiltered = quickFiltered.filter((template) => {
       if (activeTemplateCategory === "all") return true;
@@ -296,6 +293,15 @@ export default function StudioComposerDock({
     });
 
     return [...categoryFiltered].sort((left, right) => {
+      if (templateQuickFilter === "featured") {
+        const popularityDelta = right.popularity_score - left.popularity_score;
+        if (Math.abs(popularityDelta) > 0.001) return popularityDelta;
+        const applyDelta = right.recent_apply_count - left.recent_apply_count;
+        if (applyDelta !== 0) return applyDelta;
+        const successDelta = right.recent_submit_success_count - left.recent_submit_success_count;
+        if (successDelta !== 0) return successDelta;
+        return new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime();
+      }
       if (templateQuickFilter === "recent") {
         return new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime();
       }

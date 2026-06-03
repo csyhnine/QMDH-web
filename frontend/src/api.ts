@@ -326,6 +326,7 @@ export type InspirationPost = {
   id: number;
   title: string;
   description: string;
+  source_image_path: string;
   image_path: string;
   category: string;
   tags: string[];
@@ -716,13 +717,13 @@ export const api = {
   deleteTask: (taskId: number) => deleteRequest(`/tasks/${taskId}`),
   likeAsset: (assetId: number) => postJson<Asset>(`/assets/${assetId}/like`),
   bookmarkAsset: (assetId: number) => postJson<Asset>(`/assets/${assetId}/bookmark`),
-  shareAsset: (assetId: number) => postJson<AssetShareResult>(`/assets/${assetId}/share`),
+  shareAsset: (assetId: number, payload: { confirmed: boolean }) => postJson<AssetShareResult>(`/assets/${assetId}/share`, payload),
   inspiration: (category?: string) => request<InspirationPost[]>(category && category !== "全部" ? `/inspiration?category=${encodeURIComponent(category)}` : "/inspiration"),
-  createInspiration: (payload: { title: string; description?: string; image_path?: string; category?: string; tags?: string[]; source_type: string; source_name?: string; source_url?: string; source_asset_id?: number; prompt_text?: string; model_name?: string }) =>
+  createInspiration: (payload: { title: string; description?: string; source_image_path?: string; image_path?: string; category?: string; tags?: string[]; source_type: string; source_name?: string; source_url?: string; source_asset_id?: number; prompt_text?: string; model_name?: string }) =>
     postJson<InspirationPost>("/inspiration", payload),
   likeInspiration: (postId: number) => postJson<InspirationPost>(`/inspiration/${postId}/like`),
   deleteInspiration: (postId: number) => deleteRequest(`/inspiration/${postId}`),
-  updateInspiration: (postId: number, data: { title?: string; description?: string; image_path?: string; category?: string; tags?: string[]; source_url?: string; source_name?: string }) =>
+  updateInspiration: (postId: number, data: { title?: string; description?: string; source_image_path?: string; image_path?: string; category?: string; tags?: string[]; source_url?: string; source_name?: string }) =>
     request<InspirationPost>(`/inspiration/${postId}`, { method: "PATCH", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify(data) }),
   extractImages: (url: string) => postJson<{ images: string[]; title: string }>("/inspiration/extract-images", { url }),
   // Chat

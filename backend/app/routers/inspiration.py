@@ -36,6 +36,7 @@ def _to_out(post: InspirationPost) -> InspirationPostOut:
         id=post.id,
         title=post.title,
         description=post.description,
+        source_image_path=resolve_storage_path(post.source_image_path) if post.source_image_path else "",
         image_path=resolve_storage_path(post.image_path) if post.image_path else "",
         category=post.category,
         tags=post.tags or [],
@@ -80,10 +81,21 @@ def create_inspiration(
         source_url=payload.source_url.strip(),
         namespace="imports",
     )
+    managed_source_image_path = (
+        prepare_inspiration_image(
+            payload.source_image_path,
+            title=f"{payload.title.strip()} source",
+            source_url=payload.source_url.strip(),
+            namespace="imports",
+        )
+        if payload.source_image_path.strip()
+        else ""
+    )
 
     post = InspirationPost(
         title=payload.title.strip(),
         description=payload.description.strip(),
+        source_image_path=managed_source_image_path,
         image_path=managed_image_path,
         category=payload.category.strip() or "建筑",
         tags=[tag.strip() for tag in payload.tags if tag.strip()],
@@ -149,6 +161,13 @@ def update_inspiration(
     for field, value in update_data.items():
         if field == "tags" and value is not None:
             value = [tag.strip() for tag in value if tag.strip()]
+        elif field == "source_image_path" and value is not None:
+            value = prepare_inspiration_image(
+                str(value),
+                title=f"{update_data.get('title') or post.title} source",
+                source_url=update_data.get("source_url") or post.source_url,
+                namespace="imports",
+            ) if str(value).strip() else ""
         elif field == "image_path" and value is not None:
             value = prepare_inspiration_image(
                 str(value),

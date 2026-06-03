@@ -688,6 +688,61 @@ button {
   border-top: 1px solid var(--line);
 }
 
+.share-confirm-modal {
+  width: min(960px, 100%);
+  gap: 0;
+}
+
+.share-confirm-copy {
+  display: grid;
+  gap: 6px;
+  padding: 18px 20px 0;
+}
+
+.share-confirm-copy strong {
+  font-size: 1rem;
+}
+
+.share-confirm-copy p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.share-confirm-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 18px 20px 20px;
+}
+
+.share-confirm-figure {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.share-confirm-figure img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 14px;
+  background: rgba(17, 24, 39, 0.04);
+  object-fit: contain;
+}
+
+.share-confirm-figure figcaption {
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.share-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 20px 20px;
+}
+
 .empty-stage {
   width: min(760px, 100%);
   min-height: 220px;
@@ -2337,7 +2392,7 @@ button {
 
 .template-browser-categorized {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
+  grid-template-columns: 168px minmax(0, 1fr) minmax(240px, 296px);
   gap: 18px;
   align-items: start;
 }
@@ -2491,16 +2546,16 @@ button {
 }
 
 .template-hover-preview {
-  position: absolute;
-  top: -18px;
-  right: 0;
-  width: min(460px, 46vw);
+  position: sticky;
+  top: 0;
+  width: 100%;
+  max-width: 296px;
   border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 18px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 22px 48px rgba(15, 23, 42, 0.18);
-  z-index: 3;
+  z-index: 1;
   opacity: 0;
   transform: translateY(8px);
   pointer-events: none;
@@ -2510,7 +2565,7 @@ button {
 }
 
 .template-hover-preview-stacked {
-  width: min(560px, 54vw);
+  max-width: 296px;
 }
 
 .template-hover-preview.is-visible {
@@ -2550,13 +2605,13 @@ button {
 .template-hover-preview-figure {
   margin: 0;
   display: grid;
-  grid-template-rows: minmax(220px, 320px) auto;
+  grid-template-rows: minmax(148px, 208px) auto;
   gap: 0;
   background: rgba(15, 23, 42, 0.04);
 }
 
 .template-hover-preview-compare-stacked .template-hover-preview-figure {
-  grid-template-rows: minmax(180px, 260px) auto;
+  grid-template-rows: minmax(112px, 156px) auto;
 }
 
 .template-hover-preview-media {
@@ -2577,14 +2632,14 @@ button {
 }
 
 .template-hover-preview-fallback {
-  min-height: 220px;
+  min-height: 164px;
   padding: 18px;
   color: #fff;
   display: block;
 }
 
 .template-hover-preview-placeholder {
-  min-height: 220px;
+  min-height: 164px;
   background: transparent;
 }
 
@@ -4984,6 +5039,12 @@ textarea:focus-visible {
     display: grid;
   }
 
+  .share-confirm-compare,
+  .inspiration-lightbox-compare,
+  .inspiration-card-compare {
+    grid-template-columns: 1fr;
+  }
+
   .stat-strip,
   .studio-overview-grid,
   .history-digest-list,
@@ -5535,6 +5596,42 @@ textarea:focus-visible {
   background: var(--panel-soft);
   overflow: hidden;
 }
+
+.inspiration-card-compare {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  background: rgba(17, 24, 39, 0.08);
+}
+
+.inspiration-card-compare-figure {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.inspiration-card-compare-figure img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.inspiration-card-compare-figure figcaption {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.72);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
 .inspiration-card-image img {
   width: 100%;
   height: 100%;
@@ -5699,6 +5796,25 @@ textarea:focus-visible {
   margin: 0;
   color: #dc2626;
   font-size: 0.8rem;
+}
+
+.inspiration-lightbox-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.inspiration-lightbox-figure {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.inspiration-lightbox-figure figcaption {
+  color: #fff;
+  font-size: 0.82rem;
+  text-align: center;
 }
 
 

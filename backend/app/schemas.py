@@ -78,6 +78,10 @@ class AssetShareOut(BaseModel):
     already_shared: bool
 
 
+class AssetShareIn(BaseModel):
+    confirmed: bool = False
+
+
 class DashboardDailyPoint(BaseModel):
     date: str
     total_tasks: int = 0
@@ -499,6 +503,7 @@ class InspirationPostOut(BaseModel):
     id: int
     title: str
     description: str
+    source_image_path: str = ""
     image_path: str
     category: str
     tags: list[str]
@@ -518,6 +523,7 @@ class InspirationPostOut(BaseModel):
 class InspirationPostCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str = ""
+    source_image_path: str = ""
     image_path: str = ""
     category: str = "建筑"
     tags: list[str] = Field(default_factory=list)
@@ -532,6 +538,7 @@ class InspirationPostCreate(BaseModel):
 class InspirationPostUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
+    source_image_path: str | None = None
     image_path: str | None = None
     category: str | None = None
     tags: list[str] | None = None

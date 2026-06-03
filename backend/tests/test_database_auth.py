@@ -90,8 +90,8 @@ class DatabaseAuthTests(unittest.TestCase):
                 project_id=project.id,
                 user_id=designer.id,
                 requested_provider="modelscope_free_image",
-                payload={},
-                result={},
+                payload={"reference_images": ["/media/reference/source.png"], "source_image": "/media/reference/source.png"},
+                result={"reference_image_storage_path": "/media/reference/source.png"},
                 classification=DataClassification.b,
                 cost=1.25,
                 latency_ms=1200,
@@ -438,6 +438,7 @@ class DatabaseAuthTests(unittest.TestCase):
         forbidden_share = self.client.post(
             f"/assets/{peer_asset_id}/share",
             headers={"Authorization": f"Bearer {designer_token}"},
+            json={"confirmed": True},
         )
         self.assertEqual(forbidden_share.status_code, 403)
 
@@ -456,9 +457,17 @@ class DatabaseAuthTests(unittest.TestCase):
         first_share = self.client.post(
             f"/assets/{asset['id']}/share",
             headers={"Authorization": f"Bearer {designer_token}"},
+            json={"confirmed": False},
         )
-        self.assertEqual(first_share.status_code, 200, first_share.text)
-        first_payload = first_share.json()
+        self.assertEqual(first_share.status_code, 400, first_share.text)
+
+        confirmed_share = self.client.post(
+            f"/assets/{asset['id']}/share",
+            headers={"Authorization": f"Bearer {designer_token}"},
+            json={"confirmed": True},
+        )
+        self.assertEqual(confirmed_share.status_code, 200, confirmed_share.text)
+        first_payload = confirmed_share.json()
         self.assertFalse(first_payload["already_shared"])
         self.assertEqual(first_payload["asset"]["share_count"], 1)
         self.assertTrue(first_payload["asset"]["is_shared_to_inspiration"])
@@ -468,6 +477,7 @@ class DatabaseAuthTests(unittest.TestCase):
         second_share = self.client.post(
             f"/assets/{asset['id']}/share",
             headers={"Authorization": f"Bearer {designer_token}"},
+            json={"confirmed": True},
         )
         self.assertEqual(second_share.status_code, 200, second_share.text)
         second_payload = second_share.json()
@@ -482,11 +492,13 @@ class DatabaseAuthTests(unittest.TestCase):
         self.assertEqual(user_posts[0]["title"], "Project cover")
         self.assertEqual(user_posts[0]["prompt_text"], "cover")
         self.assertEqual(user_posts[0]["model_name"], "MAILAND/majicflus_v1")
+        self.assertEqual(user_posts[0]["source_image_path"], "/media/reference/source.png")
 
         with self.SessionLocal() as db:
             posts = db.scalars(select(InspirationPost).where(InspirationPost.source_asset_id == asset["id"])).all()
             designer = db.scalar(select(User).where(User.name == "designer"))
             self.assertEqual(len(posts), 1)
+            self.assertEqual(posts[0].source_image_path, "/media/reference/source.png")
             self.assertEqual(posts[0].image_path, "media/project-cover.png")
             self.assertIsNotNone(designer)
             self.assertEqual(posts[0].user_id, designer.id)

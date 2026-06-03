@@ -11,7 +11,7 @@ from app.core.auth import can_access_project, get_current_auth_user
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import Asset, AssetBookmark, InspirationPost, Project, ProviderCall, Task
-from app.schemas import AssetOut, AssetShareOut, ReferenceUploadIn, ReferenceUploadOut
+from app.schemas import AssetOut, AssetShareIn, AssetShareOut, ReferenceUploadIn, ReferenceUploadOut
 from app.services.media_storage import resolve_storage_path, write_binary_asset
 
 router = APIRouter(prefix="/assets", tags=["assets"])
@@ -122,6 +122,32 @@ def _derive_inspiration_model_name(db: Session, asset: Asset, task: Task | None)
     return ""
 
 
+def _extract_reference_images(task: Task | None) -> list[str]:
+    if task is None:
+        return []
+
+    for payload in (task.result, task.payload):
+        if not isinstance(payload, dict):
+            continue
+        for key in ("reference_image_storage_paths", "reference_images", "source_images"):
+            raw_value = payload.get(key)
+            if isinstance(raw_value, list):
+                values = [str(item or "").strip() for item in raw_value]
+                cleaned = [value for value in values if value]
+                if cleaned:
+                    return cleaned[:4]
+        for key in ("reference_image_storage_path", "reference_image", "source_image", "image"):
+            value = str(payload.get(key) or "").strip()
+            if value:
+                return [value]
+    return []
+
+
+def _derive_inspiration_source_image_path(task: Task | None) -> str:
+    reference_images = _extract_reference_images(task)
+    return reference_images[0] if reference_images else ""
+
+
 def _extension_for_reference_upload(file_name: str, data_url: str) -> str:
     normalized_name = file_name.lower().strip()
     if "." in normalized_name:
@@ -225,6 +251,7 @@ def like_asset(
 @router.post("/{asset_id}/share", response_model=AssetShareOut, status_code=status.HTTP_200_OK)
 def share_asset(
     asset_id: int,
+    payload: AssetShareIn,
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> AssetShareOut:
@@ -241,10 +268,17 @@ def share_asset(
             already_shared=True,
         )
 
+    if not payload.confirmed:
+        raise HTTPException(status_code=400, detail="Share confirmation required")
+
     task = db.get(Task, asset.source_task_id) if asset.source_task_id is not None else None
+    source_image_path = _derive_inspiration_source_image_path(task)
+    if not source_image_path:
+        raise HTTPException(status_code=400, detail="This result has no source image to compare")
     post = InspirationPost(
         title=_derive_inspiration_title(asset, task),
         description=_derive_inspiration_description(asset, task),
+        source_image_path=source_image_path,
         image_path=asset.storage_path,
         category="\u5efa\u7b51",
         tags=list(dict.fromkeys(tag.strip() for tag in (asset.tags or []) if tag.strip())),

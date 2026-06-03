@@ -162,6 +162,7 @@ class InspirationPost(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
+    source_image_path: Mapped[str] = mapped_column(String(255), default="")
     image_path: Mapped[str] = mapped_column(String(255))
     category: Mapped[str] = mapped_column(String(50), default="全部", index=True)
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)

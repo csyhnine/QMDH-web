@@ -35,6 +35,10 @@ export type InspirationPageProps = {
   mode?: "studio" | "admin";
 };
 
+function hasComparePreview(post: InspirationPost): boolean {
+  return post.source_type === "user" && Boolean(post.source_image_path) && Boolean(post.image_path);
+}
+
 /* ─── Component ─── */
 
 export default function InspirationPage({
@@ -480,7 +484,18 @@ export default function InspirationPage({
         {visiblePosts.length > 0 ? visiblePosts.map((post) => (
           <article key={post.id} className="inspiration-card">
             <div className="inspiration-card-image" onClick={() => setLightbox(post)} style={{ cursor: "pointer" }}>
-              {post.image_path ? <img src={post.image_path} alt={post.title} loading="lazy" /> : <div className="inspiration-card-placeholder" />}
+              {hasComparePreview(post) ? (
+                <div className="inspiration-card-compare">
+                  <figure className="inspiration-card-compare-figure">
+                    <img src={post.source_image_path} alt={`${post.title} 原图`} loading="lazy" />
+                    <figcaption>原图</figcaption>
+                  </figure>
+                  <figure className="inspiration-card-compare-figure">
+                    <img src={post.image_path} alt={`${post.title} 最终图`} loading="lazy" />
+                    <figcaption>最终图</figcaption>
+                  </figure>
+                </div>
+              ) : post.image_path ? <img src={post.image_path} alt={post.title} loading="lazy" /> : <div className="inspiration-card-placeholder" />}
               {post.category !== "全部" ? <span className="inspiration-card-badge">{post.category}</span> : null}
               {mode === "admin" ? (
                 <label
@@ -552,7 +567,20 @@ export default function InspirationPage({
         <div className="media-lightbox" onClick={() => setLightbox(null)} onKeyDown={(e) => { if (e.key === "Escape") setLightbox(null); }} tabIndex={0} ref={(el) => el?.focus()}>
           <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()}>
             <button type="button" className="media-lightbox-close" onClick={() => setLightbox(null)}>×</button>
-            <img src={lightbox.image_path} alt={lightbox.title} style={{ maxWidth: "90vw", maxHeight: "80vh", objectFit: "contain" }} />
+            {hasComparePreview(lightbox) ? (
+              <div className="inspiration-lightbox-compare">
+                <figure className="inspiration-lightbox-figure">
+                  <img src={lightbox.source_image_path} alt={`${lightbox.title} 原图`} style={{ maxWidth: "42vw", maxHeight: "72vh", objectFit: "contain" }} />
+                  <figcaption>原图</figcaption>
+                </figure>
+                <figure className="inspiration-lightbox-figure">
+                  <img src={lightbox.image_path} alt={`${lightbox.title} 最终图`} style={{ maxWidth: "42vw", maxHeight: "72vh", objectFit: "contain" }} />
+                  <figcaption>最终图</figcaption>
+                </figure>
+              </div>
+            ) : (
+              <img src={lightbox.image_path} alt={lightbox.title} style={{ maxWidth: "90vw", maxHeight: "80vh", objectFit: "contain" }} />
+            )}
             <div style={{ textAlign: "center", marginTop: "12px", color: "#fff" }}>
               <h3 style={{ margin: "0 0 8px", fontSize: "18px" }}>{lightbox.title}</h3>
               {lightbox.source_url ? <a href={lightbox.source_url} target="_blank" rel="noopener noreferrer" style={{ color: "#8bb4ff", fontSize: "14px" }}>查看原文 →</a> : null}

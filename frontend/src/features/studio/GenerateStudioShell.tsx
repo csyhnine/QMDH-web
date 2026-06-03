@@ -102,6 +102,14 @@ type HistoryActionFeedback = {
   stamp: number;
 };
 
+type ShareConfirmState = {
+  taskId: number;
+  assetId: number;
+  title: string;
+  sourceImagePath: string;
+  finalImagePath: string;
+};
+
 type ProviderProfileDraft = {
   providerName: string;
   apiKey: string;
@@ -1384,6 +1392,7 @@ export default function GenerateStudioShell() {
   const [renameValue, setRenameValue] = useState("");
   const [dashboardStatsDays, setDashboardStatsDays] = useState(30);
   const [galleryPreview, setGalleryPreview] = useState<{ task: Task; asset: Asset } | null>(null);
+  const [shareConfirmState, setShareConfirmState] = useState<ShareConfirmState | null>(null);
   const [historyActionPendingByTaskId, setHistoryActionPendingByTaskId] = useState<Record<number, HistoryActionKey | null>>({});
   const [historyFeedbackByTaskId, setHistoryFeedbackByTaskId] = useState<Record<number, HistoryActionFeedback | undefined>>({});
   const [historyNotice, setHistoryNotice] = useState<{ tone: "success" | "error" | "info"; message: string } | null>(null);
@@ -2589,7 +2598,7 @@ export default function GenerateStudioShell() {
         replaceAssetInState(updatedAsset);
         pushHistoryFeedback(taskId, "bookmark", "success", updatedAsset.is_bookmarked ? "已标记为重点历史。" : "已取消标记。");
       } else {
-        const result = await api.shareAsset(assetId);
+        const result = await api.shareAsset(assetId, { confirmed: true });
         replaceAssetInState(result.asset);
         pushHistoryFeedback(taskId, "share", "success", result.already_shared ? "这张图已经在灵感库里。" : "已分享到灵感库。");
       }
@@ -2602,6 +2611,34 @@ export default function GenerateStudioShell() {
     } finally {
       setHistoryActionPending(taskId, null);
     }
+  }
+
+  function openShareConfirm(task: Task, asset: Asset) {
+    if (asset.is_shared_to_inspiration) {
+      pushHistoryFeedback(task.id, "share", "info", "这张图已经在灵感库里。");
+      return;
+    }
+    const sourceImagePath = taskReferenceImages(task)[0] ?? "";
+    if (!sourceImagePath) {
+      pushHistoryFeedback(task.id, "share", "error", "这条记录没有原图，暂时不能分享到灵感库。");
+      return;
+    }
+    setShareConfirmState({
+      taskId: task.id,
+      assetId: asset.id,
+      title: taskDisplayTitle(task, asset),
+      sourceImagePath,
+      finalImagePath: getRenderableUrl(asset) ?? asset.storage_path,
+    });
+  }
+
+  async function handleConfirmShare() {
+    if (!shareConfirmState) {
+      return;
+    }
+    const { taskId, assetId } = shareConfirmState;
+    setShareConfirmState(null);
+    await handleGalleryAction("share", taskId, assetId);
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -3933,7 +3970,7 @@ export default function GenerateStudioShell() {
                   onReuse={() => void handleRegenerateTask(task, linkedAsset ?? galleryAssets[0])}
                   reuseDisabled={submitting || regeneratingTaskId === task.id}
                   onBookmark={() => (linkedAsset ? void handleGalleryAction("bookmark", task.id, linkedAsset.id) : undefined)}
-                  onShare={() => (linkedAsset ? void handleGalleryAction("share", task.id, linkedAsset.id) : undefined)}
+                  onShare={() => (linkedAsset ? openShareConfirm(task, linkedAsset) : undefined)}
                   onDelete={() => void handleDeleteHistoryTask(task)}
                   onAssetPreview={(asset) => {
                     if (getRenderableUrl(asset)) {
@@ -4051,6 +4088,46 @@ export default function GenerateStudioShell() {
               </button>
               <button type="button" className="submit-button" onClick={() => setGalleryPreview(null)}>
                 关闭
+              </button>
+            </footer>
+          </div>
+        </div>
+      ) : null}
+      {shareConfirmState ? (
+        <div
+          className="media-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="确认分享到灵感库"
+          onClick={() => setShareConfirmState(null)}
+        >
+          <div className="media-lightbox-surface share-confirm-modal" onClick={(event) => event.stopPropagation()}>
+            <header className="media-lightbox-head">
+              <span className="media-lightbox-title">确认分享到灵感库</span>
+              <button type="button" className="media-lightbox-close" aria-label="关闭" onClick={() => setShareConfirmState(null)}>
+                ×
+              </button>
+            </header>
+            <div className="share-confirm-copy">
+              <strong>{shareConfirmState.title}</strong>
+              <p>确认后，这条内容会以“原图 / 最终图”的对比形式进入灵感库，其他设计师可以直接看到前后变化。</p>
+            </div>
+            <div className="share-confirm-compare" aria-label="原图与最终图对比预览">
+              <figure className="share-confirm-figure">
+                <img src={shareConfirmState.sourceImagePath} alt="原图预览" />
+                <figcaption>原图</figcaption>
+              </figure>
+              <figure className="share-confirm-figure">
+                <img src={shareConfirmState.finalImagePath} alt="最终图预览" />
+                <figcaption>最终图</figcaption>
+              </figure>
+            </div>
+            <footer className="share-confirm-actions">
+              <button type="button" className="ghost-button" onClick={() => setShareConfirmState(null)}>
+                取消
+              </button>
+              <button type="button" className="workspace-primary" onClick={() => void handleConfirmShare()}>
+                确认分享
               </button>
             </footer>
           </div>

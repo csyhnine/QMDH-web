@@ -72,6 +72,11 @@ def ensure_schema(engine: Engine) -> None:
         if "prompt_templates" in inspector.get_table_names()
         else set()
     )
+    inspiration_post_columns = (
+        {column["name"] for column in inspector.get_columns("inspiration_posts")}
+        if "inspiration_posts" in inspector.get_table_names()
+        else set()
+    )
     with engine.begin() as connection:
         if "owner_user_id" not in project_columns:
             connection.execute(text("ALTER TABLE projects ADD COLUMN owner_user_id INTEGER"))
@@ -116,6 +121,10 @@ def ensure_schema(engine: Engine) -> None:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_prompt_templates_scope ON prompt_templates (scope)"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_prompt_templates_category ON prompt_templates (category)"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_prompt_templates_is_featured ON prompt_templates (is_featured)"))
+        if inspiration_post_columns and "source_image_path" not in inspiration_post_columns:
+            connection.execute(
+                text("ALTER TABLE inspiration_posts ADD COLUMN source_image_path VARCHAR(255) NOT NULL DEFAULT ''")
+            )
         if usage_ledger_columns and "input_tokens" not in usage_ledger_columns:
             connection.execute(text("ALTER TABLE usage_ledgers ADD COLUMN input_tokens INTEGER NOT NULL DEFAULT 0"))
         if usage_ledger_columns and "output_tokens" not in usage_ledger_columns:

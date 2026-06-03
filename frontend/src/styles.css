@@ -2186,9 +2186,10 @@ button {
 }
 
 .composer-menu-panel-template {
-  width: min(820px, 96vw);
+  width: min(980px, calc(100vw - 48px));
   max-height: min(74vh, 760px);
   overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .composer-dock-centered .composer-menu-panel {
@@ -2392,7 +2393,7 @@ button {
 
 .template-browser-categorized {
   display: grid;
-  grid-template-columns: 168px minmax(0, 1fr) minmax(240px, 296px);
+  grid-template-columns: 112px minmax(280px, 1fr) minmax(320px, 360px);
   gap: 18px;
   align-items: start;
 }
@@ -2487,6 +2488,10 @@ button {
   gap: 12px;
 }
 
+.template-browser-main .template-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .template-browser-main-head {
   display: flex;
   align-items: baseline;
@@ -2526,12 +2531,18 @@ button {
 
 .template-card strong {
   font-size: 0.92rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .template-card span {
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .template-card small {
@@ -2549,7 +2560,8 @@ button {
   position: sticky;
   top: 0;
   width: 100%;
-  max-width: 296px;
+  max-width: 360px;
+  min-height: 392px;
   border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 18px;
   overflow: hidden;
@@ -2564,8 +2576,11 @@ button {
     transform 120ms ease;
 }
 
+.template-hover-preview-single,
+.template-hover-preview-columns,
 .template-hover-preview-stacked {
-  max-width: 296px;
+  max-width: 360px;
+  min-height: 392px;
 }
 
 .template-hover-preview.is-visible {
@@ -2605,13 +2620,14 @@ button {
 .template-hover-preview-figure {
   margin: 0;
   display: grid;
-  grid-template-rows: minmax(148px, 208px) auto;
+  grid-template-rows: 208px auto;
   gap: 0;
   background: rgba(15, 23, 42, 0.04);
+  overflow: hidden;
 }
 
 .template-hover-preview-compare-stacked .template-hover-preview-figure {
-  grid-template-rows: minmax(112px, 156px) auto;
+  grid-template-rows: 156px auto;
 }
 
 .template-hover-preview-media {
@@ -2620,6 +2636,7 @@ button {
   place-items: center;
   padding: 12px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(248, 250, 252, 0.92));
+  overflow: hidden;
 }
 
 .template-hover-preview-figure figcaption {
@@ -2639,7 +2656,7 @@ button {
 }
 
 .template-hover-preview-placeholder {
-  min-height: 164px;
+  min-height: 392px;
   background: transparent;
 }
 
@@ -4935,23 +4952,6 @@ textarea:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .template-hover-preview {
-    position: static;
-    width: 100%;
-    margin-top: 12px;
-  }
-
-  .template-browser-categorized {
-    grid-template-columns: 1fr;
-  }
-
-  .template-browser-sidebar {
-    padding-right: 0;
-    border-right: 0;
-    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-    padding-bottom: 12px;
-  }
-
   .template-preview-upload-grid,
   .template-editor-row-3 {
     grid-template-columns: 1fr;
@@ -4966,6 +4966,24 @@ textarea:focus-visible {
 
   .composer-menu-panel-template {
     width: min(92vw, 640px);
+  }
+
+  .template-hover-preview {
+    position: static;
+    width: 100%;
+    max-width: none;
+    margin-top: 12px;
+  }
+
+  .template-browser-categorized {
+    grid-template-columns: 1fr;
+  }
+
+  .template-browser-sidebar {
+    padding-right: 0;
+    border-right: 0;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+    padding-bottom: 12px;
   }
 
   .canvas-area.canvas-studio-layout {

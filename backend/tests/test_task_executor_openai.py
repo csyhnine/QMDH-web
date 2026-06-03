@@ -84,6 +84,10 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
                             )
 
         self.assertEqual(outcome.result["adapter_mode"], "openai")
+        self.assertEqual(outcome.result["request_strategy"], "openai_images")
+        self.assertEqual(outcome.result["request_endpoint"], "/images/generations")
+        self.assertEqual(outcome.result["request_url"], "https://api.openai.com/v1/images/generations")
+        self.assertEqual(outcome.result["request_timeout_seconds"], self.adapter.profile.timeout_seconds)
         self.assertEqual(outcome.result["usage"]["total_tokens"], 123)
         self.assertEqual(outcome.result["requested_image_count"], 2)
         self.assertEqual(outcome.result["output_count"], 2)
@@ -330,6 +334,255 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         self.assertTrue(outcome.result["native_image_edit_used"])
         self.assertEqual(outcome.result["native_image_edit_fallback_from"], "image.generate")
         self.assertTrue(outcome.result["storage_path"].startswith("generated/openai_gpt_image_2/"))
+
+    def test_chat_modalities_image_strategy_uses_chat_completions_with_modalities(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="openrouter_gemini_image",
+            api_key="test-key",
+            base_url="https://openrouter.example.test/v1",
+            model_name="google/gemini-3.1-flash-image-preview",
+            timeout_seconds=1,
+            strategies={
+                "chat.completions": "openai_chat",
+                "image.generate": "chat_modalities_image",
+                "image.edit": "chat_modalities_image_edit",
+            },
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "openrouter_gemini_image",
+                "google/gemini-3.1-flash-image-preview",
+                ["image.generate", "image.edit", "chat.completions"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": "https://cdn.example.test/generated-chat-image.png"}}
+                        ]
+                    }
+                }
+            ]
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"chat-image")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {"prompt": "Render a compact cultural pavilion", "aspect_ratio": "1:1"},
+                    )
+
+        generation_request = mocked_urlopen.call_args_list[0].args[0]
+        generation_body = json.loads(generation_request.data.decode("utf-8"))
+
+        self.assertTrue(generation_request.full_url.endswith("/chat/completions"))
+        self.assertEqual(generation_body["modalities"], ["image", "text"])
+        self.assertEqual(generation_body["image_config"]["aspect_ratio"], "1:1")
+        self.assertEqual(outcome.result["request_strategy"], "chat_modalities_image")
+        self.assertEqual(outcome.result["request_endpoint"], "/chat/completions")
+        self.assertEqual(outcome.result["request_url"], "https://openrouter.example.test/v1/chat/completions")
+
+    def test_chat_modalities_image_edit_strategy_sends_multimodal_message(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="openrouter_gemini_image",
+            api_key="test-key",
+            base_url="https://openrouter.example.test/v1",
+            model_name="google/gemini-3.1-flash-image-preview",
+            timeout_seconds=1,
+            strategies={
+                "image.generate": "chat_modalities_image",
+                "image.edit": "chat_modalities_image_edit",
+            },
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "openrouter_gemini_image",
+                "google/gemini-3.1-flash-image-preview",
+                ["image.generate", "image.edit"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": "https://cdn.example.test/generated-chat-edit.png"}}
+                        ]
+                    }
+                }
+            ]
+        }
+        reference_image = "data:image/png;base64,cmVmZXJlbmNlLWltYWdl"
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"chat-edit-image")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.edit",
+                        {
+                            "edit_prompt": "Preserve the massing and enrich facade rhythm",
+                            "aspect_ratio": "16:9",
+                            "source_image": reference_image,
+                        },
+                    )
+
+        generation_request = mocked_urlopen.call_args_list[0].args[0]
+        generation_body = json.loads(generation_request.data.decode("utf-8"))
+        content = generation_body["messages"][0]["content"]
+
+        self.assertTrue(generation_request.full_url.endswith("/chat/completions"))
+        self.assertEqual(generation_body["modalities"], ["image", "text"])
+        self.assertEqual(content[0]["type"], "text")
+        self.assertEqual(content[1]["type"], "image_url")
+        self.assertEqual(content[1]["image_url"]["url"], reference_image)
+        self.assertEqual(outcome.result["request_strategy"], "chat_modalities_image_edit")
+
+    def test_gemini_image_preview_defaults_to_chat_modalities_strategy_when_strategies_are_empty(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="google_gemini-3.1-flash-image-preview",
+            api_key="test-key",
+            base_url="https://newapi.example.test/v1",
+            model_name="google/gemini-3.1-flash-image-preview",
+            timeout_seconds=1,
+            strategies={},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "google_gemini-3.1-flash-image-preview",
+                "google/gemini-3.1-flash-image-preview",
+                ["image.generate", "image.edit"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": "https://cdn.example.test/generated-gemini.png"}}
+                        ]
+                    }
+                }
+            ]
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"gemini-image")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {"prompt": "Render a museum atrium skylight", "aspect_ratio": "1:1"},
+                    )
+
+        generation_request = mocked_urlopen.call_args_list[0].args[0]
+        generation_body = json.loads(generation_request.data.decode("utf-8"))
+        self.assertTrue(generation_request.full_url.endswith("/chat/completions"))
+        self.assertEqual(generation_body["modalities"], ["image", "text"])
+        self.assertEqual(outcome.result["request_strategy"], "chat_modalities_image")
+
+    def test_chat_modalities_message_images_are_normalized_from_nested_image_url(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="openrouter_gemini_image",
+            api_key="test-key",
+            base_url="https://openrouter.example.test/v1",
+            model_name="google/gemini-3.1-flash-image-preview",
+            timeout_seconds=1,
+            strategies={"image.generate": "chat_modalities_image"},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "openrouter_gemini_image",
+                "google/gemini-3.1-flash-image-preview",
+                ["image.generate"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "images": [
+                            {"image_url": {"url": "https://cdn.example.test/generated-nested-image.png"}}
+                        ]
+                    }
+                }
+            ]
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"nested-image")],
+        ):
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {"prompt": "Render a civic library foyer", "aspect_ratio": "1:1"},
+                    )
+
+        self.assertTrue(outcome.result["storage_path"].startswith("generated/openrouter_gemini_image/"))
+
+    def test_chat_modalities_message_images_data_url_are_normalized_to_b64(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="openrouter_gemini_image",
+            api_key="test-key",
+            base_url="https://openrouter.example.test/v1",
+            model_name="google/gemini-3.1-flash-image-preview",
+            timeout_seconds=1,
+            strategies={"image.generate": "chat_modalities_image"},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "openrouter_gemini_image",
+                "google/gemini-3.1-flash-image-preview",
+                ["image.generate"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        data_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yh3cAAAAASUVORK5CYII="
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "images": [
+                            {"image_url": {"url": data_url}}
+                        ]
+                    }
+                }
+            ]
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload)],
+        ):
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {"prompt": "Render a civic library foyer", "aspect_ratio": "1:1"},
+                    )
+
+        self.assertTrue(outcome.result["storage_path"].startswith("generated/openrouter_gemini_image/"))
 
 
 if __name__ == "__main__":

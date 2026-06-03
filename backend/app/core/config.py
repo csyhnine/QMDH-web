@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.services.provider_strategy import normalize_provider_base_url, normalize_strategies
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -40,6 +42,7 @@ class ImageProviderProfile:
     reference_caption_model: str | None = None
     reference_caption_fallback_models: tuple[str, ...] = DEFAULT_REFERENCE_CAPTION_FALLBACK_MODELS
     reference_caption_prompt: str = DEFAULT_REFERENCE_CAPTION_PROMPT
+    strategies: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -196,7 +199,7 @@ class Settings(BaseSettings):
 
             provider_name = str(item.get("provider_name") or "").strip()
             api_key = str(item.get("api_key") or "").strip()
-            base_url = str(item.get("base_url") or "").strip().rstrip("/")
+            base_url = normalize_provider_base_url(str(item.get("base_url") or "").strip())
             model_name = str(item.get("model_name") or "").strip()
             if not provider_name or not api_key or not base_url or not model_name:
                 continue
@@ -239,6 +242,7 @@ class Settings(BaseSettings):
                 )
                 or DEFAULT_REFERENCE_CAPTION_FALLBACK_MODELS,
                 reference_caption_prompt=reference_caption_prompt or DEFAULT_REFERENCE_CAPTION_PROMPT,
+                strategies=normalize_strategies(item.get("strategies") or {}),
             )
 
         return profiles

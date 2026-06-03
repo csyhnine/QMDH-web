@@ -13,6 +13,7 @@ from app.core.encryption import (
     decrypt_value_or_raise,
 )
 from app.models import ProviderProfile
+from app.services.provider_strategy import normalize_strategies
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ def _profile_from_record(record: ProviderProfile) -> ImageProviderProfile:
         outbound=True,
         reference_mode=reference_mode,
         reference_caption_model=record.reference_caption_model,
+        strategies=normalize_strategies(record.strategies or {}),
     )
 
 

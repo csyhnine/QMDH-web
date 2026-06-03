@@ -273,6 +273,7 @@ class ProviderProfileBase(BaseModel):
     model_name: str = Field(min_length=1, max_length=150)
     adapter_kind: str = "openai_compatible"
     capabilities: list[str] = Field(default_factory=lambda: ["image.generate"])
+    strategies: dict[str, str] = Field(default_factory=dict)
     quality: str = "medium"
     output_format: str = "png"
     timeout_seconds: float = 300.0
@@ -294,6 +295,7 @@ class ProviderProfileUpdate(BaseModel):
     model_name: str | None = Field(default=None, min_length=1, max_length=150)
     adapter_kind: str | None = None
     capabilities: list[str] | None = None
+    strategies: dict[str, str] | None = None
     quality: str | None = None
     output_format: str | None = None
     timeout_seconds: float | None = None
@@ -486,6 +488,7 @@ class ProviderBulkImportItem(BaseModel):
     capabilities: list[str] = Field(default_factory=lambda: ["image.generate"])
     adapter_kind: str = "openai_compatible"
     reference_mode: str = "disabled"
+    strategies: dict[str, str] = Field(default_factory=dict)
 
 
 class ProviderBulkImportIn(BaseModel):

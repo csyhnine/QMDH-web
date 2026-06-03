@@ -28,6 +28,13 @@ from app.services.media_storage import (
     write_preview_svg,
 )
 from app.services.model_registry import ProviderDefinition, get_image_provider_profile, get_provider_definition
+from app.services.provider_strategy import (
+    CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
+    CHAT_MODALITIES_IMAGE_STRATEGY,
+    OPENAI_IMAGE_EDITS_STRATEGY,
+    OPENAI_IMAGES_STRATEGY,
+    resolve_strategy_for_capability,
+)
 from app.services.usage_ledger import ensure_usage_ledger_for_task
 
 WHITE_CANVAS_DATA_URL = (
@@ -50,6 +57,33 @@ class ExecutionOutcome:
     cost_currency: str
     outbound: bool
     result: dict
+
+
+@dataclass(frozen=True)
+class ImageRequestPlan:
+    endpoint_path: str
+    body: dict
+    headers: dict[str, str]
+    reference_result: dict[str, object]
+    adapter_mode: str
+    effective_capability: str
+    strategy: str
+
+
+@dataclass(frozen=True)
+class RequestDiagnostics:
+    strategy: str
+    endpoint_path: str
+    request_url: str
+    timeout_seconds: float
+    adapter_mode: str
+    effective_capability: str
+
+
+class ProviderExecutionError(Exception):
+    def __init__(self, message: str, *, diagnostics: RequestDiagnostics):
+        super().__init__(message)
+        self.diagnostics = diagnostics
 
 
 class ProviderAdapter:
@@ -129,162 +163,90 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
             raise ValueError("Image task payload is missing prompt")
 
         requested_count = _requested_image_count(payload)
-        reference_result: dict[str, object] = {}
-        prompt_for_generation = prompt
-        reference_images = _extract_reference_images(payload)
-        reference_image = reference_images[0] if reference_images else ""
-        image_edit_bridge_url = ""
-        native_edit_image_urls: list[str] = []
-        request_endpoint_path = "/images/generations"
-        if capability == "image.edit":
-            if _uses_native_image_edit_request(self.profile):
-                if not reference_images:
-                    raise ValueError("Image edit task requires a reference image for this provider profile")
-                native_edit_image_urls = [_reference_image_to_model_url(item) for item in reference_images]
-                request_endpoint_path = "/images/edits"
-                reference_result = {
-                    "reference_image_used": True,
-                    "reference_image_mode": "native_image_edit",
-                    "reference_image_count": len(reference_images),
-                    "native_image_edit_used": True,
-                    "native_image_edit_endpoint": "images.edits",
-                    "native_image_edit_provider": self.profile.provider_name,
-                }
-            elif _uses_image_edit_bridge(self.profile):
-                image_edit_bridge_url, reference_result = _build_image_edit_bridge_request(
-                    profile=self.profile,
-                    reference_image=reference_image,
-                )
-            elif reference_image:
-                prompt_for_generation, reference_result = _apply_reference_image_to_prompt(
-                    profile=self.profile,
-                    prompt=prompt,
-                    reference_image=reference_image,
-                )
-            else:
-                raise ValueError("Image edit task requires a reference image for this provider profile")
-        elif _uses_image_edit_bridge(self.profile):
-            image_edit_bridge_url, reference_result = _build_image_edit_bridge_request(
-                profile=self.profile,
-                reference_image=reference_image,
-            )
-        elif (
-            reference_image
-            and "image.edit" in self.definition.capabilities
-            and _uses_native_image_edit_request(self.profile)
-        ):
-            native_edit_image_urls = [_reference_image_to_model_url(item) for item in reference_images]
-            request_endpoint_path = "/images/edits"
-            reference_result = {
-                "reference_image_used": True,
-                "reference_image_mode": "native_image_edit",
-                "reference_image_count": len(reference_images),
-                "native_image_edit_used": True,
-                "native_image_edit_endpoint": "images.edits",
-                "native_image_edit_provider": self.profile.provider_name,
-                "native_image_edit_fallback_from": capability,
-            }
-        elif reference_image:
-            prompt_for_generation, reference_result = _apply_reference_image_to_prompt(
-                profile=self.profile,
-                prompt=prompt,
-                reference_image=reference_image,
-            )
-
-        request_body = {
-            "model": self.profile.model_name,
-            "prompt": prompt_for_generation,
-            "size": _openai_size_for_payload(payload),
-            "quality": self.profile.quality,
-            "output_format": self.profile.output_format,
-        }
-        if native_edit_image_urls:
-            request_body["images"] = [{"image_url": image_url} for image_url in native_edit_image_urls]
-        if image_edit_bridge_url:
-            request_body["image_url"] = image_edit_bridge_url
-
-        detail = payload.get("prompt_supplement")
-        if detail:
-            request_body["prompt"] = f"{prompt_for_generation}\n\nAdditional guidance: {detail}"
-
-        headers = {
-            "Authorization": f"Bearer {self.profile.api_key}",
-            "Content-Type": "application/json",
-        }
-        if _uses_modelscope_async_mode(self.profile):
-            headers["X-ModelScope-Async-Mode"] = "true"
-
-        started_at = perf_counter()
-        storage_paths: list[str] = []
-        usage_records: list[dict] = []
-        response_models: list[str] = []
-
-        while len(storage_paths) < requested_count:
-            response_payload = _submit_image_generation_request(
-                base_url=self.profile.base_url,
-                body=request_body,
-                headers=headers,
-                timeout_seconds=self.profile.timeout_seconds,
-                endpoint_path=request_endpoint_path,
-            )
-
-            if _uses_modelscope_async_mode(self.profile):
-                data = _extract_image_data(response_payload)
-                if not data:
-                    data = _poll_modelscope_image_result(self.profile, response_payload)
-            else:
-                data = _extract_image_data(response_payload)
-
-            if not data:
-                raise ValueError("Image generation returned no image data")
-
-            response_model = str(response_payload.get("model", self.profile.model_name))
-            if response_model not in response_models:
-                response_models.append(response_model)
-
-            usage_payload = response_payload.get("usage")
-            if isinstance(usage_payload, dict):
-                usage_records.append(usage_payload)
-
-            for item in data:
-                storage_paths.append(
-                    _persist_generated_image(
-                        provider_name=self.definition.provider_name,
-                        image_payload=item,
-                        prompt=prompt,
-                        output_format=self.profile.output_format,
-                        timeout_seconds=self.profile.timeout_seconds,
-                    )
-                )
-                if len(storage_paths) >= requested_count:
-                    break
-
-        latency_ms = max(1, round((perf_counter() - started_at) * 1000))
-        billing = _calculate_image_billing(profile=self.profile, output_count=len(storage_paths))
-        result = {
-            "summary": f"{self.definition.provider_name} completed a live {capability} run.",
-            "payload_keys": list(payload.keys()),
-            "adapter_mode": "modelscope_async" if _uses_modelscope_async_mode(self.profile) else "openai",
-            "storage_path": storage_paths[0],
-            "storage_paths": storage_paths,
-            "response_model": response_models[0] if response_models else self.profile.model_name,
-            "response_models": response_models,
-            "usage": usage_records[-1] if usage_records else {},
-            "usage_records": usage_records,
-            "requested_image_count": requested_count,
-            "output_count": len(storage_paths),
-            "billing": billing,
-            **reference_result,
-        }
-
-        return ExecutionOutcome(
-            model_name=self.profile.model_name,
-            latency_ms=latency_ms,
-            cost=billing["cost"],
-            cost_currency=billing["currency"],
-            outbound=self.definition.outbound,
-            result=result,
+        request_plan = _build_image_request_plan(
+            profile=self.profile,
+            definition=self.definition,
+            capability=capability,
+            payload=payload,
+            prompt=prompt,
         )
+        diagnostics = _request_diagnostics_for_plan(self.profile, request_plan)
+
+        try:
+            started_at = perf_counter()
+            storage_paths: list[str] = []
+            usage_records: list[dict] = []
+            response_models: list[str] = []
+
+            while len(storage_paths) < requested_count:
+                response_payload = _submit_image_generation_request(
+                    base_url=self.profile.base_url,
+                    body=request_plan.body,
+                    headers=request_plan.headers,
+                    timeout_seconds=self.profile.timeout_seconds,
+                    endpoint_path=request_plan.endpoint_path,
+                )
+
+                if _uses_modelscope_async_mode(self.profile) and request_plan.endpoint_path.startswith("/images/"):
+                    data = _extract_image_data(response_payload)
+                    if not data:
+                        data = _poll_modelscope_image_result(self.profile, response_payload)
+                else:
+                    data = _extract_image_data(response_payload)
+
+                if not data:
+                    raise ValueError("Image generation returned no image data")
+
+                response_model = str(response_payload.get("model", self.profile.model_name))
+                if response_model not in response_models:
+                    response_models.append(response_model)
+
+                usage_payload = response_payload.get("usage")
+                if isinstance(usage_payload, dict):
+                    usage_records.append(usage_payload)
+
+                for item in data:
+                    storage_paths.append(
+                        _persist_generated_image(
+                            provider_name=self.definition.provider_name,
+                            image_payload=item,
+                            prompt=prompt,
+                            output_format=self.profile.output_format,
+                            timeout_seconds=self.profile.timeout_seconds,
+                        )
+                    )
+                    if len(storage_paths) >= requested_count:
+                        break
+
+            latency_ms = max(1, round((perf_counter() - started_at) * 1000))
+            billing = _calculate_image_billing(profile=self.profile, output_count=len(storage_paths))
+            result = {
+                "summary": f"{self.definition.provider_name} completed a live {capability} run.",
+                "payload_keys": list(payload.keys()),
+                "adapter_mode": request_plan.adapter_mode,
+                "storage_path": storage_paths[0],
+                "storage_paths": storage_paths,
+                "response_model": response_models[0] if response_models else self.profile.model_name,
+                "response_models": response_models,
+                "usage": usage_records[-1] if usage_records else {},
+                "usage_records": usage_records,
+                "requested_image_count": requested_count,
+                "output_count": len(storage_paths),
+                "billing": billing,
+                **_request_diagnostics_payload(diagnostics),
+                **request_plan.reference_result,
+            }
+
+            return ExecutionOutcome(
+                model_name=self.profile.model_name,
+                latency_ms=latency_ms,
+                cost=billing["cost"],
+                cost_currency=billing["currency"],
+                outbound=self.definition.outbound,
+                result=result,
+            )
+        except Exception as exc:
+            raise ProviderExecutionError(str(exc), diagnostics=diagnostics) from exc
 
 
 def _calculate_image_billing(*, profile: ImageProviderProfile, output_count: int) -> dict:
@@ -323,6 +285,295 @@ def get_provider_adapter(provider_name: str, db: Session | None = None) -> Provi
     if definition.adapter_kind == "openai_compatible":
         return OpenAIImageProviderAdapter(definition, get_image_provider_profile(provider_name, db))
     return SimulatedProviderAdapter(definition)
+
+
+def _request_diagnostics_for_plan(profile: ImageProviderProfile, plan: ImageRequestPlan) -> RequestDiagnostics:
+    return RequestDiagnostics(
+        strategy=plan.strategy,
+        endpoint_path=plan.endpoint_path,
+        request_url=f"{profile.base_url.rstrip('/')}{plan.endpoint_path}",
+        timeout_seconds=float(profile.timeout_seconds),
+        adapter_mode=plan.adapter_mode,
+        effective_capability=plan.effective_capability,
+    )
+
+
+def _request_diagnostics_payload(diagnostics: RequestDiagnostics) -> dict[str, object]:
+    return {
+        "request_strategy": diagnostics.strategy,
+        "request_endpoint": diagnostics.endpoint_path,
+        "request_url": diagnostics.request_url,
+        "request_timeout_seconds": diagnostics.timeout_seconds,
+        "request_adapter_mode": diagnostics.adapter_mode,
+        "effective_capability": diagnostics.effective_capability,
+    }
+
+
+def _build_image_request_plan(
+    *,
+    profile: ImageProviderProfile,
+    definition: ProviderDefinition,
+    capability: str,
+    payload: dict,
+    prompt: str,
+) -> ImageRequestPlan:
+    requested_strategy = resolve_strategy_for_capability(
+        capability=capability,
+        provider_name=profile.provider_name,
+        model_name=profile.model_name,
+        base_url=profile.base_url,
+        strategies=profile.strategies,
+    )
+    if not requested_strategy:
+        raise ValueError(f"{profile.provider_name} does not define a request strategy for {capability}")
+
+    reference_images = _extract_reference_images(payload)
+    effective_capability = capability
+    strategy = requested_strategy
+
+    if (
+        capability == "image.generate"
+        and reference_images
+        and "image.edit" in definition.capabilities
+    ):
+        edit_strategy = resolve_strategy_for_capability(
+            capability="image.edit",
+            provider_name=profile.provider_name,
+            model_name=profile.model_name,
+            base_url=profile.base_url,
+            strategies=profile.strategies,
+        )
+        if edit_strategy in {OPENAI_IMAGE_EDITS_STRATEGY, CHAT_MODALITIES_IMAGE_EDIT_STRATEGY}:
+            effective_capability = "image.edit"
+            strategy = edit_strategy
+
+    if strategy == OPENAI_IMAGES_STRATEGY:
+        return _build_openai_images_plan(
+            profile=profile,
+            requested_capability=capability,
+            effective_capability=effective_capability,
+            payload=payload,
+            prompt=prompt,
+        )
+    if strategy == OPENAI_IMAGE_EDITS_STRATEGY:
+        return _build_openai_image_edits_plan(
+            profile=profile,
+            requested_capability=capability,
+            effective_capability=effective_capability,
+            payload=payload,
+            prompt=prompt,
+        )
+    if strategy == CHAT_MODALITIES_IMAGE_STRATEGY:
+        return _build_chat_modalities_image_plan(
+            profile=profile,
+            requested_capability=capability,
+            payload=payload,
+            prompt=prompt,
+        )
+    if strategy == CHAT_MODALITIES_IMAGE_EDIT_STRATEGY:
+        return _build_chat_modalities_image_edit_plan(
+            profile=profile,
+            requested_capability=capability,
+            effective_capability=effective_capability,
+            payload=payload,
+            prompt=prompt,
+        )
+
+    raise ValueError(f"Unsupported request strategy for {profile.provider_name}: {strategy}")
+
+
+def _build_openai_headers(profile: ImageProviderProfile, *, async_images: bool = False) -> dict[str, str]:
+    headers = {
+        "Authorization": f"Bearer {profile.api_key}",
+        "Content-Type": "application/json",
+    }
+    if async_images and _uses_modelscope_async_mode(profile):
+        headers["X-ModelScope-Async-Mode"] = "true"
+    return headers
+
+
+def _openai_image_request_body(
+    *,
+    profile: ImageProviderProfile,
+    payload: dict,
+    prompt: str,
+) -> dict[str, object]:
+    body: dict[str, object] = {
+        "model": profile.model_name,
+        "prompt": prompt,
+        "size": _openai_size_for_payload(payload),
+        "quality": profile.quality,
+        "output_format": profile.output_format,
+    }
+    detail = str(payload.get("prompt_supplement") or "").strip()
+    if detail:
+        body["prompt"] = f"{prompt}\n\nAdditional guidance: {detail}"
+    return body
+
+
+def _build_openai_images_plan(
+    *,
+    profile: ImageProviderProfile,
+    requested_capability: str,
+    effective_capability: str,
+    payload: dict,
+    prompt: str,
+) -> ImageRequestPlan:
+    reference_images = _extract_reference_images(payload)
+    reference_image = reference_images[0] if reference_images else ""
+    prompt_for_generation = prompt
+    reference_result: dict[str, object] = {}
+    image_edit_bridge_url = ""
+
+    if effective_capability == "image.edit":
+        if _uses_image_edit_bridge(profile):
+            image_edit_bridge_url, reference_result = _build_image_edit_bridge_request(
+                profile=profile,
+                reference_image=reference_image,
+            )
+        elif reference_image:
+            prompt_for_generation, reference_result = _apply_reference_image_to_prompt(
+                profile=profile,
+                prompt=prompt,
+                reference_image=reference_image,
+            )
+        else:
+            raise ValueError("Image edit task requires a reference image for this provider profile")
+    elif _uses_image_edit_bridge(profile):
+        image_edit_bridge_url, reference_result = _build_image_edit_bridge_request(
+            profile=profile,
+            reference_image=reference_image,
+        )
+    elif reference_image:
+        prompt_for_generation, reference_result = _apply_reference_image_to_prompt(
+            profile=profile,
+            prompt=prompt,
+            reference_image=reference_image,
+        )
+
+    body = _openai_image_request_body(profile=profile, payload=payload, prompt=prompt_for_generation)
+    if image_edit_bridge_url:
+        body["image_url"] = image_edit_bridge_url
+
+    return ImageRequestPlan(
+        endpoint_path="/images/generations",
+        body=body,
+        headers=_build_openai_headers(profile, async_images=True),
+        reference_result=reference_result,
+        adapter_mode="modelscope_async" if _uses_modelscope_async_mode(profile) else "openai",
+        effective_capability=effective_capability,
+        strategy=OPENAI_IMAGES_STRATEGY,
+    )
+
+
+def _build_openai_image_edits_plan(
+    *,
+    profile: ImageProviderProfile,
+    requested_capability: str,
+    effective_capability: str,
+    payload: dict,
+    prompt: str,
+) -> ImageRequestPlan:
+    reference_images = _extract_reference_images(payload)
+    if not reference_images:
+        raise ValueError("Image edit task requires a reference image for this provider profile")
+
+    body = _openai_image_request_body(profile=profile, payload=payload, prompt=prompt)
+    body["images"] = [{"image_url": _reference_image_to_model_url(item)} for item in reference_images]
+
+    reference_result: dict[str, object] = {
+        "reference_image_used": True,
+        "reference_image_mode": "native_image_edit",
+        "reference_image_count": len(reference_images),
+        "native_image_edit_used": True,
+        "native_image_edit_endpoint": "images.edits",
+        "native_image_edit_provider": profile.provider_name,
+    }
+    if requested_capability != effective_capability:
+        reference_result["native_image_edit_fallback_from"] = requested_capability
+
+    return ImageRequestPlan(
+        endpoint_path="/images/edits",
+        body=body,
+        headers=_build_openai_headers(profile, async_images=True),
+        reference_result=reference_result,
+        adapter_mode="modelscope_async" if _uses_modelscope_async_mode(profile) else "openai",
+        effective_capability=effective_capability,
+        strategy=OPENAI_IMAGE_EDITS_STRATEGY,
+    )
+
+
+def _build_chat_modalities_image_plan(
+    *,
+    profile: ImageProviderProfile,
+    requested_capability: str,
+    payload: dict,
+    prompt: str,
+) -> ImageRequestPlan:
+    content = prompt
+    detail = str(payload.get("prompt_supplement") or "").strip()
+    if detail:
+        content = f"{prompt}\n\nAdditional guidance: {detail}"
+    body = {
+        "model": profile.model_name,
+        "messages": [{"role": "user", "content": content}],
+        "modalities": ["image", "text"],
+        "image_config": {"aspect_ratio": str(payload.get("aspect_ratio") or "1:1").strip() or "1:1"},
+        "stream": False,
+    }
+    return ImageRequestPlan(
+        endpoint_path="/chat/completions",
+        body=body,
+        headers=_build_openai_headers(profile),
+        reference_result={},
+        adapter_mode="chat_modalities_image",
+        effective_capability="image.generate",
+        strategy=CHAT_MODALITIES_IMAGE_STRATEGY,
+    )
+
+
+def _build_chat_modalities_image_edit_plan(
+    *,
+    profile: ImageProviderProfile,
+    requested_capability: str,
+    effective_capability: str,
+    payload: dict,
+    prompt: str,
+) -> ImageRequestPlan:
+    reference_images = _extract_reference_images(payload)
+    if not reference_images:
+        raise ValueError("Image edit task requires a reference image for this provider profile")
+
+    detail = str(payload.get("prompt_supplement") or "").strip()
+    text_prompt = f"{prompt}\n\nAdditional guidance: {detail}" if detail else prompt
+    content: list[dict[str, object]] = [{"type": "text", "text": text_prompt}]
+    for item in reference_images:
+        content.append({"type": "image_url", "image_url": {"url": _reference_image_to_model_url(item)}})
+
+    reference_result: dict[str, object] = {
+        "reference_image_used": True,
+        "reference_image_mode": "chat_modalities_image_edit",
+        "reference_image_count": len(reference_images),
+    }
+    if requested_capability != effective_capability:
+        reference_result["chat_modalities_image_edit_fallback_from"] = requested_capability
+
+    body = {
+        "model": profile.model_name,
+        "messages": [{"role": "user", "content": content}],
+        "modalities": ["image", "text"],
+        "image_config": {"aspect_ratio": str(payload.get("aspect_ratio") or "1:1").strip() or "1:1"},
+        "stream": False,
+    }
+    return ImageRequestPlan(
+        endpoint_path="/chat/completions",
+        body=body,
+        headers=_build_openai_headers(profile),
+        reference_result=reference_result,
+        adapter_mode="chat_modalities_image",
+        effective_capability=effective_capability,
+        strategy=CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
+    )
 
 
 def _extract_reference_images(payload: dict) -> list[str]:
@@ -371,11 +622,6 @@ def _task_payload_result_fields(payload: dict) -> dict[str, str]:
 def _uses_image_edit_bridge(profile: ImageProviderProfile) -> bool:
     identity = f"{profile.provider_name} {profile.model_name}".lower()
     return "firered" in identity or "image-edit" in identity
-
-
-def _uses_native_image_edit_request(profile: ImageProviderProfile) -> bool:
-    identity = f"{profile.provider_name} {profile.model_name} {profile.base_url}".lower()
-    return "gpt-image" in identity or "api.openai.com" in identity
 
 
 def _build_image_edit_bridge_request(
@@ -699,6 +945,34 @@ def _extract_image_data(payload: dict) -> list[dict]:
         if candidates := payload.get(key):
             return _normalize_image_candidates(candidates)
 
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        message = choices[0].get("message") if isinstance(choices[0], dict) else None
+        if isinstance(message, dict):
+            if candidates := message.get("images"):
+                return _normalize_image_candidates(candidates)
+
+            content = message.get("content")
+            if isinstance(content, list):
+                normalized: list[dict] = []
+                for item in content:
+                    if not isinstance(item, dict):
+                        continue
+                    image_url = item.get("image_url")
+                    if isinstance(image_url, dict) and image_url.get("url"):
+                        normalized.append({"url": image_url["url"]})
+                        continue
+                    if isinstance(image_url, str):
+                        normalized.append({"url": image_url})
+                        continue
+                    if item.get("b64_json"):
+                        normalized.append({"b64_json": item["b64_json"]})
+                        continue
+                    if item.get("data"):
+                        normalized.append({"b64_json": item["data"]})
+                if normalized:
+                    return normalized
+
     return []
 
 
@@ -708,11 +982,44 @@ def _normalize_image_candidates(candidates: object) -> list[dict]:
 
     normalized: list[dict] = []
     for item in candidates:
-        if isinstance(item, str):
-            normalized.append({"url": item})
-        elif isinstance(item, dict):
-            normalized.append(item)
+        normalized_item = _normalize_image_candidate(item)
+        if normalized_item:
+            normalized.append(normalized_item)
     return normalized
+
+
+def _normalize_image_candidate(item: object) -> dict | None:
+    if isinstance(item, str):
+        return _normalize_image_url_value(item)
+
+    if not isinstance(item, dict):
+        return None
+
+    if item.get("url"):
+        return _normalize_image_url_value(str(item["url"]))
+
+    if item.get("b64_json"):
+        return {"b64_json": item["b64_json"]}
+
+    if item.get("data"):
+        return {"b64_json": item["data"]}
+
+    image_url = item.get("image_url")
+    if isinstance(image_url, dict) and image_url.get("url"):
+        return _normalize_image_url_value(str(image_url["url"]))
+    if isinstance(image_url, str):
+        return _normalize_image_url_value(image_url)
+
+    return None
+
+
+def _normalize_image_url_value(value: str) -> dict | None:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return None
+    if normalized.startswith("data:image/") and ";base64," in normalized:
+        return {"b64_json": normalized.split(";base64,", 1)[1]}
+    return {"url": normalized}
 
 
 def _poll_modelscope_image_result(profile: ImageProviderProfile, submit_payload: dict) -> list[dict]:
@@ -894,6 +1201,12 @@ def _build_failure_result(exc: Exception, *, capability: str, provider_name: str
     }
 
 
+def _diagnostics_from_exception(exc: Exception) -> dict[str, object]:
+    if isinstance(exc, ProviderExecutionError):
+        return _request_diagnostics_payload(exc.diagnostics)
+    return {}
+
+
 def _build_asset_tags(task: Task, workflow: Workflow) -> list[str]:
     tags = [workflow.category, workflow.key, task.requested_provider, task.classification.value]
     if style := task.payload.get("style"):
@@ -998,6 +1311,7 @@ def execute_task(task_id: int) -> None:
             task.result = outcome.result
             task.result = {
                 **task.result,
+                "execution_mode": settings.task_execution_mode,
                 "queued_stage": "completed",
                 **_reference_image_result_fields(task.payload),
                 **_task_payload_result_fields(task.payload),
@@ -1040,12 +1354,17 @@ def execute_task(task_id: int) -> None:
                 }
         except Exception as exc:
             task.status = TaskStatus.failed
+            request_diagnostics = _diagnostics_from_exception(exc)
             failure = _build_failure_result(
                 exc,
                 capability=workflow.provider_capability,
                 provider_name=task.requested_provider,
             )
-            task.result = failure
+            task.result = {
+                **failure,
+                **request_diagnostics,
+                "execution_mode": settings.task_execution_mode,
+            }
             task.result = {
                 **task.result,
                 "queued_stage": "failed",
@@ -1075,6 +1394,7 @@ def execute_task(task_id: int) -> None:
                         "classification": task.classification.value,
                         "project_code": project.code,
                         "keys": list(task.payload.keys()),
+                        "request_diagnostics": request_diagnostics,
                         "failure": failure,
                     },
                 )
@@ -1088,6 +1408,8 @@ def execute_task(task_id: int) -> None:
                     "provider_name": task.requested_provider,
                     "error_code": failure.get("error_code"),
                     "error_detail": failure.get("error_detail"),
+                    "execution_mode": settings.task_execution_mode,
+                    **request_diagnostics,
                 },
                 exc_info=True,
             )

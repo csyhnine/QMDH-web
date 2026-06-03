@@ -210,6 +210,7 @@ export type ProviderProfileRecord = {
   model_name: string;
   adapter_kind: string;
   capabilities: string[];
+  strategies: Record<string, string>;
   quality: string;
   output_format: string;
   timeout_seconds: number;
@@ -241,6 +242,7 @@ export type ProviderProfileCreatePayload = {
   model_name: string;
   adapter_kind: string;
   capabilities: string[];
+  strategies?: Record<string, string>;
   quality: string;
   output_format: string;
   timeout_seconds: number;
@@ -296,6 +298,7 @@ export type ProviderBulkImportItem = {
   capabilities: string[];
   adapter_kind: string;
   reference_mode: string;
+  strategies?: Record<string, string>;
 };
 
 export type ProviderBulkImportPayload = {

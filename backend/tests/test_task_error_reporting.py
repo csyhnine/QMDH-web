@@ -7,7 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.models import DataClassification, Project, ProviderCall, Task, TaskStatus, UsageLedger, User, Workflow
-from app.services.task_executor import execute_task
+from app.services.task_executor import ProviderExecutionError, RequestDiagnostics, execute_task
 
 
 class TaskErrorReportingTests(unittest.TestCase):
@@ -65,7 +65,17 @@ class TaskErrorReportingTests(unittest.TestCase):
         with patch("app.services.task_executor.SessionLocal", self.SessionLocal):
             with patch(
                 "app.services.task_executor.get_provider_adapter",
-                side_effect=ValueError("Image generation failed with HTTP 404: <!DOCTYPE html><html>missing route</html>"),
+                side_effect=ProviderExecutionError(
+                    "Image generation failed with HTTP 404: <!DOCTYPE html><html>missing route</html>",
+                    diagnostics=RequestDiagnostics(
+                        strategy="chat_modalities_image",
+                        endpoint_path="/chat/completions",
+                        request_url="https://example.test/v1/chat/completions",
+                        timeout_seconds=500.0,
+                        adapter_mode="chat_modalities_image",
+                        effective_capability="image.generate",
+                    ),
+                ),
             ):
                 execute_task(self.task_id)
 
@@ -77,12 +87,21 @@ class TaskErrorReportingTests(unittest.TestCase):
             self.assertEqual(task.result["error_code"], "upstream_http_404")
             self.assertIn("上游接口或模型地址不存在", task.result["error_summary"])
             self.assertIn("HTML error page", task.result["error_detail"])
+            self.assertEqual(task.result["request_strategy"], "chat_modalities_image")
+            self.assertEqual(task.result["request_endpoint"], "/chat/completions")
+            self.assertEqual(task.result["request_url"], "https://example.test/v1/chat/completions")
+            self.assertEqual(task.result["request_timeout_seconds"], 500.0)
+            self.assertEqual(task.result["execution_mode"], "background")
 
             provider_calls = list(db.scalars(select(ProviderCall).where(ProviderCall.task_id == self.task_id)).all())
             self.assertEqual(len(provider_calls), 1)
             self.assertEqual(
                 provider_calls[0].request_summary["failure"]["error_code"],
                 "upstream_http_404",
+            )
+            self.assertEqual(
+                provider_calls[0].request_summary["request_diagnostics"]["request_url"],
+                "https://example.test/v1/chat/completions",
             )
 
             task_ledger = db.scalar(

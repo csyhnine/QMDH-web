@@ -32,8 +32,24 @@ from app.schemas import (
     ProviderProfileUpdate,
 )
 from app.services.model_registry import list_provider_capabilities
+from app.services.provider_strategy import (
+    CHAT_CAPABILITY,
+    CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
+    CHAT_MODALITIES_IMAGE_STRATEGY,
+    OPENAI_CHAT_STRATEGY,
+    OPENAI_IMAGE_EDITS_STRATEGY,
+    OPENAI_IMAGES_STRATEGY,
+    normalize_provider_base_url,
+    normalize_strategies,
+    resolve_strategy_for_capability,
+)
 
 router = APIRouter(prefix="/providers", tags=["providers"])
+
+_PROBE_IMAGE_DATA_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yh3cAAAAASUVORK5CYII="
+)
 
 
 @router.get("", response_model=list[ProviderCapability])
@@ -93,6 +109,7 @@ def _to_profile_out(profile: ProviderProfile) -> ProviderProfileOut:
         model_name=profile.model_name,
         adapter_kind=profile.adapter_kind,
         capabilities=profile.capabilities or ["image.generate"],
+        strategies=normalize_strategies(profile.strategies or {}),
         quality=profile.quality,
         output_format=profile.output_format,
         timeout_seconds=profile.timeout_seconds,
@@ -127,15 +144,36 @@ def _to_pricing_rule_out(rule: ProviderPricingRule) -> ProviderPricingRuleOut:
 
 def _build_probe_request(profile: ProviderProfile, api_key: str) -> tuple[str, str, dict[str, object], str]:
     base_url = profile.base_url.rstrip("/")
-    if "chat.completions" in (profile.capabilities or []):
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    probe_capability = next(
+        (
+            capability
+            for capability in (CHAT_CAPABILITY, "image.generate", "image.edit", "video.generate")
+            if capability in (profile.capabilities or [])
+        ),
+        None,
+    )
+    strategy = (
+        resolve_strategy_for_capability(
+            capability=probe_capability,
+            provider_name=profile.provider_name,
+            model_name=profile.model_name,
+            base_url=profile.base_url,
+            strategies=profile.strategies or {},
+        )
+        if probe_capability
+        else None
+    )
+
+    if strategy == OPENAI_CHAT_STRATEGY:
         return (
             "POST",
             f"{base_url}/chat/completions",
             {
-                "headers": {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
+                "headers": headers,
                 "json": {
                     "model": profile.model_name,
                     "messages": [{"role": "user", "content": "ping"}],
@@ -146,15 +184,87 @@ def _build_probe_request(profile: ProviderProfile, api_key: str) -> tuple[str, s
             "Chat 接口可用，当前模型已通过最小请求校验。",
         )
 
+    if strategy == OPENAI_IMAGES_STRATEGY:
+        return (
+            "POST",
+            f"{base_url}/images/generations",
+            {
+                "headers": headers,
+                "json": {
+                    "model": profile.model_name,
+                    "prompt": "ping",
+                    "size": "1024x1024",
+                    "quality": profile.quality or "medium",
+                    "output_format": profile.output_format or "png",
+                },
+            },
+            "图片生成接口可用，当前模型已通过最小请求校验。",
+        )
+
+    if strategy == OPENAI_IMAGE_EDITS_STRATEGY:
+        return (
+            "POST",
+            f"{base_url}/images/edits",
+            {
+                "headers": headers,
+                "json": {
+                    "model": profile.model_name,
+                    "prompt": "ping",
+                    "images": [{"image_url": _PROBE_IMAGE_DATA_URL}],
+                    "size": "1024x1024",
+                    "quality": profile.quality or "medium",
+                    "output_format": profile.output_format or "png",
+                },
+            },
+            "图片编辑接口可用，当前模型已通过最小请求校验。",
+        )
+
+    if strategy == CHAT_MODALITIES_IMAGE_STRATEGY:
+        return (
+            "POST",
+            f"{base_url}/chat/completions",
+            {
+                "headers": headers,
+                "json": {
+                    "model": profile.model_name,
+                    "messages": [{"role": "user", "content": "ping"}],
+                    "modalities": ["image", "text"],
+                    "image_config": {"aspect_ratio": "1:1"},
+                    "stream": False,
+                },
+            },
+            "多模态生图接口可用，当前模型已通过最小请求校验。",
+        )
+
+    if strategy == CHAT_MODALITIES_IMAGE_EDIT_STRATEGY:
+        return (
+            "POST",
+            f"{base_url}/chat/completions",
+            {
+                "headers": headers,
+                "json": {
+                    "model": profile.model_name,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "ping"},
+                                {"type": "image_url", "image_url": {"url": _PROBE_IMAGE_DATA_URL}},
+                            ],
+                        }
+                    ],
+                    "modalities": ["image", "text"],
+                    "image_config": {"aspect_ratio": "1:1"},
+                    "stream": False,
+                },
+            },
+            "多模态图片编辑接口可用，当前模型已通过最小请求校验。",
+        )
+
     return (
         "GET",
         f"{base_url}/models",
-        {
-            "headers": {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            }
-        },
+        {"headers": headers},
         "模型服务已连通，当前 API Key 可读取模型列表。",
     )
 
@@ -239,7 +349,7 @@ async def probe_provider_profile(
     method, checked_url, request_kwargs, success_detail = _build_probe_request(profile, api_key)
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=max(float(profile.timeout_seconds or 15.0), 1.0)) as client:
             response = await client.request(method, checked_url, **request_kwargs)
     except httpx.TimeoutException:
         return ProviderProfileProbeOut(
@@ -298,13 +408,20 @@ def create_provider_profile(
     if existing:
         raise HTTPException(status_code=409, detail="Provider profile already exists")
 
+    try:
+        normalized_base_url = normalize_provider_base_url(payload.base_url)
+        normalized_strategies = normalize_strategies(payload.strategies)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     profile = ProviderProfile(
         provider_name=payload.provider_name.strip(),
         api_key=encrypt_value(payload.api_key.strip()),
-        base_url=payload.base_url.strip().rstrip("/"),
+        base_url=normalized_base_url,
         model_name=payload.model_name.strip(),
         adapter_kind=payload.adapter_kind.strip() or "openai_compatible",
         capabilities=[value.strip() for value in payload.capabilities if value.strip()] or ["image.generate"],
+        strategies=normalized_strategies,
         quality=payload.quality.strip() or "medium",
         output_format=payload.output_format.strip() or "png",
         timeout_seconds=payload.timeout_seconds,
@@ -352,12 +469,20 @@ def update_provider_profile(
         if api_key:
             _require_encryption_key_configured("updated")
             profile.api_key = encrypt_value(api_key)
+    if "base_url" in updates:
+        try:
+            updates["base_url"] = normalize_provider_base_url(updates["base_url"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if "strategies" in updates:
+        try:
+            updates["strategies"] = normalize_strategies(updates["strategies"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     for field, value in updates.items():
         if isinstance(value, str):
             value = value.strip()
-        if field == "base_url" and isinstance(value, str):
-            value = value.rstrip("/")
         if field == "pricing_currency" and isinstance(value, str):
             value = value.upper() or "CNY"
         if field == "pricing_unit" and isinstance(value, str):
@@ -527,7 +652,10 @@ async def discover_provider_models(
 ) -> ProviderDiscoverOut:
     _require_provider_admin(auth_user)
 
-    base_url = payload.base_url.rstrip("/")
+    try:
+        base_url = normalize_provider_base_url(payload.base_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     headers = {"Authorization": f"Bearer {payload.api_key}"}
 
     try:
@@ -580,7 +708,10 @@ def bulk_import_provider_profiles(
     _require_provider_admin(auth_user)
     _require_encryption_key_configured("saved")
 
-    base_url = payload.base_url.rstrip("/")
+    try:
+        base_url = normalize_provider_base_url(payload.base_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     created: list[str] = []
     skipped: list[str] = []
 
@@ -593,6 +724,10 @@ def bulk_import_provider_profiles(
         reference_mode = item.reference_mode
         if not reference_mode or reference_mode == "disabled":
             reference_mode = "caption_prompt" if "modelscope.cn" in base_url else "disabled"
+        try:
+            normalized_strategies = normalize_strategies(item.strategies)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         profile = ProviderProfile(
             provider_name=item.provider_name,
@@ -601,6 +736,7 @@ def bulk_import_provider_profiles(
             model_name=item.model_id,
             adapter_kind=item.adapter_kind,
             capabilities=item.capabilities or ["image.generate"],
+            strategies=normalized_strategies,
             quality="medium",
             output_format="png",
             timeout_seconds=300.0,

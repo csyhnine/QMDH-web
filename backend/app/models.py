@@ -485,6 +485,7 @@ class ProviderProfile(Base):
     model_name: Mapped[str] = mapped_column(String(150))
     adapter_kind: Mapped[str] = mapped_column(String(50), default="openai_compatible")
     capabilities: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["image.generate"])
+    strategies: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
     quality: Mapped[str] = mapped_column(String(50), default="medium")
     output_format: Mapped[str] = mapped_column(String(20), default="png")
     timeout_seconds: Mapped[float] = mapped_column(Float, default=300.0)

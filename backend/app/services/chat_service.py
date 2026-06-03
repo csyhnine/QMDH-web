@@ -31,6 +31,7 @@ class ChatProviderConfig:
     api_key: str
     base_url: str
     model_name: str
+    timeout_seconds: float = 120.0
 
 
 def _sanitize_error_text(raw: object, *, limit: int = 320) -> str:
@@ -75,6 +76,7 @@ def snapshot_chat_provider_config(profile: ProviderProfile) -> ChatProviderConfi
         api_key=profile.api_key,
         base_url=profile.base_url,
         model_name=profile.model_name,
+        timeout_seconds=float(profile.timeout_seconds or 120.0),
     )
 
 
@@ -187,7 +189,7 @@ async def stream_chat_completion(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=max(float(provider.timeout_seconds or 120.0), 1.0)) as client:
             for include_usage in (True, False):
                 payload = {
                     "model": provider.model_name,

@@ -104,6 +104,7 @@ class ProviderProfileTests(unittest.TestCase):
         self.assertEqual(payload["pricing_currency"], "CNY")
         self.assertEqual(payload["pricing_unit"], "per_image")
         self.assertEqual(payload["unit_price"], 0.35)
+        self.assertEqual(payload["strategies"], {})
 
         providers_response = self.client.get("/providers")
         self.assertEqual(providers_response.status_code, 200)
@@ -119,6 +120,30 @@ class ProviderProfileTests(unittest.TestCase):
         self.assertEqual(update_response.json()["model_name"], "arch-render-v2")
         self.assertEqual(update_response.json()["masked_api_key"], "sk-t...cret")
         self.assertEqual(update_response.json()["editable_api_key"], "sk-test-secret")
+
+    def test_provider_profile_rejects_endpoint_in_base_url(self) -> None:
+        response = self.client.post(
+            "/providers/profiles",
+            headers=self.auth_headers(),
+            json={
+                "provider_name": "bad_base_url",
+                "api_key": "sk-test-secret",
+                "base_url": "https://api.example.test/v1/chat/completions",
+                "model_name": "bad-model",
+                "capabilities": ["image.generate"],
+                "quality": "high",
+                "output_format": "png",
+                "timeout_seconds": 60,
+                "pricing_currency": "CNY",
+                "pricing_unit": "per_image",
+                "unit_price": 0.35,
+                "enabled": True,
+                "reference_mode": "disabled",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("API root", response.json()["detail"])
 
     def test_designer_cannot_manage_provider_profiles(self) -> None:
         response = self.client.get("/providers/profiles", headers=self.designer_headers())
@@ -267,6 +292,7 @@ class ProviderProfileTests(unittest.TestCase):
                 model_name="chat-model",
                 adapter_kind="openai_compatible",
                 capabilities=["chat.completions"],
+                timeout_seconds=500.0,
                 enabled=True,
             )
             db.add(profile)
@@ -283,7 +309,7 @@ class ProviderProfileTests(unittest.TestCase):
         mock_async_client.__aenter__.return_value = mock_client
         mock_async_client.__aexit__.return_value = False
 
-        with patch("app.routers.providers.httpx.AsyncClient", return_value=mock_async_client):
+        with patch("app.routers.providers.httpx.AsyncClient", return_value=mock_async_client) as mocked_async_client_ctor:
             response = self.client.post(f"/providers/profiles/{profile_id}/probe", headers=self.auth_headers())
 
         self.assertEqual(response.status_code, 200, response.text)
@@ -293,6 +319,7 @@ class ProviderProfileTests(unittest.TestCase):
         self.assertIn("/chat/completions", payload["checked_url"])
         self.assertIn("Chat", payload["detail"])
         mock_client.request.assert_awaited_once()
+        mocked_async_client_ctor.assert_called_once_with(timeout=500.0)
         args, kwargs = mock_client.request.await_args
         self.assertEqual(args[0], "POST")
         self.assertIn("/chat/completions", args[1])
@@ -332,7 +359,7 @@ class ProviderProfileTests(unittest.TestCase):
         self.assertEqual(payload["status"], "auth_error")
         self.assertIn("API Key", payload["detail"])
 
-    def test_probe_provider_profile_uses_models_endpoint_for_non_chat_capability(self) -> None:
+    def test_probe_provider_profile_uses_strategy_endpoint_for_non_chat_capability(self) -> None:
         with self.SessionLocal() as db:
             profile = ProviderProfile(
                 provider_name="image_probe",
@@ -363,11 +390,85 @@ class ProviderProfileTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
         self.assertTrue(payload["ok"])
-        self.assertIn("/models", payload["checked_url"])
+        self.assertIn("/images/generations", payload["checked_url"])
         args, kwargs = mock_client.request.await_args
-        self.assertEqual(args[0], "GET")
-        self.assertIn("/models", args[1])
-        self.assertIn("headers", kwargs)
+        self.assertEqual(args[0], "POST")
+        self.assertIn("/images/generations", args[1])
+        self.assertEqual(kwargs["json"]["model"], "image-model")
+
+    def test_probe_provider_profile_uses_strategy_endpoint_for_chat_modalities_image(self) -> None:
+        with self.SessionLocal() as db:
+            profile = ProviderProfile(
+                provider_name="gemini_image_probe",
+                api_key=encrypt_value("sk-image"),
+                base_url="https://api.example.test/v1",
+                model_name="google/gemini-3.1-flash-image-preview",
+                adapter_kind="openai_compatible",
+                capabilities=["image.generate"],
+                strategies={"image.generate": "chat_modalities_image"},
+                enabled=True,
+            )
+            db.add(profile)
+            db.commit()
+            profile_id = profile.id
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.text = '{"choices":[]}'
+        mock_client = MagicMock()
+        mock_client.request = AsyncMock(return_value=mock_response)
+        mock_async_client = MagicMock()
+        mock_async_client.__aenter__.return_value = mock_client
+        mock_async_client.__aexit__.return_value = False
+
+        with patch("app.routers.providers.httpx.AsyncClient", return_value=mock_async_client):
+            response = self.client.post(f"/providers/profiles/{profile_id}/probe", headers=self.auth_headers())
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertIn("/chat/completions", payload["checked_url"])
+        args, kwargs = mock_client.request.await_args
+        self.assertEqual(args[0], "POST")
+        self.assertEqual(kwargs["json"]["modalities"], ["image", "text"])
+
+    def test_probe_provider_profile_defaults_gemini_image_preview_to_chat_modalities(self) -> None:
+        with self.SessionLocal() as db:
+            profile = ProviderProfile(
+                provider_name="google_gemini-3.1-flash-image-preview",
+                api_key=encrypt_value("sk-image"),
+                base_url="https://api.example.test/v1",
+                model_name="google/gemini-3.1-flash-image-preview",
+                adapter_kind="openai_compatible",
+                capabilities=["image.generate"],
+                strategies={},
+                enabled=True,
+            )
+            db.add(profile)
+            db.commit()
+            profile_id = profile.id
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.text = '{"choices":[]}'
+        mock_client = MagicMock()
+        mock_client.request = AsyncMock(return_value=mock_response)
+        mock_async_client = MagicMock()
+        mock_async_client.__aenter__.return_value = mock_client
+        mock_async_client.__aexit__.return_value = False
+
+        with patch("app.routers.providers.httpx.AsyncClient", return_value=mock_async_client):
+            response = self.client.post(f"/providers/profiles/{profile_id}/probe", headers=self.auth_headers())
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertIn("/chat/completions", payload["checked_url"])
+        args, kwargs = mock_client.request.await_args
+        self.assertEqual(args[0], "POST")
+        self.assertEqual(kwargs["json"]["modalities"], ["image", "text"])
 
     def test_probe_provider_profile_rejects_unsupported_adapter(self) -> None:
         with self.SessionLocal() as db:

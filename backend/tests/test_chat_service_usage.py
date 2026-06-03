@@ -111,6 +111,29 @@ class ChatServiceUsageTests(unittest.TestCase):
         self.assertTrue(any('"delta": "fallback ok"' in chunk for chunk in chunks))
         self.assertEqual(chunks[-1], "data: [DONE]\n\n")
 
+    def test_stream_chat_completion_uses_provider_timeout_seconds(self) -> None:
+        provider = ChatProviderConfig(
+            api_key="encrypted",
+            base_url="https://example.test/v1",
+            model_name="glm-5",
+            timeout_seconds=500.0,
+        )
+        responses = [_FakeStreamResponse(200, lines=["data: [DONE]"])]
+        payloads: list[dict] = []
+
+        async def run():
+            with patch("app.services.chat_service.decrypt_value_or_raise", return_value="plain-key"):
+                with patch(
+                    "app.services.chat_service.httpx.AsyncClient",
+                    return_value=_FakeAsyncClient(responses, payloads),
+                ) as mocked_async_client:
+                    chunks = [chunk async for chunk in stream_chat_completion(provider, [{"role": "user", "content": "hello"}])]
+            return chunks, mocked_async_client
+
+        chunks, mocked_async_client = asyncio.run(run())
+        self.assertEqual(chunks[-1], "data: [DONE]\n\n")
+        mocked_async_client.assert_called_once_with(timeout=500.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,6 +20,7 @@ type ProviderProfileDraft = {
   modelName: string;
   adapterKind: string;
   capabilities: string;
+  strategies: string;
   quality: string;
   outputFormat: string;
   timeoutSeconds: number;
@@ -80,6 +81,7 @@ const defaultProviderProfileDraft: ProviderProfileDraft = {
   modelName: "",
   adapterKind: "openai_compatible",
   capabilities: "image.generate",
+  strategies: "",
   quality: "medium",
   outputFormat: "png",
   timeoutSeconds: 300,
@@ -180,6 +182,7 @@ function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfile
     modelName: profile.model_name,
     adapterKind: profile.adapter_kind,
     capabilities: profile.capabilities.join(", "),
+    strategies: JSON.stringify(profile.strategies ?? {}, null, 2),
     quality: profile.quality ?? "medium",
     outputFormat: profile.output_format ?? "png",
     timeoutSeconds: profile.timeout_seconds ?? 300,
@@ -193,6 +196,9 @@ function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfile
 }
 
 function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileCreatePayload {
+  let strategies: Record<string, string> = {};
+  const rawStrategies = draft.strategies.trim();
+  if (rawStrategies) strategies = JSON.parse(rawStrategies) as Record<string, string>;
   return {
     provider_name: draft.providerName.trim(),
     api_key: draft.apiKey,
@@ -200,6 +206,7 @@ function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileC
     model_name: draft.modelName.trim(),
     adapter_kind: draft.adapterKind,
     capabilities: parseCapabilities(draft.capabilities),
+    strategies,
     quality: draft.quality || "medium",
     output_format: draft.outputFormat || "png",
     timeout_seconds: draft.timeoutSeconds || 300,
@@ -423,7 +430,13 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
 
   async function handleSaveProviderProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const payload = toProviderProfilePayload(providerDraft);
+    let payload: ProviderProfileCreatePayload;
+    try {
+      payload = toProviderProfilePayload(providerDraft);
+    } catch {
+      onSetError("Strategies 必须是合法 JSON，例如 {\"image.generate\":\"openai_images\"}");
+      return;
+    }
     if (!payload.provider_name || !payload.base_url || !payload.model_name) { onSetError("请填写 provider 名称、base URL 和模型名称"); return; }
     if (payload.capabilities.length === 0) { onSetError("请至少填写一个模型能力"); return; }
     if (editingProviderProfileId === null && !payload.api_key) { onSetError("新增模型配置需要填写 API Key"); return; }
@@ -432,7 +445,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
       if (editingProviderProfileId === null) {
         await api.createProviderProfile(payload);
       } else {
-        await api.updateProviderProfile(editingProviderProfileId, { base_url: payload.base_url, model_name: payload.model_name, adapter_kind: payload.adapter_kind, capabilities: payload.capabilities, quality: payload.quality, output_format: payload.output_format, timeout_seconds: payload.timeout_seconds, pricing_currency: payload.pricing_currency, pricing_unit: payload.pricing_unit, unit_price: payload.unit_price, enabled: payload.enabled, reference_mode: payload.reference_mode, reference_caption_model: payload.reference_caption_model, ...(payload.api_key ? { api_key: payload.api_key } : {}) });
+        await api.updateProviderProfile(editingProviderProfileId, { base_url: payload.base_url, model_name: payload.model_name, adapter_kind: payload.adapter_kind, capabilities: payload.capabilities, strategies: payload.strategies, quality: payload.quality, output_format: payload.output_format, timeout_seconds: payload.timeout_seconds, pricing_currency: payload.pricing_currency, pricing_unit: payload.pricing_unit, unit_price: payload.unit_price, enabled: payload.enabled, reference_mode: payload.reference_mode, reference_caption_model: payload.reference_caption_model, ...(payload.api_key ? { api_key: payload.api_key } : {}) });
       }
       resetProviderProfileDraft();
       onRefresh();
@@ -685,6 +698,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                 </div>
                 <input value={providerDraft.capabilities} onChange={(e) => setProviderDraft((c) => ({ ...c, capabilities: e.target.value }))} placeholder="image.generate, chat.completions" />
               </label>
+              <label className="composer-menu-field composer-menu-field-full"><span>Strategies</span><textarea rows={5} value={providerDraft.strategies} onChange={(e) => setProviderDraft((c) => ({ ...c, strategies: e.target.value }))} placeholder={'{\n  "chat": "openai_chat",\n  "image.generate": "chat_modalities_image",\n  "image.edit": "chat_modalities_image_edit"\n}'} /></label>
               <label className="composer-menu-field"><span>Quality</span><input value={providerDraft.quality} onChange={(e) => setProviderDraft((c) => ({ ...c, quality: e.target.value }))} placeholder="medium" /></label>
               <label className="composer-menu-field"><span>Format</span><select value={providerDraft.outputFormat} onChange={(e) => setProviderDraft((c) => ({ ...c, outputFormat: e.target.value }))}><option value="png">png</option><option value="jpeg">jpeg</option><option value="webp">webp</option><option value="mp4">mp4</option></select></label>
               <label className="composer-menu-field"><span>Timeout</span><input type="number" min="30" value={providerDraft.timeoutSeconds} onChange={(e) => setProviderDraft((c) => ({ ...c, timeoutSeconds: Number(e.target.value) || 300 }))} /></label>

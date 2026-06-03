@@ -72,6 +72,11 @@ def ensure_schema(engine: Engine) -> None:
         if "prompt_templates" in inspector.get_table_names()
         else set()
     )
+    provider_profile_columns = (
+        {column["name"] for column in inspector.get_columns("provider_profiles")}
+        if "provider_profiles" in inspector.get_table_names()
+        else set()
+    )
     inspiration_post_columns = (
         {column["name"] for column in inspector.get_columns("inspiration_posts")}
         if "inspiration_posts" in inspector.get_table_names()
@@ -121,6 +126,8 @@ def ensure_schema(engine: Engine) -> None:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_prompt_templates_scope ON prompt_templates (scope)"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_prompt_templates_category ON prompt_templates (category)"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_prompt_templates_is_featured ON prompt_templates (is_featured)"))
+        if provider_profile_columns and "strategies" not in provider_profile_columns:
+            connection.execute(text("ALTER TABLE provider_profiles ADD COLUMN strategies JSON NOT NULL DEFAULT '{}'"))
         if inspiration_post_columns and "source_image_path" not in inspiration_post_columns:
             connection.execute(
                 text("ALTER TABLE inspiration_posts ADD COLUMN source_image_path VARCHAR(255) NOT NULL DEFAULT ''")

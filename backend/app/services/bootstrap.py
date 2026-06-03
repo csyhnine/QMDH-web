@@ -128,6 +128,13 @@ def ensure_schema(engine: Engine) -> None:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_prompt_templates_is_featured ON prompt_templates (is_featured)"))
         if provider_profile_columns and "strategies" not in provider_profile_columns:
             connection.execute(text("ALTER TABLE provider_profiles ADD COLUMN strategies JSON NOT NULL DEFAULT '{}'"))
+        if provider_profile_columns and "display_name" not in provider_profile_columns:
+            connection.execute(
+                text("ALTER TABLE provider_profiles ADD COLUMN display_name VARCHAR(150) NOT NULL DEFAULT ''")
+            )
+            connection.execute(
+                text("UPDATE provider_profiles SET display_name = model_name WHERE COALESCE(display_name, '') = ''")
+            )
         if inspiration_post_columns and "source_image_path" not in inspiration_post_columns:
             connection.execute(
                 text("ALTER TABLE inspiration_posts ADD COLUMN source_image_path VARCHAR(255) NOT NULL DEFAULT ''")

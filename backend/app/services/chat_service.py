@@ -31,6 +31,7 @@ class ChatProviderConfig:
     api_key: str
     base_url: str
     model_name: str
+    display_name: str = ""
     timeout_seconds: float = 120.0
 
 
@@ -75,6 +76,7 @@ def snapshot_chat_provider_config(profile: ProviderProfile) -> ChatProviderConfi
     return ChatProviderConfig(
         api_key=profile.api_key,
         base_url=profile.base_url,
+        display_name=(profile.display_name or profile.model_name or profile.provider_name).strip(),
         model_name=profile.model_name,
         timeout_seconds=float(profile.timeout_seconds or 120.0),
     )

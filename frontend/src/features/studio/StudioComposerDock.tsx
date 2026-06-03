@@ -796,8 +796,8 @@ export default function StudioComposerDock({
                       className={studioForm.requestedProvider === provider.provider_name ? "composer-choice-item is-active" : "composer-choice-item"}
                       onClick={() => onProviderSelect(provider.provider_name)}
                     >
-                      <strong>{provider.model_name}</strong>
-                      <span>{provider.provider_name}</span>
+                      <strong>{provider.display_name || provider.model_name}</strong>
+                      <span>{provider.model_name}</span>
                     </button>
                   ))}
                 </div>

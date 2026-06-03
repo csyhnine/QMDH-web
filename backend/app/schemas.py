@@ -260,6 +260,7 @@ class UserFeedbackOut(BaseModel):
 
 class ProviderCapability(BaseModel):
     provider_name: str
+    display_name: str
     model_name: str
     capabilities: list[str]
     configurable: bool
@@ -269,6 +270,7 @@ class ProviderCapability(BaseModel):
 
 class ProviderProfileBase(BaseModel):
     provider_name: str = Field(min_length=2, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$")
+    display_name: str = Field(default="", max_length=150)
     base_url: str = Field(min_length=5, max_length=255)
     model_name: str = Field(min_length=1, max_length=150)
     adapter_kind: str = "openai_compatible"
@@ -291,6 +293,7 @@ class ProviderProfileCreate(ProviderProfileBase):
 
 class ProviderProfileUpdate(BaseModel):
     api_key: str | None = None
+    display_name: str | None = Field(default=None, max_length=150)
     base_url: str | None = Field(default=None, min_length=5, max_length=255)
     model_name: str | None = Field(default=None, min_length=1, max_length=150)
     adapter_kind: str | None = None
@@ -485,6 +488,7 @@ class ProviderDiscoverOut(BaseModel):
 class ProviderBulkImportItem(BaseModel):
     model_id: str
     provider_name: str = Field(min_length=2, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$")
+    display_name: str = Field(default="", max_length=150)
     capabilities: list[str] = Field(default_factory=lambda: ["image.generate"])
     adapter_kind: str = "openai_compatible"
     reference_mode: str = "disabled"
@@ -561,6 +565,7 @@ class ExtractImagesOut(BaseModel):
 class ChatModelOut(BaseModel):
     provider_id: int
     provider_name: str
+    display_name: str
     model_name: str
     base_url: str
 

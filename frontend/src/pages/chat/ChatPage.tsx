@@ -23,6 +23,7 @@ type ChatMessage = {
 type ChatModel = {
   provider_id: number;
   provider_name: string;
+  display_name: string;
   model_name: string;
   base_url: string;
 };
@@ -408,7 +409,7 @@ export default function ChatPage() {
               </option>
               {chatModels.map((model) => (
                 <option key={model.provider_id} value={model.provider_id}>
-                  {model.model_name}
+                  {model.display_name || model.model_name}
                 </option>
               ))}
             </select>

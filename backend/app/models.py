@@ -480,6 +480,7 @@ class ProviderProfile(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     provider_name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(150), default="")
     api_key: Mapped[str] = mapped_column(Text)
     base_url: Mapped[str] = mapped_column(String(255))
     model_name: Mapped[str] = mapped_column(String(150))

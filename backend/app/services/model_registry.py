@@ -23,6 +23,7 @@ class ProviderDefinition:
     provider_name: str
     model_name: str
     capabilities: list[str]
+    display_name: str = ""
     configurable: bool = True
     outbound: bool = True
     adapter_kind: str = "simulated"
@@ -53,6 +54,7 @@ def _profile_from_record(record: ProviderProfile) -> ImageProviderProfile:
 
     return ImageProviderProfile(
         provider_name=record.provider_name,
+        display_name=(record.display_name or record.model_name or record.provider_name).strip(),
         api_key=decrypted_key,
         base_url=record.base_url.rstrip("/"),
         model_name=record.model_name,
@@ -106,6 +108,7 @@ def get_provider_map(db: Session | None = None, *, include_static: bool = True) 
             provider_name=profile.provider_name,
             model_name=profile.model_name,
             capabilities=list(profile.capabilities),
+            display_name=profile.display_name or profile.model_name,
             configurable=profile.configurable,
             outbound=profile.outbound,
             adapter_kind=profile.adapter_kind,

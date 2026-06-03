@@ -53,6 +53,7 @@ export type AssetShareResult = {
 
 export type Provider = {
   provider_name: string;
+  display_name: string;
   model_name: string;
   capabilities: string[];
   configurable: boolean;
@@ -206,6 +207,7 @@ export type DashboardStats = {
 export type ProviderProfileRecord = {
   id: number;
   provider_name: string;
+  display_name: string;
   base_url: string;
   model_name: string;
   adapter_kind: string;
@@ -237,6 +239,7 @@ export type ProviderProfileProbeResult = {
 
 export type ProviderProfileCreatePayload = {
   provider_name: string;
+  display_name: string;
   api_key: string;
   base_url: string;
   model_name: string;
@@ -295,6 +298,7 @@ export type ProviderDiscoverResult = {
 export type ProviderBulkImportItem = {
   model_id: string;
   provider_name: string;
+  display_name?: string;
   capabilities: string[];
   adapter_kind: string;
   reference_mode: string;
@@ -730,7 +734,10 @@ export const api = {
     request<InspirationPost>(`/inspiration/${postId}`, { method: "PATCH", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify(data) }),
   extractImages: (url: string) => postJson<{ images: string[]; title: string }>("/inspiration/extract-images", { url }),
   // Chat
-  getChatModels: () => request<{ provider_id: number; provider_name: string; model_name: string; base_url: string }[]>("/chat/models"),
+  getChatModels: () =>
+    request<{ provider_id: number; provider_name: string; display_name: string; model_name: string; base_url: string }[]>(
+      "/chat/models"
+    ),
   getChatConversations: () => request<{ id: number; title: string; model_provider_id: number | null; created_at: string; updated_at: string }[]>("/chat/conversations"),
   createChatConversation: (model_provider_id: number, title?: string) => postJson<{ id: number; title: string; model_provider_id: number | null; created_at: string; updated_at: string }>("/chat/conversations", { model_provider_id, title: title || "" }),
   getChatMessages: (convId: number) => request<{ id: number; role: string; content: string; created_at: string }[]>(`/chat/conversations/${convId}/messages`),

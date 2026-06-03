@@ -112,6 +112,7 @@ type ShareConfirmState = {
 
 type ProviderProfileDraft = {
   providerName: string;
+  displayName: string;
   apiKey: string;
   baseUrl: string;
   modelName: string;
@@ -199,6 +200,7 @@ const initialState: LoadState = {
 
 const defaultProviderProfileDraft: ProviderProfileDraft = {
   providerName: "",
+  displayName: "",
   apiKey: "",
   baseUrl: "",
   modelName: "",
@@ -946,6 +948,7 @@ function metricQuota(item: Record<string, unknown>): string {
 function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfileDraft {
   return {
     providerName: profile.provider_name,
+    displayName: profile.display_name || profile.model_name,
     apiKey: profile.editable_api_key ?? "",
     baseUrl: profile.base_url,
     modelName: profile.model_name,
@@ -966,6 +969,7 @@ function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfile
 function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileCreatePayload {
   return {
     provider_name: draft.providerName.trim(),
+    display_name: draft.displayName.trim(),
     api_key: draft.apiKey.trim(),
     base_url: draft.baseUrl.trim(),
     model_name: draft.modelName.trim(),
@@ -984,7 +988,7 @@ function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileC
 }
 
 function providerGroupLabel(provider: Provider): string {
-  const name = `${provider.provider_name} ${provider.model_name}`.toLowerCase();
+  const name = `${provider.display_name} ${provider.provider_name} ${provider.model_name}`.toLowerCase();
   if (name.includes("firered")) return "魔搭 / FireRed";
   if (name.includes("z_image") || name.includes("z-image")) return "魔搭 / 造相 Z";
   if (name.includes("qwen")) return "魔搭 / Qwen";
@@ -1141,6 +1145,7 @@ function AssetTile(props: { asset: Asset; emphasis?: "primary" | "secondary" }) 
 
 function FeedCard(props: {
   task: Task;
+  providerDisplayName: string;
   asset?: Asset;
   galleryAssets: Asset[];
   showDebugDetails?: boolean;
@@ -1207,7 +1212,7 @@ function FeedCard(props: {
         </div>
       ) : null}
       <div className="feed-card-head">
-        <div className="feed-card-avatar">{props.task.requested_provider.slice(0, 1).toUpperCase()}</div>
+        <div className="feed-card-avatar">{props.providerDisplayName.slice(0, 1).toUpperCase()}</div>
         <div className="feed-card-copy">
           <div className="feed-card-topline">
             <strong>{displayTitle}</strong>
@@ -1235,7 +1240,7 @@ function FeedCard(props: {
           ) : null}
           <div className="feed-card-meta">
             {props.showDebugDetails ? <span>{props.task.project_code}</span> : null}
-            <span>{props.task.requested_provider}</span>
+            <span>{props.providerDisplayName}</span>
             <span>{formatDuration(props.task.latency_ms)}</span>
             {hasReferenceImage ? <span>参考图 {referenceImageCount} 张</span> : null}
             {props.asset ? <span>已入图库</span> : null}
@@ -1623,6 +1628,9 @@ export default function GenerateStudioShell() {
   const activeProject = state.projects.find((project) => project.code === studioForm.projectCode);
   const workspaceName = activeProject?.name ?? "我的创作";
   const selectedProvider = availableProviders.find((provider) => provider.provider_name === studioForm.requestedProvider);
+  const providerDisplayNameMap = new Map(
+    state.providers.map((provider) => [provider.provider_name, provider.display_name || provider.model_name || provider.provider_name])
+  );
   const selectedWorkflowKey = getStudioWorkflowKeyForProvider(selectedProvider, studioForm.creationMode);
   const selectedWorkflow = state.workflows.find((workflow) => workflow.key === selectedWorkflowKey);
   const selectedStyle = stylePresets.find((preset) => preset.id === studioForm.style);
@@ -2062,7 +2070,7 @@ export default function GenerateStudioShell() {
     setSubmissionTracker({
       taskId: null,
       taskTitle: studioForm.title.trim() || defaultStudioForm.title,
-      providerName: selectedProvider?.model_name ?? studioForm.requestedProvider,
+      providerName: selectedProvider?.display_name ?? selectedProvider?.model_name ?? studioForm.requestedProvider,
       imageCount: clampImageCount(studioForm.imageCount),
       hasReferenceImage: true,
       stage: "uploading_reference",
@@ -2311,6 +2319,7 @@ export default function GenerateStudioShell() {
         await api.createProviderProfile(payload);
       } else {
         await api.updateProviderProfile(editingProviderProfileId, {
+          display_name: payload.display_name,
           base_url: payload.base_url,
           model_name: payload.model_name,
           adapter_kind: payload.adapter_kind,
@@ -2533,7 +2542,7 @@ export default function GenerateStudioShell() {
     setSubmissionTracker({
       taskId: null,
       taskTitle,
-      providerName: providerForSubmit.model_name ?? form.requestedProvider,
+        providerName: providerForSubmit.display_name ?? providerForSubmit.model_name ?? form.requestedProvider,
       imageCount: clampImageCount(form.imageCount),
       hasReferenceImage: referenceImageCount > 0,
       stage: "submitting",
@@ -2551,7 +2560,8 @@ export default function GenerateStudioShell() {
       setSubmissionTracker({
         taskId: createdTask.id,
         taskTitle: createdTask.title,
-        providerName: providerForSubmit.model_name ?? createdTask.requested_provider,
+        providerName:
+          providerForSubmit.display_name ?? providerForSubmit.model_name ?? createdTask.requested_provider,
         imageCount: clampImageCount(Number(createdTask.result["requested_image_count"] ?? form.imageCount)),
         hasReferenceImage: Boolean(createdTask.result["reference_image_supplied"] ?? referenceImageCount > 0),
         stage: createdTask.status === "running" ? "running" : "pending",
@@ -2772,7 +2782,7 @@ export default function GenerateStudioShell() {
   const enabledProviderProfiles = state.providerProfiles.filter((profile) => profile.enabled);
   const disabledProviderProfiles = state.providerProfiles.filter((profile) => !profile.enabled);
   const filteredProviderProfiles = state.providerProfiles.filter((profile) => {
-    const searchText = `${profile.provider_name} ${profile.model_name}`.toLowerCase();
+    const searchText = `${profile.display_name} ${profile.provider_name} ${profile.model_name}`.toLowerCase();
     const searchMatches = !modelFilters.search.trim() || searchText.includes(modelFilters.search.trim().toLowerCase());
     const capabilityMatches =
       modelFilters.capability === "all" || profile.capabilities.includes(modelFilters.capability);
@@ -3515,7 +3525,7 @@ export default function GenerateStudioShell() {
                     const adapter = getAdapterOption(profile.adapter_kind);
                     return (
                       <div key={profile.id} className="admin-table-row">
-                        <span><strong>{profile.provider_name}</strong><small>{profile.model_name}</small></span>
+                        <span><strong>{profile.display_name || profile.model_name}</strong><small>{profile.provider_name}</small></span>
                         <span className="model-capability-list">
                           {profile.capabilities.map((capability) => {
                             const definition = getCapabilityDefinition(capability);
@@ -3551,7 +3561,7 @@ export default function GenerateStudioShell() {
                   </div>
                   {state.providerProfiles.length > 0 ? state.providerProfiles.map((profile) => (
                     <div key={profile.id} className="admin-table-row">
-                      <span><strong>{profile.provider_name}</strong><small>{profile.model_name}</small></span>
+                      <span><strong>{profile.display_name || profile.model_name}</strong><small>{profile.provider_name}</small></span>
                       <span><em className={`status-pill ${profile.enabled ? "status-completed" : "status-failed"}`}>{profile.enabled ? "启用" : "停用"}</em></span>
                       <span>{profile.capabilities.join(", ")}</span>
                       <span>{profile.pricing_unit}</span>
@@ -3580,6 +3590,15 @@ export default function GenerateStudioShell() {
                       disabled={editingProviderProfileId !== null}
                       onChange={(event) => setProviderDraft((current) => ({ ...current, providerName: event.target.value }))}
                       placeholder="modelscope_arch"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>显示名</span>
+                    <input
+                      value={providerDraft.displayName}
+                      onChange={(event) => setProviderDraft((current) => ({ ...current, displayName: event.target.value }))}
+                      placeholder="例如：GPT 高质量生图"
                       autoComplete="off"
                     />
                   </label>
@@ -3964,6 +3983,7 @@ export default function GenerateStudioShell() {
                 <FeedCard
                   key={task.id}
                   task={task}
+                  providerDisplayName={providerDisplayNameMap.get(task.requested_provider) ?? task.requested_provider}
                   asset={linkedAsset}
                   galleryAssets={galleryAssets}
                   showDebugDetails={userCanUseOpsViews}
@@ -4039,7 +4059,7 @@ export default function GenerateStudioShell() {
             providerGroups={providerGroups}
             referenceUploads={referenceUploads}
             resolutionOptions={resolutionOptions}
-            selectedProviderModelName={selectedProvider?.model_name ?? null}
+            selectedProviderModelName={selectedProvider?.display_name ?? selectedProvider?.model_name ?? null}
             selectedResolutionLabel={selectedResolution?.label ?? null}
             selectedStyleLabel={selectedStyle?.label ?? studioForm.style}
             serviceHealthy={state.health === "healthy"}

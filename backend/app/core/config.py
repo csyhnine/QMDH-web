@@ -28,6 +28,7 @@ class ImageProviderProfile:
     api_key: str
     base_url: str
     model_name: str
+    display_name: str = ""
     timeout_seconds: float = 300.0
     quality: str = "medium"
     output_format: str = "png"
@@ -174,6 +175,7 @@ class Settings(BaseSettings):
         if self.openai_image_api_key:
             profiles["openai_image"] = ImageProviderProfile(
                 provider_name="openai_image",
+                display_name=self.openai_image_model,
                 api_key=self.openai_image_api_key,
                 base_url=self.openai_image_base_url,
                 model_name=self.openai_image_model,
@@ -222,6 +224,7 @@ class Settings(BaseSettings):
 
             profiles[provider_name] = ImageProviderProfile(
                 provider_name=provider_name,
+                display_name=str(item.get("display_name") or model_name).strip() or model_name,
                 api_key=api_key,
                 base_url=base_url,
                 model_name=model_name,

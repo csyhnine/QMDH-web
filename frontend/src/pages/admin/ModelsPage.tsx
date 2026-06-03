@@ -15,6 +15,7 @@ import {
 
 type ProviderProfileDraft = {
   providerName: string;
+  displayName: string;
   apiKey: string;
   baseUrl: string;
   modelName: string;
@@ -76,6 +77,7 @@ type AdapterOption = {
 
 const defaultProviderProfileDraft: ProviderProfileDraft = {
   providerName: "",
+  displayName: "",
   apiKey: "",
   baseUrl: "",
   modelName: "",
@@ -177,6 +179,7 @@ function summarizeProfileSupport(adapterKind: string, capabilities: string[]): S
 function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfileDraft {
   return {
     providerName: profile.provider_name,
+    displayName: profile.display_name || profile.model_name,
     apiKey: "",
     baseUrl: profile.base_url,
     modelName: profile.model_name,
@@ -201,6 +204,7 @@ function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileC
   if (rawStrategies) strategies = JSON.parse(rawStrategies) as Record<string, string>;
   return {
     provider_name: draft.providerName.trim(),
+    display_name: draft.displayName.trim(),
     api_key: draft.apiKey,
     base_url: draft.baseUrl.trim(),
     model_name: draft.modelName.trim(),
@@ -363,7 +367,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
   }, [pricingRuleDraft.providerProfileId, providerProfiles]);
 
   const filteredProviderProfiles = providerProfiles.filter((profile) => {
-    const searchText = `${profile.provider_name} ${profile.model_name}`.toLowerCase();
+    const searchText = `${profile.display_name} ${profile.provider_name} ${profile.model_name}`.toLowerCase();
     const searchMatches = !modelFilters.search.trim() || searchText.includes(modelFilters.search.trim().toLowerCase());
     const capabilityMatches = modelFilters.capability === "all" || profile.capabilities.includes(modelFilters.capability);
     const adapterMatches = modelFilters.adapterKind === "all" || profile.adapter_kind === modelFilters.adapterKind;
@@ -445,7 +449,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
       if (editingProviderProfileId === null) {
         await api.createProviderProfile(payload);
       } else {
-        await api.updateProviderProfile(editingProviderProfileId, { base_url: payload.base_url, model_name: payload.model_name, adapter_kind: payload.adapter_kind, capabilities: payload.capabilities, strategies: payload.strategies, quality: payload.quality, output_format: payload.output_format, timeout_seconds: payload.timeout_seconds, pricing_currency: payload.pricing_currency, pricing_unit: payload.pricing_unit, unit_price: payload.unit_price, enabled: payload.enabled, reference_mode: payload.reference_mode, reference_caption_model: payload.reference_caption_model, ...(payload.api_key ? { api_key: payload.api_key } : {}) });
+        await api.updateProviderProfile(editingProviderProfileId, { display_name: payload.display_name, base_url: payload.base_url, model_name: payload.model_name, adapter_kind: payload.adapter_kind, capabilities: payload.capabilities, strategies: payload.strategies, quality: payload.quality, output_format: payload.output_format, timeout_seconds: payload.timeout_seconds, pricing_currency: payload.pricing_currency, pricing_unit: payload.pricing_unit, unit_price: payload.unit_price, enabled: payload.enabled, reference_mode: payload.reference_mode, reference_caption_model: payload.reference_caption_model, ...(payload.api_key ? { api_key: payload.api_key } : {}) });
       }
       resetProviderProfileDraft();
       onRefresh();
@@ -561,7 +565,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
     try {
       const items: ProviderBulkImportItem[] = discoveredModels.filter((m) => selectedModelIds.has(m.model_id)).map((m) => {
         const assignment = discoveredAssignments[m.model_id] ?? { generate: false, edit: false, chat: false };
-        return { model_id: m.model_id, provider_name: buildProviderName(discoverBaseUrlForImport, m.model_id), capabilities: assignmentToCapabilities(m.model_id, m.owned_by, assignment), adapter_kind: "openai_compatible", reference_mode: assignment.generate && discoverBaseUrlForImport.includes("modelscope.cn") ? "caption_prompt" : "disabled" };
+        return { model_id: m.model_id, provider_name: buildProviderName(discoverBaseUrlForImport, m.model_id), display_name: m.model_id, capabilities: assignmentToCapabilities(m.model_id, m.owned_by, assignment), adapter_kind: "openai_compatible", reference_mode: assignment.generate && discoverBaseUrlForImport.includes("modelscope.cn") ? "caption_prompt" : "disabled" };
       });
       const unassigned = items.filter((item) => item.capabilities.length === 0).map((item) => item.model_id);
       if (unassigned.length > 0) { setDiscoverError(`以下模型尚未分配：${unassigned.join(", ")}`); setImportingModels(false); return; }
@@ -658,7 +662,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
               const probe = probeResults[profile.id];
               return (
                 <div key={profile.id} className="admin-table-row">
-                  <span><strong>{profile.provider_name}</strong><small>{profile.model_name}</small></span>
+                          <span><strong>{profile.display_name || profile.model_name}</strong><small>{profile.provider_name}</small></span>
                   <span className="model-capability-list">{profile.capabilities.map((c) => { const def = getCapabilityDefinition(c); return <em key={c} className={`model-capability-chip support-${def.support}`}>{def.label}</em>; })}</span>
                   <span><strong>{adapter.label}</strong><small className={`model-support-badge support-${support}`}>{supportLevelLabel(support)}</small></span>
                   <span>{renderBillingSummary(profile)}</span>
@@ -686,6 +690,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
             <div className="admin-detail-head"><h2>{editingProviderProfileId === null ? "新增模型配置" : "编辑模型配置"}</h2><p>保存后会按 capabilities 出现在对应页面中。</p></div>
             <div className="model-form-grid model-form-grid-tight">
               <label className="composer-menu-field"><span>Provider</span><input value={providerDraft.providerName} disabled={editingProviderProfileId !== null} onChange={(e) => setProviderDraft((c) => ({ ...c, providerName: e.target.value }))} placeholder="modelscope_arch" autoComplete="off" /></label>
+              <label className="composer-menu-field"><span>显示名</span><input value={providerDraft.displayName} onChange={(e) => setProviderDraft((c) => ({ ...c, displayName: e.target.value }))} placeholder="例如：Gemini 快速生图" autoComplete="off" /></label>
               <label className="composer-menu-field"><span>Model</span><input value={providerDraft.modelName} onChange={(e) => setProviderDraft((c) => ({ ...c, modelName: e.target.value }))} placeholder="Qwen/Qwen-Image" autoComplete="off" /></label>
               <label className="composer-menu-field composer-menu-field-full"><span>Adapter</span><select value={providerDraft.adapterKind} onChange={(e) => setProviderDraft((c) => ({ ...c, adapterKind: e.target.value }))}>{adapterOptions.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select></label>
               <label className="composer-menu-field composer-menu-field-full"><span>Base URL</span><input name="provider-base-url" value={providerDraft.baseUrl} onChange={(e) => setProviderDraft((c) => ({ ...c, baseUrl: e.target.value }))} placeholder="https://api-inference.modelscope.cn/v1" autoComplete="off" /></label>

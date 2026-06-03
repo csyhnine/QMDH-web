@@ -57,6 +57,7 @@ def get_providers(db: Session = Depends(get_db)) -> list[ProviderCapability]:
     return [
         ProviderCapability(
             provider_name=item.provider_name,
+            display_name=item.display_name,
             model_name=item.model_name,
             capabilities=item.capabilities,
             configurable=item.configurable,
@@ -105,6 +106,7 @@ def _to_profile_out(profile: ProviderProfile) -> ProviderProfileOut:
     return ProviderProfileOut(
         id=profile.id,
         provider_name=profile.provider_name,
+        display_name=(profile.display_name or profile.model_name or profile.provider_name).strip(),
         base_url=profile.base_url,
         model_name=profile.model_name,
         adapter_kind=profile.adapter_kind,
@@ -416,6 +418,7 @@ def create_provider_profile(
 
     profile = ProviderProfile(
         provider_name=payload.provider_name.strip(),
+        display_name=(payload.display_name or payload.model_name).strip(),
         api_key=encrypt_value(payload.api_key.strip()),
         base_url=normalized_base_url,
         model_name=payload.model_name.strip(),
@@ -487,11 +490,16 @@ def update_provider_profile(
             value = value.upper() or "CNY"
         if field == "pricing_unit" and isinstance(value, str):
             value = value or "per_image"
+        if field == "display_name" and isinstance(value, str):
+            value = value or profile.model_name or profile.provider_name
         if field == "capabilities" and isinstance(value, list):
             value = [item.strip() for item in value if item.strip()] or ["image.generate"]
         if field == "reference_caption_model" and value == "":
             value = None
         setattr(profile, field, value)
+
+    if not (profile.display_name or "").strip():
+        profile.display_name = profile.model_name or profile.provider_name
 
     db.commit()
     db.refresh(profile)
@@ -731,6 +739,7 @@ def bulk_import_provider_profiles(
 
         profile = ProviderProfile(
             provider_name=item.provider_name,
+            display_name=(item.display_name or item.model_id).strip() or item.model_id,
             api_key=encrypt_value(payload.api_key),
             base_url=base_url,
             model_name=item.model_id,

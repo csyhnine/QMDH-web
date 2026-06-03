@@ -53,6 +53,7 @@ def list_chat_models(
         ChatModelOut(
             provider_id=model.id,
             provider_name=model.provider_name,
+            display_name=(model.display_name or model.model_name or model.provider_name).strip(),
             model_name=model.model_name,
             base_url=model.base_url,
         )

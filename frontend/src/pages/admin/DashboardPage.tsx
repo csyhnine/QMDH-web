@@ -50,7 +50,7 @@ function formatGroupCostRows(rows: UserGroupSummary[number]["cost_by_currency"])
 }
 
 function formatAccountCostRows(rows: DashboardAccountUsage["cost_by_currency"]): string {
-  if (rows.length === 0) return "0.00 CNY";
+  if (rows.length === 0) return "未计费";
   return rows.map((row) => `${row.total_cost.toFixed(2)} ${row.currency}`).join(" + ");
 }
 
@@ -508,6 +508,7 @@ export default function DashboardPage({
                 const quotaLimit = row.quota_limit == null ? null : Number(row.quota_limit || 0);
                 const quotaUsed = Number(row.quota_used || 0);
                 const quotaRemaining = row.quota_remaining == null ? null : Number(row.quota_remaining || 0);
+                const hasMeteredSpend = Array.isArray(row.cost_by_currency) && row.cost_by_currency.length > 0;
                 return (
                   <div key={String(row.name)} className="ops-execution-body">
                     <span className="ops-execution-user">
@@ -530,8 +531,10 @@ export default function DashboardPage({
                       <small>
                         {quotaLimit == null
                           ? `${String(row.billing_plan || "standard")} / ${String(row.billing_status || "active")} · ${quotaStatusLabel(row.quota_status)}`
-                          : `${formatCurrencyAmount(quotaUsed, quotaCurrency)} / ${formatCurrencyAmount(quotaLimit, quotaCurrency)} · ${quotaStatusLabel(row.quota_status)}`}
-                        {quotaRemaining == null ? "" : ` · 剩余 ${formatCurrencyAmount(quotaRemaining, quotaCurrency)}`}
+                          : hasMeteredSpend
+                            ? `${formatCurrencyAmount(quotaUsed, quotaCurrency)} / ${formatCurrencyAmount(quotaLimit, quotaCurrency)} · ${quotaStatusLabel(row.quota_status)}`
+                            : `已用 0 / 配额 ${quotaLimit.toFixed(2)} · ${quotaStatusLabel(row.quota_status)}`}
+                        {quotaRemaining == null || !hasMeteredSpend ? "" : ` · 剩余 ${formatCurrencyAmount(quotaRemaining, quotaCurrency)}`}
                       </small>
                     </span>
                     <span>{formatDateTime(String(row.last_activity_at || ""))}</span>

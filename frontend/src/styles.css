@@ -3280,11 +3280,13 @@ button {
 
 .ops-panel {
   min-height: 220px;
+  min-width: 0;
   padding: 22px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.07);
+  overflow: hidden;
 }
 
 .ops-panel-wide {
@@ -3608,6 +3610,9 @@ button {
 .ops-execution-table {
   display: grid;
   gap: 10px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 
 .ops-execution-head,
@@ -3616,6 +3621,7 @@ button {
   grid-template-columns: minmax(200px, 1.3fr) repeat(5, minmax(56px, 0.5fr)) minmax(132px, 0.9fr);
   gap: 12px;
   align-items: center;
+  min-width: 100%;
 }
 
 .ops-execution-head {
@@ -3632,6 +3638,12 @@ button {
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.76);
   font-size: 0.88rem;
+}
+
+.ops-execution-head > span,
+.ops-execution-body > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .ops-execution-user {

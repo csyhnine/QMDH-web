@@ -46,6 +46,7 @@ class DatabaseAuthTests(unittest.TestCase):
             designer = User(
                 name="designer",
                 display_name="Designer",
+                group_name="方案一组",
                 role="designer",
                 password_hash=hash_password("designer-pass"),
                 is_active=True,
@@ -54,6 +55,7 @@ class DatabaseAuthTests(unittest.TestCase):
             peer_designer = User(
                 name="peer.designer",
                 display_name="Peer Designer",
+                group_name="方案二组",
                 role="designer",
                 password_hash=hash_password("peer-pass"),
                 is_active=True,
@@ -293,6 +295,7 @@ class DatabaseAuthTests(unittest.TestCase):
                 "name": "new.designer",
                 "password": "new-pass",
                 "display_name": "New Designer",
+                "group_name": "方案一组",
                 "role": "designer",
                 "is_active": True,
                 "monthly_quota": 150.0,
@@ -309,6 +312,7 @@ class DatabaseAuthTests(unittest.TestCase):
         self.assertEqual(created.json()["quota_policy"], "soft_warn")
         self.assertEqual(created.json()["quota_reset_cycle"], "monthly")
         self.assertEqual(created.json()["monthly_quota"], 150.0)
+        self.assertEqual(created.json()["group_name"], "方案一组")
 
         listed_users = self.client.get("/users", headers={"Authorization": f"Bearer {admin_token}"})
         self.assertEqual(listed_users.status_code, 200)
@@ -319,6 +323,7 @@ class DatabaseAuthTests(unittest.TestCase):
             self.assertIsNotNone(new_user)
             self.assertEqual(new_user.project_codes, [])
             assert new_user is not None
+            self.assertEqual(new_user.group_name, "方案一组")
             self.assertEqual(new_user.billing_plan, "trial")
             self.assertEqual(new_user.billing_status, "active")
             self.assertEqual(new_user.quota_policy, "soft_warn")
@@ -329,6 +334,7 @@ class DatabaseAuthTests(unittest.TestCase):
             f"/users/{created.json()['id']}",
             headers={"Authorization": f"Bearer {admin_token}"},
             json={
+                "group_name": "方案二组",
                 "billing_plan": "pro",
                 "billing_status": "grace",
                 "quota_policy": "hard_block",
@@ -341,16 +347,44 @@ class DatabaseAuthTests(unittest.TestCase):
         self.assertEqual(updated.json()["billing_status"], "grace")
         self.assertEqual(updated.json()["quota_policy"], "hard_block")
         self.assertEqual(updated.json()["monthly_quota"], 80.0)
+        self.assertEqual(updated.json()["group_name"], "方案二组")
 
         with self.SessionLocal() as db:
             new_user = db.scalar(select(User).where(User.name == "new.designer"))
             self.assertIsNotNone(new_user)
             assert new_user is not None
+            self.assertEqual(new_user.group_name, "方案二组")
             self.assertEqual(new_user.billing_plan, "pro")
             self.assertEqual(new_user.billing_status, "grace")
             self.assertEqual(new_user.quota_policy, "hard_block")
             self.assertEqual(new_user.quota_reset_cycle, "monthly")
             self.assertEqual(new_user.monthly_quota, 80.0)
+
+        group_summary = self.client.get("/users/groups/summary", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(group_summary.status_code, 200, group_summary.text)
+        summary_rows = group_summary.json()
+        self.assertTrue(any(row["group_name"] == "方案二组" and row["user_count"] == 2 for row in summary_rows))
+        self.assertTrue(any(row["group_name"] == "" for row in summary_rows))
+
+        today = datetime.now(timezone.utc).astimezone().date().isoformat()
+        filtered_group_summary = self.client.get(
+            f"/users/groups/summary?start_date={today}&end_date={today}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        self.assertEqual(filtered_group_summary.status_code, 200, filtered_group_summary.text)
+        filtered_rows = filtered_group_summary.json()
+        plan_group = next(row for row in filtered_rows if row["group_name"] == "方案一组")
+        self.assertEqual(plan_group["total_cost"], 1.25)
+        self.assertEqual(plan_group["members"][0]["user_name"], "designer")
+
+        export_response = self.client.get(
+            f"/users/groups/summary/export?start_date={today}&end_date={today}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        self.assertEqual(export_response.status_code, 200, export_response.text)
+        self.assertIn("text/csv", export_response.headers["content-type"])
+        self.assertIn("方案一组", export_response.text)
+        self.assertIn("designer", export_response.text)
 
         reset = self.client.post(
             f"/users/{created.json()['id']}/reset-password",

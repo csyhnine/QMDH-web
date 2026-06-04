@@ -171,6 +171,7 @@ class AuthUserOut(BaseModel):
     id: int
     name: str
     display_name: str
+    group_name: str = ""
     role: str
     project_codes: list[str]
     is_active: bool
@@ -191,6 +192,7 @@ class UserCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$")
     password: str = Field(min_length=6, max_length=200)
     display_name: str = Field(default="", max_length=150)
+    group_name: str = Field(default="", max_length=120)
     role: str = "designer"
     is_active: bool = True
     monthly_quota: float | None = Field(default=None, ge=0)
@@ -202,6 +204,7 @@ class UserCreate(BaseModel):
 
 class UserUpdate(BaseModel):
     display_name: str | None = Field(default=None, max_length=150)
+    group_name: str | None = Field(default=None, max_length=120)
     role: str | None = None
     is_active: bool | None = None
     monthly_quota: float | None = Field(default=None, ge=0)
@@ -219,6 +222,7 @@ class UserOut(BaseModel):
     id: int
     name: str
     display_name: str
+    group_name: str = ""
     role: str
     is_active: bool
     monthly_quota: float | None = None
@@ -229,6 +233,29 @@ class UserOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_login_at: datetime | None = None
+
+
+class UserGroupCurrencySpendOut(BaseModel):
+    currency: str
+    total_cost: float
+
+
+class UserGroupMemberSpendOut(BaseModel):
+    user_id: int
+    user_name: str
+    display_name: str
+    is_active: bool
+    total_cost: float = 0.0
+    cost_by_currency: list[UserGroupCurrencySpendOut] = Field(default_factory=list)
+
+
+class UserGroupSummaryOut(BaseModel):
+    group_name: str = ""
+    user_count: int = 0
+    enabled_user_count: int = 0
+    total_cost: float = 0.0
+    cost_by_currency: list[UserGroupCurrencySpendOut] = Field(default_factory=list)
+    members: list[UserGroupMemberSpendOut] = Field(default_factory=list)
 
 
 class UserFeedbackCreate(BaseModel):

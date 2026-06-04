@@ -1,4 +1,9 @@
-import { type DashboardStats } from "../../api";
+import { useEffect, useState } from "react";
+
+import { api, type DashboardStats, type UserGroupSummary } from "../../api";
+
+const ACCOUNT_USAGE_PAGE_SIZE = 6;
+const GROUP_SUMMARY_PAGE_SIZE = 6;
 
 function formatDateTime(value: string | null): string {
   if (!value) return "未记录";
@@ -29,14 +34,19 @@ function formatToken(value: number): string {
 }
 
 function formatCurrencyAmount(value: number, currency: string): string {
-  return `${currency === "CNY" ? "￥" : "$"}${value.toFixed(2)}`;
+  return `${currency === "CNY" ? "¥" : "$"}${value.toFixed(2)}`;
 }
 
 function formatCostRows(rows: Array<Record<string, unknown>>): string {
-  if (rows.length === 0) return "￥0.00";
+  if (rows.length === 0) return "¥0.00";
   return rows
     .map((row) => formatCurrencyAmount(Number(row.total_cost || 0), String(row.currency || "CNY")))
     .join(" + ");
+}
+
+function formatGroupCostRows(rows: UserGroupSummary[number]["cost_by_currency"]): string {
+  if (rows.length === 0) return "0.00 CNY";
+  return rows.map((row) => `${row.total_cost.toFixed(2)} ${row.currency}`).join(" / ");
 }
 
 function quotaStatusLabel(value: unknown): string {
@@ -51,8 +61,23 @@ function rowMax<T>(rows: T[], pick: (row: T) => number): number {
   return rows.reduce((max, row) => Math.max(max, pick(row)), 0);
 }
 
+function buildDateWindow(days: number): { startDate: string; endDate: string } {
+  const endDate = new Date();
+  const startDate = new Date(endDate);
+  startDate.setDate(endDate.getDate() - (days - 1));
+  return {
+    startDate: startDate.toISOString().slice(0, 10),
+    endDate: endDate.toISOString().slice(0, 10),
+  };
+}
+
+function groupLabel(groupName: string): string {
+  return groupName.trim() || "未分组";
+}
+
 export type DashboardPageProps = {
   dashboard: DashboardStats | null;
+  groupSummaries: UserGroupSummary[];
   userCanUseOpsViews: boolean;
   dashboardStatsDays: number;
   lastSyncedAt: string | null;
@@ -62,12 +87,35 @@ export type DashboardPageProps = {
 
 export default function DashboardPage({
   dashboard,
+  groupSummaries,
   userCanUseOpsViews,
   dashboardStatsDays,
   lastSyncedAt,
   onChangeDays,
   onRefresh,
 }: DashboardPageProps) {
+  const [accountUsagePage, setAccountUsagePage] = useState(1);
+  const [groupSummaryPage, setGroupSummaryPage] = useState(1);
+  const [exportingGroups, setExportingGroups] = useState(false);
+
+  const accountUsageTotalPages = Math.max(
+    1,
+    Math.ceil((dashboard?.account_usage.length ?? 0) / ACCOUNT_USAGE_PAGE_SIZE),
+  );
+  const groupSummaryTotalPages = Math.max(1, Math.ceil(groupSummaries.length / GROUP_SUMMARY_PAGE_SIZE));
+
+  useEffect(() => {
+    if (accountUsagePage > accountUsageTotalPages) {
+      setAccountUsagePage(accountUsageTotalPages);
+    }
+  }, [accountUsagePage, accountUsageTotalPages]);
+
+  useEffect(() => {
+    if (groupSummaryPage > groupSummaryTotalPages) {
+      setGroupSummaryPage(groupSummaryTotalPages);
+    }
+  }, [groupSummaryPage, groupSummaryTotalPages]);
+
   if (!userCanUseOpsViews) {
     return (
       <section className="ops-dashboard">
@@ -91,6 +139,28 @@ export default function DashboardPage({
   const executionMax = rowMax(dashboard.execution_rankings, (item) =>
     item.image_generate_count + item.image_edit_count + item.video_generate_count + item.chat_turn_count,
   );
+  const safeAccountUsagePage = Math.min(accountUsagePage, accountUsageTotalPages);
+  const accountUsagePageStart = (safeAccountUsagePage - 1) * ACCOUNT_USAGE_PAGE_SIZE;
+  const pagedAccountUsage = dashboard.account_usage.slice(
+    accountUsagePageStart,
+    accountUsagePageStart + ACCOUNT_USAGE_PAGE_SIZE,
+  );
+  const safeGroupSummaryPage = Math.min(groupSummaryPage, groupSummaryTotalPages);
+  const groupSummaryPageStart = (safeGroupSummaryPage - 1) * GROUP_SUMMARY_PAGE_SIZE;
+  const pagedGroupSummaries = groupSummaries.slice(
+    groupSummaryPageStart,
+    groupSummaryPageStart + GROUP_SUMMARY_PAGE_SIZE,
+  );
+  const { startDate, endDate } = buildDateWindow(dashboardStatsDays);
+
+  async function handleExportGroupSummary() {
+    setExportingGroups(true);
+    try {
+      await api.exportUserGroupSummariesCsv(startDate, endDate);
+    } finally {
+      setExportingGroups(false);
+    }
+  }
 
   return (
     <section className="ops-dashboard">
@@ -112,7 +182,7 @@ export default function DashboardPage({
             </button>
           </div>
           <div className="ops-date-range">
-            <span>{`统计窗口：最近 ${dashboardStatsDays} 天`}</span>
+            <span>{`统计窗口：${startDate} 至 ${endDate}`}</span>
             <span>{`刷新于 ${formatDateTime(lastSyncedAt)}`}</span>
           </div>
           <button type="button" className="ops-icon-button" onClick={onRefresh}>
@@ -317,9 +387,96 @@ export default function DashboardPage({
 
         <section className="ops-panel ops-panel-wide">
           <div className="ops-panel-head">
+            <div>
+              <h2>分组支出统计</h2>
+              <span>{`结算窗口：${startDate} 至 ${endDate}`}</span>
+            </div>
+            <button type="button" className="ops-icon-button" disabled={exportingGroups} onClick={() => void handleExportGroupSummary()}>
+              {exportingGroups ? "导出中..." : "导出 CSV"}
+            </button>
+          </div>
+          {groupSummaries.length > 0 ? (
+            <div className="admin-list-summary">
+              <span>
+                共 {groupSummaries.length} 个分组，当前显示 {groupSummaryPageStart + 1}-
+                {Math.min(groupSummaryPageStart + GROUP_SUMMARY_PAGE_SIZE, groupSummaries.length)}
+              </span>
+              <span>
+                第 {safeGroupSummaryPage} / {groupSummaryTotalPages} 页
+              </span>
+            </div>
+          ) : null}
+          <div className="ops-execution-table">
+            <div className="ops-execution-head">
+              <span>分组</span>
+              <span>成员</span>
+              <span>启用账号</span>
+              <span>组内总花费</span>
+              <span>主要成员</span>
+            </div>
+            {groupSummaries.length > 0 ? (
+              pagedGroupSummaries.map((group) => (
+                <div key={group.group_name || "__ungrouped__"} className="ops-execution-body">
+                  <span className="ops-execution-user">
+                    <strong>{groupLabel(group.group_name)}</strong>
+                    <small>{group.members.length > 0 ? `${group.members.length} 位成员有支出` : "暂无支出明细"}</small>
+                  </span>
+                  <span>{formatCount(group.user_count)}</span>
+                  <span>{formatCount(group.enabled_user_count)}</span>
+                  <span>{formatGroupCostRows(group.cost_by_currency)}</span>
+                  <span>
+                    {group.members.length > 0
+                      ? group.members
+                          .slice(0, 2)
+                          .map((member) => `${member.display_name || member.user_name} ${member.total_cost.toFixed(2)}`)
+                          .join(" / ")
+                      : "暂无"}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="template-empty">当前窗口内还没有可展示的分组支出数据。</div>
+            )}
+          </div>
+          {groupSummaries.length > GROUP_SUMMARY_PAGE_SIZE ? (
+            <div className="admin-pagination">
+              <button
+                type="button"
+                disabled={safeGroupSummaryPage <= 1}
+                onClick={() => setGroupSummaryPage((current) => Math.max(1, current - 1))}
+              >
+                上一页
+              </button>
+              <span>
+                第 {safeGroupSummaryPage} / {groupSummaryTotalPages} 页
+              </span>
+              <button
+                type="button"
+                disabled={safeGroupSummaryPage >= groupSummaryTotalPages}
+                onClick={() => setGroupSummaryPage((current) => Math.min(groupSummaryTotalPages, current + 1))}
+              >
+                下一页
+              </button>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="ops-panel ops-panel-wide">
+          <div className="ops-panel-head">
             <h2>账号监管</h2>
             <span>套餐、额度与使用细分</span>
           </div>
+          {dashboard.account_usage.length > 0 ? (
+            <div className="admin-list-summary">
+              <span>
+                共 {dashboard.account_usage.length} 个账号，当前显示 {accountUsagePageStart + 1}-
+                {Math.min(accountUsagePageStart + ACCOUNT_USAGE_PAGE_SIZE, dashboard.account_usage.length)}
+              </span>
+              <span>
+                第 {safeAccountUsagePage} / {accountUsageTotalPages} 页
+              </span>
+            </div>
+          ) : null}
           <div className="ops-execution-table">
             <div className="ops-execution-head">
               <span>账号</span>
@@ -332,7 +489,7 @@ export default function DashboardPage({
               <span>最近活动</span>
             </div>
             {dashboard.account_usage.length > 0 ? (
-              dashboard.account_usage.map((row) => {
+              pagedAccountUsage.map((row) => {
                 const quotaCurrency = String(row.quota_currency || "CNY");
                 const quotaLimit = row.quota_limit == null ? null : Number(row.quota_limit || 0);
                 const quotaUsed = Number(row.quota_used || 0);
@@ -363,6 +520,27 @@ export default function DashboardPage({
               <div className="template-empty">当前窗口内还没有可展示的账号监管数据。</div>
             )}
           </div>
+          {dashboard.account_usage.length > ACCOUNT_USAGE_PAGE_SIZE ? (
+            <div className="admin-pagination">
+              <button
+                type="button"
+                disabled={safeAccountUsagePage <= 1}
+                onClick={() => setAccountUsagePage((current) => Math.max(1, current - 1))}
+              >
+                上一页
+              </button>
+              <span>
+                第 {safeAccountUsagePage} / {accountUsageTotalPages} 页
+              </span>
+              <button
+                type="button"
+                disabled={safeAccountUsagePage >= accountUsageTotalPages}
+                onClick={() => setAccountUsagePage((current) => Math.min(accountUsageTotalPages, current + 1))}
+              >
+                下一页
+              </button>
+            </div>
+          ) : null}
         </section>
       </div>
     </section>

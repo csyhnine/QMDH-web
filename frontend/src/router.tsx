@@ -16,6 +16,7 @@ import {
   type ProviderPricingRuleRecord,
   type ProviderProfileRecord,
   type Task,
+  type UserGroupSummary,
 } from "./api";
 import { AppShell, AuthGuard, LoadingFallback } from "./components/shared";
 import { useAuth } from "./context/AuthContext";
@@ -107,12 +108,22 @@ function StudioFeedbackRoute() {
 
 function DashboardRoute() {
   const [dashboard, setDashboard] = useState<DashboardStats | null>(null);
+  const [groupSummaries, setGroupSummaries] = useState<UserGroupSummary[]>([]);
   const [dashboardStatsDays, setDashboardStatsDays] = useState(30);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
   async function refresh(days = dashboardStatsDays) {
-    const nextDashboard = await api.dashboardStats(days);
+    const endDate = new Date();
+    const startDate = new Date(endDate);
+    startDate.setDate(endDate.getDate() - (days - 1));
+    const startDateText = startDate.toISOString().slice(0, 10);
+    const endDateText = endDate.toISOString().slice(0, 10);
+    const [nextDashboard, nextGroupSummaries] = await Promise.all([
+      api.dashboardStats(days),
+      api.userGroupSummaries(startDateText, endDateText),
+    ]);
     setDashboard(nextDashboard);
+    setGroupSummaries(nextGroupSummaries);
     setLastSyncedAt(new Date().toISOString());
   }
 
@@ -124,6 +135,7 @@ function DashboardRoute() {
     <AppShell kind="admin" active="dashboard">
       <DashboardPage
         dashboard={dashboard}
+        groupSummaries={groupSummaries}
         userCanUseOpsViews={true}
         dashboardStatsDays={dashboardStatsDays}
         lastSyncedAt={lastSyncedAt}
@@ -136,11 +148,14 @@ function DashboardRoute() {
 
 function UsersRoute() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [groupSummaries, setGroupSummaries] = useState<UserGroupSummary[]>([]);
   const [error, setError] = useState("");
 
   async function refresh() {
     try {
-      setUsers(await api.users());
+      const [nextUsers, nextGroupSummaries] = await Promise.all([api.users(), api.userGroupSummaries()]);
+      setUsers(nextUsers);
+      setGroupSummaries(nextGroupSummaries);
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载用户失败");
@@ -153,7 +168,14 @@ function UsersRoute() {
 
   return (
     <AppShell kind="admin" active="users">
-      <UsersPage users={users} userCanManageUsers={true} error={error} onRefresh={() => void refresh()} onSetError={setError} />
+      <UsersPage
+        users={users}
+        groupSummaries={groupSummaries}
+        userCanManageUsers={true}
+        error={error}
+        onRefresh={() => void refresh()}
+        onSetError={setError}
+      />
     </AppShell>
   );
 }

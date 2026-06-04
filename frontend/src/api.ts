@@ -65,6 +65,7 @@ export type AuthUser = {
   id: number;
   name: string;
   display_name: string;
+  group_name: string;
   role: string;
   project_codes: string[];
   is_active: boolean;
@@ -85,6 +86,7 @@ export type ManagedUser = {
   id: number;
   name: string;
   display_name: string;
+  group_name: string;
   role: string;
   is_active: boolean;
   monthly_quota: number | null;
@@ -101,6 +103,7 @@ export type UserCreatePayload = {
   name: string;
   password: string;
   display_name: string;
+  group_name: string;
   role: string;
   is_active: boolean;
   monthly_quota: number | null;
@@ -114,6 +117,7 @@ export type UserUpdatePayload = Partial<
   Pick<
     UserCreatePayload,
     | "display_name"
+    | "group_name"
     | "role"
     | "is_active"
     | "monthly_quota"
@@ -123,6 +127,29 @@ export type UserUpdatePayload = Partial<
     | "quota_reset_cycle"
   >
 >;
+
+export type UserGroupCurrencySpend = {
+  currency: string;
+  total_cost: number;
+};
+
+export type UserGroupMemberSpend = {
+  user_id: number;
+  user_name: string;
+  display_name: string;
+  is_active: boolean;
+  total_cost: number;
+  cost_by_currency: UserGroupCurrencySpend[];
+};
+
+export type UserGroupSummary = {
+  group_name: string;
+  user_count: number;
+  enabled_user_count: number;
+  total_cost: number;
+  cost_by_currency: UserGroupCurrencySpend[];
+  members: UserGroupMemberSpend[];
+};
 
 export type DashboardDailyPoint = {
   date: string;
@@ -631,6 +658,15 @@ async function deleteRequest(path: string): Promise<void> {
   await request<void>(path, { method: "DELETE" });
 }
 
+function buildQuery(params: Record<string, string | undefined>): string {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) search.set(key, value);
+  });
+  const query = search.toString();
+  return query ? `?${query}` : "";
+}
+
 export const api = {
   login: async (username: string, password: string) => {
     const response = await fetch(`${API_BASE}/auth/login`, {
@@ -646,6 +682,30 @@ export const api = {
   logout: () => postJson<void>("/auth/logout"),
   me: () => request<AuthUser>("/auth/me"),
   users: () => request<ManagedUser[]>("/users"),
+  userGroupSummaries: (startDate?: string, endDate?: string) =>
+    request<UserGroupSummary[]>(`/users/groups/summary${buildQuery({ start_date: startDate, end_date: endDate })}`),
+  exportUserGroupSummariesCsv: async (startDate?: string, endDate?: string) => {
+    const response = await fetch(
+      `${API_BASE}/users/groups/summary/export${buildQuery({ start_date: startDate, end_date: endDate })}`,
+      {
+        headers: authHeaders(),
+      },
+    );
+    if (!response.ok) {
+      throw await buildError(response);
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const today = new Date().toISOString().slice(0, 10);
+    const suffix = [startDate, endDate].filter(Boolean).join("_") || today;
+    anchor.href = url;
+    anchor.download = `group-spend-${suffix}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(url);
+  },
   feedback: () => request<FeedbackRecord[]>("/feedback"),
   createFeedback: (payload: FeedbackCreatePayload) => postJson<FeedbackRecord>("/feedback", payload),
   adminFeedback: () => request<FeedbackRecord[]>("/feedback/admin"),

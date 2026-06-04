@@ -88,6 +88,8 @@ def ensure_schema(engine: Engine) -> None:
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_projects_owner_user_id ON projects (owner_user_id)"))
         if "billing_plan" not in user_columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN billing_plan VARCHAR(30) NOT NULL DEFAULT 'standard'"))
+        if "group_name" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN group_name VARCHAR(120) NOT NULL DEFAULT ''"))
         if "billing_status" not in user_columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN billing_status VARCHAR(20) NOT NULL DEFAULT 'active'"))
         if "quota_policy" not in user_columns:

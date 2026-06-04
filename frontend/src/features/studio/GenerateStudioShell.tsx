@@ -133,6 +133,7 @@ type UserDraft = {
   name: string;
   password: string;
   displayName: string;
+  groupName: string;
   role: string;
   monthlyQuota: string;
   isActive: boolean;
@@ -221,6 +222,7 @@ const defaultUserDraft: UserDraft = {
   name: "",
   password: "",
   displayName: "",
+  groupName: "",
   role: "designer",
   monthlyQuota: "200",
   isActive: true
@@ -757,6 +759,7 @@ function toUserPayload(draft: UserDraft): UserCreatePayload {
     name: draft.name.trim(),
     password: draft.password,
     display_name: draft.displayName.trim(),
+    group_name: draft.groupName.trim(),
     role: draft.role,
     monthly_quota: trimmedQuota ? Number(trimmedQuota) : null,
     is_active: draft.isActive
@@ -768,6 +771,7 @@ function toUserDraft(user: ManagedUser): UserDraft {
     name: user.name,
     password: "",
     displayName: user.display_name,
+    groupName: user.group_name,
     role: user.role,
     monthlyQuota: user.monthly_quota === null ? "" : String(user.monthly_quota),
     isActive: user.is_active
@@ -2701,6 +2705,7 @@ export default function GenerateStudioShell() {
       } else {
         await api.updateUser(editingUserId, {
           display_name: payload.display_name,
+          group_name: payload.group_name,
           role: payload.role,
           monthly_quota: payload.monthly_quota,
           is_active: payload.is_active
@@ -2730,6 +2735,18 @@ export default function GenerateStudioShell() {
       setState((current) => ({
         ...current,
         error: error instanceof Error ? error.message : "停用用户失败"
+      }));
+    }
+  }
+
+  async function handleRestoreUser(userId: number) {
+    try {
+      await api.updateUser(userId, { is_active: true });
+      await loadData({ force: true });
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        error: error instanceof Error ? error.message : "恢复用户失败"
       }));
     }
   }
@@ -2776,7 +2793,7 @@ export default function GenerateStudioShell() {
   const dashboardAccountUsedTotal = state.dashboard ? sumMetric(state.dashboard.account_usage, "quota_used") : 0;
   const dashboardProjectTotal = state.dashboard ? sumMetric(state.dashboard.project_rankings, "count") : 0;
   const dashboardFailureTotal = state.dashboard ? sumMetric(state.dashboard.failure_reasons, "count") : 0;
-  const activeUsers = state.users.filter((user) => user.is_active);
+  const enabledUsers = state.users.filter((user) => user.is_active);
   const disabledUsers = state.users.filter((user) => !user.is_active);
   const adminUsers = state.users.filter((user) => user.role === "admin");
   const enabledProviderProfiles = state.providerProfiles.filter((profile) => profile.enabled);
@@ -2944,15 +2961,15 @@ export default function GenerateStudioShell() {
               <>
                 <div className="admin-kpi-grid">
                   <article className="admin-kpi-card admin-blue"><span>账号总数</span><strong>{state.users.length}</strong><small>全部后台账号</small><i>♙</i></article>
-                  <article className="admin-kpi-card admin-green"><span>活跃账号</span><strong>{activeUsers.length}</strong><small>可正常登录</small><i>●</i></article>
-                  <article className="admin-kpi-card admin-gray"><span>已禁用账号</span><strong>{disabledUsers.length}</strong><small>停用或不可登录</small><i>○</i></article>
+                  <article className="admin-kpi-card admin-green"><span>已启用账号</span><strong>{enabledUsers.length}</strong><small>允许登录</small><i>●</i></article>
+                  <article className="admin-kpi-card admin-gray"><span>已禁用账号</span><strong>{disabledUsers.length}</strong><small>当前不可登录</small><i>○</i></article>
                   <article className="admin-kpi-card admin-purple"><span>管理员账号</span><strong>{adminUsers.length}</strong><small>admin</small><i>◆</i></article>
                 </div>
 
                 <div className="admin-split-layout">
                   <section className="admin-table-panel">
                     <div className="admin-toolbar">
-                      <select aria-label="账号状态筛选"><option>全部状态</option><option>活跃</option><option>禁用</option></select>
+                      <select aria-label="账号状态筛选"><option>全部状态</option><option>已启用</option><option>禁用</option></select>
                       <select aria-label="账号角色筛选"><option>全部角色</option><option>designer</option><option>admin</option></select>
                       <input aria-label="搜索账号" placeholder="搜索账号、姓名或角色" />
                       <button type="button" onClick={() => void loadData({ force: true })}>刷新</button>
@@ -2966,11 +2983,15 @@ export default function GenerateStudioShell() {
                           <span><strong>{user.display_name || user.name}</strong><small>@{user.name}</small></span>
                           <span><em className="admin-tag">{user.role}</em></span>
                           <span>{user.monthly_quota === null ? "不限额" : `${user.monthly_quota} / 月`}</span>
-                          <span><em className={`status-pill ${user.is_active ? "status-completed" : "status-failed"}`}>{user.is_active ? "活跃" : "禁用"}</em></span>
+                          <span><em className={`status-pill ${user.is_active ? "status-completed" : "status-failed"}`}>{user.is_active ? "启用" : "禁用"}</em></span>
                           <span>{user.last_login_at ? formatDate(user.last_login_at) : "未登录"}</span>
                           <span className="admin-row-actions">
                             <button type="button" onClick={() => handleEditUser(user)}>编辑</button>
-                            <button type="button" onClick={() => handleDeactivateUser(user.id)} disabled={!user.is_active}>停用</button>
+                            {user.is_active ? (
+                              <button type="button" onClick={() => handleDeactivateUser(user.id)}>停用</button>
+                            ) : (
+                              <button type="button" onClick={() => handleRestoreUser(user.id)}>恢复</button>
+                            )}
                           </span>
                         </div>
                       ))}
@@ -2985,6 +3006,7 @@ export default function GenerateStudioShell() {
                       </div>
                       <label className="composer-menu-field"><span>用户名</span><input value={userDraft.name} disabled={editingUserId !== null} onChange={(event) => setUserDraft((current) => ({ ...current, name: event.target.value }))} /></label>
                       <label className="composer-menu-field"><span>显示名</span><input value={userDraft.displayName} onChange={(event) => setUserDraft((current) => ({ ...current, displayName: event.target.value }))} /></label>
+                      <label className="composer-menu-field"><span>账号分组</span><input value={userDraft.groupName} onChange={(event) => setUserDraft((current) => ({ ...current, groupName: event.target.value }))} placeholder="比如：华南一组" /></label>
                       <label className="composer-menu-field"><span>角色</span><select value={userDraft.role} onChange={(event) => setUserDraft((current) => ({ ...current, role: event.target.value }))}><option value="designer">designer</option><option value="admin">admin</option></select></label>
                       <label className="composer-menu-field"><span>{editingUserId === null ? "初始密码" : "重置密码"}</span><input type="password" value={userDraft.password} onChange={(event) => setUserDraft((current) => ({ ...current, password: event.target.value }))} /></label>
                       <label className="composer-menu-field"><span>月度额度</span><input type="number" min="0" step="0.01" value={userDraft.monthlyQuota} onChange={(event) => setUserDraft((current) => ({ ...current, monthlyQuota: event.target.value }))} placeholder="留空表示不限额" /></label>

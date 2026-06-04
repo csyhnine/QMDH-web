@@ -4254,7 +4254,8 @@ button {
 }
 
 .admin-user-table .admin-table-row {
-  grid-template-columns: minmax(150px, 1.2fr) 100px minmax(130px, 1fr) 110px 90px 150px 120px;
+  min-width: 1120px;
+  grid-template-columns: minmax(160px, 1.2fr) 140px 100px minmax(130px, 1fr) 120px 90px 150px 120px;
 }
 
 .admin-model-table .admin-table-row {
@@ -4298,6 +4299,130 @@ button {
 .admin-row-actions button:disabled {
   color: #a8b1c0;
   cursor: not-allowed;
+}
+
+.admin-section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.admin-section-head h2 {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.admin-section-head p {
+  margin: 6px 0 0;
+  color: #667085;
+  line-height: 1.5;
+}
+
+.admin-section-head > span {
+  color: #667085;
+  font-size: 0.82rem;
+}
+
+.admin-group-summary-panel {
+  margin-bottom: 22px;
+}
+
+.admin-group-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.admin-group-summary-card {
+  border: 1px solid #e6ebf2;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.admin-group-summary-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.admin-group-summary-top strong {
+  font-size: 0.94rem;
+  color: #1f2937;
+}
+
+.admin-group-summary-top span,
+.admin-group-summary-card small {
+  color: #667085;
+  font-size: 0.8rem;
+}
+
+.admin-group-summary-metric {
+  color: #111827;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.admin-list-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  color: #667085;
+  font-size: 0.86rem;
+}
+
+.admin-pagination-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-pagination-size select {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.admin-table-empty {
+  padding: 22px 16px;
+  text-align: center;
+  color: #8a96a8;
+}
+
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.admin-pagination button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid #d8e0eb;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.admin-pagination button:disabled {
+  color: #a8b1c0;
+  cursor: not-allowed;
+}
+
+.admin-pagination span {
+  color: #667085;
+  font-size: 0.86rem;
 }
 
 .admin-side-form {

@@ -125,6 +125,50 @@ class DashboardExecutionRanking(BaseModel):
     last_activity_at: datetime | None = None
 
 
+class DashboardCurrencySpend(BaseModel):
+    currency: str
+    total_cost: float = 0.0
+
+
+class DashboardAccountUsage(BaseModel):
+    name: str
+    display_name: str
+    group_name: str = ""
+    role: str
+    is_active: bool
+    project_codes: list[str] = Field(default_factory=list)
+    quota_limit: float | None = None
+    quota_used: float = 0.0
+    quota_currency: str = "CNY"
+    quota_remaining: float | None = None
+    quota_status: str = "ok"
+    billing_plan: str = "standard"
+    billing_status: str = "active"
+    quota_policy: str = "soft_warn"
+    quota_reset_cycle: str = "monthly"
+    total_tasks: int = 0
+    successful_tasks: int = 0
+    failed_tasks: int = 0
+    success_rate: float = 0.0
+    average_latency_ms: float = 0.0
+    provider_calls: list[dict[str, Any]] = Field(default_factory=list)
+    model_calls: list[dict[str, Any]] = Field(default_factory=list)
+    cost_by_currency: list[DashboardCurrencySpend] = Field(default_factory=list)
+    last_task_at: datetime | None = None
+    last_activity_at: datetime | None = None
+    image_generate_count: int = 0
+    image_edit_count: int = 0
+    video_generate_count: int = 0
+    image_output_count: int = 0
+    chat_turn_count: int = 0
+    chat_input_tokens: int = 0
+    chat_output_tokens: int = 0
+    chat_cached_input_tokens: int = 0
+    chat_prompt_tokens: int = 0
+    chat_completion_tokens: int = 0
+    chat_total_tokens: int = 0
+
+
 class DashboardStats(BaseModel):
     active_workflows: int
     total_tasks: int
@@ -145,7 +189,7 @@ class DashboardStats(BaseModel):
     provider_rankings: list[dict[str, Any]] = Field(default_factory=list)
     model_rankings: list[dict[str, Any]] = Field(default_factory=list)
     failure_reasons: list[dict[str, Any]] = Field(default_factory=list)
-    account_usage: list[dict[str, Any]] = Field(default_factory=list)
+    account_usage: list[DashboardAccountUsage] = Field(default_factory=list)
     daily_series: list[DashboardDailyPoint] = Field(default_factory=list)
     model_calls_by_day: list[DashboardDayModelCalls] = Field(default_factory=list)
     today_image_generate_count: int = 0

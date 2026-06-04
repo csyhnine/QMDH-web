@@ -11,6 +11,8 @@ from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import AuditLog, TaskStatus, UsageLedger, User, Workflow
 from app.schemas import (
+    DashboardAccountUsage,
+    DashboardCurrencySpend,
     DashboardDailyPoint,
     DashboardDayModelCalls,
     DashboardExecutionRanking,
@@ -21,6 +23,7 @@ from app.schemas import (
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+LEGACY_LOCAL_PRICING_PROVIDERS = {"gpt-image-2"}
 
 
 def _round(value: float) -> float:
@@ -50,6 +53,18 @@ def _failure_reason(entry: UsageLedger) -> str:
     if raw_reason:
         return raw_reason[:220]
     return "Task failed without a recorded error message"
+
+
+def _is_legacy_local_pricing_entry(entry: UsageLedger) -> bool:
+    currency = (entry.cost_currency or "CNY").upper()
+    if currency != "CNY":
+        return False
+    provider_keys = {
+        (entry.requested_provider or "").strip().lower(),
+        (entry.provider_name or "").strip().lower(),
+        (entry.model_name or "").strip().lower(),
+    }
+    return any(key in LEGACY_LOCAL_PRICING_PROVIDERS for key in provider_keys if key)
 
 
 def _success_rate(successful_tasks: int, total_tasks: int) -> float:
@@ -115,6 +130,24 @@ def _apply_chat_usage(bucket: dict[str, int], entry: UsageLedger) -> None:
     bucket["chat_prompt_tokens"] += int(entry.prompt_tokens or 0)
     bucket["chat_completion_tokens"] += int(entry.completion_tokens or 0)
     bucket["chat_total_tokens"] += int(entry.total_tokens or 0)
+
+
+def _activity_sort_key(
+    *,
+    image_generate_count: int,
+    image_edit_count: int,
+    video_generate_count: int,
+    chat_turn_count: int,
+    chat_total_tokens: int,
+    last_activity_at: datetime | None,
+    name: str,
+) -> tuple[int, int, datetime, str]:
+    return (
+        image_generate_count + image_edit_count + video_generate_count + chat_turn_count,
+        chat_total_tokens,
+        last_activity_at or datetime.min.replace(tzinfo=timezone.utc),
+        name,
+    )
 
 
 @router.get("/stats", response_model=DashboardStats)
@@ -201,11 +234,14 @@ def get_dashboard_stats(
                 provider_entries_by_task.get(task_entry.task_id, []),
             )
 
+    billable_task_entries = [entry for entry in task_entries if not _is_legacy_local_pricing_entry(entry)]
+    billable_provider_entries = [entry for entry in provider_entries if not _is_legacy_local_pricing_entry(entry)]
+
     total_tasks = len(task_entries)
     successful_tasks = sum(1 for entry in task_entries if entry.task_status == TaskStatus.completed)
     failed_tasks = sum(1 for entry in task_entries if entry.task_status == TaskStatus.failed)
     cost_by_currency_counter: Counter[str] = Counter()
-    for entry in task_entries:
+    for entry in billable_task_entries:
         cost_by_currency_counter[(entry.cost_currency or "CNY").upper()] += float(entry.cost or 0)
     total_cost = sum(cost_by_currency_counter.values())
     primary_currency = cost_by_currency_counter.most_common(1)[0][0] if cost_by_currency_counter else "CNY"
@@ -222,7 +258,7 @@ def get_dashboard_stats(
     failure_counts = Counter(_failure_reason(entry) for entry in task_entries if entry.task_status == TaskStatus.failed)
     model_counts: Counter[str] = Counter()
     model_costs: Counter[str] = Counter()
-    for entry in provider_entries:
+    for entry in billable_provider_entries:
         model_name = entry.model_name or entry.provider_name
         model_counts[model_name] += 1
         model_costs[model_name] += float(entry.cost or 0)
@@ -232,7 +268,7 @@ def get_dashboard_stats(
         provider_tasks = [entry for entry in task_entries if entry.requested_provider == name]
         provider_success = sum(1 for entry in provider_tasks if entry.task_status == TaskStatus.completed)
         provider_failed = sum(1 for entry in provider_tasks if entry.task_status == TaskStatus.failed)
-        provider_cost = sum(float(entry.cost or 0) for entry in provider_tasks)
+        provider_cost = sum(float(entry.cost or 0) for entry in provider_tasks if not _is_legacy_local_pricing_entry(entry))
         provider_currency_counts = Counter((entry.cost_currency or "CNY").upper() for entry in provider_tasks)
         provider_currency = provider_currency_counts.most_common(1)[0][0] if provider_currency_counts else "CNY"
         provider_latency = (
@@ -309,16 +345,24 @@ def get_dashboard_stats(
         if row["last_activity_at"] is None or recorded_at > row["last_activity_at"]:
             row["last_activity_at"] = recorded_at
 
-    account_usage = []
+    account_usage: list[DashboardAccountUsage] = []
     for user in users:
         user_tasks = tasks_by_user.get(user.id, [])
         user_chats = chats_by_user.get(user.id, [])
         user_total = len(user_tasks)
         user_success = sum(1 for entry in user_tasks if entry.task_status == TaskStatus.completed)
         user_failed = sum(1 for entry in user_tasks if entry.task_status == TaskStatus.failed)
-        user_cost = sum(float(entry.cost or 0) for entry in user_tasks) + sum(float(entry.cost or 0) for entry in user_chats)
-        user_currency_counts = Counter((entry.cost_currency or "CNY").upper() for entry in user_tasks)
-        user_currency_counts.update((entry.cost_currency or "CNY").upper() for entry in user_chats)
+        user_currency_costs: Counter[str] = Counter()
+        for entry in user_tasks:
+            if _is_legacy_local_pricing_entry(entry):
+                continue
+            user_currency_costs[(entry.cost_currency or "CNY").upper()] += float(entry.cost or 0)
+        for entry in user_chats:
+            user_currency_costs[(entry.cost_currency or "CNY").upper()] += float(entry.cost or 0)
+        user_cost = round(sum(user_currency_costs.values()), 4)
+        user_currency_counts = Counter(
+            {currency: total_cost for currency, total_cost in user_currency_costs.items() if total_cost > 0}
+        )
         user_currency = user_currency_counts.most_common(1)[0][0] if user_currency_counts else "CNY"
         user_latency = (
             sum(int(entry.latency_ms or 0) for entry in user_tasks) / user_total
@@ -348,37 +392,56 @@ def get_dashboard_stats(
             default=None,
         )
         account_usage.append(
-            {
-                "name": user.name,
-                "display_name": user.display_name or user.name,
-                "role": user.role,
-                "is_active": user.is_active,
-                "project_codes": user.project_codes or [],
-                "quota_limit": quota_limit,
-                "quota_used": _round(user_cost),
-                "quota_currency": user_currency,
-                "quota_remaining": quota_remaining,
-                "quota_status": _quota_status(quota_limit, user_cost),
-                "billing_plan": user.billing_plan,
-                "billing_status": user.billing_status,
-                "quota_policy": user.quota_policy,
-                "quota_reset_cycle": user.quota_reset_cycle,
-                "total_tasks": user_total,
-                "successful_tasks": user_success,
-                "failed_tasks": user_failed,
-                "success_rate": _success_rate(user_success, user_total),
-                "average_latency_ms": _round(user_latency),
-                "provider_calls": [
+            DashboardAccountUsage(
+                name=user.name,
+                display_name=user.display_name or user.name,
+                group_name=user.group_name or "",
+                role=user.role,
+                is_active=user.is_active,
+                project_codes=user.project_codes or [],
+                quota_limit=quota_limit,
+                quota_used=_round(user_cost),
+                quota_currency=user_currency,
+                quota_remaining=quota_remaining,
+                quota_status=_quota_status(quota_limit, user_cost),
+                billing_plan=user.billing_plan,
+                billing_status=user.billing_status,
+                quota_policy=user.quota_policy,
+                quota_reset_cycle=user.quota_reset_cycle,
+                total_tasks=user_total,
+                successful_tasks=user_success,
+                failed_tasks=user_failed,
+                success_rate=_success_rate(user_success, user_total),
+                average_latency_ms=_round(user_latency),
+                provider_calls=[
                     {"name": name, "count": count} for name, count in user_providers.most_common(5)
                 ],
-                "model_calls": [
+                model_calls=[
                     {"name": name, "count": count} for name, count in user_models.most_common(5)
                 ],
-                "last_task_at": max((entry.recorded_at for entry in user_tasks), default=None),
-                "last_activity_at": last_activity,
+                cost_by_currency=[
+                    DashboardCurrencySpend(currency=currency, total_cost=_round(total_cost))
+                    for currency, total_cost in user_currency_costs.most_common()
+                    if total_cost > 0
+                ],
+                last_task_at=max((entry.recorded_at for entry in user_tasks), default=None),
+                last_activity_at=last_activity,
                 **task_bucket,
-            }
+            )
         )
+
+    account_usage.sort(
+        key=lambda item: _activity_sort_key(
+            image_generate_count=item.image_generate_count,
+            image_edit_count=item.image_edit_count,
+            video_generate_count=item.video_generate_count,
+            chat_turn_count=item.chat_turn_count,
+            chat_total_tokens=item.chat_total_tokens,
+            last_activity_at=item.last_activity_at,
+            name=item.name,
+        ),
+        reverse=True,
+    )
 
     daily_tasks_map: dict[str, list[UsageLedger]] = defaultdict(list)
     daily_chat_map: dict[str, list[UsageLedger]] = defaultdict(list)
@@ -478,13 +541,14 @@ def get_dashboard_stats(
             )
             for name, values in execution_rankings_map.items()
         ),
-        key=lambda item: (
-            item.image_generate_count
-            + item.image_edit_count
-            + item.video_generate_count
-            + item.chat_turn_count,
-            item.chat_total_tokens,
-            item.last_activity_at or datetime.min.replace(tzinfo=timezone.utc),
+        key=lambda item: _activity_sort_key(
+            image_generate_count=item.image_generate_count,
+            image_edit_count=item.image_edit_count,
+            video_generate_count=item.video_generate_count,
+            chat_turn_count=item.chat_turn_count,
+            chat_total_tokens=item.chat_total_tokens,
+            last_activity_at=item.last_activity_at,
+            name=item.user_name,
         ),
         reverse=True,
     )
@@ -506,12 +570,14 @@ def get_dashboard_stats(
         ),
         cost_notes=[
             "只有在模型配置里维护了 pricing_currency、pricing_unit 和 unit_price 后，成本才代表真实计费口径。",
+            "旧版 gpt-image-2 的本地 CNY 历史已从当前运营支出口径中排除，原始记录仍保留在账本中。",
             "Chat token 统计仅从本次版本之后的新消息开始准确记录，历史消息不做回填。",
             "账号额度目前仍是软监管，只做展示与预警，不会阻断任务创建。",
         ],
         cost_by_currency=[
             {"currency": currency, "total_cost": _round(cost)}
             for currency, cost in cost_by_currency_counter.most_common()
+            if abs(float(cost)) > 0
         ],
         user_rankings=[{"name": name, "count": count} for name, count in user_counts.most_common(10)],
         project_rankings=[{"code": code, "count": count} for code, count in project_counts.most_common(10)],

@@ -194,6 +194,50 @@ export type DashboardExecutionRanking = {
   last_activity_at: string | null;
 };
 
+export type DashboardCurrencySpend = {
+  currency: string;
+  total_cost: number;
+};
+
+export type DashboardAccountUsage = {
+  name: string;
+  display_name: string;
+  group_name: string;
+  role: string;
+  is_active: boolean;
+  project_codes: string[];
+  quota_limit: number | null;
+  quota_used: number;
+  quota_currency: string;
+  quota_remaining: number | null;
+  quota_status: string;
+  billing_plan: string;
+  billing_status: string;
+  quota_policy: string;
+  quota_reset_cycle: string;
+  total_tasks: number;
+  successful_tasks: number;
+  failed_tasks: number;
+  success_rate: number;
+  average_latency_ms: number;
+  provider_calls: Array<Record<string, unknown>>;
+  model_calls: Array<Record<string, unknown>>;
+  cost_by_currency: DashboardCurrencySpend[];
+  last_task_at: string | null;
+  last_activity_at: string | null;
+  image_generate_count: number;
+  image_edit_count: number;
+  video_generate_count: number;
+  image_output_count: number;
+  chat_turn_count: number;
+  chat_input_tokens: number;
+  chat_output_tokens: number;
+  chat_cached_input_tokens: number;
+  chat_prompt_tokens: number;
+  chat_completion_tokens: number;
+  chat_total_tokens: number;
+};
+
 export type DashboardStats = {
   active_workflows: number;
   total_tasks: number;
@@ -214,7 +258,7 @@ export type DashboardStats = {
   provider_rankings: Array<Record<string, unknown>>;
   model_rankings: Array<Record<string, unknown>>;
   failure_reasons: Array<Record<string, unknown>>;
-  account_usage: Array<Record<string, unknown>>;
+  account_usage: DashboardAccountUsage[];
   daily_series: DashboardDailyPoint[];
   model_calls_by_day: DashboardDayModelCalls[];
   today_image_generate_count: number;

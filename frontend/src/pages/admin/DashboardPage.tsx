@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { api, type DashboardStats, type UserGroupSummary } from "../../api";
+import { api, type DashboardAccountUsage, type DashboardStats, type UserGroupSummary } from "../../api";
 
 const ACCOUNT_USAGE_PAGE_SIZE = 6;
 const GROUP_SUMMARY_PAGE_SIZE = 6;
@@ -46,7 +46,12 @@ function formatCostRows(rows: Array<Record<string, unknown>>): string {
 
 function formatGroupCostRows(rows: UserGroupSummary[number]["cost_by_currency"]): string {
   if (rows.length === 0) return "0.00 CNY";
-  return rows.map((row) => `${row.total_cost.toFixed(2)} ${row.currency}`).join(" / ");
+  return rows.map((row) => `${row.total_cost.toFixed(2)} ${row.currency}`).join(" + ");
+}
+
+function formatAccountCostRows(rows: DashboardAccountUsage["cost_by_currency"]): string {
+  if (rows.length === 0) return "0.00 CNY";
+  return rows.map((row) => `${row.total_cost.toFixed(2)} ${row.currency}`).join(" + ");
 }
 
 function quotaStatusLabel(value: unknown): string {
@@ -137,6 +142,9 @@ export default function DashboardPage({
   );
   const maxChatTokens = rowMax(dashboard.daily_series, (item) => item.chat_total_tokens);
   const executionMax = rowMax(dashboard.execution_rankings, (item) =>
+    item.image_generate_count + item.image_edit_count + item.video_generate_count + item.chat_turn_count,
+  );
+  const accountUsageMax = rowMax(dashboard.account_usage, (item) =>
     item.image_generate_count + item.image_edit_count + item.video_generate_count + item.chat_turn_count,
   );
   const safeAccountUsagePage = Math.min(accountUsagePage, accountUsageTotalPages);
@@ -477,19 +485,25 @@ export default function DashboardPage({
               </span>
             </div>
           ) : null}
-          <div className="ops-execution-table">
+          <div className="ops-execution-table ops-execution-table-account">
             <div className="ops-execution-head">
               <span>账号</span>
-              <span>套餐 / 状态</span>
-              <span>额度</span>
-              <span>图片</span>
-              <span>Chat 输入</span>
-              <span>Chat 输出</span>
-              <span>缓存命中</span>
+              <span>分组</span>
+              <span>生图</span>
+              <span>修图</span>
+              <span>视频</span>
+              <span>Chat 轮次</span>
+              <span>Chat Token</span>
+              <span>支出 / 配额</span>
               <span>最近活动</span>
             </div>
             {dashboard.account_usage.length > 0 ? (
               pagedAccountUsage.map((row) => {
+                const activityTotal =
+                  Number(row.image_generate_count || 0) +
+                  Number(row.image_edit_count || 0) +
+                  Number(row.video_generate_count || 0) +
+                  Number(row.chat_turn_count || 0);
                 const quotaCurrency = String(row.quota_currency || "CNY");
                 const quotaLimit = row.quota_limit == null ? null : Number(row.quota_limit || 0);
                 const quotaUsed = Number(row.quota_used || 0);
@@ -499,19 +513,27 @@ export default function DashboardPage({
                     <span className="ops-execution-user">
                       <strong>{String(row.display_name || row.name)}</strong>
                       <small>{String(row.name)}</small>
+                      <b
+                        style={{
+                          width: `${accountUsageMax === 0 ? 0 : (activityTotal / accountUsageMax) * 100}%`,
+                        }}
+                      />
                     </span>
-                    <span>{`${String(row.billing_plan || "standard")} / ${String(row.billing_status || "active")}`}</span>
-                    <span>
-                      {quotaLimit == null
-                        ? "无限制"
-                        : `${formatCurrencyAmount(quotaUsed, quotaCurrency)} / ${formatCurrencyAmount(quotaLimit, quotaCurrency)}`}
-                      {quotaRemaining == null ? "" : ` · 剩余 ${formatCurrencyAmount(quotaRemaining, quotaCurrency)}`}
-                      {` · ${quotaStatusLabel(row.quota_status)}`}
+                    <span>{groupLabel(String(row.group_name || ""))}</span>
+                    <span>{formatCount(Number(row.image_generate_count || 0))}</span>
+                    <span>{formatCount(Number(row.image_edit_count || 0))}</span>
+                    <span>{formatCount(Number(row.video_generate_count || 0))}</span>
+                    <span>{formatCount(Number(row.chat_turn_count || 0))}</span>
+                    <span>{formatToken(Number(row.chat_total_tokens || 0))}</span>
+                    <span className="ops-execution-stack">
+                      <strong>{formatAccountCostRows(row.cost_by_currency || [])}</strong>
+                      <small>
+                        {quotaLimit == null
+                          ? `${String(row.billing_plan || "standard")} / ${String(row.billing_status || "active")} · ${quotaStatusLabel(row.quota_status)}`
+                          : `${formatCurrencyAmount(quotaUsed, quotaCurrency)} / ${formatCurrencyAmount(quotaLimit, quotaCurrency)} · ${quotaStatusLabel(row.quota_status)}`}
+                        {quotaRemaining == null ? "" : ` · 剩余 ${formatCurrencyAmount(quotaRemaining, quotaCurrency)}`}
+                      </small>
                     </span>
-                    <span>{`${formatCount(Number(row.image_output_count || 0))} 张 / ${formatCount(Number(row.total_tasks || 0))} 次`}</span>
-                    <span>{formatToken(Number(row.chat_input_tokens || 0))}</span>
-                    <span>{formatToken(Number(row.chat_output_tokens || 0))}</span>
-                    <span>{formatToken(Number(row.chat_cached_input_tokens || 0))}</span>
                     <span>{formatDateTime(String(row.last_activity_at || ""))}</span>
                   </div>
                 );

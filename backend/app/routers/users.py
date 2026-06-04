@@ -26,6 +26,7 @@ VALID_QUOTA_POLICIES = {"soft_warn", "hard_block", "unlimited"}
 VALID_QUOTA_RESET_CYCLES = {"monthly"}
 USER_GROUP_UNASSIGNED = ""
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+LEGACY_LOCAL_PRICING_PROVIDERS = {"gpt-image-2"}
 ROLE_ALIASES = {
     "owner": "admin",
     "admin": "admin",
@@ -56,6 +57,18 @@ def _normalize_group_name(value: str | None) -> str:
 
 def _group_label(group_name: str) -> str:
     return group_name or "未分组"
+
+
+def _is_legacy_local_pricing_entry(entry: UsageLedger) -> bool:
+    currency = (entry.cost_currency or "CNY").upper()
+    if currency != "CNY":
+        return False
+    provider_keys = {
+        (entry.requested_provider or "").strip().lower(),
+        (entry.provider_name or "").strip().lower(),
+        (entry.model_name or "").strip().lower(),
+    }
+    return any(key in LEGACY_LOCAL_PRICING_PROVIDERS for key in provider_keys if key)
 
 
 def _shanghai_day_start_utc(day: date) -> datetime:
@@ -165,6 +178,7 @@ def _build_group_summaries(
                     "cost_by_currency": [
                         {"currency": currency, "total_cost": round(float(total_cost), 2)}
                         for currency, total_cost in member_currency_costs.most_common()
+                        if abs(float(total_cost)) > 0
                     ],
                 }
             )
@@ -178,6 +192,7 @@ def _build_group_summaries(
                 cost_by_currency=[
                     {"currency": currency, "total_cost": round(float(total_cost), 2)}
                     for currency, total_cost in currency_costs.most_common()
+                    if abs(float(total_cost)) > 0
                 ],
                 members=members,
             )
@@ -335,7 +350,11 @@ def list_user_group_summaries(
         filters.append(UsageLedger.recorded_at >= window_start)
     if window_end is not None:
         filters.append(UsageLedger.recorded_at < window_end)
-    ledger_entries = list(db.scalars(select(UsageLedger).where(*filters)).all())
+    ledger_entries = [
+        entry
+        for entry in db.scalars(select(UsageLedger).where(*filters)).all()
+        if not _is_legacy_local_pricing_entry(entry)
+    ]
     return _build_group_summaries(users, ledger_entries)
 
 
@@ -358,7 +377,11 @@ def export_user_group_summaries_csv(
         filters.append(UsageLedger.recorded_at >= window_start)
     if window_end is not None:
         filters.append(UsageLedger.recorded_at < window_end)
-    ledger_entries = list(db.scalars(select(UsageLedger).where(*filters)).all())
+    ledger_entries = [
+        entry
+        for entry in db.scalars(select(UsageLedger).where(*filters)).all()
+        if not _is_legacy_local_pricing_entry(entry)
+    ]
     summaries = _build_group_summaries(users, ledger_entries)
 
     csv_buffer = StringIO()

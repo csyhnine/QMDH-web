@@ -393,6 +393,95 @@ class DatabaseAuthTests(unittest.TestCase):
         )
         self.assertEqual(reset.status_code, 200)
 
+    def test_legacy_gpt_image_cny_history_is_excluded_from_operational_spend_views(self) -> None:
+        admin_token = self.login("admin", "admin-pass")
+        designer_group_name = ""
+
+        with self.SessionLocal() as db:
+            designer = db.scalar(select(User).where(User.name == "designer"))
+            workflow = db.scalar(select(Workflow).where(Workflow.key == "image-generate"))
+            project = db.scalar(select(Project).where(Project.code == "QMDH-001"))
+            completed_task = db.scalar(select(Task).where(Task.title == "Done"))
+            self.assertIsNotNone(designer)
+            self.assertIsNotNone(workflow)
+            self.assertIsNotNone(project)
+            self.assertIsNotNone(completed_task)
+            designer_group_name = designer.group_name
+
+            completed_task.cost = 1.25
+            completed_task.cost_currency = "USD"
+            completed_task.updated_at = datetime.now(timezone.utc)
+            db.query(ProviderCall).filter(ProviderCall.task_id == completed_task.id).update(
+                {"cost": 1.25, "cost_currency": "USD"},
+                synchronize_session=False,
+            )
+            db.query(UsageLedger).filter(
+                UsageLedger.entry_type == "task.finalized",
+                UsageLedger.task_id == completed_task.id,
+            ).update(
+                {"cost": 1.25, "cost_currency": "USD"},
+                synchronize_session=False,
+            )
+            db.query(UsageLedger).filter(
+                UsageLedger.entry_type == "provider_call.recorded",
+                UsageLedger.task_id == completed_task.id,
+            ).update(
+                {"cost": 1.25, "cost_currency": "USD"},
+                synchronize_session=False,
+            )
+
+            legacy_task = Task(
+                title="Legacy GPT Image",
+                status=TaskStatus.completed,
+                workflow_id=workflow.id,
+                project_id=project.id,
+                user_id=designer.id,
+                requested_provider="gpt-image-2",
+                payload={},
+                result={},
+                classification=DataClassification.b,
+                cost=0.25,
+                cost_currency="CNY",
+                latency_ms=900,
+            )
+            db.add(legacy_task)
+            db.flush()
+            db.add(
+                ProviderCall(
+                    task_id=legacy_task.id,
+                    provider_name="gpt-image-2",
+                    model_name="gpt-image-2",
+                    capability="image.generate",
+                    cost=0.25,
+                    cost_currency="CNY",
+                    latency_ms=900,
+                    outbound=True,
+                    request_summary={},
+                )
+            )
+            db.flush()
+            ensure_usage_ledger_for_task(db, legacy_task, ledger_source="test.legacy")
+            db.commit()
+
+        dashboard_response = self.client.get("/dashboard/stats", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(dashboard_response.status_code, 200, dashboard_response.text)
+        dashboard_payload = dashboard_response.json()
+        self.assertEqual(dashboard_payload["total_tasks"], 3)
+        self.assertEqual(dashboard_payload["cost_by_currency"], [{"currency": "USD", "total_cost": 1.25}])
+        designer_usage = next(row for row in dashboard_payload["account_usage"] if row["name"] == "designer")
+        self.assertEqual(designer_usage["cost_by_currency"], [{"currency": "USD", "total_cost": 1.25}])
+        self.assertEqual(designer_usage["quota_used"], 1.25)
+
+        today = datetime.now(timezone.utc).astimezone().date().isoformat()
+        group_summary = self.client.get(
+            f"/users/groups/summary?start_date={today}&end_date={today}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        self.assertEqual(group_summary.status_code, 200, group_summary.text)
+        plan_group = next(row for row in group_summary.json() if row["group_name"] == designer_group_name)
+        self.assertEqual(plan_group["total_cost"], 1.25)
+        self.assertEqual(plan_group["cost_by_currency"], [{"currency": "USD", "total_cost": 1.25}])
+
     def test_designer_task_and_asset_visibility_is_scoped_to_own_history(self) -> None:
         designer_token = self.login("designer", "designer-pass")
         peer_token = self.login("peer.designer", "peer-pass")

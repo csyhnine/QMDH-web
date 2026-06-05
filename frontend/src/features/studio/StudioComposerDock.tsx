@@ -757,6 +757,8 @@ export default function StudioComposerDock({
                     <aside
                       className={`template-hover-preview template-hover-preview-${hoveredTemplatePreviewLayout}${hoveredTemplate ? " is-visible" : ""}`}
                       aria-live="polite"
+                      onMouseEnter={cancelHoverPreviewHide}
+                      onMouseLeave={scheduleHoverPreviewHide}
                     >
                       {hoveredTemplate ? (
                         <>

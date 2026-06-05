@@ -449,8 +449,9 @@ def export_user_group_summaries_csv(
     if end_date:
         filename_parts.append(end_date)
     filename = "-".join(filename_parts) + ".csv"
+    csv_content = "\ufeff" + csv_buffer.getvalue()
     return Response(
-        content=csv_buffer.getvalue(),
+        content=csv_content,
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

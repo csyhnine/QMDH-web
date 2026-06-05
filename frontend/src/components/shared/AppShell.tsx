@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
+import { BrandIcon } from "./Brand";
 
 type StudioTab = "generate" | "inspiration" | "feedback" | "chat";
 type AdminTab = "dashboard" | "inspiration" | "feedback" | "models" | "templates" | "agents" | "users" | "settings";
@@ -62,7 +63,9 @@ export default function AppShell(props: AppShellProps) {
   return (
     <div className={className}>
       <aside className="global-rail">
-        <div className="rail-logo">Q</div>
+        <div className="rail-logo">
+          <BrandIcon className="rail-logo-image" />
+        </div>
         <nav className="rail-nav">
           {props.kind === "admin"
             ? adminNavItems.map((item) => (

@@ -1,4 +1,4 @@
-import { type ChangeEvent, type DragEvent, type FormEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type DragEvent, type FocusEvent, type FormEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, type PromptTemplateRecord, type Provider } from "../../api";
 
@@ -53,6 +53,7 @@ type StudioComposerDockProps = {
   activeTemplateId: number | null;
   aspectRatioOptions: readonly string[];
   availableProviderCount: number;
+  composerCollapsed: boolean;
   hasActiveProject: boolean;
   composerToolbarRef: RefObject<HTMLDivElement | null>;
   customTemplates: PromptTemplateRecord[];
@@ -62,6 +63,8 @@ type StudioComposerDockProps = {
   onApplyTemplate: (template: PromptTemplateRecord) => void;
   onAspectRatioSelect: (ratio: string) => void;
   onCancelTemplateEdit: () => void;
+  onComposerExpand: () => void;
+  onComposerFocusChange: (focused: boolean) => void;
   onDeleteCustomTemplate: (templateId: number) => void;
   onEditCustomTemplate: (template: PromptTemplateRecord) => void;
   onImageCountSelect: (count: number) => void;
@@ -152,11 +155,31 @@ function inferTemplatePreviewLayout(
   return "columns";
 }
 
+function previewFrameRatio(
+  aspectRatio: number | undefined,
+  layout: TemplatePreviewLayout
+): string {
+  if (!aspectRatio || !Number.isFinite(aspectRatio)) {
+    return layout === "columns" ? "4 / 5" : "16 / 10";
+  }
+  if (aspectRatio >= 1.2) return "16 / 9";
+  if (aspectRatio <= 0.8) return "4 / 5";
+  return "1 / 1";
+}
+
+function previewOrientationClass(aspectRatio: number | undefined): string {
+  if (!aspectRatio || !Number.isFinite(aspectRatio)) return "is-balanced";
+  if (aspectRatio >= 1.2) return "is-wide";
+  if (aspectRatio <= 0.8) return "is-tall";
+  return "is-balanced";
+}
+
 export default function StudioComposerDock({
   activeComposerMenu,
   activeTemplateId,
   aspectRatioOptions,
   availableProviderCount,
+  composerCollapsed,
   hasActiveProject,
   composerToolbarRef,
   customTemplates,
@@ -166,6 +189,8 @@ export default function StudioComposerDock({
   onApplyTemplate,
   onAspectRatioSelect,
   onCancelTemplateEdit,
+  onComposerExpand,
+  onComposerFocusChange,
   onDeleteCustomTemplate,
   onEditCustomTemplate,
   onImageCountSelect,
@@ -208,8 +233,10 @@ export default function StudioComposerDock({
   const [hoveredTemplateAspectRatios, setHoveredTemplateAspectRatios] = useState<Record<string, number>>({});
   const impressedTemplateIdsRef = useRef<Set<number>>(new Set());
   const hoverPreviewHideTimeoutRef = useRef<number | null>(null);
+  const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const modeLabel = studioForm.creationMode === "edit" ? "图像编辑" : "文生图";
+  const compactPromptPreview = studioForm.prompt.trim() || "点击展开后继续编辑提示词";
   const referenceHint =
     studioForm.creationMode === "edit"
       ? `图像编辑要求 1-4 张参考图，当前已上传 ${referenceUploads.length} 张。`
@@ -439,8 +466,67 @@ export default function StudioComposerDock({
     }).catch(() => undefined);
   }
 
+  function handleComposerBlur(event: FocusEvent<HTMLFormElement>) {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) {
+      return;
+    }
+    onComposerFocusChange(false);
+  }
+
   return (
-    <form className="composer-dock" onSubmit={onSubmit}>
+    <form
+      className={composerCollapsed ? "composer-dock is-collapsed" : "composer-dock"}
+      onSubmit={onSubmit}
+      onFocusCapture={() => onComposerFocusChange(true)}
+      onBlurCapture={handleComposerBlur}
+    >
+      {composerCollapsed ? (
+        <div className="composer-collapsed-bar" onMouseEnter={onComposerExpand}>
+          <button
+            type="button"
+            className="composer-collapsed-main"
+            onClick={() => {
+              onComposerExpand();
+              window.requestAnimationFrame(() => promptTextareaRef.current?.focus());
+            }}
+          >
+            <div className="composer-collapsed-media" aria-hidden="true">
+              {referenceUploads.length > 0 ? (
+                <div className="composer-collapsed-thumbs">
+                  {referenceUploads.slice(0, 3).map((item) => (
+                    <img key={item.storagePath} src={item.previewUrl} alt="" />
+                  ))}
+                </div>
+              ) : (
+                <span className="composer-collapsed-plus">+</span>
+              )}
+            </div>
+            <div className="composer-collapsed-copy">
+              <strong>{workspaceName}</strong>
+              <p>{compactPromptPreview}</p>
+              <div className="composer-collapsed-meta">
+                <span>{modeLabel}</span>
+                <span>{selectedProviderModelName ?? studioForm.requestedProvider}</span>
+                <span>
+                  {studioForm.aspectRatio} / {selectedResolutionLabel ?? studioForm.resolution}
+                </span>
+                <span>{studioForm.imageCount} 张</span>
+              </div>
+            </div>
+          </button>
+          <button
+            type="button"
+            className="ghost-button composer-collapsed-expand"
+            onClick={() => {
+              onComposerExpand();
+              window.requestAnimationFrame(() => promptTextareaRef.current?.focus());
+            }}
+          >
+            展开创作区
+          </button>
+        </div>
+      ) : null}
+
       <div className="composer-leading">
         <div>
           <span className="composer-label">当前创作</span>
@@ -510,6 +596,7 @@ export default function StudioComposerDock({
 
         <label className="composer-textarea">
           <textarea
+            ref={promptTextareaRef}
             rows={4}
             value={studioForm.prompt}
             onChange={(event) => onPromptChange(event.target.value)}
@@ -672,28 +759,45 @@ export default function StudioComposerDock({
                       aria-live="polite"
                     >
                       {hoveredTemplate ? (
-                        hoveredTemplateImages.length > 0 ? (
-                          <div
-                            className={
-                              hoveredTemplateImages.length === 1
-                                ? "template-hover-preview-compare template-hover-preview-compare-single"
-                                : hoveredTemplatePreviewLayout === "stacked"
-                                  ? "template-hover-preview-compare template-hover-preview-compare-stacked"
-                                  : "template-hover-preview-compare"
-                            }
-                          >
-                            {hoveredTemplateImages.map((image) => (
-                              <figure key={image.key} className="template-hover-preview-figure">
-                                <div className="template-hover-preview-media">
-                                  <img className="template-hover-preview-image" src={image.src} alt={`${hoveredTemplate.label} ${image.label}`} />
-                                </div>
-                                <figcaption>{image.label}</figcaption>
-                              </figure>
-                            ))}
+                        <>
+                          <div className="template-hover-preview-head">
+                            <strong>{hoveredTemplate.label}</strong>
+                            <span>
+                              {hoveredTemplateImages.length > 1 ? "原图 / 最终图对照" : "模板预览"}
+                            </span>
                           </div>
-                        ) : (
-                          <div className={`template-hover-preview-fallback ${previewStyleClass(hoveredTemplate.style)}`} aria-label={`${hoveredTemplate.label} 暂无预览图`} />
-                        )
+                          {hoveredTemplateImages.length > 0 ? (
+                            <div
+                              className={
+                                hoveredTemplateImages.length === 1
+                                  ? "template-hover-preview-compare template-hover-preview-compare-single"
+                                  : hoveredTemplatePreviewLayout === "stacked"
+                                    ? "template-hover-preview-compare template-hover-preview-compare-stacked"
+                                    : "template-hover-preview-compare"
+                              }
+                            >
+                              {hoveredTemplateImages.map((image) => {
+                                const measuredRatio = hoveredTemplateAspectRatios[image.key];
+                                return (
+                                  <figure
+                                    key={image.key}
+                                    className={`template-hover-preview-figure ${previewOrientationClass(measuredRatio)}`}
+                                  >
+                                    <div
+                                      className="template-hover-preview-media"
+                                      style={{ aspectRatio: previewFrameRatio(measuredRatio, hoveredTemplatePreviewLayout) }}
+                                    >
+                                      <span className="template-hover-preview-badge">{image.label}</span>
+                                      <img className="template-hover-preview-image" src={image.src} alt={`${hoveredTemplate.label} ${image.label}`} />
+                                    </div>
+                                  </figure>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className={`template-hover-preview-fallback ${previewStyleClass(hoveredTemplate.style)}`} aria-label={`${hoveredTemplate.label} 暂无预览图`} />
+                          )}
+                        </>
                       ) : (
                         <div className="template-hover-preview-placeholder" aria-hidden="true" />
                       )}

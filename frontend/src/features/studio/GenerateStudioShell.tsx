@@ -20,6 +20,7 @@ import {
   type UserCreatePayload,
   type Workflow
 } from "../../api";
+import { BrandIcon, BrandWordmark } from "../../components/shared";
 import { MAX_REFERENCE_UPLOAD_BYTES, formatUploadSize, validateReferenceImageSize } from "../../utils/uploads";
 import StudioComposerDock from "./StudioComposerDock";
 import StudioHistoryPane, { type FeedFilterState } from "./StudioHistoryPane";
@@ -480,6 +481,14 @@ function buildPreviewStyle(seed: string): CSSProperties {
     "--preview-start": `hsl(${hueB}, 72%, 72%)`,
     "--preview-end": `hsl(${hueC}, 28%, 26%)`
   } as CSSProperties;
+}
+
+function normalizeAspectRatio(value: string): string | null {
+  const raw = value.trim();
+  if (!raw.includes(":")) return null;
+  const [width, height] = raw.split(":").map((item) => Number(item.trim()));
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+  return `${width} / ${height}`;
 }
 
 function getRenderableUrl(asset: Asset): string | null {
@@ -1130,13 +1139,20 @@ function isRuntimeImageProvider(provider: Provider): boolean {
   return provider.outbound && (provider.adapter_kind === "openai_compatible" || provider.provider_name.startsWith("modelscope_"));
 }
 
-function AssetTile(props: { asset: Asset; emphasis?: "primary" | "secondary" }) {
+function AssetTile(props: { asset: Asset; emphasis?: "primary" | "secondary"; aspectRatio?: string | null; preserveFullImage?: boolean }) {
   const renderableUrl = getRenderableUrl(props.asset);
+  const normalizedAspectRatio = props.aspectRatio ? normalizeAspectRatio(props.aspectRatio) : null;
 
   return (
     <div
-      className={props.emphasis === "primary" ? "asset-tile asset-tile-primary" : "asset-tile"}
-      style={buildPreviewStyle(props.asset.storage_path || props.asset.name)}
+      className={[
+        props.emphasis === "primary" ? "asset-tile asset-tile-primary" : "asset-tile",
+        props.preserveFullImage ? "asset-tile-preserve-full" : "",
+      ].filter(Boolean).join(" ")}
+      style={{
+        ...buildPreviewStyle(props.asset.storage_path || props.asset.name),
+        ...(normalizedAspectRatio ? { "--asset-ratio": normalizedAspectRatio } as CSSProperties : {}),
+      }}
     >
       {renderableUrl ? <img src={renderableUrl} alt={props.asset.name} loading="lazy" /> : null}
       <div className="asset-tile-overlay">
@@ -1194,6 +1210,7 @@ function FeedCard(props: {
     <article
       className={[
         "feed-card",
+        "feed-card-compact",
         showRunningState ? "feed-card-running" : "",
         hasReferenceImage ? "feed-card-with-reference" : "",
         props.asset?.is_bookmarked ? "feed-card-bookmarked" : "",
@@ -1268,7 +1285,12 @@ function FeedCard(props: {
               }}
               aria-label="查看大图"
             >
-              <AssetTile asset={asset} emphasis={index === 0 ? "primary" : "secondary"} />
+              <AssetTile
+                asset={asset}
+                emphasis={index === 0 ? "primary" : "secondary"}
+                aspectRatio={taskResultString(props.task, "aspect_ratio")}
+                preserveFullImage
+              />
               <span className="feed-gallery-zoom-hint" aria-hidden>
                 放大
               </span>
@@ -1345,6 +1367,7 @@ function FeedCard(props: {
 
 export default function GenerateStudioShell() {
   const activeView = resolveActiveView();
+  const isStudioDockLayout = activeView === "studio";
   const [state, setState] = useState<LoadState>(initialState);
   const [authReady, setAuthReady] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
@@ -1405,11 +1428,15 @@ export default function GenerateStudioShell() {
   const [historyActionPendingByTaskId, setHistoryActionPendingByTaskId] = useState<Record<number, HistoryActionKey | null>>({});
   const [historyFeedbackByTaskId, setHistoryFeedbackByTaskId] = useState<Record<number, HistoryActionFeedback | undefined>>({});
   const [historyNotice, setHistoryNotice] = useState<{ tone: "success" | "error" | "info"; message: string } | null>(null);
+  const [composerFocused, setComposerFocused] = useState(false);
+  const [composerCollapsed, setComposerCollapsed] = useState(false);
   const isFetchingRef = useRef(false);
   const submissionInFlightRef = useRef(false);
   const loadRequestIdRef = useRef(0);
   const hasAppliedInitialTemplateRef = useRef(false);
   const composerToolbarRef = useRef<HTMLDivElement | null>(null);
+  const studioScrollPaneRef = useRef<HTMLDivElement | null>(null);
+  const composerCollapseLockUntilRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const latestTaskRef = useRef<HTMLElement | null>(null);
   const hasAutoPositionedRef = useRef(false);
@@ -1599,6 +1626,54 @@ export default function GenerateStudioShell() {
   }, []);
 
   useEffect(() => {
+    if (!isStudioDockLayout) {
+      setComposerCollapsed(false);
+      return undefined;
+    }
+
+    const pane = studioScrollPaneRef.current;
+    if (!pane) return undefined;
+
+    const evaluateComposerCollapse = () => {
+      const now = Date.now();
+      const scrollTop = pane.scrollTop;
+      const distanceFromBottom = pane.scrollHeight - pane.clientHeight - scrollTop;
+      const engaged = composerFocused || activeComposerMenu !== null || submitting || uploadingReference;
+      setComposerCollapsed((current) => {
+        if (engaged) return false;
+        if (scrollTop < 140) return false;
+
+        if (now < composerCollapseLockUntilRef.current) {
+          return current;
+        }
+
+        let next = false;
+        if (current) {
+          next = distanceFromBottom >= 220;
+        } else if (scrollTop > 220 && distanceFromBottom > 300) {
+          next = true;
+        }
+
+        if (next !== current) {
+          composerCollapseLockUntilRef.current = now + 220;
+        }
+        return next;
+      });
+    };
+
+    const frameId = window.requestAnimationFrame(() => {
+      evaluateComposerCollapse();
+    });
+    pane.addEventListener("scroll", evaluateComposerCollapse, { passive: true });
+    window.addEventListener("resize", evaluateComposerCollapse);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      pane.removeEventListener("scroll", evaluateComposerCollapse);
+      window.removeEventListener("resize", evaluateComposerCollapse);
+    };
+  }, [activeComposerMenu, composerCollapsed, composerFocused, isStudioDockLayout, state.tasks.length, submitting, uploadingReference]);
+
+  useEffect(() => {
     return () => {
       for (const item of referenceUploads) {
         releaseReferencePreview(item.previewUrl);
@@ -1679,7 +1754,6 @@ export default function GenerateStudioShell() {
       : null;
   const hasProjectHistory = imageTasks.length > 0;
   const hasFilteredHistory = filteredTasks.length > 0;
-  const isStudioDockLayout = activeView === "studio";
   const activeTemplate =
     [...sharedTemplates, ...customTemplates].find(
       (template) => template.title === studioForm.title && template.prompt === studioForm.prompt
@@ -1924,6 +1998,7 @@ export default function GenerateStudioShell() {
   }
 
   function scrollComposerIntoView() {
+    setComposerCollapsed(false);
     const anchor = composerToolbarRef.current;
     try {
       if (anchor?.scrollIntoView) {
@@ -2759,8 +2834,12 @@ export default function GenerateStudioShell() {
     return (
       <main className="auth-shell">
         <form className="auth-card" onSubmit={handleLogin}>
-          <p className="canvas-kicker">QMDH / LOGIN</p>
-          <h1>登录 QMDH</h1>
+          <div className="auth-brand">
+            <BrandIcon className="auth-brand-icon" />
+            <BrandWordmark className="auth-brand-wordmark" />
+          </div>
+          <p className="canvas-kicker">设计师工作台登录</p>
+          <h1>欢迎回来</h1>
           <label className="composer-menu-field">
             <span>用户名</span>
             <input value={loginName} onChange={(event) => setLoginName(event.target.value)} autoComplete="username" />
@@ -2829,7 +2908,9 @@ export default function GenerateStudioShell() {
       }
     >
       <aside className="global-rail">
-        <div className="rail-logo">Q</div>
+        <div className="rail-logo">
+          <BrandIcon className="rail-logo-image" />
+        </div>
         <nav className="rail-nav">
           {isAdminView ? (
             <>
@@ -3985,7 +4066,10 @@ export default function GenerateStudioShell() {
           </section>
         ) : (
           <>
-        <div className={isStudioDockLayout ? "studio-scroll-pane" : "studio-scroll-fallback"}>
+        <div
+          ref={studioScrollPaneRef}
+          className={isStudioDockLayout ? "studio-scroll-pane" : "studio-scroll-fallback"}
+        >
           <StudioHistoryPane
             availableProviders={availableProviders}
             error={state.error}
@@ -4036,12 +4120,15 @@ export default function GenerateStudioShell() {
             activeTemplateId={activeTemplate?.id ?? null}
             aspectRatioOptions={aspectRatioOptions}
             availableProviderCount={availableProviders.length}
+            composerCollapsed={composerCollapsed}
             hasActiveProject={Boolean(activeProject)}
             composerToolbarRef={composerToolbarRef}
             customTemplates={customTemplates}
             editingTemplateId={editingTemplateId}
             sharedTemplates={sharedTemplates}
             fileInputRef={fileInputRef}
+            onComposerExpand={() => setComposerCollapsed(false)}
+            onComposerFocusChange={setComposerFocused}
             onApplyTemplate={handleApplyTemplate}
             onAspectRatioSelect={(ratio) => setStudioForm((current) => ({ ...current, aspectRatio: ratio }))}
             onCancelTemplateEdit={() => {

@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import { BrandIcon, BrandWordmark } from "../../components/shared";
 import { useAuth } from "../../context/AuthContext";
 
 export default function LoginPage() {
@@ -27,8 +28,12 @@ export default function LoginPage() {
   return (
     <main className="auth-shell">
       <form className="auth-card" onSubmit={handleLogin}>
-        <p className="canvas-kicker">QMDH / LOGIN</p>
-        <h1>登录 QMDH</h1>
+        <div className="auth-brand">
+          <BrandIcon className="auth-brand-icon" />
+          <BrandWordmark className="auth-brand-wordmark" />
+        </div>
+        <p className="canvas-kicker">设计师工作台登录</p>
+        <h1>欢迎回来</h1>
         <label className="composer-menu-field">
           <span>用户名</span>
           <input value={loginName} onChange={(event) => setLoginName(event.target.value)} autoComplete="username" />

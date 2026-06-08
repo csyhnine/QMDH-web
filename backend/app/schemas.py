@@ -402,9 +402,9 @@ class ProviderPricingRuleBase(BaseModel):
     provider_profile_id: int
     capability: str = Field(min_length=1, max_length=50)
     metric: str = Field(min_length=1, max_length=40)
-    unit_size: float = Field(default=1.0, gt=0)
+    unit_size: float = Field(default=1_000_000.0, gt=0)
     unit_price: float = Field(default=0.0, ge=0)
-    currency: str = Field(default="CNY", max_length=12)
+    currency: str = Field(default="USD", max_length=12)
     is_active: bool = True
 
 

@@ -135,9 +135,9 @@ def _to_pricing_rule_out(rule: ProviderPricingRule) -> ProviderPricingRuleOut:
         provider_profile_id=rule.provider_profile_id,
         capability=rule.capability,
         metric=rule.metric,
-        unit_size=float(rule.unit_size or 1.0),
+        unit_size=float(rule.unit_size or 1_000_000.0),
         unit_price=float(rule.unit_price or 0.0),
-        currency=(rule.currency or "CNY").upper(),
+        currency=(rule.currency or "USD").upper(),
         is_active=rule.is_active,
         created_at=rule.created_at,
         updated_at=rule.updated_at,
@@ -534,9 +534,9 @@ def create_provider_pricing_rule(
         provider_profile_id=payload.provider_profile_id,
         capability=payload.capability.strip(),
         metric=payload.metric.strip(),
-        unit_size=float(payload.unit_size or 1.0),
+        unit_size=float(payload.unit_size or 1_000_000.0),
         unit_price=float(payload.unit_price or 0.0),
-        currency=payload.currency.strip().upper() or "CNY",
+        currency=payload.currency.strip().upper() or "USD",
         is_active=payload.is_active,
     )
     db.add(rule)
@@ -578,7 +578,7 @@ def update_provider_pricing_rule(
         if isinstance(value, str):
             value = value.strip()
         if field == "currency" and isinstance(value, str):
-            value = value.upper() or "CNY"
+            value = value.upper() or "USD"
         setattr(rule, field, value)
 
     db.commit()

@@ -181,9 +181,7 @@ class ProviderProfileTests(unittest.TestCase):
                 "provider_profile_id": profile_id,
                 "capability": "chat.completions",
                 "metric": "input_tokens",
-                "unit_size": 1000,
                 "unit_price": 0.8,
-                "currency": "CNY",
                 "is_active": True,
             },
         )
@@ -191,6 +189,8 @@ class ProviderProfileTests(unittest.TestCase):
         rule_payload = created_rule.json()
         self.assertEqual(rule_payload["provider_profile_id"], profile_id)
         self.assertEqual(rule_payload["metric"], "input_tokens")
+        self.assertEqual(rule_payload["unit_size"], 1_000_000.0)
+        self.assertEqual(rule_payload["currency"], "USD")
 
         listing = self.client.get("/providers/pricing-rules", headers=self.auth_headers())
         self.assertEqual(listing.status_code, 200, listing.text)

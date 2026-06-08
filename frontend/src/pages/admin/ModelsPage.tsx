@@ -99,9 +99,9 @@ const defaultPricingRuleDraft: ProviderPricingRuleDraft = {
   providerProfileId: "",
   capability: "chat.completions",
   metric: "input_tokens",
-  unitSize: "1000",
+  unitSize: "1000000",
   unitPrice: "0",
-  currency: "CNY",
+  currency: "USD",
   isActive: true,
 };
 
@@ -321,7 +321,7 @@ function toPricingRulePayload(draft: ProviderPricingRuleDraft): ProviderPricingR
     metric: draft.metric.trim(),
     unit_size: Number(draft.unitSize) || 1,
     unit_price: Number(draft.unitPrice) || 0,
-    currency: draft.currency.trim() || "CNY",
+    currency: draft.currency.trim() || "USD",
     is_active: draft.isActive,
   };
 }
@@ -334,6 +334,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
   const [editingPricingRuleId, setEditingPricingRuleId] = useState<number | null>(null);
   const [savingPricingRule, setSavingPricingRule] = useState(false);
   const [probingProfileId, setProbingProfileId] = useState<number | null>(null);
+  const [togglingProfileId, setTogglingProfileId] = useState<number | null>(null);
   const [probeResults, setProbeResults] = useState<Record<number, ProviderProfileProbeResult>>({});
   const [modelFilters, setModelFilters] = useState<ModelFilterState>({ search: "", capability: "all", adapterKind: "all", status: "all" });
   const [discoverPanelOpen, setDiscoverPanelOpen] = useState(false);
@@ -471,6 +472,23 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
       onRefresh();
       onSetError("");
     } catch (err) { onSetError(err instanceof Error ? err.message : "删除模型配置失败"); }
+  }
+
+  async function handleToggleProviderProfile(profile: ProviderProfileRecord) {
+    const nextEnabled = !profile.enabled;
+    setTogglingProfileId(profile.id);
+    try {
+      await api.updateProviderProfile(profile.id, { enabled: nextEnabled });
+      if (editingProviderProfileId === profile.id) {
+        setProviderDraft((current) => ({ ...current, enabled: nextEnabled }));
+      }
+      onRefresh();
+      onSetError("");
+    } catch (err) {
+      onSetError(err instanceof Error ? err.message : nextEnabled ? "启用模型失败" : "停用模型失败");
+    } finally {
+      setTogglingProfileId(null);
+    }
   }
 
   async function handleSavePricingRule(event?: FormEvent<HTMLFormElement>) {
@@ -676,6 +694,9 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                   </span>
                   <span className="admin-row-actions">
                     <button type="button" onClick={() => void handleProbeProviderProfile(profile.id)} disabled={probingProfileId === profile.id}>{probingProfileId === profile.id ? "校验中..." : "校验"}</button>
+                    <button type="button" onClick={() => void handleToggleProviderProfile(profile)} disabled={togglingProfileId === profile.id}>
+                      {togglingProfileId === profile.id ? "处理中..." : profile.enabled ? "停用" : "启用"}
+                    </button>
                     <button type="button" onClick={() => handleEditProviderProfile(profile)}>编辑</button>
                     <button type="button" onClick={() => handleDeleteProviderProfile(profile.id)}>删除</button>
                   </span>

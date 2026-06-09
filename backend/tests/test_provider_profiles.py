@@ -100,7 +100,7 @@ class ProviderProfileTests(unittest.TestCase):
         payload = response.json()
         self.assertTrue(payload["has_api_key"])
         self.assertEqual(payload["masked_api_key"], "sk-t...cret")
-        self.assertEqual(payload["editable_api_key"], "sk-test-secret")
+        self.assertNotIn("editable_api_key", payload)
         self.assertEqual(payload["pricing_currency"], "CNY")
         self.assertEqual(payload["pricing_unit"], "per_image")
         self.assertEqual(payload["unit_price"], 0.35)
@@ -119,7 +119,7 @@ class ProviderProfileTests(unittest.TestCase):
         self.assertEqual(update_response.status_code, 200)
         self.assertEqual(update_response.json()["model_name"], "arch-render-v2")
         self.assertEqual(update_response.json()["masked_api_key"], "sk-t...cret")
-        self.assertEqual(update_response.json()["editable_api_key"], "sk-test-secret")
+        self.assertNotIn("editable_api_key", update_response.json())
 
     def test_provider_profile_rejects_endpoint_in_base_url(self) -> None:
         response = self.client.post(

@@ -35,7 +35,7 @@ from app.services.agent_skill_registry import list_official_skills
 from app.services.inspiration_media import prepare_inspiration_image
 from app.services.media_storage import resolve_storage_payload, resolve_storage_path, write_binary_asset
 from app.services.model_registry import get_provider_definition, get_provider_map
-from app.services.task_executor import enqueue_task, execute_task
+from app.services.task_executor import enqueue_task, execute_task, mark_task_enqueue_failed
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -328,6 +328,23 @@ def _create_image_task(
     return task
 
 
+def _mark_agent_job_enqueue_failed(db: Session, job: AgentJob, task: Task, exc: Exception) -> dict[str, object]:
+    failure = mark_task_enqueue_failed(db, task, exc, ledger_source="agent.task.enqueue")
+    job.status = "failed"
+    job.error_detail = str(failure["error_detail"])
+    job.completed_at = datetime.now(timezone.utc)
+    job.result = {
+        **(job.result if isinstance(job.result, dict) else {}),
+        "task_status": task.status.value,
+        "task_result": resolve_storage_payload(task.result),
+        "error": failure["error_summary"],
+        "error_code": failure["error_code"],
+        "error_stage": failure["error_stage"],
+    }
+    db.flush()
+    return failure
+
+
 @router.post("/image-generate", response_model=AgentJobOut, status_code=status.HTTP_202_ACCEPTED)
 def create_agent_image_generate(
     payload: AgentImageTaskCreate,
@@ -381,7 +398,12 @@ def create_agent_image_generate(
     if settings.task_execution_mode == "sync":
         execute_task(task.id)
     elif settings.task_execution_mode == "redis":
-        enqueue_task(task.id)
+        try:
+            enqueue_task(task.id)
+        except Exception as exc:
+            failure = _mark_agent_job_enqueue_failed(db, job, task, exc)
+            db.commit()
+            raise HTTPException(status_code=503, detail=str(failure["error_summary"])) from exc
     else:
         background_tasks.add_task(execute_task, task.id)
 
@@ -443,7 +465,12 @@ def create_agent_image_edit(
     if settings.task_execution_mode == "sync":
         execute_task(task.id)
     elif settings.task_execution_mode == "redis":
-        enqueue_task(task.id)
+        try:
+            enqueue_task(task.id)
+        except Exception as exc:
+            failure = _mark_agent_job_enqueue_failed(db, job, task, exc)
+            db.commit()
+            raise HTTPException(status_code=503, detail=str(failure["error_summary"])) from exc
     else:
         background_tasks.add_task(execute_task, task.id)
 

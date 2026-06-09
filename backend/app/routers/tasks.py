@@ -17,7 +17,7 @@ from app.services.task_archive import ensure_task_archive
 from app.services.media_storage import resolve_storage_payload
 from app.services.billing import enforce_user_quota
 from app.services.model_registry import get_provider_definition, get_provider_map
-from app.services.task_executor import enqueue_task, execute_task
+from app.services.task_executor import enqueue_task, execute_task, mark_task_enqueue_failed
 from app.services.usage_ledger import ensure_usage_ledger_for_task
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -232,7 +232,12 @@ def create_task(
     if settings.task_execution_mode == "sync":
         execute_task(task.id)
     elif settings.task_execution_mode == "redis":
-        enqueue_task(task.id)
+        try:
+            enqueue_task(task.id)
+        except Exception as exc:
+            failure = mark_task_enqueue_failed(db, task, exc)
+            db.commit()
+            raise HTTPException(status_code=503, detail=str(failure["error_summary"])) from exc
     else:
         background_tasks.add_task(execute_task, task.id)
 

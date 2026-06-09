@@ -295,7 +295,6 @@ export type ProviderProfileRecord = {
   reference_caption_model: string | null;
   has_api_key: boolean;
   masked_api_key: string;
-  editable_api_key?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -624,6 +623,14 @@ function authHeaders(): Record<string, string> {
   return {};
 }
 
+export function buildApiUrl(path: string): string {
+  return `${API_BASE}${path}`;
+}
+
+export function getAuthHeaders(): Record<string, string> {
+  return authHeaders();
+}
+
 async function buildError(response: Response): Promise<Error> {
   let detail = "";
   const contentType = response.headers.get("content-type") ?? "";
@@ -656,7 +663,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
 
   try {
-    response = await fetch(`${API_BASE}${path}`, {
+    response = await fetch(buildApiUrl(path), {
       ...init,
       headers: {
         ...authHeaders(),
@@ -713,7 +720,7 @@ function buildQuery(params: Record<string, string | undefined>): string {
 
 export const api = {
   login: async (username: string, password: string) => {
-    const response = await fetch(`${API_BASE}/auth/login`, {
+    const response = await fetch(buildApiUrl("/auth/login"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password })
@@ -730,7 +737,7 @@ export const api = {
     request<UserGroupSummary[]>(`/users/groups/summary${buildQuery({ start_date: startDate, end_date: endDate })}`),
   exportUserGroupSummariesCsv: async (startDate?: string, endDate?: string) => {
     const response = await fetch(
-      `${API_BASE}/users/groups/summary/export${buildQuery({ start_date: startDate, end_date: endDate })}`,
+      buildApiUrl(`/users/groups/summary/export${buildQuery({ start_date: startDate, end_date: endDate })}`),
       {
         headers: authHeaders(),
       },

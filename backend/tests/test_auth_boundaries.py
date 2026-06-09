@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
 from app.database import Base, get_db
-from app.models import DataClassification, Project, Task, Workflow
+from app.models import DataClassification, Project, Task, TaskStatus, Workflow
 from app.routers import projects, prompt_templates, tasks
 
 
@@ -254,6 +254,33 @@ class AuthBoundaryTests(unittest.TestCase):
             },
         )
         self.assertEqual(forbidden.status_code, 403)
+
+    def test_redis_enqueue_failure_marks_task_failed(self) -> None:
+        with (
+            patch("app.routers.tasks.settings.task_execution_mode", "redis"),
+            patch("app.routers.tasks.enqueue_task", side_effect=RuntimeError("redis down")),
+        ):
+            response = self.client.post(
+                "/tasks",
+                headers={"X-QMDH-Auth": "reviewer-token", "X-QMDH-User": "reviewer"},
+                json={
+                    "title": "Queue failure task",
+                    "workflow_key": "image-generate",
+                    "project_code": "QMDH-001",
+                    "requested_provider": "jimeng",
+                    "classification": "B",
+                    "payload": {"prompt": "Generate an image"},
+                },
+            )
+
+        self.assertEqual(response.status_code, 503, response.text)
+
+        with self.SessionLocal() as db:
+            task = db.query(Task).filter(Task.title == "Queue failure task").one()
+
+        self.assertEqual(task.status, TaskStatus.failed)
+        self.assertEqual(task.result["error_stage"], "task_enqueue")
+        self.assertEqual(task.result["queued_stage"], "failed")
 
 
 if __name__ == "__main__":

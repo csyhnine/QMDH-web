@@ -8,6 +8,7 @@
     "dev:check": "start-dev.cmd --check",
     "build": "npm --prefix frontend run build",
     "dev:frontend": "npm --prefix frontend run dev",
-    "build:frontend": "npm --prefix frontend run build"
+    "build:frontend": "npm --prefix frontend run build",
+    "smoke:studio": "node scripts/smoke-studio.mjs"
   }
 }

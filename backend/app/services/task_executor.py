@@ -1422,6 +1422,43 @@ def execute_task(task_id: int) -> None:
         db.commit()
 
 
+def build_enqueue_failure_result(exc: Exception) -> dict[str, object]:
+    message = _sanitize_error_text(str(exc) or exc.__class__.__name__, limit=320)
+    summary = "Task could not be queued for execution."
+    return {
+        "error": summary,
+        "error_summary": summary,
+        "error_detail": f"Queue enqueue failed: {message}",
+        "error_code": "task_enqueue_failed",
+        "error_stage": "task_enqueue",
+        "error_hint": "Check Redis connectivity and queue configuration, then retry the task.",
+        "error_raw": message,
+    }
+
+
+def mark_task_enqueue_failed(
+    db: Session,
+    task: Task,
+    exc: Exception,
+    *,
+    ledger_source: str = "task.enqueue",
+) -> dict[str, object]:
+    failure = build_enqueue_failure_result(exc)
+    task.status = TaskStatus.failed
+    task.result = {
+        **(task.result if isinstance(task.result, dict) else {}),
+        **failure,
+        "execution_mode": settings.task_execution_mode,
+        "queued_stage": "failed",
+    }
+    ensure_usage_ledger_for_task(db, task, ledger_source=ledger_source)
+    db.flush()
+    return failure
+
+
 def enqueue_task(task_id: int) -> None:
     client = Redis.from_url(settings.redis_url, decode_responses=True)
-    client.lpush(settings.redis_queue_name, str(task_id))
+    try:
+        client.lpush(settings.redis_queue_name, str(task_id))
+    finally:
+        client.close()

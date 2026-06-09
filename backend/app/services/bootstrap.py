@@ -54,47 +54,34 @@ LOCAL_DEV_ACCOUNTS = [
 def ensure_schema(engine: Engine) -> None:
     """Apply lightweight compatibility fixes for local databases that predate newer models."""
     inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
 
-    project_columns = {column["name"] for column in inspector.get_columns("projects")}
-    user_columns = {column["name"] for column in inspector.get_columns("users")}
-    feedback_columns = (
-        {column["name"] for column in inspector.get_columns("user_feedbacks")}
-        if "user_feedbacks" in inspector.get_table_names()
-        else set()
-    )
-    usage_ledger_columns = (
-        {column["name"] for column in inspector.get_columns("usage_ledgers")}
-        if "usage_ledgers" in inspector.get_table_names()
-        else set()
-    )
-    prompt_template_columns = (
-        {column["name"] for column in inspector.get_columns("prompt_templates")}
-        if "prompt_templates" in inspector.get_table_names()
-        else set()
-    )
-    provider_profile_columns = (
-        {column["name"] for column in inspector.get_columns("provider_profiles")}
-        if "provider_profiles" in inspector.get_table_names()
-        else set()
-    )
-    inspiration_post_columns = (
-        {column["name"] for column in inspector.get_columns("inspiration_posts")}
-        if "inspiration_posts" in inspector.get_table_names()
-        else set()
-    )
+    def existing_columns(table_name: str) -> set[str]:
+        if table_name not in table_names:
+            return set()
+        return {column["name"] for column in inspector.get_columns(table_name)}
+
+    project_columns = existing_columns("projects")
+    user_columns = existing_columns("users")
+    feedback_columns = existing_columns("user_feedbacks")
+    usage_ledger_columns = existing_columns("usage_ledgers")
+    prompt_template_columns = existing_columns("prompt_templates")
+    provider_profile_columns = existing_columns("provider_profiles")
+    inspiration_post_columns = existing_columns("inspiration_posts")
     with engine.begin() as connection:
-        if "owner_user_id" not in project_columns:
+        if project_columns and "owner_user_id" not in project_columns:
             connection.execute(text("ALTER TABLE projects ADD COLUMN owner_user_id INTEGER"))
-        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_projects_owner_user_id ON projects (owner_user_id)"))
-        if "billing_plan" not in user_columns:
+        if project_columns:
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_projects_owner_user_id ON projects (owner_user_id)"))
+        if user_columns and "billing_plan" not in user_columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN billing_plan VARCHAR(30) NOT NULL DEFAULT 'standard'"))
-        if "group_name" not in user_columns:
+        if user_columns and "group_name" not in user_columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN group_name VARCHAR(120) NOT NULL DEFAULT ''"))
-        if "billing_status" not in user_columns:
+        if user_columns and "billing_status" not in user_columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN billing_status VARCHAR(20) NOT NULL DEFAULT 'active'"))
-        if "quota_policy" not in user_columns:
+        if user_columns and "quota_policy" not in user_columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN quota_policy VARCHAR(20) NOT NULL DEFAULT 'soft_warn'"))
-        if "quota_reset_cycle" not in user_columns:
+        if user_columns and "quota_reset_cycle" not in user_columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN quota_reset_cycle VARCHAR(20) NOT NULL DEFAULT 'monthly'"))
         if feedback_columns and "attachment_paths" not in feedback_columns:
             connection.execute(

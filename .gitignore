@@ -8,6 +8,8 @@ dist/
 backend/app.db
 backend/*.db
 backend/storage/
+storage/
+tmp/
 *-dev.out.log
 *-dev.err.log
 local/

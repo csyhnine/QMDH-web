@@ -123,7 +123,6 @@ def _to_profile_out(profile: ProviderProfile) -> ProviderProfileOut:
         reference_caption_model=profile.reference_caption_model,
         has_api_key=has_stored_key,
         masked_api_key=masked_api_key,
-        editable_api_key=decrypted_key or None,
         created_at=profile.created_at,
         updated_at=profile.updated_at,
     )

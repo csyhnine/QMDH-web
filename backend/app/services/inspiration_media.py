@@ -6,9 +6,10 @@ import mimetypes
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlparse, urlunparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from app.services.media_storage import write_binary_asset, write_preview_svg
+from app.services.url_safety import UnsafeUrlError, assert_public_http_url
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,21 @@ _BROWSER_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 )
+_MAX_REMOTE_IMAGE_BYTES = 10 * 1024 * 1024
+
+
+class _SafeRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        try:
+            safe_url = assert_public_http_url(newurl)
+        except UnsafeUrlError as exc:
+            raise ValueError(str(exc)) from exc
+        return super().redirect_request(req, fp, code, msg, headers, safe_url)
+
+
+def _open_remote_request(request: Request, *, timeout_seconds: float):
+    opener = build_opener(_SafeRedirectHandler())
+    return opener.open(request, timeout=timeout_seconds)
 
 
 def _safe_slug(value: str, *, fallback: str = "inspiration") -> str:
@@ -41,8 +57,9 @@ def _extension_for_downloaded_image(image_url: str, content_type: str | None, fa
 
 
 def _download_remote_image(image_url: str, *, referer: str = "", timeout_seconds: float = 20.0) -> tuple[bytes, str | None]:
-    parsed = urlparse(image_url)
-    safe_url = image_url
+    safe_input_url = assert_public_http_url(image_url)
+    parsed = urlparse(safe_input_url)
+    safe_url = safe_input_url
     if parsed.scheme and parsed.netloc:
         safe_url = urlunparse(
             parsed._replace(
@@ -58,11 +75,16 @@ def _download_remote_image(image_url: str, *, referer: str = "", timeout_seconds
         },
     )
     try:
-        with urlopen(request, timeout=timeout_seconds) as response:
-            payload = response.read()
+        with _open_remote_request(request, timeout_seconds=timeout_seconds) as response:
             content_type = None
             if hasattr(response, "headers") and response.headers is not None:
                 content_type = response.headers.get("Content-Type")
+                content_length = int(response.headers.get("Content-Length") or 0)
+                if content_length > _MAX_REMOTE_IMAGE_BYTES:
+                    raise ValueError("Image download is too large")
+            payload = response.read(_MAX_REMOTE_IMAGE_BYTES + 1)
+            if len(payload) > _MAX_REMOTE_IMAGE_BYTES:
+                raise ValueError("Image download is too large")
             return payload, content_type
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")

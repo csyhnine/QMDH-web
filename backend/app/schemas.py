@@ -385,7 +385,6 @@ class ProviderProfileOut(ProviderProfileBase):
     id: int
     has_api_key: bool
     masked_api_key: str
-    editable_api_key: str | None = None
     created_at: datetime
     updated_at: datetime
 

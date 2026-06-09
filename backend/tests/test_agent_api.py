@@ -12,7 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.security import hash_password, hash_session_token
 from app.database import Base, get_db
-from app.models import AgentClient, Asset, DataClassification, Project, ProjectResearchNote, Task, User, Workflow
+from app.models import AgentClient, AgentJob, Asset, DataClassification, Project, ProjectResearchNote, Task, TaskStatus, User, Workflow
 from app.routers import agent, assets, inspiration
 
 
@@ -173,6 +173,37 @@ class AgentApiTests(unittest.TestCase):
             self.assertEqual(task.user_id, 1)
             self.assertEqual(task.project_id, 1)
             self.assertEqual(task.requested_provider, "jimeng")
+
+    def test_redis_enqueue_failure_marks_agent_job_and_task_failed(self) -> None:
+        with (
+            patch("app.routers.agent.settings.task_execution_mode", "redis"),
+            patch("app.routers.agent.enqueue_task", side_effect=RuntimeError("redis down")),
+        ):
+            response = self.client.post(
+                "/agent/image-generate",
+                headers=self._agent_headers(),
+                json={
+                    "title": "Agent queue failure",
+                    "project_id": 1,
+                    "requested_provider": "jimeng",
+                    "payload": {"prompt": "Generate a waterfront concept"},
+                },
+            )
+
+        self.assertEqual(response.status_code, 503, response.text)
+
+        with self.SessionLocal() as db:
+            task = db.scalar(select(Task).where(Task.title == "Agent queue failure"))
+            self.assertIsNotNone(task)
+            assert task is not None
+            job = db.scalar(select(AgentJob).where(AgentJob.task_id == task.id))
+            self.assertIsNotNone(job)
+            assert job is not None
+            self.assertEqual(task.status, TaskStatus.failed)
+            self.assertEqual(task.result["error_stage"], "task_enqueue")
+            self.assertEqual(job.status, "failed")
+            self.assertEqual(job.result["error_stage"], "task_enqueue")
+            self.assertIsNotNone(job.completed_at)
 
     def test_agent_can_import_inspiration(self) -> None:
         with patch("app.routers.agent.prepare_inspiration_image", return_value="inspiration/imports/agent-post.png"):

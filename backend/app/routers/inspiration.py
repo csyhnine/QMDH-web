@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -14,6 +14,7 @@ from app.models import InspirationPost
 from app.schemas import ExtractImagesIn, ExtractImagesOut, InspirationPostCreate, InspirationPostOut, InspirationPostUpdate
 from app.services.inspiration_media import prepare_inspiration_image
 from app.services.media_storage import resolve_storage_path
+from app.services.url_safety import UnsafeUrlError, assert_public_http_url
 
 router = APIRouter(prefix="/inspiration", tags=["inspiration"])
 
@@ -21,6 +22,8 @@ _BROWSER_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 )
+_MAX_EXTRACT_HTML_BYTES = 2 * 1024 * 1024
+_MAX_EXTRACT_REDIRECTS = 5
 
 
 def _can_edit_post(auth_user: AuthUserProfile, post: InspirationPost) -> bool:
@@ -189,10 +192,10 @@ async def extract_images_from_url(
 ) -> ExtractImagesOut:
     """Fetch a URL and extract candidate images for inspiration import."""
 
-    url = payload.url.strip()
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
+    try:
+        url = assert_public_http_url(payload.url)
+    except UnsafeUrlError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
         from bs4 import BeautifulSoup
@@ -200,13 +203,30 @@ async def extract_images_from_url(
         raise HTTPException(status_code=500, detail="beautifulsoup4 not installed")
 
     try:
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-            resp = await client.get(url, headers={"User-Agent": _BROWSER_UA})
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
+            for _ in range(_MAX_EXTRACT_REDIRECTS + 1):
+                resp = await client.get(url, headers={"User-Agent": _BROWSER_UA})
+                if not resp.is_redirect:
+                    break
+                location = resp.headers.get("location")
+                if not location:
+                    raise HTTPException(status_code=422, detail="页面跳转缺少目标地址")
+                try:
+                    url = assert_public_http_url(urljoin(url, location))
+                except UnsafeUrlError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+            else:
+                raise HTTPException(status_code=422, detail="页面跳转次数过多")
             resp.raise_for_status()
+            content_length = int(resp.headers.get("content-length") or 0)
+            if content_length > _MAX_EXTRACT_HTML_BYTES or len(resp.content) > _MAX_EXTRACT_HTML_BYTES:
+                raise HTTPException(status_code=413, detail="页面内容过大，无法提取图片")
     except httpx.TimeoutException:
         raise HTTPException(status_code=422, detail="请求超时，无法访问该链接")
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=422, detail=f"页面返回错误: {exc.response.status_code}")
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=422, detail="无法访问该链接")
 

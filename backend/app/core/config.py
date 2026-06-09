@@ -369,9 +369,18 @@ def validate_required_for_production() -> None:
         "QMDH_REDIS_URL": settings.redis_url,
         "QMDH_ENCRYPTION_KEY": settings.encryption_key,
     }
+    if settings.bootstrap_admin_name.strip():
+        required["QMDH_BOOTSTRAP_ADMIN_PASSWORD"] = settings.bootstrap_admin_password
 
     missing = [name for name, value in required.items() if not value or not value.strip()]
     if missing:
         for name in missing:
             print(f"ERROR: Required environment variable {name} is missing or empty.", file=sys.stderr)
+        sys.exit(1)
+
+    if settings.bootstrap_admin_name.strip() and settings.bootstrap_admin_password.strip() == "dev-admin-password":
+        print(
+            "ERROR: QMDH_BOOTSTRAP_ADMIN_PASSWORD must be changed from the development default in production.",
+            file=sys.stderr,
+        )
         sys.exit(1)

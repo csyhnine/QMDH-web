@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { api, getStoredAuthToken } from "../../api";
+import { api, buildApiUrl, getAuthHeaders } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 
 const ACTIVE_CHAT_STORAGE_KEY = "qmdh.active.chat";
@@ -252,11 +252,10 @@ export default function ChatPage() {
     shouldAutoScrollRef.current = true;
 
     try {
-      const token = getStoredAuthToken();
-      const response = await fetch(`/api/v1/chat/conversations/${activeChatId}/messages`, {
+      const response = await fetch(buildApiUrl(`/chat/conversations/${activeChatId}/messages`), {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ content }),

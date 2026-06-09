@@ -26,8 +26,10 @@ class _FakeDownloadResponse:
         self._payload = payload
         self.headers = {"Content-Type": content_type}
 
-    def read(self) -> bytes:
-        return self._payload
+    def read(self, size: int | None = -1) -> bytes:
+        if size is None or size < 0:
+            return self._payload
+        return self._payload[:size]
 
     def __enter__(self):
         return self
@@ -54,7 +56,7 @@ class InspirationMediaTests(unittest.TestCase):
 
     def test_prepare_inspiration_image_downloads_remote_image(self) -> None:
         with patch(
-            "app.services.inspiration_media.urlopen",
+            "app.services.inspiration_media._open_remote_request",
             return_value=_FakeDownloadResponse(b"image-bytes", "image/jpeg"),
         ):
             relative_path = prepare_inspiration_image(
@@ -68,7 +70,7 @@ class InspirationMediaTests(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.tempdir, *relative_path.split("/"))))
 
     def test_prepare_inspiration_image_falls_back_to_managed_placeholder(self) -> None:
-        with patch("app.services.inspiration_media.urlopen", side_effect=URLError("blocked")):
+        with patch("app.services.inspiration_media._open_remote_request", side_effect=URLError("blocked")):
             relative_path = prepare_inspiration_image(
                 "https://images.example.test/blocked.jpg",
                 title="Blocked Reference",
@@ -76,6 +78,19 @@ class InspirationMediaTests(unittest.TestCase):
             )
 
         self.assertTrue(relative_path.startswith("inspiration/external/blocked-reference-"))
+        self.assertTrue(relative_path.endswith(".svg"))
+        self.assertTrue(os.path.exists(os.path.join(self.tempdir, *relative_path.split("/"))))
+
+    def test_prepare_inspiration_image_rejects_private_url_before_download(self) -> None:
+        with patch("app.services.inspiration_media._open_remote_request") as opener:
+            relative_path = prepare_inspiration_image(
+                "http://127.0.0.1/private.png",
+                title="Private Reference",
+                source_url="https://example.test/article",
+            )
+
+        opener.assert_not_called()
+        self.assertTrue(relative_path.startswith("inspiration/external/private-reference-"))
         self.assertTrue(relative_path.endswith(".svg"))
         self.assertTrue(os.path.exists(os.path.join(self.tempdir, *relative_path.split("/"))))
 
@@ -237,9 +252,15 @@ class InspirationRouterTests(unittest.TestCase):
         """
 
         class _FakeHttpResponse:
-            def __init__(self, text: str):
+            def __init__(self, text: str, status_code: int = 200, headers: dict[str, str] | None = None):
                 self.text = text
-                self.status_code = 200
+                self.status_code = status_code
+                self.headers = headers or {}
+                self.content = text.encode("utf-8")
+
+            @property
+            def is_redirect(self) -> bool:
+                return 300 <= self.status_code < 400
 
             def raise_for_status(self) -> None:
                 return None
@@ -289,6 +310,49 @@ class InspirationRouterTests(unittest.TestCase):
             post = db.scalar(select(InspirationPost).where(InspirationPost.title == "Designer upload"))
             self.assertIsNotNone(post)
             self.assertEqual(post.user_id, 1)
+
+    def test_extract_images_rejects_private_url_before_fetch(self) -> None:
+        with patch("app.routers.inspiration.httpx.AsyncClient") as client_factory:
+            response = self.client.post(
+                "/inspiration/extract-images",
+                json={"url": "http://127.0.0.1/internal"},
+            )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        client_factory.assert_not_called()
+
+    def test_extract_images_rejects_redirect_to_private_url(self) -> None:
+        class _FakeHttpResponse:
+            def __init__(self, status_code: int, headers: dict[str, str]):
+                self.text = ""
+                self.status_code = status_code
+                self.headers = headers
+                self.content = b""
+
+            @property
+            def is_redirect(self) -> bool:
+                return 300 <= self.status_code < 400
+
+            def raise_for_status(self) -> None:
+                return None
+
+        class _FakeAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def get(self, url: str, headers: dict[str, str]):
+                return _FakeHttpResponse(302, {"location": "http://127.0.0.1/internal"})
+
+        with patch("app.routers.inspiration.httpx.AsyncClient", return_value=_FakeAsyncClient()):
+            response = self.client.post(
+                "/inspiration/extract-images",
+                json={"url": "https://example.test/article"},
+            )
+
+        self.assertEqual(response.status_code, 400, response.text)
 
 
 if __name__ == "__main__":

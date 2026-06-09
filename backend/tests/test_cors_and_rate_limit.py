@@ -4,7 +4,7 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.config import settings
+from app.core.config import settings, validate_required_for_production
 from app.core.middleware import StrictCORSMiddleware
 from app.core.rate_limit import SlidingWindowLimiter
 
@@ -53,6 +53,29 @@ class CorsOriginTests(unittest.TestCase):
         with patch.object(settings, "cors_origins", "   "):
             with patch.object(settings, "frontend_origin", "https://fallback.example.com"):
                 self.assertEqual(settings.get_cors_origins(), ["https://fallback.example.com"])
+
+
+class ProductionConfigTests(unittest.TestCase):
+    def test_production_rejects_default_bootstrap_admin_password(self) -> None:
+        with (
+            patch.object(settings, "database_url", "postgresql://qmdh.example/prod"),
+            patch.object(settings, "redis_url", "redis://redis.example/0"),
+            patch.object(settings, "encryption_key", "prod-encryption-key"),
+            patch.object(settings, "bootstrap_admin_name", "admin"),
+            patch.object(settings, "bootstrap_admin_password", "dev-admin-password"),
+        ):
+            with self.assertRaises(SystemExit) as raised:
+                validate_required_for_production()
+
+        self.assertEqual(raised.exception.code, 1)
+
+    def test_sqlite_allows_default_bootstrap_admin_password_for_local_dev(self) -> None:
+        with (
+            patch.object(settings, "database_url", "sqlite:///./app.db"),
+            patch.object(settings, "bootstrap_admin_name", "admin"),
+            patch.object(settings, "bootstrap_admin_password", "dev-admin-password"),
+        ):
+            validate_required_for_production()
 
 
 class _FakePipeline:

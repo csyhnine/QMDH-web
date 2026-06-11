@@ -49,11 +49,10 @@
 
 | 路径 | 分支 / HEAD | 用途 |
 |------|-------------|------|
-| `E:\projects\QMDH-web` | `codex/video-model-providers` @ `c237d93` + video WIP | 阶段 2 进行中 |
-| `E:\projects\QMDH-web-pr1-review` | `codex/prod-001-studio-refactor` @ `c237d93` | 可与 main 同步，review 已完成 |
-| GitHub `origin/main` | `005e25d`（尚未 push 本地 merge） | 待 push |
-| 本地 `main` | `c237d93`（含 Studio 重构 + composer CSS fix） | 集成主线 |
-| 生产服务器 | 约 `6ae35b1` | 尚未 deploy Studio 重构 |
+| `E:\projects\QMDH-web` | `main` @ `411c719` | 集成主线（Studio + Video 后端） |
+| `E:\projects\QMDH-web-pr1-review` | 可同步到 `main` | review worktree |
+| GitHub `origin/main` | `005e25d` | **待 push**（本地 ahead 3 commits） |
+| 生产服务器 | 约 `6ae35b1` | **待 deploy**（需用户批准） |
 
 ### 阶段 0：确认基线（在 `main` 或当前生产 HEAD 上）
 
@@ -81,11 +80,11 @@
 
 | 步骤 | 事项 | 状态 |
 |------|------|------|
-| 2.1 | video WIP 应用到含 Studio 的 `main` 上 | IN_PROGRESS（backend 已 auto-merge；docs 冲突待解） |
-| 2.2 | 解决重叠文件冲突 | DONE（代码路径无冲突） |
-| 2.3 | 跑 migration 与 video pytest | TODO |
-| 2.4 | Commit + merge 到 `main` | TODO |
-| 2.5 | 有真实 Key 时 live smoke | TODO |
+| 2.1 | video WIP 应用到含 Studio 的 `main` 上 | DONE |
+| 2.2 | 解决重叠文件冲突 | DONE |
+| 2.3 | 跑 migration 与 video pytest | DONE（32 passed；alembic `4d5e6f7a8b9c`） |
+| 2.4 | Commit + merge 到 `main` | DONE（`411c719`） |
+| 2.5 | Push + 有真实 Key 时 live smoke | TODO |
 
 **范围边界**：
 - ✅ 后台 `/admin/models` 视频 adapter 配置；后端 adapter 执行与 mp4 资产落库
@@ -450,11 +449,9 @@
 
 > **以 `Development Sequence (2026-06)` 为准。**
 
-1. **阶段 2（当前）**：解决 docs 冲突 → 跑 video pytest + migration → commit video backend → merge 到 `main`。
-2. **阶段 1 收尾**：`git push origin main` + 关闭 PR #1（本地 main 已含 `c237d93`）。
-3. **阶段 2 后续**：有真实凭证时做受控 video live smoke；**未经用户批准不 deploy**。
-4. **阶段 3 暂不开工**：设计师 Studio 视频 UI 等阶段 2 merge 后再立项 `video-002`。
-5. 新 provider 协议继续放 `backend/app/services/provider_adapters/`。
+1. **Push `main`** 到 GitHub（本地 ahead 3 commits：`12fb9fe` → `c237d93` → `411c719`），关闭 PR #1。
+2. **阶段 2 收尾**：有真实凭证时做受控 video live smoke；**未经用户批准不 deploy 服务器**。
+3. **阶段 3**：立项 `video-002`，在拆分后的 Studio 上增加设计师视频 UI。
 
 ---
 

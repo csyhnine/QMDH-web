@@ -2008,7 +2008,10 @@ button {
   backdrop-filter: blur(18px);
   box-shadow: 0 24px 64px rgba(15, 23, 42, 0.12);
   display: grid;
+  grid-template-rows: auto 252px auto;
   gap: 14px;
+  min-height: 0;
+  overflow: hidden;
   transition:
     padding 180ms ease,
     border-radius 180ms ease,
@@ -2024,6 +2027,7 @@ button {
 }
 
 .composer-dock.is-collapsed {
+  grid-template-rows: auto;
   padding: 12px 14px;
   border-radius: 22px;
   gap: 0;
@@ -2275,16 +2279,21 @@ button {
   grid-template-columns: 176px minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
-  min-height: 236px;
+  height: 252px;
+  min-height: 0;
+  max-height: 252px;
+  overflow: hidden;
 }
 
 .reference-column {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) minmax(78px, auto);
+  grid-template-rows: auto 104px 54px;
   gap: 8px;
   align-content: stretch;
   min-width: 0;
-  min-height: 100%;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .composer-mode-switch {
@@ -2311,7 +2320,9 @@ button {
 
 .reference-dropzone {
   width: 100%;
-  min-height: 116px;
+  min-width: 0;
+  min-height: 104px;
+  max-height: 104px;
   height: 100%;
   border: 1px dashed rgba(15, 23, 42, 0.14);
   border-radius: 20px;
@@ -2344,10 +2355,12 @@ button {
 .reference-preview-grid {
   width: 100%;
   height: 100%;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 2px;
+  overflow: hidden;
 }
 
 .reference-preview {
@@ -2359,17 +2372,23 @@ button {
 .reference-upload-list {
   display: grid;
   gap: 6px;
-  min-height: 78px;
-  max-height: 110px;
+  height: 54px;
+  min-height: 0;
+  max-height: 54px;
+  min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   align-content: start;
   padding-right: 4px;
 }
 
 .reference-upload-chip {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
-  padding: 6px 8px;
+  align-items: center;
+  min-height: 25px;
+  padding: 4px 7px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.8);
@@ -2378,13 +2397,12 @@ button {
 }
 
 .reference-upload-chip span {
-  display: -webkit-box;
+  display: block;
   width: 100%;
   overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   line-height: 1.45;
-  word-break: break-word;
 }
 
 .reference-upload-chip button {
@@ -2401,13 +2419,16 @@ button {
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 10px;
   min-width: 0;
-  min-height: 100%;
+  min-height: 0;
+  max-height: 252px;
+  height: 100%;
   align-self: stretch;
+  overflow: hidden;
 }
 
 .composer-textarea textarea,
 .composer-notes textarea {
-  min-height: 132px;
+  min-height: 0;
   height: 100%;
   max-height: none;
   width: 100%;
@@ -5599,7 +5620,10 @@ textarea:focus-visible {
 
   .composer-body {
     grid-template-columns: 1fr;
+    height: auto;
     min-height: auto;
+    max-height: none;
+    overflow: visible;
   }
 
   .reference-column {
@@ -6772,7 +6796,10 @@ textarea:focus-visible {
 @media (max-width: 960px) {
   .composer-body {
     grid-template-columns: 1fr;
+    height: auto;
     min-height: auto;
+    max-height: none;
+    overflow: visible;
   }
 
   .reference-column {

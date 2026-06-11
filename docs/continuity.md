@@ -25,9 +25,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - `E:/projects/QMDH-web` → `codex/video-model-providers`
   - `E:/projects/QMDH-web-pr1-review` → `codex/prod-001-studio-refactor` @ `c237d93`
 - Phase status (2026-06-11):
-  - Phase 0: baseline smoke DONE locally (`smoke:studio` 8/8); production health OK
-  - Phase 1: Studio PR merged to local `main` DONE; push/close PR TODO
-  - Phase 2: video WIP applied on top of Studio merge IN_PROGRESS
+  - Phase 0–2: DONE on local `main`
+  - Phase 3 (`video-002` Studio video UI): DONE; live provider E2E smoke TODO
 - `GenerateStudioShell.tsx` is now a ~24-line entrypoint; Studio modules live under `frontend/src/features/studio/`
 - `scripts/smoke-studio.mjs` + `npm run smoke:studio` available for API smoke
 - Local dev URLs:

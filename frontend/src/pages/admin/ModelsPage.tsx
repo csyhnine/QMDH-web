@@ -17,11 +17,13 @@ type ProviderProfileDraft = {
   providerName: string;
   displayName: string;
   apiKey: string;
+  apiSecret: string;
   baseUrl: string;
   modelName: string;
   adapterKind: string;
   capabilities: string;
   strategies: string;
+  adapterConfig: string;
   quality: string;
   outputFormat: string;
   timeoutSeconds: number;
@@ -79,11 +81,13 @@ const defaultProviderProfileDraft: ProviderProfileDraft = {
   providerName: "",
   displayName: "",
   apiKey: "",
+  apiSecret: "",
   baseUrl: "",
   modelName: "",
   adapterKind: "openai_compatible",
   capabilities: "image.generate",
   strategies: "",
+  adapterConfig: "",
   quality: "medium",
   outputFormat: "png",
   timeoutSeconds: 300,
@@ -113,10 +117,12 @@ const capabilityDefinitions: CapabilityDefinition[] = [
 ];
 
 const adapterOptions: AdapterOption[] = [
+  { key: "volcengine_ark", label: "Volcengine Ark Video", support: "partial", note: "Supports Seedance / Ark content generation tasks; probe will not create a live video." },
   { key: "openai_compatible", label: "OpenAI Compatible", support: "ready", note: "当前后端已支持这一适配器的 Chat、图像生成和图像编辑。" },
+  { key: "dashscope_native", label: "DashScope Video", support: "partial", note: "支持 Wan / HappyHorse 的 DashScope 异步视频任务；探测不会创建真实视频。" },
   { key: "anthropic_native", label: "Anthropic Native", support: "planned", note: "可以先保存配置，但后端还没有 Claude 原生 adapter。" },
   { key: "kling_native", label: "Kling Native", support: "partial", note: "适合快手 Kling 系列；当前仅保留配置结构，视频执行 adapter 待补。" },
-  { key: "jimeng_native", label: "即梦 / Seedance Native", support: "partial", note: "适合即梦 / Seedance 视频链路；当前仅能配置，后端尚未执行。" },
+  { key: "jimeng_native", label: "Jimeng CV Native", support: "partial", note: "Supports Volcengine CV signed video tasks; probe will not create a live video." },
   { key: "custom_http", label: "Custom HTTP", support: "planned", note: "用于后续接入非标准厂商接口，当前前后端都还没有通用执行器。" },
 ];
 
@@ -181,11 +187,13 @@ function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfile
     providerName: profile.provider_name,
     displayName: profile.display_name || profile.model_name,
     apiKey: "",
+    apiSecret: "",
     baseUrl: profile.base_url,
     modelName: profile.model_name,
     adapterKind: profile.adapter_kind,
     capabilities: profile.capabilities.join(", "),
     strategies: JSON.stringify(profile.strategies ?? {}, null, 2),
+    adapterConfig: JSON.stringify(profile.adapter_config ?? {}, null, 2),
     quality: profile.quality ?? "medium",
     outputFormat: profile.output_format ?? "png",
     timeoutSeconds: profile.timeout_seconds ?? 300,
@@ -200,17 +208,22 @@ function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfile
 
 function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileCreatePayload {
   let strategies: Record<string, string> = {};
+  let adapterConfig: Record<string, unknown> = {};
   const rawStrategies = draft.strategies.trim();
   if (rawStrategies) strategies = JSON.parse(rawStrategies) as Record<string, string>;
+  const rawAdapterConfig = draft.adapterConfig.trim();
+  if (rawAdapterConfig) adapterConfig = JSON.parse(rawAdapterConfig) as Record<string, unknown>;
   return {
     provider_name: draft.providerName.trim(),
     display_name: draft.displayName.trim(),
     api_key: draft.apiKey,
+    api_secret: draft.apiSecret,
     base_url: draft.baseUrl.trim(),
     model_name: draft.modelName.trim(),
     adapter_kind: draft.adapterKind,
     capabilities: parseCapabilities(draft.capabilities),
     strategies,
+    adapter_config: adapterConfig,
     quality: draft.quality || "medium",
     output_format: draft.outputFormat || "png",
     timeout_seconds: draft.timeoutSeconds || 300,
@@ -276,6 +289,7 @@ function assignmentLabel(assignment: DiscoveredModelAssignment): string {
 
 function formatPricingUnitLabel(unit: string): string {
   if (unit === "per_image") return "按张图片";
+  if (unit === "per_video") return "按条视频";
   if (unit === "per_request") return "按次请求";
   return unit || "未设置";
 }
@@ -285,6 +299,7 @@ function formatPricingMetricLabel(metric: string): string {
   if (metric === "output_tokens") return "输出 tokens";
   if (metric === "cached_input_tokens") return "缓存命中 tokens";
   if (metric === "per_image") return "按张图片";
+  if (metric === "per_video") return "按条视频";
   if (metric === "per_request") return "按次请求";
   return metric;
 }
@@ -384,15 +399,16 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
 
   function renderBillingSummary(profile: ProviderProfileRecord) {
     const hasImageCapability = profile.capabilities.some((capability) => capability === "image.generate" || capability === "image.edit");
+    const hasVideoCapability = profile.capabilities.includes("video.generate");
     const chatRuleCount = pricingRules.filter(
       (rule) => rule.provider_profile_id === profile.id && rule.capability === "chat.completions" && rule.is_active
     ).length;
     return (
       <>
-        {hasImageCapability ? (
+        {hasImageCapability || hasVideoCapability ? (
           <>
             <strong>{`${profile.unit_price} ${profile.pricing_currency}`}</strong>
-            <small>{`图片 ${formatPricingUnitLabel(profile.pricing_unit)}`}</small>
+            <small>{`${hasVideoCapability && !hasImageCapability ? "视频" : "图片"} ${formatPricingUnitLabel(profile.pricing_unit)}`}</small>
           </>
         ) : (
           <>
@@ -450,7 +466,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
       if (editingProviderProfileId === null) {
         await api.createProviderProfile(payload);
       } else {
-        await api.updateProviderProfile(editingProviderProfileId, { display_name: payload.display_name, base_url: payload.base_url, model_name: payload.model_name, adapter_kind: payload.adapter_kind, capabilities: payload.capabilities, strategies: payload.strategies, quality: payload.quality, output_format: payload.output_format, timeout_seconds: payload.timeout_seconds, pricing_currency: payload.pricing_currency, pricing_unit: payload.pricing_unit, unit_price: payload.unit_price, enabled: payload.enabled, reference_mode: payload.reference_mode, reference_caption_model: payload.reference_caption_model, ...(payload.api_key ? { api_key: payload.api_key } : {}) });
+        await api.updateProviderProfile(editingProviderProfileId, { display_name: payload.display_name, base_url: payload.base_url, model_name: payload.model_name, adapter_kind: payload.adapter_kind, capabilities: payload.capabilities, strategies: payload.strategies, adapter_config: payload.adapter_config, quality: payload.quality, output_format: payload.output_format, timeout_seconds: payload.timeout_seconds, pricing_currency: payload.pricing_currency, pricing_unit: payload.pricing_unit, unit_price: payload.unit_price, enabled: payload.enabled, reference_mode: payload.reference_mode, reference_caption_model: payload.reference_caption_model, ...(payload.api_key ? { api_key: payload.api_key } : {}), ...(payload.api_secret ? { api_secret: payload.api_secret } : {}) });
       }
       resetProviderProfileDraft();
       onRefresh();
@@ -542,7 +558,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
   }
 
   function probeTone(status: string): SupportLevel {
-    if (status === "ok") return "ready";
+    if (status === "ok" || status === "configured") return "ready";
     if (status === "auth_error" || status === "invalid_key" || status === "missing_key") return "partial";
     return "planned";
   }
@@ -716,6 +732,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
               <label className="composer-menu-field composer-menu-field-full"><span>Adapter</span><select value={providerDraft.adapterKind} onChange={(e) => setProviderDraft((c) => ({ ...c, adapterKind: e.target.value }))}>{adapterOptions.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select></label>
               <label className="composer-menu-field composer-menu-field-full"><span>Base URL</span><input name="provider-base-url" value={providerDraft.baseUrl} onChange={(e) => setProviderDraft((c) => ({ ...c, baseUrl: e.target.value }))} placeholder="https://api-inference.modelscope.cn/v1" autoComplete="off" /></label>
               <label className="composer-menu-field composer-menu-field-full"><span>API Key</span><input name="provider-api-key" type="password" value={providerDraft.apiKey} autoComplete="new-password" onChange={(e) => setProviderDraft((c) => ({ ...c, apiKey: e.target.value }))} placeholder={editingProviderProfileId === null ? "新增时必填" : "留空则保留已保存 key"} /></label>
+              <label className="composer-menu-field composer-menu-field-full"><span>API Secret</span><input name="provider-api-secret" type="password" value={providerDraft.apiSecret} autoComplete="new-password" onChange={(e) => setProviderDraft((c) => ({ ...c, apiSecret: e.target.value }))} placeholder="Jimeng native only; leave blank to keep saved secret" /></label>
               <label className="composer-menu-field"><span>Capabilities</span>
                 <div className="capability-toggle-list">
                   {capabilityDefinitions.map((def) => (
@@ -724,13 +741,14 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                 </div>
                 <input value={providerDraft.capabilities} onChange={(e) => setProviderDraft((c) => ({ ...c, capabilities: e.target.value }))} placeholder="image.generate, chat.completions" />
               </label>
-              <label className="composer-menu-field composer-menu-field-full"><span>Strategies</span><textarea rows={5} value={providerDraft.strategies} onChange={(e) => setProviderDraft((c) => ({ ...c, strategies: e.target.value }))} placeholder={'{\n  "chat": "openai_chat",\n  "image.generate": "chat_modalities_image",\n  "image.edit": "chat_modalities_image_edit"\n}'} /></label>
+              <label className="composer-menu-field composer-menu-field-full"><span>Strategies</span><textarea rows={5} value={providerDraft.strategies} onChange={(e) => setProviderDraft((c) => ({ ...c, strategies: e.target.value }))} placeholder={'{\n  "chat": "openai_chat",\n  "image.generate": "chat_modalities_image",\n  "image.edit": "chat_modalities_image_edit",\n  "video.generate": "dashscope_async_video"\n}'} /></label>
+              <label className="composer-menu-field composer-menu-field-full"><span>Adapter Config</span><textarea rows={5} value={providerDraft.adapterConfig} onChange={(e) => setProviderDraft((c) => ({ ...c, adapterConfig: e.target.value }))} placeholder={'{\n  "service": "cv",\n  "region": "cn-north-1",\n  "version": "2022-08-31",\n  "submit_action": "CVSync2AsyncSubmitTask",\n  "result_action": "CVSync2AsyncGetResult",\n  "req_key": "jimeng_t2v_v30"\n}'} /></label>
               <label className="composer-menu-field"><span>Quality</span><input value={providerDraft.quality} onChange={(e) => setProviderDraft((c) => ({ ...c, quality: e.target.value }))} placeholder="medium" /></label>
               <label className="composer-menu-field"><span>Format</span><select value={providerDraft.outputFormat} onChange={(e) => setProviderDraft((c) => ({ ...c, outputFormat: e.target.value }))}><option value="png">png</option><option value="jpeg">jpeg</option><option value="webp">webp</option><option value="mp4">mp4</option></select></label>
               <label className="composer-menu-field"><span>Timeout</span><input type="number" min="30" value={providerDraft.timeoutSeconds} onChange={(e) => setProviderDraft((c) => ({ ...c, timeoutSeconds: Number(e.target.value) || 300 }))} /></label>
               <p className="admin-form-help">建议图片任务从 300 秒起步；视频任务可按上游建议调整到 600-900 秒。</p>
               <label className="composer-menu-field"><span>计费币种</span><input value={providerDraft.pricingCurrency} onChange={(e) => setProviderDraft((c) => ({ ...c, pricingCurrency: e.target.value }))} placeholder="CNY" /></label>
-              <label className="composer-menu-field"><span>计费单位</span><select value={providerDraft.pricingUnit} onChange={(e) => setProviderDraft((c) => ({ ...c, pricingUnit: e.target.value }))}><option value="per_image">按张图片</option><option value="per_request">按次请求</option></select></label>
+              <label className="composer-menu-field"><span>计费单位</span><select value={providerDraft.pricingUnit} onChange={(e) => setProviderDraft((c) => ({ ...c, pricingUnit: e.target.value }))}><option value="per_image">按张图片</option><option value="per_video">按条视频</option><option value="per_request">按次请求</option></select></label>
               <label className="composer-menu-field"><span>单价</span><input type="number" min="0" step="0.0001" value={providerDraft.unitPrice} onChange={(e) => setProviderDraft((c) => ({ ...c, unitPrice: Number(e.target.value) || 0 }))} placeholder="0" /></label>
               <label className="composer-menu-field"><span>Reference</span><select value={providerDraft.referenceMode} onChange={(e) => setProviderDraft((c) => ({ ...c, referenceMode: e.target.value }))}><option value="disabled">disabled</option><option value="caption_prompt">caption_prompt</option></select></label>
               <label className="composer-menu-field"><span>Caption Model</span><input value={providerDraft.referenceCaptionModel} onChange={(e) => setProviderDraft((c) => ({ ...c, referenceCaptionModel: e.target.value }))} placeholder="Qwen/Qwen3-VL-8B-Instruct" /></label>
@@ -799,6 +817,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                       <option value="chat.completions">chat.completions</option>
                       <option value="image.generate">image.generate</option>
                       <option value="image.edit">image.edit</option>
+                      <option value="video.generate">video.generate</option>
                     </select>
                   </label>
                   <label className="composer-menu-field">
@@ -811,6 +830,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                       <option value="output_tokens">output_tokens</option>
                       <option value="cached_input_tokens">cached_input_tokens</option>
                       <option value="per_image">per_image</option>
+                      <option value="per_video">per_video</option>
                       <option value="per_request">per_request</option>
                     </select>
                   </label>

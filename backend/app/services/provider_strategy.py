@@ -13,6 +13,9 @@ OPENAI_IMAGES_STRATEGY = "openai_images"
 OPENAI_IMAGE_EDITS_STRATEGY = "openai_image_edits"
 CHAT_MODALITIES_IMAGE_STRATEGY = "chat_modalities_image"
 CHAT_MODALITIES_IMAGE_EDIT_STRATEGY = "chat_modalities_image_edit"
+DASHSCOPE_ASYNC_VIDEO_STRATEGY = "dashscope_async_video"
+VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY = "volcengine_ark_video_tasks"
+VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY = "volcengine_cv_jimeng_video"
 
 KNOWN_STRATEGIES = {
     OPENAI_CHAT_STRATEGY,
@@ -20,6 +23,9 @@ KNOWN_STRATEGIES = {
     OPENAI_IMAGE_EDITS_STRATEGY,
     CHAT_MODALITIES_IMAGE_STRATEGY,
     CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
+    DASHSCOPE_ASYNC_VIDEO_STRATEGY,
+    VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
+    VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
 }
 
 FORBIDDEN_BASE_URL_SUFFIXES = (
@@ -41,6 +47,11 @@ _ALLOWED_STRATEGIES_BY_CAPABILITY = {
     CHAT_CAPABILITY: {OPENAI_CHAT_STRATEGY},
     "image.generate": {OPENAI_IMAGES_STRATEGY, CHAT_MODALITIES_IMAGE_STRATEGY},
     "image.edit": {OPENAI_IMAGES_STRATEGY, OPENAI_IMAGE_EDITS_STRATEGY, CHAT_MODALITIES_IMAGE_EDIT_STRATEGY},
+    "video.generate": {
+        DASHSCOPE_ASYNC_VIDEO_STRATEGY,
+        VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
+        VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
+    },
 }
 
 
@@ -97,6 +108,21 @@ def profile_prefers_chat_modalities_image(*, provider_name: str, model_name: str
     return False
 
 
+def profile_prefers_dashscope_video(*, provider_name: str, model_name: str, base_url: str) -> bool:
+    identity = f"{provider_name} {model_name} {base_url}".lower()
+    return "dashscope" in identity or "aliyuncs.com" in identity or "wan" in identity or "happyhorse" in identity
+
+
+def profile_prefers_volcengine_ark_video(*, provider_name: str, model_name: str, base_url: str) -> bool:
+    identity = f"{provider_name} {model_name} {base_url}".lower()
+    return "ark" in identity or "seedance" in identity or "volces.com/api/v3" in identity
+
+
+def profile_prefers_volcengine_jimeng_video(*, provider_name: str, model_name: str, base_url: str) -> bool:
+    identity = f"{provider_name} {model_name} {base_url}".lower()
+    return "jimeng" in identity or ("cv" in identity and "volc" in identity)
+
+
 def default_strategy_for_capability(
     *,
     capability: str,
@@ -126,6 +152,24 @@ def default_strategy_for_capability(
         ):
             return OPENAI_IMAGE_EDITS_STRATEGY
         return OPENAI_IMAGES_STRATEGY
+    if normalized == "video.generate" and profile_prefers_dashscope_video(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+    ):
+        return DASHSCOPE_ASYNC_VIDEO_STRATEGY
+    if normalized == "video.generate" and profile_prefers_volcengine_ark_video(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+    ):
+        return VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY
+    if normalized == "video.generate" and profile_prefers_volcengine_jimeng_video(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+    ):
+        return VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY
     return None
 
 

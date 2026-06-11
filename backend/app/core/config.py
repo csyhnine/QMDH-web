@@ -28,6 +28,7 @@ class ImageProviderProfile:
     api_key: str
     base_url: str
     model_name: str
+    api_secret: str = ""
     display_name: str = ""
     timeout_seconds: float = 300.0
     quality: str = "medium"
@@ -44,6 +45,7 @@ class ImageProviderProfile:
     reference_caption_fallback_models: tuple[str, ...] = DEFAULT_REFERENCE_CAPTION_FALLBACK_MODELS
     reference_caption_prompt: str = DEFAULT_REFERENCE_CAPTION_PROMPT
     strategies: dict[str, str] = field(default_factory=dict)
+    adapter_config: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -226,6 +228,7 @@ class Settings(BaseSettings):
                 provider_name=provider_name,
                 display_name=str(item.get("display_name") or model_name).strip() or model_name,
                 api_key=api_key,
+                api_secret=str(item.get("api_secret") or "").strip(),
                 base_url=base_url,
                 model_name=model_name,
                 timeout_seconds=float(item.get("timeout_seconds") or 300.0),
@@ -246,6 +249,7 @@ class Settings(BaseSettings):
                 or DEFAULT_REFERENCE_CAPTION_FALLBACK_MODELS,
                 reference_caption_prompt=reference_caption_prompt or DEFAULT_REFERENCE_CAPTION_PROMPT,
                 strategies=normalize_strategies(item.get("strategies") or {}),
+                adapter_config=item.get("adapter_config") if isinstance(item.get("adapter_config"), dict) else {},
             )
 
         return profiles

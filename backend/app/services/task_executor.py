@@ -28,11 +28,23 @@ from app.services.media_storage import (
     write_preview_svg,
 )
 from app.services.model_registry import ProviderDefinition, get_image_provider_profile, get_provider_definition
+from app.services.provider_adapters.base import (
+    ExecutionOutcome,
+    ProviderAdapter,
+    ProviderExecutionError,
+    RequestDiagnostics,
+)
+from app.services.provider_adapters.dashscope_video import DashScopeVideoProviderAdapter
+from app.services.provider_adapters.volcengine_ark_video import VolcengineArkVideoProviderAdapter
+from app.services.provider_adapters.volcengine_jimeng_video import VolcengineJimengVideoProviderAdapter
 from app.services.provider_strategy import (
     CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
     CHAT_MODALITIES_IMAGE_STRATEGY,
+    DASHSCOPE_ASYNC_VIDEO_STRATEGY,
     OPENAI_IMAGE_EDITS_STRATEGY,
     OPENAI_IMAGES_STRATEGY,
+    VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
+    VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
     resolve_strategy_for_capability,
 )
 from app.services.usage_ledger import ensure_usage_ledger_for_task
@@ -50,16 +62,6 @@ _HTML_ERROR_PATTERN = re.compile(r"<!doctype html|<html\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
-class ExecutionOutcome:
-    model_name: str
-    latency_ms: int
-    cost: float
-    cost_currency: str
-    outbound: bool
-    result: dict
-
-
-@dataclass(frozen=True)
 class ImageRequestPlan:
     endpoint_path: str
     body: dict
@@ -68,30 +70,6 @@ class ImageRequestPlan:
     adapter_mode: str
     effective_capability: str
     strategy: str
-
-
-@dataclass(frozen=True)
-class RequestDiagnostics:
-    strategy: str
-    endpoint_path: str
-    request_url: str
-    timeout_seconds: float
-    adapter_mode: str
-    effective_capability: str
-
-
-class ProviderExecutionError(Exception):
-    def __init__(self, message: str, *, diagnostics: RequestDiagnostics):
-        super().__init__(message)
-        self.diagnostics = diagnostics
-
-
-class ProviderAdapter:
-    def __init__(self, definition: ProviderDefinition):
-        self.definition = definition
-
-    def execute(self, capability: str, payload: dict) -> ExecutionOutcome:
-        raise NotImplementedError
 
 
 class SimulatedProviderAdapter(ProviderAdapter):
@@ -249,6 +227,34 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
             raise ProviderExecutionError(str(exc), diagnostics=diagnostics) from exc
 
 
+class StrategyProviderAdapter(ProviderAdapter):
+    def __init__(self, definition: ProviderDefinition, profile: ImageProviderProfile):
+        super().__init__(definition)
+        self.profile = profile
+        self.image_adapter = OpenAIImageProviderAdapter(definition, profile)
+        self.dashscope_video_adapter = DashScopeVideoProviderAdapter(definition, profile)
+        self.ark_video_adapter = VolcengineArkVideoProviderAdapter(definition, profile)
+        self.jimeng_video_adapter = VolcengineJimengVideoProviderAdapter(definition, profile)
+
+    def execute(self, capability: str, payload: dict) -> ExecutionOutcome:
+        if capability == "video.generate":
+            strategy = resolve_strategy_for_capability(
+                capability=capability,
+                provider_name=self.profile.provider_name,
+                model_name=self.profile.model_name,
+                base_url=self.profile.base_url,
+                strategies=self.profile.strategies,
+            )
+            if strategy == DASHSCOPE_ASYNC_VIDEO_STRATEGY:
+                return self.dashscope_video_adapter.execute(capability, payload)
+            if strategy == VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY:
+                return self.ark_video_adapter.execute(capability, payload)
+            if strategy == VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY:
+                return self.jimeng_video_adapter.execute(capability, payload)
+            raise ValueError(f"{self.definition.provider_name} does not define a supported video.generate strategy")
+        return self.image_adapter.execute(capability, payload)
+
+
 def _calculate_image_billing(*, profile: ImageProviderProfile, output_count: int) -> dict:
     unit_price = round(float(profile.unit_price or 0.0), 6)
     pricing_unit = (profile.pricing_unit or "per_image").strip() or "per_image"
@@ -282,8 +288,8 @@ def _materialize_preview_asset(*, provider_name: str, capability: str, prompt_su
 
 def get_provider_adapter(provider_name: str, db: Session | None = None) -> ProviderAdapter:
     definition = get_provider_definition(provider_name, db)
-    if definition.adapter_kind == "openai_compatible":
-        return OpenAIImageProviderAdapter(definition, get_image_provider_profile(provider_name, db))
+    if definition.adapter_kind in {"openai_compatible", "dashscope_native", "volcengine_ark", "jimeng_native"}:
+        return StrategyProviderAdapter(definition, get_image_provider_profile(provider_name, db))
     return SimulatedProviderAdapter(definition)
 
 
@@ -1084,6 +1090,9 @@ def _stage_metadata(raw_stage: str) -> tuple[str, str]:
     normalized = raw_stage.strip().lower()
     mapping = (
         ("image generation", ("image_generation_request", "调用生图接口")),
+        ("dashscope video task submit", ("video_generation_submit", "提交视频生成任务")),
+        ("dashscope video task poll", ("video_generation_poll", "轮询视频生成结果")),
+        ("generated video download", ("generated_video_download", "下载视频生成结果")),
         ("generated image download", ("generated_image_download", "下载生成结果")),
         ("reference image caption", ("reference_image_caption", "分析参考图")),
         ("modelscope async poll", ("async_result_poll", "轮询异步结果")),
@@ -1173,7 +1182,11 @@ def _build_failure_result(exc: Exception, *, capability: str, provider_name: str
             "failed_provider": provider_name,
         }
 
-    if "returned no image data" in lowered or "returned no image outputs" in lowered:
+    if (
+        "returned no image data" in lowered
+        or "returned no image outputs" in lowered
+        or "returned no video outputs" in lowered
+    ):
         summary = "任务执行失败：上游没有返回可用的生成结果。"
         hint = "请让管理员检查当前模型是否真的支持该能力，或是否需要调整请求参数。"
         return {

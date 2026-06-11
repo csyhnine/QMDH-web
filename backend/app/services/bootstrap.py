@@ -117,6 +117,10 @@ def ensure_schema(engine: Engine) -> None:
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_prompt_templates_is_featured ON prompt_templates (is_featured)"))
         if provider_profile_columns and "strategies" not in provider_profile_columns:
             connection.execute(text("ALTER TABLE provider_profiles ADD COLUMN strategies JSON NOT NULL DEFAULT '{}'"))
+        if provider_profile_columns and "api_secret" not in provider_profile_columns:
+            connection.execute(text("ALTER TABLE provider_profiles ADD COLUMN api_secret TEXT NOT NULL DEFAULT ''"))
+        if provider_profile_columns and "adapter_config" not in provider_profile_columns:
+            connection.execute(text("ALTER TABLE provider_profiles ADD COLUMN adapter_config JSON NOT NULL DEFAULT '{}'"))
         if provider_profile_columns and "display_name" not in provider_profile_columns:
             connection.execute(
                 text("ALTER TABLE provider_profiles ADD COLUMN display_name VARCHAR(150) NOT NULL DEFAULT ''")

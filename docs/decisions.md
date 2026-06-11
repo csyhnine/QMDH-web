@@ -70,6 +70,30 @@
 - 禁止事项：
   - 在没有充分理由的情况下，绕开 task 体系直接新增平行业务执行链
 
+### Decision: video providers use strategy-specific adapters
+- 状态：Accepted
+- 日期：2026-06-09
+- 背景：
+  - Wan / HappyHorse use DashScope async video tasks.
+  - Seedance / Ark uses content-generation task submit / poll APIs.
+  - Jimeng native uses Volcengine CV OpenAPI Action + Version + signed requests.
+  - These protocols are not OpenAI image-compatible, and treating them as such would hide provider-specific failures.
+- 决策内容：
+  - `video.generate` continues to use the existing `Workflow + Task` entrypoint.
+  - Provider profiles declare video execution through `capabilities` plus `strategies`.
+  - Supported video strategies are `dashscope_async_video`, `volcengine_ark_video_tasks`, and `volcengine_cv_jimeng_video`.
+  - Jimeng native stores AK in `api_key`, encrypted SK in `api_secret`, and Action / Version / req_key details in `adapter_config`.
+  - Provider-specific submit / poll / download logic lives under the provider adapter layer, not in Studio UI code and not as a parallel task API.
+  - Generated video URLs from upstream providers must be transferred into QMDH media storage before being recorded as task results.
+- 影响：
+  - DashScope Wan / HappyHorse, Volcengine Ark / Seedance, and Volcengine Jimeng native now share the same task-result and asset materialization contract.
+  - Provider probes for these async video strategies are configuration checks only; live smoke must be run as explicit `video-generate` tasks.
+  - Designer Studio video UI remains a separate product task and is not implied by backend provider support.
+- 禁止事项：
+  - Do not implement Anthropic runtime as part of video provider work.
+  - Do not put provider secrets into frontend state or task payload.
+  - Do not store only upstream temporary video URLs as final task artifacts.
+
 ### Decision: 2.0 作为升级方向预备，不在 1.0 阶段直接落地
 - 状态：Accepted
 - 日期：2026-05-16

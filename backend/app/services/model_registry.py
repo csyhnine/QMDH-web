@@ -51,11 +51,13 @@ def _profile_from_record(record: ProviderProfile) -> ImageProviderProfile:
         reference_mode = "caption_prompt" if "modelscope.cn" in record.base_url else "disabled"
 
     decrypted_key = decrypt_value_or_raise(record.api_key)
+    decrypted_secret = decrypt_value_or_raise(record.api_secret) if record.api_secret else ""
 
     return ImageProviderProfile(
         provider_name=record.provider_name,
         display_name=(record.display_name or record.model_name or record.provider_name).strip(),
         api_key=decrypted_key,
+        api_secret=decrypted_secret,
         base_url=record.base_url.rstrip("/"),
         model_name=record.model_name,
         timeout_seconds=record.timeout_seconds,
@@ -71,6 +73,7 @@ def _profile_from_record(record: ProviderProfile) -> ImageProviderProfile:
         reference_mode=reference_mode,
         reference_caption_model=record.reference_caption_model,
         strategies=normalize_strategies(record.strategies or {}),
+        adapter_config=record.adapter_config or {},
     )
 
 

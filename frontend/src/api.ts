@@ -284,6 +284,7 @@ export type ProviderProfileRecord = {
   adapter_kind: string;
   capabilities: string[];
   strategies: Record<string, string>;
+  adapter_config: Record<string, unknown>;
   quality: string;
   output_format: string;
   timeout_seconds: number;
@@ -311,11 +312,13 @@ export type ProviderProfileCreatePayload = {
   provider_name: string;
   display_name: string;
   api_key: string;
+  api_secret?: string;
   base_url: string;
   model_name: string;
   adapter_kind: string;
   capabilities: string[];
   strategies?: Record<string, string>;
+  adapter_config?: Record<string, unknown>;
   quality: string;
   output_format: string;
   timeout_seconds: number;

@@ -145,6 +145,76 @@ class ProviderProfileTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertIn("API root", response.json()["detail"])
 
+    def test_provider_profile_accepts_dashscope_video_strategy(self) -> None:
+        response = self.client.post(
+            "/providers/profiles",
+            headers=self.auth_headers(),
+            json={
+                "provider_name": "dashscope_wan_video",
+                "api_key": "sk-video",
+                "base_url": "https://dashscope.aliyuncs.com/api/v1",
+                "model_name": "wan2.1-t2v-turbo",
+                "adapter_kind": "dashscope_native",
+                "capabilities": ["video.generate"],
+                "strategies": {"video.generate": "dashscope_async_video"},
+                "quality": "standard",
+                "output_format": "mp4",
+                "timeout_seconds": 900,
+                "pricing_currency": "CNY",
+                "pricing_unit": "per_video",
+                "unit_price": 1.2,
+                "enabled": True,
+                "reference_mode": "disabled",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201, response.text)
+        payload = response.json()
+        self.assertEqual(payload["adapter_kind"], "dashscope_native")
+        self.assertEqual(payload["capabilities"], ["video.generate"])
+        self.assertEqual(payload["strategies"], {"video.generate": "dashscope_async_video"})
+        self.assertEqual(payload["output_format"], "mp4")
+        self.assertEqual(payload["pricing_unit"], "per_video")
+
+    def test_provider_profile_accepts_jimeng_secret_and_adapter_config(self) -> None:
+        response = self.client.post(
+            "/providers/profiles",
+            headers=self.auth_headers(),
+            json={
+                "provider_name": "jimeng_v30",
+                "api_key": "ak-test",
+                "api_secret": "sk-test",
+                "base_url": "https://visual.volcengineapi.com",
+                "model_name": "jimeng_t2v_v30",
+                "adapter_kind": "jimeng_native",
+                "capabilities": ["video.generate"],
+                "strategies": {"video.generate": "volcengine_cv_jimeng_video"},
+                "adapter_config": {
+                    "service": "cv",
+                    "region": "cn-north-1",
+                    "version": "2022-08-31",
+                    "submit_action": "CVSync2AsyncSubmitTask",
+                    "result_action": "CVSync2AsyncGetResult",
+                    "req_key": "jimeng_t2v_v30",
+                },
+                "quality": "standard",
+                "output_format": "mp4",
+                "timeout_seconds": 900,
+                "pricing_currency": "CNY",
+                "pricing_unit": "per_video",
+                "unit_price": 1.2,
+                "enabled": True,
+                "reference_mode": "disabled",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201, response.text)
+        payload = response.json()
+        self.assertNotIn("api_secret", payload)
+        self.assertEqual(payload["adapter_kind"], "jimeng_native")
+        self.assertEqual(payload["strategies"], {"video.generate": "volcengine_cv_jimeng_video"})
+        self.assertEqual(payload["adapter_config"]["submit_action"], "CVSync2AsyncSubmitTask")
+
     def test_designer_cannot_manage_provider_profiles(self) -> None:
         response = self.client.get("/providers/profiles", headers=self.designer_headers())
         self.assertEqual(response.status_code, 403)
@@ -469,6 +539,78 @@ class ProviderProfileTests(unittest.TestCase):
         args, kwargs = mock_client.request.await_args
         self.assertEqual(args[0], "POST")
         self.assertEqual(kwargs["json"]["modalities"], ["image", "text"])
+
+    def test_probe_dashscope_video_profile_is_configuration_only(self) -> None:
+        with self.SessionLocal() as db:
+            profile = ProviderProfile(
+                provider_name="dashscope_wan_video",
+                api_key=encrypt_value("sk-video"),
+                base_url="https://dashscope.aliyuncs.com/api/v1",
+                model_name="wan2.1-t2v-turbo",
+                adapter_kind="dashscope_native",
+                capabilities=["video.generate"],
+                strategies={"video.generate": "dashscope_async_video"},
+                enabled=True,
+            )
+            db.add(profile)
+            db.commit()
+            profile_id = profile.id
+
+        with patch("app.routers.providers.httpx.AsyncClient") as mock_async_client:
+            response = self.client.post(f"/providers/profiles/{profile_id}/probe", headers=self.auth_headers())
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["status"], "configured")
+        self.assertIn("/services/aigc/video-generation/video-synthesis", payload["checked_url"])
+        self.assertIn("DashScope", payload["detail"])
+        mock_async_client.assert_not_called()
+
+    def test_probe_volcengine_video_profiles_are_configuration_only(self) -> None:
+        profiles = [
+            ProviderProfile(
+                provider_name="seedance_ark_probe",
+                api_key=encrypt_value("ark-key"),
+                base_url="https://ark.cn-beijing.volces.com/api/v3",
+                model_name="seedance-1-0-pro",
+                adapter_kind="volcengine_ark",
+                capabilities=["video.generate"],
+                strategies={"video.generate": "volcengine_ark_video_tasks"},
+                enabled=True,
+            ),
+            ProviderProfile(
+                provider_name="jimeng_probe",
+                api_key=encrypt_value("ak-test"),
+                api_secret=encrypt_value("sk-test"),
+                base_url="https://visual.volcengineapi.com",
+                model_name="jimeng_t2v_v30",
+                adapter_kind="jimeng_native",
+                capabilities=["video.generate"],
+                strategies={"video.generate": "volcengine_cv_jimeng_video"},
+                adapter_config={"submit_action": "CVSync2AsyncSubmitTask", "version": "2022-08-31"},
+                enabled=True,
+            ),
+        ]
+        with self.SessionLocal() as db:
+            db.add_all(profiles)
+            db.commit()
+            profile_ids = [profile.id for profile in profiles]
+
+        with patch("app.routers.providers.httpx.AsyncClient") as mock_async_client:
+            responses = [
+                self.client.post(f"/providers/profiles/{profile_id}/probe", headers=self.auth_headers())
+                for profile_id in profile_ids
+            ]
+
+        for response in responses:
+            self.assertEqual(response.status_code, 200, response.text)
+            payload = response.json()
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["status"], "configured")
+        self.assertIn("/contents/generations/tasks", responses[0].json()["checked_url"])
+        self.assertIn("Action=CVSync2AsyncSubmitTask", responses[1].json()["checked_url"])
+        mock_async_client.assert_not_called()
 
     def test_probe_provider_profile_rejects_unsupported_adapter(self) -> None:
         with self.SessionLocal() as db:

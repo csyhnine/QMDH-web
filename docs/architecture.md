@@ -173,6 +173,26 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
   - 结果结构设计
   - Redis 模式一致性改进
 
+### Module: Provider Adapter Layer
+- 路径：
+  - `backend/app/services/provider_adapters/`
+- 职责：
+  - 承载真实 provider 的协议适配、请求构造、异步轮询和结果下载
+  - 通过 capability strategy 选择具体执行路径，例如 `dashscope_async_video`, `volcengine_ark_video_tasks`, `volcengine_cv_jimeng_video`
+  - 把上游临时媒体 URL 转存到统一 media storage 后再返回任务结果
+- 依赖：
+  - `backend/app/services/model_registry.py`
+  - `backend/app/services/provider_strategy.py`
+  - `backend/app/services/media_storage.py`
+- 不应负责：
+  - 决定任务权限、项目可见性或用户账本口径
+  - 为不同业务页面另起任务 API
+- 当前相关任务：
+  - DashScope Wan / HappyHorse 视频 provider 接入
+  - Volcengine Ark / Seedance 视频 provider 接入
+  - Volcengine Jimeng native 视频 provider 接入
+  - 后续 provider 协议继续新增 adapter，不回填到 `task_executor.py`
+
 ### Module: Usage Ledger / 运营账本
 - 路径：
   - `backend/app/services/usage_ledger.py`

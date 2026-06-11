@@ -30,6 +30,108 @@
 - 使用、成本、模型调用和失败原因看板
 - 保留模型与 Key 后台为运维配置入口
 
+上述 1.0 主线能力已基本完成（见下方 Priority Queue 中 DONE 任务）。当前迭代重心转为：**合并 Studio 结构重构 → 合并视频后端 → 再开设计师视频 UI → 穿插生产化补强**。
+
+---
+
+## Development Sequence (2026-06)
+
+本章节是 **当前推荐的开发顺序**，优先级高于下方散落的 `Next Suggested Step` 旧条目。接手 agent 应以此为准。
+
+### 总原则
+
+- **`main` 是唯一集成主线**；feature 分支 review 通过后再合并，避免长期并行大改。
+- **合并 ≠ 部署**；每次上生产需单独 smoke，且未经用户明确批准不 deploy WIP 分支。
+- **Studio 前端大改与视频后端可分开交付**，但两者都会触及 `task_executor.py`、`providers.py`、`config.py`、`api.ts`；合并顺序固定为 **Studio PR 先于 Video 后端**，以减少冲突和返工。
+- **`E:\projects\QMDH-web-pr1-review`** 是主仓库的 git worktree，用于隔离 review PR #1（Studio 重构）；与 `E:\projects\QMDH-web` 共享同一 Git 对象库，不在此重复 clone。
+
+### 活跃分支与本地 worktree（2026-06-11 执行后）
+
+| 路径 | 分支 / HEAD | 用途 |
+|------|-------------|------|
+| `E:\projects\QMDH-web` | `codex/video-model-providers` @ `c237d93` + video WIP | 阶段 2 进行中 |
+| `E:\projects\QMDH-web-pr1-review` | `codex/prod-001-studio-refactor` @ `c237d93` | 可与 main 同步，review 已完成 |
+| GitHub `origin/main` | `005e25d`（尚未 push 本地 merge） | 待 push |
+| 本地 `main` | `c237d93`（含 Studio 重构 + composer CSS fix） | 集成主线 |
+| 生产服务器 | 约 `6ae35b1` | 尚未 deploy Studio 重构 |
+
+### 阶段 0：确认基线（在 `main` 或当前生产 HEAD 上）
+
+| 步骤 | 事项 | 状态 |
+|------|------|------|
+| 0.1 | 对齐本地 / GitHub `main` / 服务器 HEAD 与健康检查 | DONE（2026-06-11：生产 health OK；GitHub main 仍 `005e25d`） |
+| 0.2 | 本地 smoke：`npm run smoke:studio` 8/8 | DONE |
+| 0.3 | 若仍复现：`gpt-image-2` 参考图真实上传修复 | TODO |
+| 0.4 | 若需要：灵感库 seed bundle 导入 | TODO |
+| 0.5 | urgent 小补丁直接进 `main`，不与 Studio / Video 大 PR 捆绑 | — |
+
+### 阶段 1：合并 Studio 重构 PR #1（P1）
+
+对应 backlog **`prod-001`** 首轮交付。
+
+| 步骤 | 事项 | 状态 |
+|------|------|------|
+| 1.1 | PR #1 review | DONE（build + 55 pytest + smoke 8/8） |
+| 1.2 | composer CSS fix 提交 | DONE（`c237d93`） |
+| 1.3 | Merge 到本地 `main` | DONE（2026-06-11 fast-forward） |
+| 1.4 | Push `main` 并关闭 PR #1 | TODO |
+| 1.5 | 可选：deploy 到服务器 | TODO（需用户批准） |
+
+### 阶段 2：收口并合并 Video Provider 后端（P1，当前进行中）
+
+| 步骤 | 事项 | 状态 |
+|------|------|------|
+| 2.1 | video WIP 应用到含 Studio 的 `main` 上 | IN_PROGRESS（backend 已 auto-merge；docs 冲突待解） |
+| 2.2 | 解决重叠文件冲突 | DONE（代码路径无冲突） |
+| 2.3 | 跑 migration 与 video pytest | TODO |
+| 2.4 | Commit + merge 到 `main` | TODO |
+| 2.5 | 有真实 Key 时 live smoke | TODO |
+
+**范围边界**：
+- ✅ 后台 `/admin/models` 视频 adapter 配置；后端 adapter 执行与 mp4 资产落库
+- ❌ 仍不做设计师 Studio 视频 UI
+- ❌ 未经用户批准不 deploy
+
+### 阶段 3：设计师 Studio 视频 UI（P2）
+
+**前置条件**：阶段 1、2 均已 merge 到 `main`。
+
+| 步骤 | 事项 | 状态 |
+|------|------|------|
+| 3.1 | 在拆分后的 Studio 组件上增加视频模式 / 参数 / 结果展示 | TODO |
+| 3.2 | 复用现有 `video-generate` workflow，不新开平行任务 API | TODO |
+| 3.3 | 端到端 smoke：提交 → 轮询 → mp4 预览 → 资产入库 | TODO |
+
+立项时在 `Priority Queue` 新增独立 task（例如 `video-002`）。
+
+### 阶段 4：生产化补强（与功能并行，小步进 `main`）
+
+见下方 **Production Readiness Backlog**。推荐穿插顺序：
+
+| 优先级 | ID | 说明 |
+|--------|-----|------|
+| P1 | prod-002 | `.env.production.example` |
+| P1 | prod-001 续 | Studio 拆分收尾（PR #1 之后） |
+| P2 | prod-004 | `/health` 增强 DB / Redis |
+| P2 | prod-008 | OSS/S3 静态资源 |
+| P2 | — | `image.edit` 专用 workflow（FireRed 等） |
+| P3 | prod-006 / prod-007 | Rate limit、Session 清理 |
+
+### 明确暂缓
+
+- 微服务拆分、换消息队列、多租户（见 Production Readiness Backlog）
+- 2.0 Agent / 协作工作流完整落地（见 `docs/roadmap-2.0-prep.md`）
+- 在未 merge 的 monolithic Studio 上先做视频 UI
+- 未经批准的 video / Studio WIP 分支 deploy
+
+### 依赖关系（简图）
+
+```text
+阶段0 基线 smoke ──► 阶段1 Studio PR #1 ──► 阶段2 Video 后端 ──► 阶段3 Video UI
+                         │
+                         └──► 阶段4 生产化小项（可并行）
+```
+
 ---
 
 ## Priority Queue
@@ -305,18 +407,58 @@
   2. 运营侧仍能追溯 provider/model/cost/operator/project snapshot：已完成（usage ledger + archive snapshot + project.deleted audit）
   3. 方案符合 `docs/data-governance.md` 与 `docs/roadmap-2.0-prep.md`：已完成
 
+### Task: [video-001] Video provider execution path
+- Status: DONE
+- Goal:
+  - Add real `video.generate` provider execution paths without extending the Studio refactor PR or putting new video protocol logic into the large Studio file.
+  - Support DashScope async video providers such as Wan / HappyHorse, Volcengine Ark / Seedance, and Volcengine Jimeng native through provider profile configuration.
+- Boundary:
+  - Backend provider strategy, task execution, provider probing, media storage result persistence, focused tests, migration, and `/admin/models` configuration affordances.
+  - No designer Studio video UI in this task.
+  - No Anthropic runtime, no upload protocol change, no deploy.
+- Current progress:
+  - Added a provider adapter layer under `backend/app/services/provider_adapters/`.
+  - Added `dashscope_async_video`, `volcengine_ark_video_tasks`, and `volcengine_cv_jimeng_video` strategies for `video.generate`.
+  - Implemented DashScope async submit / poll / video download / media storage persistence.
+  - Implemented Volcengine Ark / Seedance content-generation task submit / poll / video persistence.
+  - Implemented Volcengine Jimeng native CV OpenAPI signed submit / poll / video persistence.
+  - Added encrypted `api_secret` and JSON `adapter_config` fields for provider profiles, with Alembic migration and bootstrap compatibility.
+  - Kept `POST /tasks` + `workflow_key=video-generate` as the task creation path.
+  - Stored video results in existing `Task.result.storage_path/storage_paths` and reused existing `AssetType.video` materialization.
+  - Added admin model configuration support for `dashscope_native`, `volcengine_ark`, `jimeng_native`, `mp4`, `per_video`, `api_secret`, and `adapter_config`.
+  - Added focused backend tests for strategy/profile configuration, safe probe behavior, DashScope adapter execution, Volcengine video adapters, and video asset materialization.
+- Acceptance criteria:
+  1. `video.generate` provider profile with `{"video.generate":"dashscope_async_video"}` can execute a mocked DashScope task and persist an mp4 result.
+  2. `video.generate` provider profile with `{"video.generate":"volcengine_ark_video_tasks"}` can execute a mocked Ark / Seedance task and persist an mp4 result.
+  3. `video.generate` provider profile with `{"video.generate":"volcengine_cv_jimeng_video"}` can execute mocked signed CV submit / poll requests and persist an mp4 result.
+  4. Completed video tasks materialize a video asset.
+  5. Provider probe for async video profiles is configuration-only and does not create a live upstream video task.
+  6. Existing OpenAI image execution tests still pass.
+- Verification:
+  - `backend/.venv/Scripts/python.exe -m pytest tests/test_task_executor_dashscope_video.py tests/test_task_executor_volcengine_video.py -q`
+  - `backend/.venv/Scripts/python.exe -m pytest tests/test_provider_profiles.py -q`
+  - `backend/.venv/Scripts/python.exe -m pytest tests/test_task_executor_openai.py tests/test_task_error_reporting.py tests/test_model_registry_profiles.py -q`
+  - `backend/.venv/Scripts/python.exe -m alembic heads`
+  - `frontend`: `npm run build`
+- Remaining follow-up:
+  - Add a guarded live smoke checklist once real provider credentials are available.
+  - Designer Studio video generation UI remains intentionally out of scope until the Studio refactor PR is merged.
+
 ---
 
 ## Next Suggested Step
 
-Current override on 2026-06-09:
+> **以 `Development Sequence (2026-06)` 为准。**
 
-1. `prod-001` Studio splitting is paused. Do not continue component/hook splitting unless the user explicitly reopens that work.
-2. Review the broad WIP candidate set, confirm exclusions, and stage intentionally only after user confirmation.
-3. Before commit, rerun backend tests, `npm run build`, `npm run smoke:studio`, and `git diff --check`.
-4. Before any release/deploy, separately recheck GitHub/server HEAD, server health, and deployment baseline.
+1. **阶段 2（当前）**：解决 docs 冲突 → 跑 video pytest + migration → commit video backend → merge 到 `main`。
+2. **阶段 1 收尾**：`git push origin main` + 关闭 PR #1（本地 main 已含 `c237d93`）。
+3. **阶段 2 后续**：有真实凭证时做受控 video live smoke；**未经用户批准不 deploy**。
+4. **阶段 3 暂不开工**：设计师 Studio 视频 UI 等阶段 2 merge 后再立项 `video-002`。
+5. 新 provider 协议继续放 `backend/app/services/provider_adapters/`。
 
-Historical suggestions below may be stale unless they are revalidated against the current goal.
+---
+
+## Previous Suggested Step
 
 1. 优先处理 `gpt-image-2` 参考图真实上传修复：提交并部署当前本地补丁，然后在服务器复测一条带参考图的任务，确认上游实际收到图片输入而不是纯文本请求
 2. 如果当前目标是稳定服务器灵感库，优先上传并导入本地 `tmp/seed-inspiration-bundle.zip`，不要继续依赖服务器直接重抓 ArchDaily

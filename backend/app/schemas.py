@@ -347,6 +347,7 @@ class ProviderProfileBase(BaseModel):
     adapter_kind: str = "openai_compatible"
     capabilities: list[str] = Field(default_factory=lambda: ["image.generate"])
     strategies: dict[str, str] = Field(default_factory=dict)
+    adapter_config: dict[str, object] = Field(default_factory=dict)
     quality: str = "medium"
     output_format: str = "png"
     timeout_seconds: float = 300.0
@@ -360,16 +361,19 @@ class ProviderProfileBase(BaseModel):
 
 class ProviderProfileCreate(ProviderProfileBase):
     api_key: str = Field(min_length=1)
+    api_secret: str = ""
 
 
 class ProviderProfileUpdate(BaseModel):
     api_key: str | None = None
+    api_secret: str | None = None
     display_name: str | None = Field(default=None, max_length=150)
     base_url: str | None = Field(default=None, min_length=5, max_length=255)
     model_name: str | None = Field(default=None, min_length=1, max_length=150)
     adapter_kind: str | None = None
     capabilities: list[str] | None = None
     strategies: dict[str, str] | None = None
+    adapter_config: dict[str, object] | None = None
     quality: str | None = None
     output_format: str | None = None
     timeout_seconds: float | None = None

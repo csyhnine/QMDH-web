@@ -36,9 +36,12 @@ from app.services.provider_strategy import (
     CHAT_CAPABILITY,
     CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
     CHAT_MODALITIES_IMAGE_STRATEGY,
+    DASHSCOPE_ASYNC_VIDEO_STRATEGY,
     OPENAI_CHAT_STRATEGY,
     OPENAI_IMAGE_EDITS_STRATEGY,
     OPENAI_IMAGES_STRATEGY,
+    VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
+    VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
     normalize_provider_base_url,
     normalize_strategies,
     resolve_strategy_for_capability,
@@ -50,6 +53,8 @@ _PROBE_IMAGE_DATA_URL = (
     "data:image/png;base64,"
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yh3cAAAAASUVORK5CYII="
 )
+_DASHSCOPE_VIDEO_PROBE_ENDPOINT = "/services/aigc/video-generation/video-synthesis"
+_ARK_VIDEO_PROBE_ENDPOINT = "/contents/generations/tasks"
 
 
 @router.get("", response_model=list[ProviderCapability])
@@ -112,6 +117,7 @@ def _to_profile_out(profile: ProviderProfile) -> ProviderProfileOut:
         adapter_kind=profile.adapter_kind,
         capabilities=profile.capabilities or ["image.generate"],
         strategies=normalize_strategies(profile.strategies or {}),
+        adapter_config=profile.adapter_config or {},
         quality=profile.quality,
         output_format=profile.output_format,
         timeout_seconds=profile.timeout_seconds,
@@ -270,6 +276,26 @@ def _build_probe_request(profile: ProviderProfile, api_key: str) -> tuple[str, s
     )
 
 
+def _probe_strategy_for_profile(profile: ProviderProfile) -> str | None:
+    probe_capability = next(
+        (
+            capability
+            for capability in (CHAT_CAPABILITY, "image.generate", "image.edit", "video.generate")
+            if capability in (profile.capabilities or [])
+        ),
+        None,
+    )
+    if not probe_capability:
+        return None
+    return resolve_strategy_for_capability(
+        capability=probe_capability,
+        provider_name=profile.provider_name,
+        model_name=profile.model_name,
+        base_url=profile.base_url,
+        strategies=profile.strategies or {},
+    )
+
+
 @router.get("/profiles", response_model=list[ProviderProfileOut])
 def list_provider_profiles(
     db: Session = Depends(get_db),
@@ -335,6 +361,31 @@ async def probe_provider_profile(
             status="missing_key",
             detail="当前模型没有可用的 API Key，请先在后台重新录入。",
             checked_url=None,
+            checked_at=checked_at,
+        )
+
+    strategy = _probe_strategy_for_profile(profile)
+    if strategy in {DASHSCOPE_ASYNC_VIDEO_STRATEGY, VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY, VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY}:
+        if strategy == DASHSCOPE_ASYNC_VIDEO_STRATEGY:
+            checked_url = f"{profile.base_url.rstrip('/')}{_DASHSCOPE_VIDEO_PROBE_ENDPOINT}"
+            provider_label = "DashScope"
+        elif strategy == VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY:
+            checked_url = f"{profile.base_url.rstrip('/')}{_ARK_VIDEO_PROBE_ENDPOINT}"
+            provider_label = "Volcengine Ark"
+        else:
+            config = profile.adapter_config or {}
+            action = str(config.get("submit_action") or "CVSync2AsyncSubmitTask")
+            version = str(config.get("version") or "2022-08-31")
+            checked_url = f"{profile.base_url.rstrip('/')}?Action={action}&Version={version}"
+            provider_label = "Volcengine Jimeng"
+        return ProviderProfileProbeOut(
+            ok=True,
+            status="configured",
+            detail=(
+                f"已识别 {provider_label} 异步视频配置。探测不会创建真实视频任务；"
+                "请通过受控的 video-generate 任务进行 live smoke。"
+            ),
+            checked_url=checked_url,
             checked_at=checked_at,
         )
 
@@ -419,11 +470,13 @@ def create_provider_profile(
         provider_name=payload.provider_name.strip(),
         display_name=(payload.display_name or payload.model_name).strip(),
         api_key=encrypt_value(payload.api_key.strip()),
+        api_secret=encrypt_value(payload.api_secret.strip()) if payload.api_secret.strip() else "",
         base_url=normalized_base_url,
         model_name=payload.model_name.strip(),
         adapter_kind=payload.adapter_kind.strip() or "openai_compatible",
         capabilities=[value.strip() for value in payload.capabilities if value.strip()] or ["image.generate"],
         strategies=normalized_strategies,
+        adapter_config=payload.adapter_config or {},
         quality=payload.quality.strip() or "medium",
         output_format=payload.output_format.strip() or "png",
         timeout_seconds=payload.timeout_seconds,
@@ -471,6 +524,11 @@ def update_provider_profile(
         if api_key:
             _require_encryption_key_configured("updated")
             profile.api_key = encrypt_value(api_key)
+    if "api_secret" in updates:
+        api_secret = (updates.pop("api_secret") or "").strip()
+        if api_secret:
+            _require_encryption_key_configured("updated")
+            profile.api_secret = encrypt_value(api_secret)
     if "base_url" in updates:
         try:
             updates["base_url"] = normalize_provider_base_url(updates["base_url"])

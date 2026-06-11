@@ -5,6 +5,7 @@ import type {
 
 export const IMAGE_WORKFLOW_KEY = "image-generate";
 export const IMAGE_EDIT_WORKFLOW_KEY = "image-edit";
+export const VIDEO_WORKFLOW_KEY = "video-generate";
 
 export const initialState: LoadState = {
   health: "loading",

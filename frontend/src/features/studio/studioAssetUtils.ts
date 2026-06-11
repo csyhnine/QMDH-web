@@ -60,6 +60,10 @@ export function getRenderableUrl(asset: Asset): string | null {
   return /^(https?:|data:|blob:|\/)/.test(rawPath) ? rawPath : null;
 }
 
+export function isVideoAsset(asset: Asset | undefined): boolean {
+  return asset?.asset_type === "video";
+}
+
 export function summarizeStoragePath(path: string): string {
   if (!path) return "未生成路径";
   if (path.length <= 42) return path;

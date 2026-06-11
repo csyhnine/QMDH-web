@@ -1,4 +1,5 @@
 import type { StudioGalleryPreviewLightboxProps } from "./studioMediaLightboxTypes";
+import { isVideoAsset } from "./studioUtils";
 
 export default function StudioGalleryPreviewLightbox({
   galleryPreview,
@@ -6,23 +7,29 @@ export default function StudioGalleryPreviewLightbox({
   onApplyToComposer,
   onClose,
 }: StudioGalleryPreviewLightboxProps) {
+  const videoAsset = isVideoAsset(galleryPreview.asset);
+
   return (
     <div
       className="media-lightbox"
       role="dialog"
       aria-modal="true"
-      aria-label={"\u751f\u6210\u56fe\u9884\u89c8"}
+      aria-label={videoAsset ? "生成视频预览" : "生成图预览"}
       onClick={onClose}
     >
       <div className="media-lightbox-surface" onClick={(event) => event.stopPropagation()}>
         <header className="media-lightbox-head">
           <span className="media-lightbox-title">{galleryPreview.asset.name}</span>
-          <button type="button" className="media-lightbox-close" aria-label={"\u5173\u95ed"} onClick={onClose}>
-            {"\u00d7"}
+          <button type="button" className="media-lightbox-close" aria-label="关闭" onClick={onClose}>
+            ×
           </button>
         </header>
         <div className="media-lightbox-body">
-          <img src={previewUrl} alt="" />
+          {videoAsset ? (
+            <video src={previewUrl} controls autoPlay playsInline />
+          ) : (
+            <img src={previewUrl} alt="" />
+          )}
         </div>
         <footer className="media-lightbox-foot">
           <button
@@ -30,10 +37,10 @@ export default function StudioGalleryPreviewLightbox({
             className="ghost-button"
             onClick={() => onApplyToComposer(galleryPreview.task, galleryPreview.asset)}
           >
-            {"\u586b\u5165\u521b\u4f5c\u6846"}
+            填入创作框
           </button>
           <button type="button" className="submit-button" onClick={onClose}>
-            {"\u5173\u95ed"}
+            关闭
           </button>
         </footer>
       </div>

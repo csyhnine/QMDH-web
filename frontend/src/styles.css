@@ -1714,12 +1714,29 @@ button {
     linear-gradient(135deg, rgba(241, 245, 249, 0.98), rgba(226, 232, 240, 0.94));
 }
 
-.asset-tile img {
+.asset-tile img,
+.asset-tile video {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.asset-tile-preserve-full img,
+.asset-tile-preserve-full video {
+  object-fit: contain;
+}
+
+.asset-tile-video .asset-tile-overlay {
+  pointer-events: none;
+}
+
+.media-lightbox-body video {
+  width: min(100%, 960px);
+  max-height: min(72vh, 720px);
+  border-radius: 16px;
+  background: #0f172a;
 }
 
 .asset-tile-overlay {

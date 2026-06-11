@@ -1,12 +1,7 @@
 import type { PromptTemplateRecord, Provider, Task, TaskCreatePayload } from "../../api";
 import { defaultStudioForm } from "./studioConstants";
 import type { StudioFormState, SubmissionTracker } from "./studioTypes";
-import {
-  buildImagePayload,
-  clampImageCount,
-  deriveTaskTitleFromPrompt,
-  getStudioWorkflowKeyForProvider,
-} from "./studioUtils";
+import { buildImagePayload, buildVideoPayload, clampImageCount, deriveTaskTitleFromPrompt, getStudioWorkflowKeyForProvider } from "./studioUtils";
 
 type BuildTaskSubmissionPayloadOptions = {
   form: StudioFormState;
@@ -52,7 +47,8 @@ export function buildTaskSubmissionPayload({
       project_code: form.projectCode,
       requested_provider: provider.provider_name,
       classification: form.classification,
-      payload: buildImagePayload(form, workflowKey),
+      payload:
+        form.creationMode === "video" ? buildVideoPayload(form) : buildImagePayload(form, workflowKey),
     },
   };
 }
@@ -67,7 +63,7 @@ export function buildPendingSubmissionTracker({
     taskId: null,
     taskTitle,
     providerName: provider.display_name ?? provider.model_name ?? form.requestedProvider,
-    imageCount: clampImageCount(form.imageCount),
+    imageCount: form.creationMode === "video" ? 1 : clampImageCount(form.imageCount),
     hasReferenceImage: referenceImageCount > 0,
     stage: "submitting",
   };
@@ -83,7 +79,10 @@ export function buildCreatedSubmissionTracker({
     taskId: task.id,
     taskTitle: task.title,
     providerName: provider.display_name ?? provider.model_name ?? task.requested_provider,
-    imageCount: clampImageCount(Number(task.result["requested_image_count"] ?? form.imageCount)),
+    imageCount:
+      form.creationMode === "video"
+        ? 1
+        : clampImageCount(Number(task.result["requested_video_count"] ?? task.result["requested_image_count"] ?? form.imageCount)),
     hasReferenceImage: Boolean(task.result["reference_image_supplied"] ?? referenceImageCount > 0),
     stage: task.status === "running" ? "running" : "pending",
   };

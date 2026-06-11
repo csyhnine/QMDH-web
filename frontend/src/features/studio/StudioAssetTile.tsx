@@ -4,6 +4,7 @@ import type { Asset } from "../../api";
 import {
   buildPreviewStyle,
   getRenderableUrl,
+  isVideoAsset,
   normalizeAspectRatio,
   summarizeStoragePath,
 } from "./studioUtils";
@@ -23,12 +24,14 @@ export default function StudioAssetTile({
 }: StudioAssetTileProps) {
   const renderableUrl = getRenderableUrl(asset);
   const normalizedAspectRatio = aspectRatio ? normalizeAspectRatio(aspectRatio) : null;
+  const videoAsset = isVideoAsset(asset);
 
   return (
     <div
       className={[
         emphasis === "primary" ? "asset-tile asset-tile-primary" : "asset-tile",
         preserveFullImage ? "asset-tile-preserve-full" : "",
+        videoAsset ? "asset-tile-video" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -37,7 +40,13 @@ export default function StudioAssetTile({
         ...(normalizedAspectRatio ? ({ "--asset-ratio": normalizedAspectRatio } as CSSProperties) : {}),
       }}
     >
-      {renderableUrl ? <img src={renderableUrl} alt={asset.name} loading="lazy" /> : null}
+      {renderableUrl ? (
+        videoAsset ? (
+          <video src={renderableUrl} controls playsInline preload="metadata" />
+        ) : (
+          <img src={renderableUrl} alt={asset.name} loading="lazy" />
+        )
+      ) : null}
       <div className="asset-tile-overlay">
         <strong>{asset.name}</strong>
         <span>{summarizeStoragePath(asset.storage_path)}</span>

@@ -97,11 +97,11 @@
 
 | 步骤 | 事项 | 状态 |
 |------|------|------|
-| 3.1 | 在拆分后的 Studio 组件上增加视频模式 / 参数 / 结果展示 | TODO |
-| 3.2 | 复用现有 `video-generate` workflow，不新开平行任务 API | TODO |
-| 3.3 | 端到端 smoke：提交 → 轮询 → mp4 预览 → 资产入库 | TODO |
+| 3.1 | 在拆分后的 Studio 组件上增加视频模式 / 参数 / 结果展示 | DONE（2026-06-11） |
+| 3.2 | 复用现有 `video-generate` workflow，不新开平行任务 API | DONE |
+| 3.3 | 端到端 live smoke：提交 → 轮询 → mp4 预览 → 资产入库 | TODO（需真实 video provider） |
 
-立项时在 `Priority Queue` 新增独立 task（例如 `video-002`）。
+立项 task：**`video-002`**（见 Priority Queue）。
 
 ### 阶段 4：生产化补强（与功能并行，小步进 `main`）
 
@@ -441,7 +441,25 @@
   - `frontend`: `npm run build`
 - Remaining follow-up:
   - Add a guarded live smoke checklist once real provider credentials are available.
-  - Designer Studio video generation UI remains intentionally out of scope until the Studio refactor PR is merged.
+  - Designer Studio video UI tracked separately as **`video-002`**.
+
+### Task: [video-002] Designer Studio video generation UI
+- Status: DONE (UI); live E2E smoke TODO
+- Goal:
+  - Expose `video-generate` in the refactored Studio composer without a parallel task API.
+  - Let designers submit video tasks, poll history, preview mp4 assets, and reuse completed runs.
+- Boundary:
+  - `frontend/src/features/studio/*` only; reuse existing `POST /tasks` + backend adapters from `video-001`.
+- Completion notes (2026-06-11):
+  - Added **视频生成** creation mode alongside 文生图 / 图像编辑.
+  - Provider list filters runtime `video.generate` profiles; submission uses `workflow_key=video-generate` and `buildVideoPayload`.
+  - History feed scopes to video tasks/assets in video mode; feed cards render `<video>` previews and lightbox playback.
+  - Template / 张数 menus hidden in video mode; optional reference images supported; share-to-inspiration disabled for video assets.
+- Acceptance criteria:
+  1. Frontend build passes with video mode wired through existing Studio controller/submission path.
+  2. Video mode submits `video-generate` tasks when a video provider is selected.
+  3. Completed video tasks show playable mp4 in history cards/lightbox.
+  4. Live provider E2E smoke remains a manual follow-up when credentials exist.
 
 ---
 
@@ -449,9 +467,9 @@
 
 > **以 `Development Sequence (2026-06)` 为准。**
 
-1. **Push `main`** 到 GitHub（本地 ahead 3 commits：`12fb9fe` → `c237d93` → `411c719`），关闭 PR #1。
-2. **阶段 2 收尾**：有真实凭证时做受控 video live smoke；**未经用户批准不 deploy 服务器**。
-3. **阶段 3**：立项 `video-002`，在拆分后的 Studio 上增加设计师视频 UI。
+1. **Push `main`** 到 GitHub并关闭 PR #1（如尚未 push）。
+2. **Video live smoke**：在 `/admin/models` 启用 video provider 后，从 Studio **视频生成** 模式提交一条真实任务，验证 mp4 预览。
+3. **未经用户批准不 deploy 服务器**。
 
 ---
 

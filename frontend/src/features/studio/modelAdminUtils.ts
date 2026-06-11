@@ -24,3 +24,14 @@ export function groupProviders(providers: Provider[]): Array<{ label: string; pr
 export function isRuntimeImageProvider(provider: Provider): boolean {
   return provider.outbound && (provider.adapter_kind === "openai_compatible" || provider.provider_name.startsWith("modelscope_"));
 }
+
+export function isRuntimeVideoProvider(provider: Provider): boolean {
+  return provider.outbound && provider.capabilities.includes("video.generate");
+}
+
+export function isRuntimeStudioProvider(provider: Provider, creationMode: "generate" | "edit" | "video"): boolean {
+  if (creationMode === "video") {
+    return isRuntimeVideoProvider(provider);
+  }
+  return isRuntimeImageProvider(provider);
+}

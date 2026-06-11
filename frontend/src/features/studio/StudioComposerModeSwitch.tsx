@@ -17,6 +17,13 @@ export default function StudioComposerModeSwitch({ creationMode, onModeChange }:
       >
         图像编辑
       </button>
+      <button
+        type="button"
+        className={creationMode === "video" ? "composer-mode-button is-active" : "composer-mode-button"}
+        onClick={() => onModeChange("video")}
+      >
+        视频生成
+      </button>
     </div>
   );
 }

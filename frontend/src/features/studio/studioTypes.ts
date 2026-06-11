@@ -18,8 +18,10 @@ export type LoadState = {
   ready: boolean;
 };
 
+export type CreationMode = "generate" | "edit" | "video";
+
 export type StudioFormState = {
-  creationMode: "generate" | "edit";
+  creationMode: CreationMode;
   title: string;
   prompt: string;
   projectCode: string;

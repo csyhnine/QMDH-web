@@ -1,3 +1,4 @@
+import { composerPromptPlaceholder } from "./studioComposerDockUtils";
 import type { StudioPromptTextareaProps } from "./studioComposerExpandedContentTypes";
 
 export default function StudioPromptTextarea({
@@ -13,7 +14,7 @@ export default function StudioPromptTextarea({
         rows={4}
         value={studioForm.prompt}
         onChange={(event) => onPromptChange(event.target.value)}
-        placeholder="请输入要生成或编辑的画面描述。"
+        placeholder={composerPromptPlaceholder(studioForm.creationMode)}
       />
       <span className="composer-textarea-hint">{referenceHint}</span>
     </label>

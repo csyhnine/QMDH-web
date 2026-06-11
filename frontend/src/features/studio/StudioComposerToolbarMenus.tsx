@@ -5,12 +5,14 @@ import StudioComposerTemplateMenuSlot from "./StudioComposerTemplateMenuSlot";
 import type { StudioComposerToolbarMenusProps } from "./studioComposerToolbarTypes";
 
 export default function StudioComposerToolbarMenus(props: StudioComposerToolbarMenusProps) {
+  const isVideoMode = props.studioForm.creationMode === "video";
+
   return (
     <>
-      <StudioComposerTemplateMenuSlot {...props} />
+      {isVideoMode ? null : <StudioComposerTemplateMenuSlot {...props} />}
       <StudioComposerProviderMenuSlot {...props} />
       <StudioComposerDisplayMenuSlot {...props} />
-      <StudioComposerCountMenuSlot {...props} />
+      {isVideoMode ? null : <StudioComposerCountMenuSlot {...props} />}
     </>
   );
 }

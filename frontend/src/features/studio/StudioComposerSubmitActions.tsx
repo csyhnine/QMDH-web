@@ -1,7 +1,10 @@
 import type { SubmissionTracker } from "./studioTypes";
+import { composerSubmitLabel } from "./studioComposerDockUtils";
+import type { StudioFormState } from "./studioTypes";
 
 type StudioComposerSubmitActionsProps = {
   availableProviderCount: number;
+  creationMode: StudioFormState["creationMode"];
   hasActiveProject: boolean;
   selectedStyleLabel: string;
   serviceHealthy: boolean;
@@ -12,6 +15,7 @@ type StudioComposerSubmitActionsProps = {
 
 export default function StudioComposerSubmitActions({
   availableProviderCount,
+  creationMode,
   hasActiveProject,
   selectedStyleLabel,
   serviceHealthy,
@@ -32,7 +36,7 @@ export default function StudioComposerSubmitActions({
         className="submit-button"
         disabled={submitting || uploadingReference || availableProviderCount === 0 || !hasActiveProject}
       >
-        {submitting ? "正在创建..." : !hasActiveProject ? "请先新建项目" : "开始生成"}
+        {submitting ? "正在创建..." : !hasActiveProject ? "请先新建项目" : composerSubmitLabel(creationMode, submitting)}
       </button>
     </div>
   );

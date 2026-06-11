@@ -42,6 +42,25 @@ export function validateStudioTaskSubmission({
     return { ok: false };
   }
 
+  if (!form.prompt.trim()) {
+    setState((current) => ({
+      ...current,
+      error: form.creationMode === "video" ? "请先输入视频描述。" : "请先输入提示词。",
+    }));
+    return { ok: false };
+  }
+
+  if (form.creationMode === "video") {
+    if (!providerForSubmit.capabilities.includes("video.generate")) {
+      setState((current) => ({
+        ...current,
+        error: "当前模型不支持视频生成，请切换到支持 video.generate 的模型。",
+      }));
+      return { ok: false };
+    }
+    return { ok: true, referenceImageCount: clampReferenceImageCount(form.referenceImages.length) };
+  }
+
   if (form.creationMode === "edit" && !providerForSubmit.capabilities.includes("image.edit")) {
     setState((current) => ({
       ...current,

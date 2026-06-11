@@ -1,6 +1,7 @@
 import type { Asset } from "../../api";
 import type { StudioFeedActionItem, StudioFeedCardActionsProps } from "./studioFeedCardTypes";
 import type { HistoryActionFeedback, HistoryActionKey } from "./studioTypes";
+import { isVideoAsset } from "./studioUtils";
 
 const BOOKMARK_PENDING_LABEL = "\u6807\u8bb0\u4e2d...";
 const BOOKMARKED_LABEL = "\u2605 \u5df2\u6807\u8bb0";
@@ -80,7 +81,7 @@ export function buildStudioFeedActionItems({
     },
     {
       action: "share",
-      disabled: !asset || pendingAction !== null,
+      disabled: !asset || pendingAction !== null || isVideoAsset(asset),
       label: shareActionLabel(asset, pendingAction),
       onClick: onShare,
     },

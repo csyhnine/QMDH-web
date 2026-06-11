@@ -19,6 +19,7 @@ export default function StudioComposerToolbar(props: StudioComposerToolbarProps)
       <StudioComposerToolbarMenus {...props} />
       <StudioComposerSubmitActions
         availableProviderCount={availableProviderCount}
+        creationMode={props.studioForm.creationMode}
         hasActiveProject={hasActiveProject}
         selectedStyleLabel={selectedStyleLabel}
         serviceHealthy={serviceHealthy}

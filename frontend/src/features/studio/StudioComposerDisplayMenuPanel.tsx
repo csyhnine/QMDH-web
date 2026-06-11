@@ -8,6 +8,8 @@ export default function StudioComposerDisplayMenuPanel({
   onAspectRatioSelect,
   onResolutionSelect,
 }: StudioComposerDisplayMenuPanelProps) {
+  const isVideoMode = studioForm.creationMode === "video";
+
   return (
     <div className="composer-menu-panel composer-menu-panel-display">
       <StudioComposerOptionGroup
@@ -17,13 +19,15 @@ export default function StudioComposerDisplayMenuPanel({
         onSelect={onAspectRatioSelect}
       />
 
-      <StudioComposerOptionGroup
-        activeId={studioForm.resolution}
-        gridClassName="composer-chip-grid composer-chip-grid-two"
-        options={resolutionOptions}
-        title="分辨率"
-        onSelect={onResolutionSelect}
-      />
+      {isVideoMode ? null : (
+        <StudioComposerOptionGroup
+          activeId={studioForm.resolution}
+          gridClassName="composer-chip-grid composer-chip-grid-two"
+          options={resolutionOptions}
+          title="分辨率"
+          onSelect={onResolutionSelect}
+        />
+      )}
     </div>
   );
 }

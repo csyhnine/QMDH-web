@@ -1,15 +1,22 @@
 import { type FormEvent, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { BrandIcon, BrandWordmark } from "../../components/shared";
+import { BrandWordmark } from "../../components/shared";
 import { useAuth } from "../../context/AuthContext";
+import {
+  clearRememberedLoginCredentials,
+  loadRememberedLoginCredentials,
+  saveRememberedLoginCredentials,
+} from "../../features/auth/loginCredentialsStorage";
 
 export default function LoginPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [loginName, setLoginName] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
+  const remembered = loadRememberedLoginCredentials();
+  const [loginName, setLoginName] = useState(remembered.name);
+  const [loginPassword, setLoginPassword] = useState(remembered.password);
+  const [rememberLogin, setRememberLogin] = useState(remembered.remember);
   const [loginError, setLoginError] = useState("");
 
   async function handleLogin(event: FormEvent) {
@@ -17,7 +24,13 @@ export default function LoginPage() {
     setLoginError("");
 
     try {
-      await login(loginName, loginPassword);
+      const trimmedName = loginName.trim();
+      await login(trimmedName, loginPassword);
+      if (rememberLogin) {
+        saveRememberedLoginCredentials(trimmedName, loginPassword);
+      } else {
+        clearRememberedLoginCredentials();
+      }
       const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
       navigate(from || "/studio/generate", { replace: true });
     } catch (error) {
@@ -29,7 +42,6 @@ export default function LoginPage() {
     <main className="auth-shell">
       <form className="auth-card" onSubmit={handleLogin}>
         <div className="auth-brand">
-          <BrandIcon className="auth-brand-icon" />
           <BrandWordmark className="auth-brand-wordmark" />
         </div>
         <p className="canvas-kicker">设计师工作台登录</p>
@@ -46,6 +58,14 @@ export default function LoginPage() {
             onChange={(event) => setLoginPassword(event.target.value)}
             autoComplete="current-password"
           />
+        </label>
+        <label className="auth-remember">
+          <input
+            type="checkbox"
+            checked={rememberLogin}
+            onChange={(event) => setRememberLogin(event.target.checked)}
+          />
+          <span>记住账号和密码</span>
         </label>
         {loginError ? <div className="floating-error">{loginError}</div> : null}
         <button type="submit" className="submit-button">

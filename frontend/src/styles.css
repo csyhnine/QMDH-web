@@ -104,6 +104,23 @@ button {
   display: block;
 }
 
+.auth-remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  color: var(--text-secondary, #5f6b7a);
+  cursor: pointer;
+  user-select: none;
+}
+
+.auth-remember input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent, #2f6fed);
+}
+
 .auth-card h1 {
   margin: 0;
   font-family: "Sora", sans-serif;

@@ -17,8 +17,10 @@ export default function GenerateStudioShell() {
         loginName={studioAuth.loginName}
         loginPassword={studioAuth.loginPassword}
         loginError={studioAuth.loginError}
+        rememberLogin={studioAuth.rememberLogin}
         onLoginNameChange={studioAuth.setLoginName}
         onLoginPasswordChange={studioAuth.setLoginPassword}
+        onRememberLoginChange={studioAuth.setRememberLogin}
         onSubmit={studioAuth.login}
       />
     );

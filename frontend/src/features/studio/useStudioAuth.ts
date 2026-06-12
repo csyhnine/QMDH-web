@@ -7,16 +7,23 @@ import {
   getStoredAuthToken,
   setStoredAuthToken,
 } from "../../api";
+import {
+  clearRememberedLoginCredentials,
+  loadRememberedLoginCredentials,
+  saveRememberedLoginCredentials,
+} from "../auth/loginCredentialsStorage";
 
 type UseStudioAuthOptions = {
   onLogout: () => void;
 };
 
 export function useStudioAuth({ onLogout }: UseStudioAuthOptions) {
+  const remembered = loadRememberedLoginCredentials();
   const [authReady, setAuthReady] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [loginName, setLoginName] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
+  const [loginName, setLoginName] = useState(remembered.name);
+  const [loginPassword, setLoginPassword] = useState(remembered.password);
+  const [rememberLogin, setRememberLogin] = useState(remembered.remember);
   const [loginError, setLoginError] = useState("");
 
   useEffect(() => {
@@ -44,10 +51,16 @@ export function useStudioAuth({ onLogout }: UseStudioAuthOptions) {
     event.preventDefault();
     setLoginError("");
     try {
-      const response = await api.login(loginName.trim(), loginPassword);
+      const trimmedName = loginName.trim();
+      const response = await api.login(trimmedName, loginPassword);
       setStoredAuthToken(response.token);
       setCurrentUser(response.user);
-      setLoginPassword("");
+      if (rememberLogin) {
+        saveRememberedLoginCredentials(trimmedName, loginPassword);
+      } else {
+        clearRememberedLoginCredentials();
+      }
+      setLoginPassword(rememberLogin ? loginPassword : "");
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "登录失败");
     }
@@ -73,7 +86,9 @@ export function useStudioAuth({ onLogout }: UseStudioAuthOptions) {
     loginName,
     loginPassword,
     logout,
+    rememberLogin,
     setLoginName,
     setLoginPassword,
+    setRememberLogin,
   };
 }

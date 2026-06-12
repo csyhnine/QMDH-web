@@ -536,6 +536,11 @@ button {
   bottom: auto;
   margin-top: 0;
   flex-shrink: 0;
+  overflow: visible;
+}
+
+.canvas-area.canvas-studio-layout .composer-toolbar {
+  overflow: visible;
 }
 
 .canvas-area-empty {
@@ -2561,6 +2566,11 @@ button {
   max-height: min(74vh, 760px);
   overflow: auto;
   scrollbar-gutter: stable;
+  z-index: 24;
+}
+
+.canvas-area.canvas-studio-layout .composer-menu-panel-template {
+  max-height: min(74vh, calc(100dvh - 200px));
 }
 
 .composer-dock-centered .composer-menu-panel {

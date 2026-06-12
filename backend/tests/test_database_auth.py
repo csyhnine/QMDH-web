@@ -288,6 +288,15 @@ class DatabaseAuthTests(unittest.TestCase):
         self.assertEqual(designer_execution["chat_turn_count"], 1)
         self.assertEqual(designer_execution["chat_total_tokens"], 200)
 
+        usage_logs = self.client.get("/dashboard/usage-logs", headers={"Authorization": f"Bearer {ops_token}"})
+        self.assertEqual(usage_logs.status_code, 200, usage_logs.text)
+        usage_payload = usage_logs.json()
+        self.assertGreaterEqual(usage_payload["total"], 1)
+        self.assertTrue(any(item["user_name"] == "designer" for item in usage_payload["items"]))
+
+        designer_logs = self.client.get("/dashboard/usage-logs", headers={"Authorization": f"Bearer {designer_token}"})
+        self.assertEqual(designer_logs.status_code, 403)
+
         created = self.client.post(
             "/users",
             headers={"Authorization": f"Bearer {admin_token}"},

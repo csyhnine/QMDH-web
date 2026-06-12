@@ -18,6 +18,8 @@ from app.schemas import (
     DashboardExecutionRanking,
     DashboardModelCallSlice,
     DashboardStats,
+    UsageLogPage,
+    UsageLogRecord,
 )
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -609,4 +611,193 @@ def get_dashboard_stats(
         window_chat_completion_tokens=sum(int(entry.completion_tokens or 0) for entry in chat_entries),
         window_chat_total_tokens=sum(int(entry.total_tokens or 0) for entry in chat_entries),
         execution_rankings=execution_rankings[:10],
+    )
+
+
+USAGE_LOG_DEFAULT_ENTRY_TYPES = ("provider_call.recorded", "chat.message.completed", "task.finalized")
+
+
+def _usage_log_kind(entry: UsageLedger) -> str:
+    if entry.entry_type == "chat.message.completed":
+        return "对话"
+    if entry.error_summary or entry.error_code:
+        return "失败"
+    if entry.task_status == TaskStatus.failed:
+        return "失败"
+    return "消费"
+
+
+def _usage_log_is_success(entry: UsageLedger) -> bool:
+    if entry.error_summary or entry.error_code:
+        return False
+    if entry.task_status == TaskStatus.failed:
+        return False
+    return True
+
+
+def _usage_log_model_name(entry: UsageLedger) -> str:
+    model = (entry.model_name or "").strip()
+    if model:
+        return model
+    requested = (entry.requested_provider or "").strip()
+    if requested:
+        return requested
+    provider = (entry.provider_name or "").strip()
+    return provider
+
+
+def _usage_log_detail_text(entry: UsageLedger) -> str:
+    parts: list[str] = []
+    if entry.capability:
+        parts.append(f"能力: {entry.capability}")
+    if entry.billing_unit:
+        parts.append(f"计费单位: {entry.billing_unit}")
+    if entry.billable_units:
+        parts.append(f"计费量: {entry.billable_units}")
+    if entry.output_count:
+        parts.append(f"产出数: {entry.output_count}")
+    if entry.project_name and entry.project_code != "__chat__":
+        parts.append(f"项目: {entry.project_name} ({entry.project_code})")
+    if entry.error_summary:
+        parts.append(entry.error_summary[:400])
+    elif entry.error_code:
+        parts.append(entry.error_code)
+    return " · ".join(parts)
+
+
+def _usage_log_record(entry: UsageLedger, group_name: str, display_name: str) -> UsageLogRecord:
+    return UsageLogRecord(
+        id=entry.id,
+        recorded_at=entry.recorded_at,
+        user_name=entry.user_name,
+        user_display_name=display_name or entry.user_name,
+        group_name=group_name or "",
+        entry_type=entry.entry_type,
+        usage_kind=_usage_log_kind(entry),
+        is_success=_usage_log_is_success(entry),
+        model_name=_usage_log_model_name(entry),
+        provider_name=entry.provider_name or "",
+        requested_provider=entry.requested_provider or "",
+        capability=entry.capability or "",
+        project_code=entry.project_code or "",
+        project_name=entry.project_name or "",
+        task_id=entry.task_id,
+        task_status=entry.task_status.value if entry.task_status else None,
+        latency_ms=int(entry.latency_ms or 0),
+        input_tokens=int(entry.input_tokens or entry.prompt_tokens or 0),
+        output_tokens=int(entry.output_tokens or entry.completion_tokens or 0),
+        cached_input_tokens=int(entry.cached_input_tokens or 0),
+        total_tokens=int(entry.total_tokens or 0),
+        output_count=int(entry.output_count or 0),
+        cost=_round(float(entry.cost or 0.0)),
+        cost_currency=str(entry.cost_currency or "CNY").upper(),
+        billing_unit=entry.billing_unit or "",
+        billable_units=float(entry.billable_units or 0.0),
+        error_code=entry.error_code or "",
+        error_summary=entry.error_summary or "",
+        source_table=entry.source_table,
+        source_id=entry.source_id,
+        detail_text=_usage_log_detail_text(entry),
+    )
+
+
+@router.get("/usage-logs", response_model=UsageLogPage)
+def list_usage_logs(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    start_at: datetime | None = None,
+    end_at: datetime | None = None,
+    user_name: str | None = None,
+    group_name: str | None = None,
+    model_name: str | None = None,
+    provider_name: str | None = None,
+    capability: str | None = None,
+    entry_type: str | None = None,
+    status: str | None = None,
+    include_task_summary: bool = Query(default=True),
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> UsageLogPage:
+    require_ops_access(auth_user)
+
+    now_local = datetime.now(SHANGHAI_TZ)
+    resolved_end = end_at or now_local
+    resolved_start = start_at or (resolved_end - timedelta(days=7))
+    start_utc = _with_utc(resolved_start)
+    end_utc = _with_utc(resolved_end)
+
+    allowed_entry_types = list(USAGE_LOG_DEFAULT_ENTRY_TYPES)
+    if not include_task_summary:
+        allowed_entry_types = [item for item in allowed_entry_types if item != "task.finalized"]
+
+    filters = [
+        UsageLedger.recorded_at >= start_utc,
+        UsageLedger.recorded_at <= end_utc,
+        UsageLedger.entry_type.in_(allowed_entry_types),
+    ]
+
+    if entry_type and entry_type != "all":
+        filters.append(UsageLedger.entry_type == entry_type)
+    if user_name:
+        filters.append(UsageLedger.user_name.ilike(f"%{user_name.strip()}%"))
+    if model_name:
+        keyword = f"%{model_name.strip()}%"
+        filters.append(
+            (UsageLedger.model_name.ilike(keyword))
+            | (UsageLedger.requested_provider.ilike(keyword))
+            | (UsageLedger.provider_name.ilike(keyword))
+        )
+    if provider_name:
+        keyword = f"%{provider_name.strip()}%"
+        filters.append(
+            (UsageLedger.provider_name.ilike(keyword)) | (UsageLedger.requested_provider.ilike(keyword))
+        )
+    if capability:
+        filters.append(UsageLedger.capability == capability.strip())
+    if group_name:
+        filters.append(User.group_name.ilike(f"%{group_name.strip()}%"))
+    if status == "success":
+        filters.append(UsageLedger.error_summary == "")
+        filters.append(UsageLedger.error_code == "")
+        filters.append((UsageLedger.task_status.is_(None)) | (UsageLedger.task_status != TaskStatus.failed))
+    elif status == "failed":
+        filters.append(
+            (UsageLedger.error_summary != "")
+            | (UsageLedger.error_code != "")
+            | (UsageLedger.task_status == TaskStatus.failed)
+        )
+
+    base_query = (
+        select(UsageLedger, User.group_name, User.display_name)
+        .outerjoin(User, UsageLedger.user_id == User.id)
+        .where(*filters)
+    )
+
+    total = db.scalar(select(func.count()).select_from(base_query.subquery())) or 0
+    total_pages = max(1, int((total + page_size - 1) // page_size)) if total else 0
+    safe_page = min(page, total_pages) if total_pages else 1
+    offset = (safe_page - 1) * page_size
+
+    cost_rows = db.execute(
+        select(UsageLedger.cost_currency, func.sum(UsageLedger.cost))
+        .outerjoin(User, UsageLedger.user_id == User.id)
+        .where(*filters)
+        .group_by(UsageLedger.cost_currency)
+    ).all()
+
+    rows = db.execute(
+        base_query.order_by(UsageLedger.recorded_at.desc(), UsageLedger.id.desc()).offset(offset).limit(page_size)
+    ).all()
+
+    return UsageLogPage(
+        items=[_usage_log_record(entry, group_name or "", display_name or "") for entry, group_name, display_name in rows],
+        page=safe_page,
+        page_size=page_size,
+        total=int(total),
+        total_pages=total_pages if total else 0,
+        window_cost_by_currency=[
+            DashboardCurrencySpend(currency=str(currency or "CNY").upper(), total_cost=_round(float(amount or 0.0)))
+            for currency, amount in cost_rows
+            if abs(float(amount or 0.0)) > 0
+        ],
     )

@@ -23,6 +23,7 @@ import { useAuth } from "./context/AuthContext";
 
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/admin/DashboardPage"));
+const UsageLogsPage = lazy(() => import("./pages/admin/UsageLogsPage"));
 const UsersPage = lazy(() => import("./pages/admin/UsersPage"));
 const ModelsPage = lazy(() => import("./pages/admin/ModelsPage"));
 const PromptTemplatesPage = lazy(() => import("./pages/admin/PromptTemplatesPage"));
@@ -109,7 +110,7 @@ function StudioFeedbackRoute() {
 function DashboardRoute() {
   const [dashboard, setDashboard] = useState<DashboardStats | null>(null);
   const [groupSummaries, setGroupSummaries] = useState<UserGroupSummary[]>([]);
-  const [dashboardStatsDays, setDashboardStatsDays] = useState(30);
+  const [dashboardStatsDays, setDashboardStatsDays] = useState(7);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
   async function refresh(days = dashboardStatsDays) {
@@ -364,6 +365,18 @@ export default function AppRouter() {
             }
           />
           <Route path="/admin/dashboard" element={<ProtectedRoute><OpsRoute><DashboardRoute /></OpsRoute></ProtectedRoute>} />
+          <Route
+            path="/admin/usage-logs"
+            element={
+              <ProtectedRoute>
+                <OpsRoute>
+                  <AppShell kind="admin" active="usage-logs">
+                    <UsageLogsPage />
+                  </AppShell>
+                </OpsRoute>
+              </ProtectedRoute>
+            }
+          />
           <Route path="/admin/users" element={<ProtectedRoute><AdminRoute><UsersRoute /></AdminRoute></ProtectedRoute>} />
           <Route path="/admin/models" element={<ProtectedRoute><OpsRoute><ModelsRoute /></OpsRoute></ProtectedRoute>} />
           <Route path="/admin/templates" element={<ProtectedRoute><AdminRoute><PromptTemplatesRoute /></AdminRoute></ProtectedRoute>} />

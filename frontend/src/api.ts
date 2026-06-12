@@ -275,6 +275,64 @@ export type DashboardStats = {
   execution_rankings: DashboardExecutionRanking[];
 };
 
+export type UsageLogRecord = {
+  id: number;
+  recorded_at: string;
+  user_name: string;
+  user_display_name: string;
+  group_name: string;
+  entry_type: string;
+  usage_kind: string;
+  is_success: boolean;
+  model_name: string;
+  provider_name: string;
+  requested_provider: string;
+  capability: string;
+  project_code: string;
+  project_name: string;
+  task_id: number | null;
+  task_status: string | null;
+  latency_ms: number;
+  input_tokens: number;
+  output_tokens: number;
+  cached_input_tokens: number;
+  total_tokens: number;
+  output_count: number;
+  cost: number;
+  cost_currency: string;
+  billing_unit: string;
+  billable_units: number;
+  error_code: string;
+  error_summary: string;
+  source_table: string;
+  source_id: number;
+  detail_text: string;
+};
+
+export type UsageLogPage = {
+  items: UsageLogRecord[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  window_cost_by_currency: DashboardCurrencySpend[];
+};
+
+export type UsageLogQuery = {
+  page?: number;
+  page_size?: number;
+  start_at?: string;
+  end_at?: string;
+  user_name?: string;
+  group_name?: string;
+  model_name?: string;
+  provider_name?: string;
+  capability?: string;
+  entry_type?: string;
+  status?: string;
+  include_task_summary?: boolean;
+};
+
 export type ProviderProfileRecord = {
   id: number;
   provider_name: string;
@@ -780,6 +838,23 @@ export const api = {
   dashboardStats: (days = 30) => {
     const d = Math.min(365, Math.max(1, Math.floor(days)));
     return request<DashboardStats>(`/dashboard/stats?days=${d}`);
+  },
+  usageLogs: (query: UsageLogQuery = {}) => {
+    const params = new URLSearchParams();
+    if (query.page) params.set("page", String(query.page));
+    if (query.page_size) params.set("page_size", String(query.page_size));
+    if (query.start_at) params.set("start_at", query.start_at);
+    if (query.end_at) params.set("end_at", query.end_at);
+    if (query.user_name) params.set("user_name", query.user_name);
+    if (query.group_name) params.set("group_name", query.group_name);
+    if (query.model_name) params.set("model_name", query.model_name);
+    if (query.provider_name) params.set("provider_name", query.provider_name);
+    if (query.capability) params.set("capability", query.capability);
+    if (query.entry_type) params.set("entry_type", query.entry_type);
+    if (query.status) params.set("status", query.status);
+    if (query.include_task_summary === false) params.set("include_task_summary", "false");
+    const suffix = params.toString();
+    return request<UsageLogPage>(`/dashboard/usage-logs${suffix ? `?${suffix}` : ""}`);
   },
   health: () => request<{ status: string; service: string }>("/health"),
   projects: () => request<Project[]>("/projects"),

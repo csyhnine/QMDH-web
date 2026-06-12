@@ -5,7 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { BrandIcon } from "./Brand";
 
 type StudioTab = "generate" | "inspiration" | "feedback" | "chat";
-type AdminTab = "dashboard" | "inspiration" | "feedback" | "models" | "templates" | "agents" | "users" | "settings";
+type AdminTab = "dashboard" | "usage-logs" | "inspiration" | "feedback" | "models" | "templates" | "agents" | "users" | "settings";
 
 type AppShellProps =
   | {
@@ -21,6 +21,7 @@ type AppShellProps =
 
 const adminNavItems: Array<{ key: AdminTab; label: string; path: string }> = [
   { key: "dashboard", label: "看板", path: "/admin/dashboard" },
+  { key: "usage-logs", label: "日志", path: "/admin/usage-logs" },
   { key: "inspiration", label: "灵感", path: "/admin/inspiration" },
   { key: "feedback", label: "反馈", path: "/admin/feedback" },
   { key: "models", label: "模型", path: "/admin/models" },

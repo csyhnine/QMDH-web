@@ -206,6 +206,49 @@ class DashboardStats(BaseModel):
     execution_rankings: list[DashboardExecutionRanking] = Field(default_factory=list)
 
 
+class UsageLogRecord(BaseModel):
+    id: int
+    recorded_at: datetime
+    user_name: str
+    user_display_name: str = ""
+    group_name: str = ""
+    entry_type: str
+    usage_kind: str
+    is_success: bool = True
+    model_name: str = ""
+    provider_name: str = ""
+    requested_provider: str = ""
+    capability: str = ""
+    project_code: str = ""
+    project_name: str = ""
+    task_id: int | None = None
+    task_status: str | None = None
+    latency_ms: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_input_tokens: int = 0
+    total_tokens: int = 0
+    output_count: int = 0
+    cost: float = 0.0
+    cost_currency: str = "CNY"
+    billing_unit: str = ""
+    billable_units: float = 0.0
+    error_code: str = ""
+    error_summary: str = ""
+    source_table: str = ""
+    source_id: int = 0
+    detail_text: str = ""
+
+
+class UsageLogPage(BaseModel):
+    items: list[UsageLogRecord] = Field(default_factory=list)
+    page: int = 1
+    page_size: int = 20
+    total: int = 0
+    total_pages: int = 0
+    window_cost_by_currency: list[DashboardCurrencySpend] = Field(default_factory=list)
+
+
 class AuthLoginIn(BaseModel):
     username: str = Field(min_length=1, max_length=100)
     password: str = Field(min_length=1, max_length=200)

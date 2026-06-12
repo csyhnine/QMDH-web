@@ -1,6 +1,6 @@
 import type { Asset, Provider, Task } from "../../api";
-import { isRuntimeStudioProvider } from "./modelAdminUtils";
-import { IMAGE_EDIT_WORKFLOW_KEY, VIDEO_WORKFLOW_KEY } from "./studioConstants";
+import { isGrokSkuId } from "./grokVideoUtils";
+import { isRuntimeStudioProvider } from "./modelAdminUtils";import { IMAGE_EDIT_WORKFLOW_KEY, VIDEO_WORKFLOW_KEY } from "./studioConstants";
 import { inferStyleFromAsset } from "./studioAssetUtils";
 import { inferRequestedImageCount, taskReferenceImages, taskResultString } from "./studioTaskUtils";
 import type { ReferenceUploadItem, StudioFormState } from "./studioTypes";
@@ -59,6 +59,8 @@ export function buildStudioFormFromTask({
       requestedProvider: task.requested_provider,
     })?.provider_name ?? studioForm.requestedProvider;
 
+  const restoredGrokSku = taskResultString(task, "video_sku");
+
   return {
     nextForm: {
       ...studioForm,
@@ -74,7 +76,7 @@ export function buildStudioFormFromTask({
       deliverable: taskResultString(task, "storyboard") || taskResultString(task, "deliverable") || studioForm.deliverable,
       notes: taskResultString(task, "motion_prompt") || taskResultString(task, "prompt_supplement") || studioForm.notes,
       referenceImages: nextUploads.map((item) => item.storagePath),
-    },
-    nextUploads,
+      grokVideoSku: isGrokSkuId(restoredGrokSku) ? restoredGrokSku : studioForm.grokVideoSku,
+    },    nextUploads,
   };
 }

@@ -2547,6 +2547,15 @@ button {
   width: min(360px, 88vw);
 }
 
+.composer-menu-panel-grok-sku {
+  width: min(360px, 88vw);
+}
+
+.composer-grok-sku-list {
+  display: grid;
+  gap: 8px;
+}
+
 .composer-menu-panel-template {
   width: min(980px, calc(100vw - 48px));
   max-height: min(74vh, 760px);

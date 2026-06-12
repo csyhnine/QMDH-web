@@ -37,6 +37,7 @@ from app.services.provider_strategy import (
     CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
     CHAT_MODALITIES_IMAGE_STRATEGY,
     DASHSCOPE_ASYNC_VIDEO_STRATEGY,
+    HAODEYA_GROK_VIDEO_STRATEGY,
     OPENAI_CHAT_STRATEGY,
     OPENAI_IMAGE_EDITS_STRATEGY,
     OPENAI_IMAGES_STRATEGY,
@@ -55,6 +56,7 @@ _PROBE_IMAGE_DATA_URL = (
 )
 _DASHSCOPE_VIDEO_PROBE_ENDPOINT = "/services/aigc/video-generation/video-synthesis"
 _ARK_VIDEO_PROBE_ENDPOINT = "/contents/generations/tasks"
+_HAODEYA_GROK_VIDEO_PROBE_ENDPOINT = "/videos"
 
 
 @router.get("", response_model=list[ProviderCapability])
@@ -365,13 +367,21 @@ async def probe_provider_profile(
         )
 
     strategy = _probe_strategy_for_profile(profile)
-    if strategy in {DASHSCOPE_ASYNC_VIDEO_STRATEGY, VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY, VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY}:
+    if strategy in {
+        DASHSCOPE_ASYNC_VIDEO_STRATEGY,
+        VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
+        VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
+        HAODEYA_GROK_VIDEO_STRATEGY,
+    }:
         if strategy == DASHSCOPE_ASYNC_VIDEO_STRATEGY:
             checked_url = f"{profile.base_url.rstrip('/')}{_DASHSCOPE_VIDEO_PROBE_ENDPOINT}"
             provider_label = "DashScope"
         elif strategy == VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY:
             checked_url = f"{profile.base_url.rstrip('/')}{_ARK_VIDEO_PROBE_ENDPOINT}"
             provider_label = "Volcengine Ark"
+        elif strategy == HAODEYA_GROK_VIDEO_STRATEGY:
+            checked_url = f"{profile.base_url.rstrip('/')}{_HAODEYA_GROK_VIDEO_PROBE_ENDPOINT}"
+            provider_label = "Haodeya Grok Imagine"
         else:
             config = profile.adapter_config or {}
             action = str(config.get("submit_action") or "CVSync2AsyncSubmitTask")

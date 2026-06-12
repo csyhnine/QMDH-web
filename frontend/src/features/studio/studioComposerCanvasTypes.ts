@@ -33,6 +33,8 @@ export type StudioComposerCanvasProps = {
   providerGroups: ProviderGroup[];
   referenceUploads: ReferenceUploadItem[];
   resolutionOptions: ResolutionOption[];
+  selectedProvider?: Provider;
+  selectedGrokSkuLabel: string | null;
   selectedProviderModelName: string | null;
   selectedResolutionLabel: string | null;
   selectedStyleLabel: string;
@@ -60,6 +62,7 @@ export type StudioComposerCanvasProps = {
   onOpenReferencePicker: () => void;
   onPromptChange: (value: string) => void;
   onProviderSelect: (providerName: string) => void;
+  onGrokVideoSkuSelect: (sku: import("./grokVideoUtils").GrokVideoSku) => void;
   onReferenceDrop: (event: DragEvent<HTMLButtonElement>) => void;
   onReferenceInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemoveReferenceUpload: (index: number) => void;

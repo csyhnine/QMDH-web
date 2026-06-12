@@ -46,4 +46,5 @@ export const defaultStudioForm: StudioFormState = {
   deliverable: "",
   referenceImages: [],
   notes: "",
+  grokVideoSku: "",
 };

@@ -20,6 +20,7 @@ import { useStudioReferenceUploadState } from "./useStudioReferenceUploadState";
 type UseStudioReferenceUploadsOptions = {
   defaultTitle: string;
   fileInputRef: RefObject<HTMLInputElement | null>;
+  maxReferenceCount?: number;
   onClearError: () => void;
   onError: (message: string) => void;
   selectedProviderName: string;
@@ -33,6 +34,7 @@ export type StudioReferenceUploadState = ReturnType<typeof useStudioReferenceUpl
 export function useStudioReferenceUploads({
   defaultTitle,
   fileInputRef,
+  maxReferenceCount = 4,
   onClearError,
   onError,
   selectedProviderName,
@@ -62,7 +64,11 @@ export function useStudioReferenceUploads({
       return;
     }
 
-    const { acceptedFiles, errors } = prepareReferenceUploadFiles(files, referenceUploads.length);
+    const { acceptedFiles, errors } = prepareReferenceUploadFiles(
+      files,
+      referenceUploads.length,
+      maxReferenceCount
+    );
     for (const message of errors) {
       onError(message);
     }

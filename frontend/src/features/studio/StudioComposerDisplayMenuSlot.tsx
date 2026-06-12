@@ -5,6 +5,7 @@ export default function StudioComposerDisplayMenuSlot({
   activeComposerMenu,
   aspectRatioOptions,
   resolutionOptions,
+  selectedProvider,
   selectedResolutionLabel,
   studioForm,
   onAspectRatioSelect,
@@ -16,6 +17,7 @@ export default function StudioComposerDisplayMenuSlot({
       activeComposerMenu={activeComposerMenu}
       aspectRatioOptions={aspectRatioOptions}
       resolutionOptions={resolutionOptions}
+      selectedProvider={selectedProvider}
       selectedResolutionLabel={selectedResolutionLabel}
       studioForm={studioForm}
       onAspectRatioSelect={onAspectRatioSelect}

@@ -48,7 +48,7 @@ export function buildTaskSubmissionPayload({
       requested_provider: provider.provider_name,
       classification: form.classification,
       payload:
-        form.creationMode === "video" ? buildVideoPayload(form) : buildImagePayload(form, workflowKey),
+        form.creationMode === "video" ? buildVideoPayload(form, provider) : buildImagePayload(form, workflowKey),
     },
   };
 }

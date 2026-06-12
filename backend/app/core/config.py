@@ -104,6 +104,7 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://127.0.0.1:18080"
     media_root: str = "./storage/assets"
     media_url_prefix: str = "/media"
+    public_media_base_url: str = ""
     storage_backend: str = "local"
     cdn_base_url: str = ""
     oss_endpoint: str = ""

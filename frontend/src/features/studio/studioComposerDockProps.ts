@@ -23,7 +23,12 @@ export function getStudioComposerDockProps(
 ): StudioComposerDockParts {
   const modeLabel = composerModeLabel(props.studioForm.creationMode);
   const compactPromptPreview = composerPromptPreview(props.studioForm.prompt);
-  const referenceHint = composerReferenceHint(props.studioForm.creationMode, props.referenceUploads.length);
+  const referenceHint = composerReferenceHint(
+    props.studioForm.creationMode,
+    props.referenceUploads.length,
+    props.selectedProvider,
+    props.studioForm
+  );
 
   return {
     collapsedBarProps: {

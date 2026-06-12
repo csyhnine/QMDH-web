@@ -1,4 +1,11 @@
 import { aspectRatioOptions, resolutionOptions } from "./studioConstants";
+import {
+  GROK_VIDEO_ASPECT_RATIOS,
+  getSelectedGrokSkuConfig,
+  grokVideoSkuForProviderSelection,
+  isGrokHaodeyaProvider,
+  type GrokVideoSku,
+} from "./grokVideoUtils";
 import type { StudioComposerCanvasProps } from "./studioComposerCanvasTypes";
 import type { StudioDesignerViewProps } from "./studioDesignerViewTypes";
 
@@ -36,14 +43,28 @@ export function buildStudioComposerCanvasProps({
   };
 
   const handleProviderSelect = (providerName: string) => {
-    setStudioForm((current) => ({ ...current, requestedProvider: providerName }));
+    const provider = availableProviders.find((item) => item.provider_name === providerName);
+    setStudioForm((current) => ({
+      ...current,
+      requestedProvider: providerName,
+      grokVideoSku: grokVideoSkuForProviderSelection(provider, current.grokVideoSku),
+    }));
     setActiveComposerMenu(null);
   };
+
+  const handleGrokVideoSkuSelect = (sku: GrokVideoSku) => {
+    setStudioForm((current) => ({ ...current, grokVideoSku: sku }));
+    setActiveComposerMenu(null);
+  };
+
+  const isGrokVideo = studioForm.creationMode === "video" && isGrokHaodeyaProvider(selectedProvider);
+  const grokSkuConfig = isGrokVideo ? getSelectedGrokSkuConfig(studioForm, selectedProvider) : null;
+  const composerAspectRatioOptions = isGrokVideo ? [...GROK_VIDEO_ASPECT_RATIOS] : aspectRatioOptions;
 
   return {
     activeComposerMenu,
     activeTemplateId: studioTemplates.activeTemplate?.id ?? null,
-    aspectRatioOptions,
+    aspectRatioOptions: composerAspectRatioOptions,
     availableProviderCount: availableProviders.length,
     composerCollapsed: studioView.composerCollapsed,
     composerToolbarRef: studioView.composerToolbarRef,
@@ -54,8 +75,10 @@ export function buildStudioComposerCanvasProps({
     providerGroups,
     referenceUploads: referenceUpload.referenceUploads,
     resolutionOptions,
+    selectedProvider,
+    selectedGrokSkuLabel: grokSkuConfig?.label ?? null,
     selectedProviderModelName: selectedProvider?.display_name ?? selectedProvider?.model_name ?? null,
-    selectedResolutionLabel: selectedResolution?.label ?? null,
+    selectedResolutionLabel: isGrokVideo ? "720p（固定）" : selectedResolution?.label ?? null,
     selectedStyleLabel: selectedStyle?.label ?? studioForm.style,
     serviceHealthy: state.health === "healthy",
     sharedTemplates: studioTemplates.sharedTemplates,
@@ -76,9 +99,21 @@ export function buildStudioComposerCanvasProps({
     onComposerFocusChange: setComposerFocused,
     onDeleteCustomTemplate: (templateId) => void studioTemplates.deleteCustomTemplate(templateId),
     onEditCustomTemplate: studioTemplates.editCustomTemplate,
+    onGrokVideoSkuSelect: handleGrokVideoSkuSelect,
     onImageCountSelect: handleImageCountSelect,
     onModeChange: (mode) => {
-      setStudioForm((current) => ({ ...current, creationMode: mode }));
+      setStudioForm((current) => {
+        const provider = availableProviders.find((item) => item.provider_name === current.requestedProvider);
+        const nextGrokSku =
+          mode === "video"
+            ? grokVideoSkuForProviderSelection(provider, current.grokVideoSku)
+            : "";
+        return {
+          ...current,
+          creationMode: mode,
+          grokVideoSku: nextGrokSku,
+        };
+      });
     },
     onOpenReferencePicker: referenceUpload.openReferencePicker,
     onPromptChange: (value) => setStudioForm((current) => ({ ...current, prompt: value })),

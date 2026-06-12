@@ -612,6 +612,33 @@ class ProviderProfileTests(unittest.TestCase):
         self.assertIn("Action=CVSync2AsyncSubmitTask", responses[1].json()["checked_url"])
         mock_async_client.assert_not_called()
 
+    def test_probe_haodeya_grok_video_profile_is_configuration_only(self) -> None:
+        with self.SessionLocal() as db:
+            profile = ProviderProfile(
+                provider_name="grok_i2v_5s",
+                api_key=encrypt_value("sk-grok"),
+                base_url="https://newapi.haodeya.xyz/v1",
+                model_name="x-ai/grok-imagine-video-i2v",
+                adapter_kind="haodeya_grok",
+                capabilities=["video.generate"],
+                strategies={"video.generate": "haodeya_grok_video"},
+                enabled=True,
+            )
+            db.add(profile)
+            db.commit()
+            profile_id = profile.id
+
+        with patch("app.routers.providers.httpx.AsyncClient") as mock_async_client:
+            response = self.client.post(f"/providers/profiles/{profile_id}/probe", headers=self.auth_headers())
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["status"], "configured")
+        self.assertIn("/videos", payload["checked_url"])
+        self.assertIn("Haodeya Grok", payload["detail"])
+        mock_async_client.assert_not_called()
+
     def test_probe_provider_profile_rejects_unsupported_adapter(self) -> None:
         with self.SessionLocal() as db:
             profile = ProviderProfile(

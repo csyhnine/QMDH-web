@@ -74,7 +74,8 @@ export function shouldClearTransientReferenceTracker(tracker: SubmissionTracker 
 
 export function prepareReferenceUploadFiles(
   files: File[],
-  currentUploadCount: number
+  currentUploadCount: number,
+  maxReferenceCount = 4
 ): PreparedReferenceFiles {
   const errors: string[] = [];
   if (files.length === 0) {
@@ -97,15 +98,15 @@ export function prepareReferenceUploadFiles(
     );
   }
 
-  const remainingSlots = 4 - currentUploadCount;
+  const remainingSlots = maxReferenceCount - currentUploadCount;
   if (remainingSlots <= 0) {
-    errors.push("图像编辑最多只能上传 4 张参考图");
+    errors.push(`最多只能上传 ${maxReferenceCount} 张参考图`);
     return { acceptedFiles: [], errors };
   }
 
   const acceptedFiles = sizedFiles.slice(0, remainingSlots);
   if (sizedFiles.length > remainingSlots) {
-    errors.push("最多只能保留 4 张参考图，超出的图片已忽略");
+    errors.push(`最多只能保留 ${maxReferenceCount} 张参考图，超出的图片已忽略`);
   }
 
   return { acceptedFiles, errors };

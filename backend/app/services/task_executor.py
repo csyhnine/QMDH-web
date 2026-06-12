@@ -35,12 +35,14 @@ from app.services.provider_adapters.base import (
     RequestDiagnostics,
 )
 from app.services.provider_adapters.dashscope_video import DashScopeVideoProviderAdapter
+from app.services.provider_adapters.haodeya_grok_video import HaodeyaGrokVideoProviderAdapter
 from app.services.provider_adapters.volcengine_ark_video import VolcengineArkVideoProviderAdapter
 from app.services.provider_adapters.volcengine_jimeng_video import VolcengineJimengVideoProviderAdapter
 from app.services.provider_strategy import (
     CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
     CHAT_MODALITIES_IMAGE_STRATEGY,
     DASHSCOPE_ASYNC_VIDEO_STRATEGY,
+    HAODEYA_GROK_VIDEO_STRATEGY,
     OPENAI_IMAGE_EDITS_STRATEGY,
     OPENAI_IMAGES_STRATEGY,
     VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
@@ -233,6 +235,7 @@ class StrategyProviderAdapter(ProviderAdapter):
         self.profile = profile
         self.image_adapter = OpenAIImageProviderAdapter(definition, profile)
         self.dashscope_video_adapter = DashScopeVideoProviderAdapter(definition, profile)
+        self.haodeya_grok_video_adapter = HaodeyaGrokVideoProviderAdapter(definition, profile)
         self.ark_video_adapter = VolcengineArkVideoProviderAdapter(definition, profile)
         self.jimeng_video_adapter = VolcengineJimengVideoProviderAdapter(definition, profile)
 
@@ -247,6 +250,8 @@ class StrategyProviderAdapter(ProviderAdapter):
             )
             if strategy == DASHSCOPE_ASYNC_VIDEO_STRATEGY:
                 return self.dashscope_video_adapter.execute(capability, payload)
+            if strategy == HAODEYA_GROK_VIDEO_STRATEGY:
+                return self.haodeya_grok_video_adapter.execute(capability, payload)
             if strategy == VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY:
                 return self.ark_video_adapter.execute(capability, payload)
             if strategy == VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY:
@@ -288,7 +293,7 @@ def _materialize_preview_asset(*, provider_name: str, capability: str, prompt_su
 
 def get_provider_adapter(provider_name: str, db: Session | None = None) -> ProviderAdapter:
     definition = get_provider_definition(provider_name, db)
-    if definition.adapter_kind in {"openai_compatible", "dashscope_native", "volcengine_ark", "jimeng_native"}:
+    if definition.adapter_kind in {"openai_compatible", "dashscope_native", "volcengine_ark", "jimeng_native", "haodeya_grok"}:
         return StrategyProviderAdapter(definition, get_image_provider_profile(provider_name, db))
     return SimulatedProviderAdapter(definition)
 

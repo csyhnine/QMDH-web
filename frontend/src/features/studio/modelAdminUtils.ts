@@ -2,6 +2,7 @@ import type { Provider } from "../../api";
 
 export function providerGroupLabel(provider: Provider): string {
   const name = `${provider.display_name} ${provider.provider_name} ${provider.model_name}`.toLowerCase();
+  if (name.includes("grok") || name.includes("haodeya")) return "Haodeya / Grok Imagine";
   if (name.includes("firered")) return "魔搭 / FireRed";
   if (name.includes("z_image") || name.includes("z-image")) return "魔搭 / 造相 Z";
   if (name.includes("qwen")) return "魔搭 / Qwen";

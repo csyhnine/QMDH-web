@@ -117,6 +117,7 @@ const capabilityDefinitions: CapabilityDefinition[] = [
 ];
 
 const adapterOptions: AdapterOption[] = [
+  { key: "haodeya_grok", label: "Haodeya Grok Video", support: "partial", note: "单条 profile 即可；model_name 可用 grok-imagine-video，四档 SKU 在 Studio 视频模式内切换。" },
   { key: "volcengine_ark", label: "Volcengine Ark Video", support: "partial", note: "Supports Seedance / Ark content generation tasks; probe will not create a live video." },
   { key: "openai_compatible", label: "OpenAI Compatible", support: "ready", note: "当前后端已支持这一适配器的 Chat、图像生成和图像编辑。" },
   { key: "dashscope_native", label: "DashScope Video", support: "partial", note: "支持 Wan / HappyHorse 的 DashScope 异步视频任务；探测不会创建真实视频。" },
@@ -741,7 +742,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                 </div>
                 <input value={providerDraft.capabilities} onChange={(e) => setProviderDraft((c) => ({ ...c, capabilities: e.target.value }))} placeholder="image.generate, chat.completions" />
               </label>
-              <label className="composer-menu-field composer-menu-field-full"><span>Strategies</span><textarea rows={5} value={providerDraft.strategies} onChange={(e) => setProviderDraft((c) => ({ ...c, strategies: e.target.value }))} placeholder={'{\n  "chat": "openai_chat",\n  "image.generate": "chat_modalities_image",\n  "image.edit": "chat_modalities_image_edit",\n  "video.generate": "dashscope_async_video"\n}'} /></label>
+              <label className="composer-menu-field composer-menu-field-full"><span>Strategies</span><textarea rows={5} value={providerDraft.strategies} onChange={(e) => setProviderDraft((c) => ({ ...c, strategies: e.target.value }))} placeholder={'{\n  "chat": "openai_chat",\n  "image.generate": "chat_modalities_image",\n  "image.edit": "chat_modalities_image_edit",\n  "video.generate": "haodeya_grok_video"\n}'} /></label>
               <label className="composer-menu-field composer-menu-field-full"><span>Adapter Config</span><textarea rows={5} value={providerDraft.adapterConfig} onChange={(e) => setProviderDraft((c) => ({ ...c, adapterConfig: e.target.value }))} placeholder={'{\n  "service": "cv",\n  "region": "cn-north-1",\n  "version": "2022-08-31",\n  "submit_action": "CVSync2AsyncSubmitTask",\n  "result_action": "CVSync2AsyncGetResult",\n  "req_key": "jimeng_t2v_v30"\n}'} /></label>
               <label className="composer-menu-field"><span>Quality</span><input value={providerDraft.quality} onChange={(e) => setProviderDraft((c) => ({ ...c, quality: e.target.value }))} placeholder="medium" /></label>
               <label className="composer-menu-field"><span>Format</span><select value={providerDraft.outputFormat} onChange={(e) => setProviderDraft((c) => ({ ...c, outputFormat: e.target.value }))}><option value="png">png</option><option value="jpeg">jpeg</option><option value="webp">webp</option><option value="mp4">mp4</option></select></label>

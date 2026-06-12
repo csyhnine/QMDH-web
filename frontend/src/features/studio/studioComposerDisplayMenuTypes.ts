@@ -1,3 +1,4 @@
+import type { Provider } from "../../api";
 import type { ResolutionOption } from "./studioComposerDockTypes";
 import type { ComposerMenuKey, StudioFormState } from "./studioTypes";
 
@@ -5,6 +6,7 @@ export type StudioComposerDisplayMenuProps = {
   activeComposerMenu: ComposerMenuKey;
   aspectRatioOptions: readonly string[];
   resolutionOptions: ResolutionOption[];
+  selectedProvider?: Provider;
   selectedResolutionLabel: string | null;
   studioForm: StudioFormState;
   onAspectRatioSelect: (ratio: string) => void;
@@ -19,7 +21,7 @@ export type StudioComposerDisplayMenuTriggerProps = Pick<
 
 export type StudioComposerDisplayMenuPanelProps = Pick<
   StudioComposerDisplayMenuProps,
-  "aspectRatioOptions" | "resolutionOptions" | "studioForm" | "onAspectRatioSelect" | "onResolutionSelect"
+  "aspectRatioOptions" | "resolutionOptions" | "selectedProvider" | "studioForm" | "onAspectRatioSelect" | "onResolutionSelect"
 >;
 
 export type StudioComposerOptionGroupOption = {

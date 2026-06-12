@@ -16,6 +16,7 @@ CHAT_MODALITIES_IMAGE_EDIT_STRATEGY = "chat_modalities_image_edit"
 DASHSCOPE_ASYNC_VIDEO_STRATEGY = "dashscope_async_video"
 VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY = "volcengine_ark_video_tasks"
 VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY = "volcengine_cv_jimeng_video"
+HAODEYA_GROK_VIDEO_STRATEGY = "haodeya_grok_video"
 
 KNOWN_STRATEGIES = {
     OPENAI_CHAT_STRATEGY,
@@ -26,6 +27,7 @@ KNOWN_STRATEGIES = {
     DASHSCOPE_ASYNC_VIDEO_STRATEGY,
     VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
     VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
+    HAODEYA_GROK_VIDEO_STRATEGY,
 }
 
 FORBIDDEN_BASE_URL_SUFFIXES = (
@@ -51,6 +53,7 @@ _ALLOWED_STRATEGIES_BY_CAPABILITY = {
         DASHSCOPE_ASYNC_VIDEO_STRATEGY,
         VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
         VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
+        HAODEYA_GROK_VIDEO_STRATEGY,
     },
 }
 
@@ -123,6 +126,18 @@ def profile_prefers_volcengine_jimeng_video(*, provider_name: str, model_name: s
     return "jimeng" in identity or ("cv" in identity and "volc" in identity)
 
 
+def profile_prefers_haodeya_grok_video(*, provider_name: str, model_name: str, base_url: str) -> bool:
+    identity = f"{provider_name} {model_name} {base_url}".lower()
+    if "haodeya" in identity or "grok-imagine-video" in identity:
+        return True
+    return model_name.strip() in {
+        "x-ai/grok-imagine-video-i2v",
+        "x-ai/grok-imagine-video-i2v-10s",
+        "x-ai/grok-imagine-video-ref",
+        "x-ai/grok-imagine-video-ref-10s",
+    }
+
+
 def default_strategy_for_capability(
     *,
     capability: str,
@@ -170,6 +185,12 @@ def default_strategy_for_capability(
         base_url=base_url,
     ):
         return VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY
+    if normalized == "video.generate" and profile_prefers_haodeya_grok_video(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+    ):
+        return HAODEYA_GROK_VIDEO_STRATEGY
     return None
 
 

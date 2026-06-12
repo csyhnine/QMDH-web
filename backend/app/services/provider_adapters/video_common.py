@@ -7,8 +7,27 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from app.core.config import ImageProviderProfile
-from app.services.media_storage import write_binary_asset
+from app.core.config import ImageProviderProfile, settings
+from app.services.media_storage import is_legacy_absolute_path, media_url_for, write_binary_asset
+
+
+def resolve_public_media_url(path: str) -> str:
+    normalized = str(path or "").strip()
+    if not normalized:
+        return ""
+    if normalized.startswith(("http://", "https://")):
+        return normalized
+    public_base = settings.public_media_base_url.strip().rstrip("/")
+    if normalized.startswith("/"):
+        base = public_base or settings.frontend_origin.strip().rstrip("/")
+        return f"{base}{normalized}"
+    if is_legacy_absolute_path(normalized):
+        return normalized
+    relative_url = media_url_for(normalized)
+    if relative_url.startswith("/"):
+        base = public_base or settings.frontend_origin.strip().rstrip("/")
+        return f"{base}{relative_url}"
+    return relative_url
 
 
 def video_prompt(payload: dict) -> str:

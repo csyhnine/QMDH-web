@@ -34,6 +34,7 @@ export type StudioFormState = {
   deliverable: string;
   referenceImages: string[];
   notes: string;
+  grokVideoSku: string;
 };
 
 export type ReferenceUploadItem = {
@@ -56,7 +57,7 @@ export type PromptTemplateFormValue = {
 export type CustomPromptTemplate = PromptTemplateRecord;
 export type SharedPromptTemplate = PromptTemplateRecord;
 
-export type ComposerMenuKey = "template" | "provider" | "display" | "count" | null;
+export type ComposerMenuKey = "template" | "provider" | "grokSku" | "display" | "count" | null;
 export type SubmissionStage = "uploading_reference" | "submitting" | "pending" | "running" | "completed" | "failed";
 
 export type SubmissionTracker = {

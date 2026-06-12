@@ -1,4 +1,5 @@
 import { defaultStudioForm } from "./studioConstants";
+import { grokReferenceLimit } from "./grokVideoUtils";
 import { selectedReferenceUploadProviderName } from "./studioControllerProps";
 import type { StudioDerivedState } from "./studioDerivedState";
 import type { useStudioControllerState } from "./useStudioControllerState";
@@ -16,6 +17,10 @@ export function buildStudioReferenceUploadOptions({
   return {
     defaultTitle: defaultStudioForm.title,
     fileInputRef: controllerState.fileInputRef,
+    maxReferenceCount:
+      controllerState.studioForm.creationMode === "video"
+        ? grokReferenceLimit(controllerState.studioForm, selectedProvider)
+        : 4,
     onClearError: controllerState.clearLoadError,
     onError: controllerState.pushLoadError,
     selectedProviderName: selectedReferenceUploadProviderName({

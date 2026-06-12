@@ -43,6 +43,7 @@ export type StudioComposerDockProps = {
   onOpenReferencePicker: () => void;
   onPromptChange: (value: string) => void;
   onProviderSelect: (providerName: string) => void;
+  onGrokVideoSkuSelect: (sku: import("./grokVideoUtils").GrokVideoSku) => void;
   onRemoveReferenceUpload: (index: number) => void;
   onReferenceDrop: (event: DragEvent<HTMLButtonElement>) => void;
   onReferenceInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -55,6 +56,8 @@ export type StudioComposerDockProps = {
   providerGroups: ProviderGroup[];
   referenceUploads: ReferenceUploadItem[];
   resolutionOptions: ResolutionOption[];
+  selectedProvider?: Provider;
+  selectedGrokSkuLabel: string | null;
   selectedProviderModelName: string | null;
   selectedResolutionLabel: string | null;
   selectedStyleLabel: string;

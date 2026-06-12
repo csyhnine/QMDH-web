@@ -1,4 +1,6 @@
+import type { Provider } from "../../api";
 import type { StudioFormState } from "./studioTypes";
+import { getSelectedGrokSkuConfig, isGrokHaodeyaProvider } from "./grokVideoUtils";
 
 export function isComposerBlurWithinForm(event: React.FocusEvent<HTMLFormElement>): boolean {
   return event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget);
@@ -15,12 +17,22 @@ export function composerPromptPreview(prompt: string): string {
 
 export function composerReferenceHint(
   mode: StudioFormState["creationMode"],
-  referenceUploadCount: number
+  referenceUploadCount: number,
+  provider?: Provider,
+  form?: StudioFormState
 ): string {
   if (mode === "video") {
+    if (isGrokHaodeyaProvider(provider) && form) {
+      const skuConfig = getSelectedGrokSkuConfig(form, provider);
+      if (skuConfig) {
+        const uploaded =
+          referenceUploadCount > 0 ? `已上传 ${referenceUploadCount} 张。` : "当前未上传图片，纯文本也可提交。";
+        return `${skuConfig.referenceHint} ${uploaded} 720p · 按次计费 · 生成通常 30 秒～数分钟。`;
+      }
+    }
     return referenceUploadCount > 0
-      ? `已上传 ${referenceUploadCount} 张可选首帧/参考图，会随视频任务一并提交。`
-      : "视频生成可选上传 1-4 张参考图；仅文本也可提交。";
+      ? `已上传 ${referenceUploadCount} 张可选参考图，会随视频任务一并提交。`
+      : "视频生成可选上传参考图；仅文本也可提交。";
   }
   if (mode === "edit") {
     return `图像编辑要求 1-4 张参考图，当前已上传 ${referenceUploadCount} 张。`;

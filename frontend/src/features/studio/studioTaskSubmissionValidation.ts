@@ -1,8 +1,9 @@
+import type { Provider } from "../../api";
 import type { Dispatch, SetStateAction } from "react";
 
-import type { Provider } from "../../api";
 import type { LoadState, StudioFormState } from "./studioTypes";
 import { clampReferenceImageCount } from "./studioUtils";
+import { getSelectedGrokSkuConfig, grokReferenceUploadError, isGrokHaodeyaProvider } from "./grokVideoUtils";
 
 type ValidationOptions = {
   form: StudioFormState;
@@ -58,7 +59,25 @@ export function validateStudioTaskSubmission({
       }));
       return { ok: false };
     }
-    return { ok: true, referenceImageCount: clampReferenceImageCount(form.referenceImages.length) };
+
+    const referenceImageCount = clampReferenceImageCount(form.referenceImages.length);
+    if (isGrokHaodeyaProvider(providerForSubmit)) {
+      const skuConfig = getSelectedGrokSkuConfig(form, providerForSubmit);
+      if (!skuConfig) {
+        setState((current) => ({
+          ...current,
+          error: "请先选择 Grok 视频档位。",
+        }));
+        return { ok: false };
+      }
+      const grokError = grokReferenceUploadError(form, providerForSubmit, referenceImageCount);
+      if (grokError) {
+        setState((current) => ({ ...current, error: grokError }));
+        return { ok: false };
+      }
+    }
+
+    return { ok: true, referenceImageCount };
   }
 
   if (form.creationMode === "edit" && !providerForSubmit.capabilities.includes("image.edit")) {

@@ -10,7 +10,7 @@ from app.services.model_registry import ProviderDefinition
 from app.services.provider_adapters.base import ExecutionOutcome, ProviderExecutionError, RequestDiagnostics
 from app.services.provider_adapters.video_common import (
     calculate_video_billing,
-    persist_generated_video,
+    persist_generated_video_bytes,
     resolve_public_media_url,
     video_prompt,
 )
@@ -82,17 +82,17 @@ class HaodeyaGrokVideoProviderAdapter:
                 upstream_task_id,
                 polling_url=polling_url,
             )
-            video_url = _extract_completed_video_url(final_payload)
-            if not video_url:
+            content_task_id = upstream_task_id or _extract_task_id(final_payload)
+            if not content_task_id:
                 raise ValueError(
-                    f"Haodeya Grok video task completed but returned no unsigned_urls: {final_payload}"
+                    f"Haodeya Grok video task completed but returned no task id: {final_payload}"
                 )
 
-            storage_path = persist_generated_video(
+            video_bytes = _download_haodeya_grok_video_content(self.profile, content_task_id)
+            storage_path = persist_generated_video_bytes(
                 provider_name=self.definition.provider_name,
-                video_url=video_url,
+                video_bytes=video_bytes,
                 prompt=prompt,
-                timeout_seconds=float(self.profile.timeout_seconds),
                 output_format=self.profile.output_format,
             )
             latency_ms = max(1, round((perf_counter() - started_at) * 1000))
@@ -110,7 +110,7 @@ class HaodeyaGrokVideoProviderAdapter:
                 "billing": billing,
                 "upstream_task_id": upstream_task_id,
                 "upstream_status": _extract_task_status(final_payload),
-                "upstream_video_url_count": 1,
+                "upstream_download": "content",
                 "video_sku": sku,
                 "grok_video_mode": GROK_VIDEO_SKUS[sku]["mode"],
                 "request_strategy": diagnostics.strategy,
@@ -310,14 +310,18 @@ def _extract_task_status(payload: dict) -> str:
     return str(payload.get("status") or payload.get("state") or "").strip().lower()
 
 
-def _extract_completed_video_url(payload: dict) -> str:
-    unsigned_urls = payload.get("unsigned_urls")
-    if isinstance(unsigned_urls, list) and unsigned_urls:
-        first = unsigned_urls[0]
-        if isinstance(first, str) and first.strip():
-            return first.strip()
-    for key in ("video_url", "url", "output_url"):
-        value = str(payload.get(key) or "").strip()
-        if value.startswith(("http://", "https://")):
-            return value
-    return ""
+def _download_haodeya_grok_video_content(profile: ImageProviderProfile, task_id: str) -> bytes:
+    url = f"{profile.base_url.rstrip('/')}{HAODEYA_VIDEO_ENDPOINT_PATH}/{task_id}/content"
+    request = Request(
+        url=url,
+        headers={"Authorization": f"Bearer {profile.api_key}"},
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=profile.timeout_seconds) as response:
+            return response.read()
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise ValueError(f"Haodeya Grok video content download failed with HTTP {exc.code}: {detail}") from exc
+    except URLError as exc:
+        raise ValueError(f"Haodeya Grok video content download request failed: {exc.reason}") from exc

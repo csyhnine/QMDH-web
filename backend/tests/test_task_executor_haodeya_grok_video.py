@@ -88,29 +88,23 @@ class HaodeyaGrokVideoAdapterTests(unittest.TestCase):
                     }
                 )
             if url.endswith("/videos/job-1"):
-                return _FakeJsonResponse(
-                    {
-                        "id": "job-1",
-                        "status": "completed",
-                        "unsigned_urls": ["https://cdn.example.com/output.mp4"],
-                    }
-                )
-            if url.endswith("/output.mp4"):
+                return _FakeJsonResponse({"id": "job-1", "status": "completed"})
+            if url.endswith("/videos/job-1/content"):
+                self.assertEqual(request.headers.get("Authorization"), "Bearer haodeya-key")
                 return _FakeBinaryResponse(b"fake-video-bytes")
             raise AssertionError(f"Unexpected request: {url} {request.method}")
 
         with patch.dict(os.environ, {"QMDH_MEDIA_ROOT": self.tempdir}, clear=False):
             with patch("app.services.provider_adapters.haodeya_grok_video.urlopen", side_effect=fake_urlopen):
-                with patch("app.services.provider_adapters.video_common.urlopen", side_effect=fake_urlopen):
-                    with patch("app.services.provider_adapters.haodeya_grok_video.sleep"):
-                        outcome = adapter.execute(
-                            "video.generate",
-                            {
-                                "prompt": "slow dolly in",
-                                "aspect_ratio": "16:9",
-                                "reference_image": "https://cdn.example.com/start.jpg",
-                            },
-                        )
+                with patch("app.services.provider_adapters.haodeya_grok_video.sleep"):
+                    outcome = adapter.execute(
+                        "video.generate",
+                        {
+                            "prompt": "slow dolly in",
+                            "aspect_ratio": "16:9",
+                            "reference_image": "https://cdn.example.com/start.jpg",
+                        },
+                    )
 
         self.assertEqual(outcome.cost, 3.35)
         self.assertEqual(outcome.result["video_sku"], "x-ai/grok-imagine-video-i2v")
@@ -144,27 +138,24 @@ class HaodeyaGrokVideoAdapterTests(unittest.TestCase):
                 submit_body = json.loads(request.data.decode("utf-8"))
                 return _FakeJsonResponse({"id": "job-2", "status": "pending"})
             if url.endswith("/videos/job-2"):
-                return _FakeJsonResponse(
-                    {"id": "job-2", "status": "completed", "unsigned_urls": ["https://cdn.example.com/ref.mp4"]}
-                )
-            if url.endswith("/ref.mp4"):
+                return _FakeJsonResponse({"id": "job-2", "status": "completed"})
+            if url.endswith("/videos/job-2/content"):
                 return _FakeBinaryResponse(b"fake-video-bytes")
             raise AssertionError(f"Unexpected request: {url}")
 
         with patch.dict(os.environ, {"QMDH_MEDIA_ROOT": self.tempdir}, clear=False):
             with patch("app.services.provider_adapters.haodeya_grok_video.urlopen", side_effect=fake_urlopen):
-                with patch("app.services.provider_adapters.video_common.urlopen", side_effect=fake_urlopen):
-                    with patch("app.services.provider_adapters.haodeya_grok_video.sleep"):
-                        adapter.execute(
-                            "video.generate",
-                            {
-                                "prompt": "Person from <IMAGE_1> in outfit from <IMAGE_2>",
-                                "reference_images": [
-                                    "https://cdn.example.com/person.jpg",
-                                    "https://cdn.example.com/outfit.jpg",
-                                ],
-                            },
-                        )
+                with patch("app.services.provider_adapters.haodeya_grok_video.sleep"):
+                    adapter.execute(
+                        "video.generate",
+                        {
+                            "prompt": "Person from <IMAGE_1> in outfit from <IMAGE_2>",
+                            "reference_images": [
+                                "https://cdn.example.com/person.jpg",
+                                "https://cdn.example.com/outfit.jpg",
+                            ],
+                        },
+                    )
 
         assert submit_body is not None
         self.assertEqual(submit_body["model"], "x-ai/grok-imagine-video-ref-10s")
@@ -225,26 +216,23 @@ class HaodeyaGrokVideoAdapterTests(unittest.TestCase):
                 submit_body = json.loads(request.data.decode("utf-8"))
                 return _FakeJsonResponse({"id": "job-3", "status": "pending"})
             if url.endswith("/videos/job-3"):
-                return _FakeJsonResponse(
-                    {"id": "job-3", "status": "completed", "unsigned_urls": ["https://cdn.example.com/plain.mp4"]}
-                )
-            if url.endswith("/plain.mp4"):
+                return _FakeJsonResponse({"id": "job-3", "status": "completed"})
+            if url.endswith("/videos/job-3/content"):
                 return _FakeBinaryResponse(b"fake-video-bytes")
             raise AssertionError(f"Unexpected request: {url}")
 
         with patch.dict(os.environ, {"QMDH_MEDIA_ROOT": self.tempdir}, clear=False):
             with patch("app.services.provider_adapters.haodeya_grok_video.urlopen", side_effect=fake_urlopen):
-                with patch("app.services.provider_adapters.video_common.urlopen", side_effect=fake_urlopen):
-                    with patch("app.services.provider_adapters.haodeya_grok_video.sleep"):
-                        adapter.execute(
-                            "video.generate",
-                            {
-                                "prompt": "plain text video",
-                                "video_sku": "x-ai/grok-imagine-video-i2v",
-                                "duration": 5,
-                                "resolution": "720p",
-                            },
-                        )
+                with patch("app.services.provider_adapters.haodeya_grok_video.sleep"):
+                    adapter.execute(
+                        "video.generate",
+                        {
+                            "prompt": "plain text video",
+                            "video_sku": "x-ai/grok-imagine-video-i2v",
+                            "duration": 5,
+                            "resolution": "720p",
+                        },
+                    )
 
         assert submit_body is not None
         self.assertEqual(submit_body["model"], "x-ai/grok-imagine-video-i2v")

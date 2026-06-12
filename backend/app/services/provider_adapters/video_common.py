@@ -74,6 +74,20 @@ def persist_generated_video(
     return write_binary_asset(relative_path, video_bytes)
 
 
+def persist_generated_video_bytes(
+    *,
+    provider_name: str,
+    video_bytes: bytes,
+    prompt: str,
+    output_format: str,
+) -> str:
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    safe_stub = "".join(char if char.isalnum() else "-" for char in prompt.lower())[:40].strip("-") or "video"
+    extension = (output_format or "mp4").strip().lstrip(".") or "mp4"
+    relative_path = f"generated/{provider_name}/{timestamp}-{safe_stub}-{randint(1000, 9999)}.{extension}"
+    return write_binary_asset(relative_path, video_bytes)
+
+
 def download_generated_video(video_url: str, *, timeout_seconds: float) -> tuple[bytes, str]:
     request = Request(video_url, headers={"User-Agent": "QMDH-web/1.0"})
     try:

@@ -1,3 +1,4 @@
+import { useAuth } from "../../context/AuthContext";
 import { GROK_VIDEO_SKU_OPTIONS } from "./grokVideoUtils";
 import type { StudioComposerGrokSkuMenuPanelProps } from "./studioComposerGrokSkuMenuTypes";
 
@@ -5,6 +6,8 @@ export default function StudioComposerGrokSkuMenuPanel({
   selectedGrokVideoSku,
   onGrokVideoSkuSelect,
 }: StudioComposerGrokSkuMenuPanelProps) {
+  const { canUseOpsViews } = useAuth();
+
   return (
     <div className="composer-menu-panel composer-menu-panel-grok-sku">
       <div className="composer-menu-group">
@@ -20,9 +23,7 @@ export default function StudioComposerGrokSkuMenuPanel({
               onClick={() => onGrokVideoSkuSelect(option.id)}
             >
               <strong>{option.label}</strong>
-              <span>
-                {option.detail} · {option.priceLabel}
-              </span>
+              <span>{canUseOpsViews ? `${option.detail} · ${option.priceLabel}` : option.detail}</span>
             </button>
           ))}
         </div>

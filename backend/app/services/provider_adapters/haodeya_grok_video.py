@@ -9,11 +9,11 @@ from app.core.config import ImageProviderProfile
 from app.services.model_registry import ProviderDefinition
 from app.services.provider_adapters.base import ExecutionOutcome, ProviderExecutionError, RequestDiagnostics
 from app.services.provider_adapters.video_common import (
-    calculate_video_billing,
     persist_generated_video_bytes,
     resolve_public_media_url,
     video_prompt,
 )
+from app.services.haodeya_pricing import calculate_grok_video_billing
 from app.services.provider_strategy import HAODEYA_GROK_VIDEO_STRATEGY, resolve_strategy_for_capability
 
 HAODEYA_VIDEO_ENDPOINT_PATH = "/videos"
@@ -96,7 +96,7 @@ class HaodeyaGrokVideoProviderAdapter:
                 output_format=self.profile.output_format,
             )
             latency_ms = max(1, round((perf_counter() - started_at) * 1000))
-            billing = calculate_video_billing(profile=self.profile, output_count=1)
+            billing = calculate_grok_video_billing(sku=sku, output_count=1)
             result = {
                 "summary": f"{self.definition.provider_name} completed a live video.generate run.",
                 "payload_keys": list(payload.keys()),

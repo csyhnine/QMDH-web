@@ -10,6 +10,7 @@ from app.services.inspiration_refresh import (
     import_seed_inspiration_bundle,
     refresh_seed_inspiration_media,
 )
+from app.services.haodeya_pricing import sync_haodeya_pricing
 from app.services.session_cleanup import run_session_cleanup_once
 from seed_users import seed_staff_users
 
@@ -45,6 +46,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--bundle",
         required=True,
         help="Path to the zip bundle produced by build_seed_inspiration_bundle",
+    )
+    subparsers.add_parser(
+        "sync_haodeya_pricing",
+        help="Apply upstream Haodeya/qmdh pricing to provider profiles and chat pricing rules",
     )
     return parser
 
@@ -115,6 +120,22 @@ def main(argv: list[str] | None = None) -> int:
                     "updated": result.updated,
                     "skipped": result.skipped,
                 }
+            )
+        )
+        return 0
+
+    if args.command == "sync_haodeya_pricing":
+        with SessionLocal() as db:
+            result = sync_haodeya_pricing(db)
+        print(
+            json.dumps(
+                {
+                    "updated_profiles": result.updated_profiles,
+                    "updated_rules": result.updated_rules,
+                    "deactivated_rules": result.deactivated_rules,
+                    "skipped_profiles": result.skipped_profiles,
+                },
+                ensure_ascii=False,
             )
         )
         return 0

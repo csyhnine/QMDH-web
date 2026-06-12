@@ -49,15 +49,16 @@
 
 | 路径 | 分支 / HEAD | 用途 |
 |------|-------------|------|
-| `E:\projects\QMDH-web` | `main` @ `c41778e` | 集成主线（Studio + Video + Grok + 域名 HTTPS） |
-| GitHub `origin/main` | 可能滞后 | 网络允许时用无代理 push |
-| 生产服务器 | `c41778e` | **已 deploy**（`https://cityusbdisk.cn`） |
+| `E:\projects\QMDH-web` | `main` @ `eb1057f` | 集成主线（Studio + Video + Grok + 域名 HTTPS） |
+| GitHub `origin/main` | `eb1057f` | 已同步（2026-06-12）；dev push 可能需要代理 `127.0.0.1:7897` |
+| 生产服务器 | `c41778e` | **已 deploy**（`https://cityusbdisk.cn`）；`eb1057f` 仅文档 |
+| 已删除远程分支 | — | `codex/prod-001-studio-refactor`、`codex/production-readiness-release`（已合并） |
 
 ### 阶段 0：确认基线（在 `main` 或当前生产 HEAD 上）
 
 | 步骤 | 事项 | 状态 |
 |------|------|------|
-| 0.1 | 对齐本地 / GitHub `main` / 服务器 HEAD 与健康检查 | DONE（2026-06-11：生产 health OK；GitHub main 仍 `005e25d`） |
+| 0.1 | 对齐本地 / GitHub `main` / 服务器 HEAD 与健康检查 | DONE（2026-06-12：GitHub `eb1057f`；生产 `c41778e`；health OK） |
 | 0.2 | 本地 smoke：`npm run smoke:studio` 8/8 | DONE |
 | 0.3 | 若仍复现：`gpt-image-2` 参考图真实上传修复 | TODO |
 | 0.4 | 若需要：灵感库 seed bundle 导入 | TODO |
@@ -477,9 +478,9 @@
 
 > **以 `Development Sequence (2026-06)` 为准；Grok 生产验证已完成。**
 
-1. **Push `main`** 到 GitHub（网络允许时）。
-2. **修复服务器 deploy key**，恢复 `git pull`。
-3. 继续 Production Readiness backlog（`prod-002`、`prod-004` 等）。
+1. **修复服务器 deploy key**，恢复 `git pull`（部署仍可用 git bundle）。
+2. 继续 Production Readiness backlog（`prod-002`、`prod-004` 等）。
+3. 可选：清理本地 worktree `E:\projects\QMDH-web-pr1-review`。
 
 ---
 

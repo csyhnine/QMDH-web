@@ -82,7 +82,8 @@ Server deploy method: **git bundle** fallback (`git pull` via deploy key still u
 ## Known Issues / Follow-up
 
 - Generation is **slow** (minutes, not seconds); expected for async upstream
-- GitHub `origin/main` may still lag local `main` (push intermittently fails from dev machine)
+- GitHub `origin/main` synced to `eb1057f` on 2026-06-12 (dev push via proxy `127.0.0.1:7897` if direct push fails)
+- Merged branches `codex/prod-001-studio-refactor` and `codex/production-readiness-release` deleted from GitHub
 - Fix server GitHub deploy key to restore normal `git pull`
 - Optional: add ICP footer badge on login / app shell
 

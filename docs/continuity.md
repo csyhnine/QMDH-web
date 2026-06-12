@@ -17,10 +17,10 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**: `docs/tasks.md` → **`Development Sequence (2026-06)`** (Phases 0–3 complete; Grok live smoke done 2026-06-12)
-- Current branch: `main` @ `c41778e`
-- Production server: `c41778e` — **deployed** via git bundle fallback
+- Current branch: `main` @ `eb1057f`
+- GitHub `origin/main`: `eb1057f` (synced 2026-06-12)
+- Production server: `c41778e` — **deployed** via git bundle fallback (`eb1057f` is docs-only)
 - Production URL: **`https://cityusbdisk.cn`** (ICP filed; HTTPS enabled)
-- GitHub `origin/main`: may lag local `main`; use proxy-free push when needed
 - Phase status (2026-06-12):
   - Phase 0–3: DONE including Haodeya Grok production E2E
   - Video generation latency: typically **2–6+ minutes** per task (upstream async; not a local bug)
@@ -185,7 +185,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Domain: `cityusbdisk.cn`（京ICP备14011242号-4，已备案）
 - Deploy path: `/www/wwwroot/qmdh-web`
 - Deployment model: Docker Compose
-- Current deployed product repo head: `c41778e`
+- Current deployed product repo head: `c41778e` (GitHub/local code head: `eb1057f`)
 - Server working tree: clean after bundle deploys
 - Verified runtime after latest deploy:
   - `docker compose ps` healthy
@@ -203,7 +203,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Known Risks And Follow-Up
 
-- GitHub `origin/main` may lag local `main`; push when network allows.
+- Local push to GitHub may need proxy on dev machine (`127.0.0.1:7897`); server `git pull` still broken until deploy key fixed.
 - Haodeya Grok video tasks are **slow** (minutes); upstream async queue, not local timeout misconfiguration if status eventually completes.
 - Server deploy key still needs repair for normal `git pull`.
 - `prod-001` first-pass Studio split is merged; further hook splits are optional follow-up only.
@@ -240,8 +240,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Near-Term Suggested Next Steps
 
-1. Push local `main` to GitHub when network allows.
-2. Fix server GitHub deploy key to restore `git pull`.
+1. Fix server GitHub deploy key to restore `git pull`.
 3. Optional: add ICP filing badge to login / app footer.
 4. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.
 5. Grok rollout reference: `docs/archive/handoff-2026-06-12-grok-video-production.md`.

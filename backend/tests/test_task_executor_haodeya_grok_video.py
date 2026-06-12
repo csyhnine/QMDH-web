@@ -78,7 +78,8 @@ class HaodeyaGrokVideoAdapterTests(unittest.TestCase):
                 self.assertEqual(body["model"], "x-ai/grok-imagine-video-i2v")
                 self.assertEqual(body["duration"], 5)
                 self.assertEqual(body["resolution"], "720p")
-                self.assertEqual(body["frame_images"][0]["frame_type"], "first_frame")
+                self.assertEqual(body["frame_images"][0]["type"], "first_frame")
+                self.assertEqual(body["frame_images"][0]["url"], "https://cdn.example.com/start.jpg")
                 return _FakeJsonResponse(
                     {
                         "id": "job-1",
@@ -179,6 +180,75 @@ class HaodeyaGrokVideoAdapterTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(Exception, "duration=5"):
             adapter.execute("video.generate", {"prompt": "test", "duration": 10})
+
+    def test_rejects_placeholder_profile_model_without_video_sku(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="haodeya_grok",
+            api_key="haodeya-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="grok-imagine-video",
+            adapter_kind="haodeya_grok",
+            capabilities=("video.generate",),
+            strategies={"video.generate": "haodeya_grok_video"},
+            output_format="mp4",
+            timeout_seconds=30,
+        )
+        adapter = HaodeyaGrokVideoProviderAdapter(
+            ProviderDefinition("haodeya_grok", profile.model_name, ["video.generate"], adapter_kind="haodeya_grok"),
+            profile,
+        )
+        with self.assertRaisesRegex(Exception, "missing video_sku"):
+            adapter.execute("video.generate", {"prompt": "test"})
+
+    def test_uses_video_sku_from_payload_for_placeholder_profile(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="haodeya_grok",
+            api_key="haodeya-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="grok-imagine-video",
+            adapter_kind="haodeya_grok",
+            capabilities=("video.generate",),
+            strategies={"video.generate": "haodeya_grok_video"},
+            output_format="mp4",
+            timeout_seconds=30,
+        )
+        adapter = HaodeyaGrokVideoProviderAdapter(
+            ProviderDefinition("haodeya_grok", profile.model_name, ["video.generate"], adapter_kind="haodeya_grok"),
+            profile,
+        )
+        submit_body: dict | None = None
+
+        def fake_urlopen(request, timeout):
+            nonlocal submit_body
+            url = request.full_url
+            if url.endswith("/videos") and request.method == "POST":
+                submit_body = json.loads(request.data.decode("utf-8"))
+                return _FakeJsonResponse({"id": "job-3", "status": "pending"})
+            if url.endswith("/videos/job-3"):
+                return _FakeJsonResponse(
+                    {"id": "job-3", "status": "completed", "unsigned_urls": ["https://cdn.example.com/plain.mp4"]}
+                )
+            if url.endswith("/plain.mp4"):
+                return _FakeBinaryResponse(b"fake-video-bytes")
+            raise AssertionError(f"Unexpected request: {url}")
+
+        with patch.dict(os.environ, {"QMDH_MEDIA_ROOT": self.tempdir}, clear=False):
+            with patch("app.services.provider_adapters.haodeya_grok_video.urlopen", side_effect=fake_urlopen):
+                with patch("app.services.provider_adapters.video_common.urlopen", side_effect=fake_urlopen):
+                    with patch("app.services.provider_adapters.haodeya_grok_video.sleep"):
+                        adapter.execute(
+                            "video.generate",
+                            {
+                                "prompt": "plain text video",
+                                "video_sku": "x-ai/grok-imagine-video-i2v",
+                                "duration": 5,
+                                "resolution": "720p",
+                            },
+                        )
+
+        assert submit_body is not None
+        self.assertEqual(submit_body["model"], "x-ai/grok-imagine-video-i2v")
+        self.assertNotIn("haodeya_grok", json.dumps(submit_body))
 
     def test_rejects_deprecated_model(self) -> None:
         profile = ImageProviderProfile(

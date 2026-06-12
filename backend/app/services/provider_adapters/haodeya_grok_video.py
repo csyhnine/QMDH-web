@@ -30,6 +30,12 @@ GROK_VIDEO_SKUS: dict[str, dict[str, object]] = {
 }
 
 _DEPRECATED_GROK_MODEL = "x-ai/grok-imagine-video"
+_PLACEHOLDER_PROFILE_MODELS = {
+    "grok-imagine-video",
+    "haodeya_grok",
+    "grok_imagine_video",
+    "grok-imagine",
+}
 
 
 class HaodeyaGrokVideoProviderAdapter:
@@ -127,10 +133,27 @@ class HaodeyaGrokVideoProviderAdapter:
 
 
 def _resolve_grok_sku(profile: ImageProviderProfile, payload: dict) -> str:
-    sku = str(payload.get("video_sku") or profile.model_name).strip()
+    explicit_sku = str(payload.get("video_sku") or "").strip()
+    if explicit_sku:
+        sku = explicit_sku
+    elif profile.model_name.strip() in GROK_VIDEO_SKUS:
+        sku = profile.model_name.strip()
+    elif profile.model_name.strip().lower() in _PLACEHOLDER_PROFILE_MODELS:
+        raise ValueError(
+            "Grok video task is missing video_sku. In Studio, select one of the four Grok tiers "
+            "(e.g. x-ai/grok-imagine-video-i2v) before submitting."
+        )
+    else:
+        sku = profile.model_name.strip()
+
     if sku == _DEPRECATED_GROK_MODEL:
         raise ValueError(
             f"Model {_DEPRECATED_GROK_MODEL} is deprecated; use one of: {', '.join(GROK_VIDEO_SKUS)}"
+        )
+    if sku in _PLACEHOLDER_PROFILE_MODELS or sku.lower() == profile.provider_name.strip().lower():
+        raise ValueError(
+            f"Invalid upstream Grok model {sku!r}. Admin model_name/provider_name must not be sent to Haodeya; "
+            f"use one of: {', '.join(GROK_VIDEO_SKUS)}"
         )
     if sku not in GROK_VIDEO_SKUS:
         raise ValueError(
@@ -189,9 +212,8 @@ def _build_haodeya_grok_request_body(sku: str, prompt: str, payload: dict) -> di
         if start_url:
             body["frame_images"] = [
                 {
-                    "type": "image_url",
-                    "image_url": {"url": resolve_public_media_url(start_url)},
-                    "frame_type": "first_frame",
+                    "type": "first_frame",
+                    "url": resolve_public_media_url(start_url),
                 }
             ]
     else:

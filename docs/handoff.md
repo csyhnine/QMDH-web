@@ -11,6 +11,23 @@
 
 ## Latest Handoffs
 
+### [2026-06-12] Usage logs + dashboard default 7d deployed
+- Role: Commit, GitHub push, production deploy
+- Branch: `main` @ `6771de1`
+- Repo status:
+  - Local `main`: `6771de1` (in sync with GitHub)
+  - GitHub `origin/main`: `6771de1`
+  - Production server: `6771de1` (deployed via git bundle fallback)
+- Production URL: **`https://cityusbdisk.cn`**
+- Completed:
+  - Admin **使用日志** page (`/admin/usage-logs`) + `GET /dashboard/usage-logs`
+  - Ops dashboard default window changed from 30d → **7d**
+  - Deploy: bundle fetch + `docker compose up -d --build`; health OK
+- Next step:
+  - fix server GitHub deploy key (restore `git pull`)
+  - optional: smoke `/admin/usage-logs` in browser
+- Safe to hand off: **Yes**
+
 ### [2026-06-12] Haodeya Grok video production verified + domain HTTPS live
 - Role: Grok video downstream alignment, production deploy, domain SSL, login UX, repo hygiene
 - Branch: `main` @ `eb1057f`

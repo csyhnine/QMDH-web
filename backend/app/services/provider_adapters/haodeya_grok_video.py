@@ -210,12 +210,7 @@ def _build_haodeya_grok_request_body(sku: str, prompt: str, payload: dict) -> di
             raise ValueError("i2v mode accepts at most one start frame image")
         start_url = str(payload.get("start_image_url") or "").strip() or (public_urls[0] if public_urls else "")
         if start_url:
-            body["frame_images"] = [
-                {
-                    "type": "first_frame",
-                    "url": resolve_public_media_url(start_url),
-                }
-            ]
+            body["frame_images"] = [_grok_frame_image_item(resolve_public_media_url(start_url))]
     else:
         if payload.get("frame_images"):
             raise ValueError("ref mode cannot use frame_images")
@@ -224,11 +219,17 @@ def _build_haodeya_grok_request_body(sku: str, prompt: str, payload: dict) -> di
         if len(public_urls) > 4:
             raise ValueError("ref mode accepts at most 4 reference images")
         if public_urls:
-            body["input_references"] = [
-                {"type": "image_url", "image_url": {"url": url}} for url in public_urls
-            ]
+            body["input_references"] = [_grok_image_item(url) for url in public_urls]
 
     return body
+
+
+def _grok_image_item(url: str) -> dict[str, object]:
+    return {"type": "image_url", "image_url": {"url": url}}
+
+
+def _grok_frame_image_item(url: str) -> dict[str, object]:
+    return {**_grok_image_item(url), "frame_type": "first_frame"}
 
 
 def _haodeya_headers(profile: ImageProviderProfile) -> dict[str, str]:

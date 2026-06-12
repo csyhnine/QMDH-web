@@ -78,8 +78,12 @@ class HaodeyaGrokVideoAdapterTests(unittest.TestCase):
                 self.assertEqual(body["model"], "x-ai/grok-imagine-video-i2v")
                 self.assertEqual(body["duration"], 5)
                 self.assertEqual(body["resolution"], "720p")
-                self.assertEqual(body["frame_images"][0]["type"], "first_frame")
-                self.assertEqual(body["frame_images"][0]["url"], "https://cdn.example.com/start.jpg")
+                self.assertEqual(body["frame_images"][0]["type"], "image_url")
+                self.assertEqual(body["frame_images"][0]["frame_type"], "first_frame")
+                self.assertEqual(
+                    body["frame_images"][0]["image_url"]["url"],
+                    "https://cdn.example.com/start.jpg",
+                )
                 return _FakeJsonResponse(
                     {
                         "id": "job-1",

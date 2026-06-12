@@ -94,6 +94,26 @@
   - Do not put provider secrets into frontend state or task payload.
   - Do not store only upstream temporary video URLs as final task artifacts.
 
+### Decision: Haodeya Grok video uses gateway proxy download and OpenRouter image schema
+- 状态：Accepted
+- 日期：2026-06-12
+- 背景：
+  - Haodeya 网关代理 OpenRouter Grok Imagine Video，提供四个 SKU。
+  - 早期对接曾误用 `unsigned_urls` 直连（401）和 `frame_images.type=first_frame`（400）。
+  - 上游最终文档要求 `/v1/videos/{task_id}/content` 下载，以及 OpenRouter 风格图片字段。
+- 决策内容：
+  - 策略名：`haodeya_grok_video`；Admin 单条 `haodeya_grok` profile + Studio 四档 SKU。
+  - 提交 `POST /v1/videos` → 轮询 `GET /v1/videos/{task_id}` → 下载 `GET /v1/videos/{task_id}/content`（Bearer）。
+  - i2v 首帧图：`frame_images[0] = { type: "image_url", image_url: { url }, frame_type: "first_frame" }`。
+  - ref 模式：`input_references` 使用 `type: image_url` + `image_url.url`。
+  - 平台内上传参考图即可；`QMDH_PUBLIC_MEDIA_BASE_URL` 必须指向公网可访问 HTTPS 域名（生产为 `https://cityusbdisk.cn`）。
+- 影响：
+  - 视频生成耗时以分钟计，属上游异步正常表现；Admin timeout 建议 600s。
+  - 生产 E2E 已于 2026-06-12 验证通过。
+- 禁止事项：
+  - 不要使用 `unsigned_urls` 作为最终下载地址。
+  - 不要向 Haodeya 发送 Admin 占位 model 名（`grok-imagine-video`、`haodeya_grok`）；实际 SKU 来自 Studio `video_sku`。
+
 ### Decision: 2.0 作为升级方向预备，不在 1.0 阶段直接落地
 - 状态：Accepted
 - 日期：2026-05-16

@@ -16,17 +16,14 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Current Baseline
 
-- **Active development sequence**: `docs/tasks.md` → **`Development Sequence (2026-06)`**
-- Current branch (primary worktree): `codex/video-model-providers` @ `c237d93` + video-provider WIP
-- Local `main`: `c237d93` — Studio refactor merged (`12fb9fe` + composer CSS fix)
-- GitHub `origin/main`: `005e25d` — **not yet pushed** with Studio merge
-- Production server: `6ae35b1` — Studio refactor **not deployed**
-- Active worktrees:
-  - `E:/projects/QMDH-web` → `codex/video-model-providers`
-  - `E:/projects/QMDH-web-pr1-review` → `codex/prod-001-studio-refactor` @ `c237d93`
-- Phase status (2026-06-11):
-  - Phase 0–2: DONE on local `main`
-  - Phase 3 (`video-002` Studio video UI): DONE; live provider E2E smoke TODO
+- **Active development sequence**: `docs/tasks.md` → **`Development Sequence (2026-06)`** (Phases 0–3 complete; Grok live smoke done 2026-06-12)
+- Current branch: `main` @ `c41778e`
+- Production server: `c41778e` — **deployed** via git bundle fallback
+- Production URL: **`https://cityusbdisk.cn`** (ICP filed; HTTPS enabled)
+- GitHub `origin/main`: may lag local `main`; use proxy-free push when needed
+- Phase status (2026-06-12):
+  - Phase 0–3: DONE including Haodeya Grok production E2E
+  - Video generation latency: typically **2–6+ minutes** per task (upstream async; not a local bug)
 - `GenerateStudioShell.tsx` is now a ~24-line entrypoint; Studio modules live under `frontend/src/features/studio/`
 - `scripts/smoke-studio.mjs` + `npm run smoke:studio` available for API smoke
 - Local dev URLs:
@@ -73,9 +70,15 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - `hard_block` blocks new image/chat usage based on current-month `usage_ledgers`
   - `billing_status = suspended` blocks immediately
 - Current branding reality:
-  - left rail now uses the provided QMDH icon asset instead of the placeholder `Q`
-  - login uses full `清美道合` wordmark + icon
-  - browser title is now `清美道合`
+  - left rail uses the QMDH icon asset
+  - login uses full `清美道合` wordmark only (duplicate icon logo removed 2026-06-12)
+  - login supports remember username/password in browser localStorage
+  - browser title is `清美道合`
+- Current video generation reality (2026-06-12):
+  - Haodeya Grok Imagine Video is live on production
+  - Studio four-tier SKU switcher + single admin `haodeya_grok` provider profile
+  - Text-only and i2v-with-reference-image flows verified end-to-end
+  - Reference images upload in Studio; public URL via `https://cityusbdisk.cn/media/...`
 - Current studio composer reality:
   - the composer can auto-collapse into a compact bar while browsing history
   - focusing, opening menus, hovering the collapsed bar, uploading references, or submitting expands it again
@@ -179,28 +182,30 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Server Snapshot
 
 - Server IP: `120.79.227.11`
+- Domain: `cityusbdisk.cn`（京ICP备14011242号-4，已备案）
 - Deploy path: `/www/wwwroot/qmdh-web`
 - Deployment model: Docker Compose
-- Current deployed product repo head: `6ae35b1`
-- Server working tree: clean
+- Current deployed product repo head: `c41778e`
+- Server working tree: clean after bundle deploys
 - Verified runtime after latest deploy:
   - `docker compose ps` healthy
-  - `http://127.0.0.1:8080/api/v1/health` returns `200`
-  - `http://120.79.227.11/api/v1/health` returns `200`
-- Current migration status:
-  - no new migration was required for the `6ae35b1` deployment baseline
+  - `https://cityusbdisk.cn/api/v1/health` returns `200`
+  - HTTP redirects to HTTPS on domain
+- Production `.env` highlights:
+  - `QMDH_FRONTEND_ORIGIN=https://cityusbdisk.cn`
+  - `QMDH_PUBLIC_MEDIA_BASE_URL=https://cityusbdisk.cn`
 - Current deployment caveat:
-  - server-side pull remains unreliable
-  - recent deploys continue to use local `git bundle` fallback
+  - server-side `git pull` from GitHub remains unreliable
+  - recent deploys use local `git bundle` fallback (known-good)
 - Server access practice:
   - use `admin` for normal git operations when credentials cooperate
   - use `root` for Docker / PostgreSQL / logs / fallback deployment work
 
 ## Known Risks And Follow-Up
 
-- Local `main` is ahead of GitHub/server with Studio refactor; push and deploy require explicit approval.
-- Phase 2 video-provider WIP is applied but not yet committed; do not deploy until tests pass and user approves.
-- Designer video UI (Phase 3) must wait for Phase 2 merge to `main`.
+- GitHub `origin/main` may lag local `main`; push when network allows.
+- Haodeya Grok video tasks are **slow** (minutes); upstream async queue, not local timeout misconfiguration if status eventually completes.
+- Server deploy key still needs repair for normal `git pull`.
 - `prod-001` first-pass Studio split is merged; further hook splits are optional follow-up only.
 - Release/version records are tracked through `CHANGELOG.md`, package versions, and the optional `v0.2.0` Git tag.
 - `storage/` and `tmp/` remain expected local-only directories and must not be committed.
@@ -235,9 +240,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Near-Term Suggested Next Steps
 
-Follow **`docs/tasks.md` → Development Sequence (2026-06)`**:
-
-1. **Phase 2**: finish video pytest + commit + merge to `main`.
-2. **Phase 1 wrap-up**: push `main`, close PR #1 on GitHub.
-3. **Optional deploy**: Studio merge to server via bundle (user approval required).
-4. **Phase 3**: start `video-002` designer Studio video UI after Phase 2 lands.
+1. Push local `main` to GitHub when network allows.
+2. Fix server GitHub deploy key to restore `git pull`.
+3. Optional: add ICP filing badge to login / app footer.
+4. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.
+5. Grok rollout reference: `docs/archive/handoff-2026-06-12-grok-video-production.md`.

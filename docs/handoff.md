@@ -11,36 +11,35 @@
 
 ## Latest Handoffs
 
-### [2026-06-11] Development Sequence execution — Phase 0–1 done, Phase 2 in progress
-- Role: Execute `docs/tasks.md` → Development Sequence (2026-06)
-- Branch: `codex/video-model-providers` (video WIP on top of merged Studio)
+### [2026-06-12] Haodeya Grok video production verified + domain HTTPS live
+- Role: Grok video downstream alignment, production deploy, domain SSL, login UX
+- Branch: `main` @ `c41778e`
 - Repo status:
-  - Working tree clean: No
-  - Local `main`: `c237d93` (Studio refactor + composer CSS fix)
-  - GitHub `origin/main`: still `005e25d` — **not pushed**
-  - Server: still `6ae35b1` — Studio **not deployed**
-- Completed this session:
-  - Phase 0: production health OK; local `npm run smoke:studio` 8/8
-  - Phase 1: PR #1 verified (build, 55 pytest, smoke); composer CSS fix committed; fast-forward merge to local `main`
-  - Phase 2 started: video WIP stashed and reapplied onto Studio merge; backend files auto-merged; docs conflicts resolved
-- Verification on merged Studio (`c237d93`):
-  - `npm run build` passed
-  - `npm run smoke:studio` 8/8
-  - backend pytest slice: 50 passed
+  - Local `main`: `c41778e`
+  - Production server: `c41778e` (bundle deploy)
+  - GitHub `origin/main`: may lag local; push via `git -c http.proxy= -c https.proxy= push` when network allows
+- Production URL: **`https://cityusbdisk.cn`**
+- Completed:
+  - Haodeya Grok adapter: four SKU, `/content` download, final `frame_images` format
+  - Live E2E smoke **DONE**: 纯文生 ~2–3 min；首帧图生 ~6 min（用户确认可用）
+  - Domain ICP complete; Let's Encrypt SSL for `cityusbdisk.cn`; `.env` switched to HTTPS origin + public media base
+  - Login page: removed duplicate icon logo; added remember username/password
+- Admin provider: single `haodeya_grok` profile + Studio four-tier SKU menu
+- Archive detail: `docs/archive/handoff-2026-06-12-grok-video-production.md`
 - Next step:
-  - run video pytest + alembic heads + commit video backend
-  - merge to `main`, push, close PR #1
-  - no deploy without user approval
-- Safe to hand off: WIP — video backend uncommitted
+  - optional: push `main` to GitHub; fix server deploy key
+  - optional: ICP footer on public pages
+  - monitor slow video queue; no code change required unless upstream SLA changes
+- Safe to hand off: **Yes**
+
+### [2026-06-11] Development Sequence execution — Phases 0–3 done locally
+- Role: Execute `docs/tasks.md` → Development Sequence (2026-06)
+- Outcome: Studio refactor merged; video backend + Studio video UI landed on local `main`
+- Note: production rollout for video completed in 2026-06-12 entry above
+- Archive: prior phase detail in git history `411c719` … `4df3060`
 
 ### [2026-06-09] Video provider adapter implementation
 - Role: Video provider adapter implementation, stages 1–6
 - Branch: `codex/video-model-providers`
-- Outcome: adapter layer, DashScope/Volcengine/Jimeng strategies, migration `4d5e6f7a8b9c`, admin models UI; tests passed locally before Studio merge
-- Note: superseded by 2026-06-11 execution entry for current branch state
-
-### [2026-06-08] v0.2.0 release record
-- Role: Release/version record after model activation / Studio UX wave
-- Branch: `main` @ `005e25d`
-- Deployed product baseline: `6ae35b1`
-- Server health verified; bundle deploy fallback remains known-good
+- Outcome: DashScope / Volcengine / Jimeng strategies, migration `4d5e6f7a8b9c`, admin models UI
+- Note: Haodeya Grok added later in June 2026 session; see 2026-06-12 archive

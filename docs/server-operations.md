@@ -1,6 +1,6 @@
 # Server Operations Runbook
 
-Last updated: `2026-05-21`
+Last updated: `2026-06-12`
 
 ## Current Production-Like Server Snapshot
 
@@ -11,7 +11,8 @@ Last updated: `2026-05-21`
 - App deploy path: `/www/wwwroot/qmdh-web`
 - Reverse proxy: Baota `80/443` -> `http://127.0.0.1:8080`
 - Docker frontend host port: `8080`
-- Current domain status: DNS already points to `120.79.227.11`, but domain access is blocked by ICP filing / Alibaba access control. IP access works; domain access will not work until filing or access filing is complete.
+- Current domain status: `cityusbdisk.cn` ICP filed（京ICP备14011242号-4）; DNS → `120.79.227.11`; **HTTPS live** with Let's Encrypt; HTTP redirects to HTTPS.
+- Preferred access URL: `https://cityusbdisk.cn`
 
 ## Runtime Architecture
 
@@ -251,14 +252,15 @@ If cards exist but images are blank again, check:
 5. whether backend logs contain `HTTP 403` / `AccessDenied`
 6. whether the bundle import step has already been run on the current server
 
-## Known External Constraint
+## Domain And SSL (2026-06-12)
 
-`cityusbdisk.cn` currently resolves correctly, but Alibaba blocks direct domain access because filing / access filing is incomplete.
-
-Until filing is complete:
-
-- use `http://120.79.227.11` for validation
-- do not treat domain failure as an app regression
+- ICP filing complete for `cityusbdisk.cn`.
+- Let's Encrypt certificate path: `/etc/letsencrypt/live/cityusbdisk.cn/`
+- Nginx site config: `/www/server/panel/vhost/nginx/120.79.227.11.conf`
+- Production `.env` should use:
+  - `QMDH_FRONTEND_ORIGIN=https://cityusbdisk.cn`
+  - `QMDH_PUBLIC_MEDIA_BASE_URL=https://cityusbdisk.cn`
+- IP `http://120.79.227.11` still works but domain access should be the default for designers and for upstream image fetch URLs.
 
 ## Quick Verification Commands
 

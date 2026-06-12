@@ -45,14 +45,13 @@
 - **Studio 前端大改与视频后端可分开交付**，但两者都会触及 `task_executor.py`、`providers.py`、`config.py`、`api.ts`；合并顺序固定为 **Studio PR 先于 Video 后端**，以减少冲突和返工。
 - **`E:\projects\QMDH-web-pr1-review`** 是主仓库的 git worktree，用于隔离 review PR #1（Studio 重构）；与 `E:\projects\QMDH-web` 共享同一 Git 对象库，不在此重复 clone。
 
-### 活跃分支与本地 worktree（2026-06-11 执行后）
+### 活跃分支与本地 worktree（2026-06-12 更新）
 
 | 路径 | 分支 / HEAD | 用途 |
 |------|-------------|------|
-| `E:\projects\QMDH-web` | `main` @ `411c719` | 集成主线（Studio + Video 后端） |
-| `E:\projects\QMDH-web-pr1-review` | 可同步到 `main` | review worktree |
-| GitHub `origin/main` | `005e25d` | **待 push**（本地 ahead 3 commits） |
-| 生产服务器 | 约 `6ae35b1` | **待 deploy**（需用户批准） |
+| `E:\projects\QMDH-web` | `main` @ `c41778e` | 集成主线（Studio + Video + Grok + 域名 HTTPS） |
+| GitHub `origin/main` | 可能滞后 | 网络允许时用无代理 push |
+| 生产服务器 | `c41778e` | **已 deploy**（`https://cityusbdisk.cn`） |
 
 ### 阶段 0：确认基线（在 `main` 或当前生产 HEAD 上）
 
@@ -84,7 +83,7 @@
 | 2.2 | 解决重叠文件冲突 | DONE |
 | 2.3 | 跑 migration 与 video pytest | DONE（32 passed；alembic `4d5e6f7a8b9c`） |
 | 2.4 | Commit + merge 到 `main` | DONE（`411c719`） |
-| 2.5 | Push + 有真实 Key 时 live smoke | TODO |
+| 2.5 | Push + 有真实 Key 时 live smoke | DONE（Haodeya Grok，2026-06-12 生产验证） |
 
 **范围边界**：
 - ✅ 后台 `/admin/models` 视频 adapter 配置；后端 adapter 执行与 mp4 资产落库
@@ -99,7 +98,7 @@
 |------|------|------|
 | 3.1 | 在拆分后的 Studio 组件上增加视频模式 / 参数 / 结果展示 | DONE（2026-06-11） |
 | 3.2 | 复用现有 `video-generate` workflow，不新开平行任务 API | DONE |
-| 3.3 | 端到端 live smoke：提交 → 轮询 → mp4 预览 → 资产入库 | TODO（需真实 video provider） |
+| 3.3 | 端到端 live smoke：提交 → 轮询 → mp4 预览 → 资产入库 | DONE（Haodeya Grok；纯文生 ~2–3 min，带图 ~6 min） |
 
 立项 task：**`video-002`**（见 Priority Queue）。
 
@@ -459,17 +458,28 @@
   1. Frontend build passes with video mode wired through existing Studio controller/submission path.
   2. Video mode submits `video-generate` tasks when a video provider is selected.
   3. Completed video tasks show playable mp4 in history cards/lightbox.
-  4. Live provider E2E smoke remains a manual follow-up when credentials exist.
+  4. Live provider E2E smoke completed on production for Haodeya Grok (2026-06-12).
+
+### Task: [video-grok-001] Haodeya Grok Imagine Video four-SKU integration
+- Status: DONE
+- Goal:
+  - Integrate Haodeya Grok four SKUs through `haodeya_grok_video` adapter and Studio SKU switcher.
+- Completion notes (2026-06-12):
+  - Submit / poll / `/content` download aligned with upstream final doc
+  - i2v `frame_images` uses `type: image_url` + `frame_type: first_frame`
+  - Production verified on `https://cityusbdisk.cn` for text-only and reference-image i2v
+  - Typical latency: 2–6+ minutes per task (upstream async)
+- Archive: `docs/archive/handoff-2026-06-12-grok-video-production.md`
 
 ---
 
 ## Next Suggested Step
 
-> **以 `Development Sequence (2026-06)` 为准。**
+> **以 `Development Sequence (2026-06)` 为准；Grok 生产验证已完成。**
 
-1. **Push `main`** 到 GitHub并关闭 PR #1（如尚未 push）。
-2. **Video live smoke**：在 `/admin/models` 启用 video provider 后，从 Studio **视频生成** 模式提交一条真实任务，验证 mp4 预览。
-3. **未经用户批准不 deploy 服务器**。
+1. **Push `main`** 到 GitHub（网络允许时）。
+2. **修复服务器 deploy key**，恢复 `git pull`。
+3. 继续 Production Readiness backlog（`prod-002`、`prod-004` 等）。
 
 ---
 

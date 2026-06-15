@@ -59,19 +59,10 @@ export default function ChatPage() {
   const shouldAutoScrollRef = useRef(true);
   const previousMessageCountRef = useRef(0);
   const pendingInitialScrollRef = useRef(false);
-  const pendingAttachmentsRef = useRef<{ storage_path: string; file_name: string; mime_type: string }[]>([]);
   const activeChatIdRef = useRef<number | null>(activeChatId);
   activeChatIdRef.current = activeChatId;
 
-  const transport = useMemo(
-    () =>
-      new QmdhChatTransport(() => activeChatIdRef.current, () => {
-        const payload = pendingAttachmentsRef.current;
-        pendingAttachmentsRef.current = [];
-        return payload;
-      }),
-    [],
-  );
+  const transport = useMemo(() => new QmdhChatTransport(() => activeChatIdRef.current), []);
 
   const {
     messages: chatMessages,
@@ -266,14 +257,14 @@ export default function ChatPage() {
       storage_path: item.storagePath,
       kind: item.kind,
     }));
-    pendingAttachmentsRef.current = attachmentState.toSendPayload();
+    const attachments = attachmentState.toSendPayload();
     setChatInput("");
     setChatError("");
     attachmentState.setError("");
     shouldAutoScrollRef.current = true;
 
     try {
-      await sendMessage({ text: content });
+      await sendMessage({ text: content }, { body: { attachments } });
       setChatMessages((current) => {
         const next = [...current];
         for (let index = next.length - 1; index >= 0; index -= 1) {
@@ -292,7 +283,6 @@ export default function ChatPage() {
       });
       attachmentState.clearAttachments();
     } catch (error: unknown) {
-      pendingAttachmentsRef.current = [];
       const message = error instanceof Error ? error.message : "未知错误";
       setChatError(message);
     }

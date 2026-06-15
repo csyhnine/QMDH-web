@@ -146,6 +146,43 @@ class ChatAttachmentTests(unittest.TestCase):
             assert stored is not None
             self.assertEqual(stored.attachments_json[0]["storage_path"], "references/chat-test.png")
 
+    def test_chat_message_accepts_double_encoded_json_body(self) -> None:
+        token = self.login()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        create_response = self.client.post(
+            "/chat/conversations",
+            headers=headers,
+            json={"model_provider_id": 1, "title": ""},
+        )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        conversation_id = create_response.json()["id"]
+
+        payload = {
+            "content": "请描述这张图",
+            "attachments": [
+                {
+                    "storage_path": self.storage_path,
+                    "file_name": "chat-test.png",
+                    "mime_type": "image/png",
+                    "kind": "image",
+                }
+            ],
+        }
+
+        async def fake_stream(provider, messages):
+            del provider, messages
+            yield "data: [DONE]\n\n"
+
+        with patch("app.routers.chat.stream_chat_completion", fake_stream):
+            response = self.client.post(
+                f"/chat/conversations/{conversation_id}/messages",
+                headers={**headers, "Content-Type": "application/json"},
+                content=json.dumps(json.dumps(payload)),
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+
     def test_chat_message_with_text_file_injects_extracted_content(self) -> None:
         token = self.login()
         headers = {"Authorization": f"Bearer {token}"}

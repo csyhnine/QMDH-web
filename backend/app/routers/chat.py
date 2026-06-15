@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -47,6 +47,13 @@ from app.services.billing import enforce_user_quota, normalize_chat_usage
 from app.services.usage_ledger import record_chat_usage_ledger
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+async def parse_chat_message_payload(request: Request) -> ChatMessageCreate:
+    raw_body = await request.json()
+    if isinstance(raw_body, str):
+        raw_body = json.loads(raw_body)
+    return ChatMessageCreate.model_validate(raw_body)
 
 
 def _verify_owner(db: Session, conversation_id: int, user_id: int) -> Conversation:
@@ -194,7 +201,7 @@ def delete_conversation(
 @router.post("/conversations/{conversation_id}/messages")
 async def send_message(
     conversation_id: int,
-    payload: ChatMessageCreate,
+    payload: ChatMessageCreate = Depends(parse_chat_message_payload),
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ):

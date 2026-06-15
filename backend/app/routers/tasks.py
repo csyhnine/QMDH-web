@@ -18,6 +18,7 @@ from app.services.media_storage import resolve_storage_payload
 from app.services.billing import enforce_user_quota
 from app.services.model_registry import get_provider_definition, get_provider_map
 from app.services.task_executor import enqueue_task, execute_task, mark_task_enqueue_failed
+from app.services.task_stale_recovery import recover_stale_tasks
 from app.services.usage_ledger import ensure_usage_ledger_for_task
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -122,6 +123,7 @@ def list_tasks(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> list[TaskOut]:
+    recover_stale_tasks(db)
     query = (
         select(Task)
         .join(Task.project)

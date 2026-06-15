@@ -21,6 +21,7 @@ from app.routers import agent, assets, auth, chat, dashboard, feedback, health, 
 from app.services.bootstrap import ensure_schema, seed_initial_data
 from app.services.media_storage import media_root_path, validate_storage_backend_configuration
 from app.services.session_cleanup import run_session_cleanup_once
+from app.services.task_stale_recovery import recover_stale_tasks
 
 # Configure structured logging before startup validation.
 setup_logging()
@@ -67,6 +68,17 @@ def _run_session_cleanup_job() -> None:
         client.close()
 
 
+def _run_stale_task_recovery_job() -> None:
+    logger = logging.getLogger(__name__)
+    try:
+        with SessionLocal() as db:
+            recovered = recover_stale_tasks(db)
+        if recovered:
+            logger.info("Recovered %s stale task(s)", recovered)
+    except Exception:
+        logger.exception("Stale task recovery failed")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
@@ -74,6 +86,7 @@ async def lifespan(_: FastAPI):
     media_root_path()
     with SessionLocal() as db:
         seed_initial_data(db)
+        recover_stale_tasks(db)
 
     scheduler = BackgroundScheduler()
     scheduler.add_job(
@@ -81,6 +94,14 @@ async def lifespan(_: FastAPI):
         "interval",
         seconds=settings.get_session_cleanup_interval_seconds(),
         id="session_cleanup",
+        replace_existing=True,
+        max_instances=1,
+    )
+    scheduler.add_job(
+        _run_stale_task_recovery_job,
+        "interval",
+        seconds=120,
+        id="stale_task_recovery",
         replace_existing=True,
         max_instances=1,
     )

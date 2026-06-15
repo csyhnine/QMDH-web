@@ -189,6 +189,9 @@ def update_inspiration(
     db.refresh(post)
     upsert_inspiration_post(post)
     return _to_out(post)
+
+
+@router.post("/extract-images", response_model=ExtractImagesOut)
 async def extract_images_from_url(
     payload: ExtractImagesIn,
     auth_user: AuthUserProfile = Depends(get_current_auth_user),

@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,7 @@ from app.schemas import (
     ChatMessageCreate,
     ChatMessageOut,
     ChatModelOut,
+    ChatWordExportIn,
     ConversationCreate,
     ConversationOut,
 )
@@ -35,6 +36,7 @@ from app.services.chat_message_content import (
     chat_attachment_out,
     serialize_chat_attachments,
 )
+from app.services.chat_word_export import build_chat_word_document, default_chat_word_file_name
 from app.services.media_storage import resolve_storage_path, write_binary_asset
 from app.services.chat_service import (
     format_chat_error_message,
@@ -196,6 +198,53 @@ def delete_conversation(
     db.delete(conversation)
     db.commit()
     return Response(status_code=204)
+
+
+@router.post("/conversations/{conversation_id}/messages/export-word")
+def export_chat_message_word(
+    conversation_id: int,
+    payload: ChatWordExportIn,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> Response:
+    from urllib.parse import quote
+
+    conversation = _verify_owner(db, conversation_id, auth_user.user_id)
+
+    content = ""
+    message_id = payload.message_id
+    if message_id is not None:
+        message = db.get(ChatMessage, message_id)
+        if not message or message.conversation_id != conversation_id:
+            raise HTTPException(status_code=404, detail="Message not found")
+        if message.role != "assistant":
+            raise HTTPException(status_code=400, detail="Only assistant messages can be exported to Word.")
+        content = str(message.content or "").strip()
+    else:
+        content = payload.content.strip()
+
+    if not content:
+        raise HTTPException(status_code=400, detail="Message content is empty.")
+
+    try:
+        docx_bytes = build_chat_word_document(content, title=conversation.title)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    file_name = payload.file_name.strip() or default_chat_word_file_name(
+        conversation_title=conversation.title,
+        message_id=message_id,
+    )
+    ascii_name = "".join(char if char.isascii() and (char.isalnum() or char in {".", "-", "_"}) else "-" for char in file_name)
+    ascii_name = ascii_name.strip("-_.") or "chat-reply.docx"
+    disposition = (
+        f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(file_name)}'
+    )
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": disposition},
+    )
 
 
 @router.post("/conversations/{conversation_id}/messages")

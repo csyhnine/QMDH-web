@@ -1,9 +1,9 @@
-import { useChat } from "@ai-sdk/react";
+import { useChat, type UIMessage } from "@ai-sdk/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../../api";
 import { useAuth } from "../../context/AuthContext";
-import { getUiMessageAttachments, getUiMessageText, toUiMessages } from "../../lib/chat/qmdhChatMessageUtils";
+import { getPersistedMessageId, getUiMessageAttachments, getUiMessageText, toUiMessages } from "../../lib/chat/qmdhChatMessageUtils";
 import { QmdhChatTransport } from "../../lib/chat/qmdhChatTransport";
 import { useChatAttachments } from "../../lib/chat/useChatAttachments";
 
@@ -52,6 +52,7 @@ export default function ChatPage() {
     return saved ? parseInt(saved, 10) : null;
   });
   const [chatError, setChatError] = useState("");
+  const [exportingMessageId, setExportingMessageId] = useState<string | null>(null);
 
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const messagesBottomRef = useRef<HTMLDivElement | null>(null);
@@ -242,6 +243,30 @@ export default function ChatPage() {
     }
   }
 
+  async function handleExportWord(message: UIMessage) {
+    if (!activeChatId) {
+      return;
+    }
+    const text = getUiMessageText(message).trim();
+    if (!text) {
+      return;
+    }
+
+    const messageId = getPersistedMessageId(message);
+    setExportingMessageId(message.id);
+    setChatError("");
+    try {
+      await api.exportChatMessageWord(activeChatId, {
+        message_id: messageId ?? undefined,
+        content: messageId ? undefined : text,
+      });
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : "导出 Word 失败");
+    } finally {
+      setExportingMessageId(null);
+    }
+  }
+
   async function handleSendMessage() {
     const hasText = Boolean(chatInput.trim());
     const hasAttachments = attachmentState.attachments.length > 0;
@@ -381,7 +406,7 @@ export default function ChatPage() {
             {attachmentState.isDragging ? (
               <div className="chat-drop-overlay" aria-hidden="true">
                 <strong>松开鼠标上传</strong>
-                <span>支持图片，或 PDF / TXT / MD / JSON / CSV</span>
+                <span>支持图片，或 PDF / TXT / MD / JSON / CSV / DOCX / XLSX</span>
               </div>
             ) : null}
             <div className="chat-messages" ref={messagesRef} onScroll={updateAutoScrollState}>
@@ -420,6 +445,22 @@ export default function ChatPage() {
                     <div className="chat-msg-content">
                       {getUiMessageText(message) || (streaming && index === chatMessages.length - 1 ? "..." : "")}
                     </div>
+                    {message.role === "assistant" && getUiMessageText(message).trim() ? (
+                      <div className="chat-msg-actions">
+                        <button
+                          type="button"
+                          className="chat-export-word-btn"
+                          disabled={
+                            streaming && index === chatMessages.length - 1
+                              ? true
+                              : exportingMessageId === message.id
+                          }
+                          onClick={() => void handleExportWord(message)}
+                        >
+                          {exportingMessageId === message.id ? "导出中..." : "导出 Word"}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                   {message.role === "user" ? (
                     <div className="chat-msg-avatar chat-msg-avatar-user">

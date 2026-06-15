@@ -946,6 +946,44 @@ export const api = {
       }[]
     >(`/chat/conversations/${convId}/messages`),
   deleteChatConversation: (convId: number) => deleteRequest(`/chat/conversations/${convId}`),
+  exportChatMessageWord: async (
+    convId: number,
+    payload: { message_id?: number; content?: string; file_name?: string },
+  ) => {
+    const response = await fetch(buildApiUrl(`/chat/conversations/${convId}/messages/export-word`), {
+      method: "POST",
+      headers: {
+        ...authHeaders(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      throw await buildError(response);
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get("content-disposition");
+    const utf8Match = disposition?.match(/filename\*=UTF-8''([^;]+)/i);
+    const asciiMatch = disposition?.match(/filename="([^"]+)"/i);
+    let fileName = "chat-reply.docx";
+    if (utf8Match?.[1]) {
+      try {
+        fileName = decodeURIComponent(utf8Match[1]);
+      } catch {
+        fileName = asciiMatch?.[1] ?? fileName;
+      }
+    } else if (asciiMatch?.[1]) {
+      fileName = asciiMatch[1];
+    }
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(url);
+  },
   search: (params: { q: string; domain: "inspiration" | "templates"; limit?: number }) => {
     const query = new URLSearchParams({
       q: params.q,

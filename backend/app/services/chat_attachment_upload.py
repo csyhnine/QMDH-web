@@ -16,11 +16,14 @@ MAX_CHAT_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_CHAT_FILE_BYTES = 5 * 1024 * 1024
 CHAT_ATTACHMENT_PREFIXES = ("references/", "chat-attachments/")
 _ALLOWED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
-_ALLOWED_DOCUMENT_SUFFIXES = {".pdf", ".txt", ".md", ".json", ".csv"}
+_ALLOWED_DOCUMENT_SUFFIXES = {".pdf", ".txt", ".md", ".json", ".csv", ".docx", ".xlsx"}
 
 _IMAGE_DATA_URL_PATTERN = re.compile(r"^data:image/(png|jpe?g|webp|gif);base64,(.+)$", re.IGNORECASE)
 _FILE_DATA_URL_PATTERN = re.compile(
-    r"^data:(?:application/pdf|text/plain|text/markdown|application/json|text/csv|application/octet-stream);base64,(.+)$",
+    r"^data:(?:application/pdf|text/plain|text/markdown|application/json|text/csv|"
+    r"application/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|"
+    r"application/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|"
+    r"application/octet-stream);base64,(.+)$",
     re.IGNORECASE,
 )
 
@@ -31,7 +34,7 @@ _IMAGE_EXTENSIONS = {
     "webp": "webp",
     "gif": "gif",
 }
-_FILE_EXTENSIONS = {".pdf", ".txt", ".md", ".json", ".csv"}
+_FILE_EXTENSIONS = {".pdf", ".txt", ".md", ".json", ".csv", ".docx", ".xlsx"}
 
 
 def _safe_stub(file_name: str, fallback: str) -> str:

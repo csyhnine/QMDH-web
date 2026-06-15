@@ -13,7 +13,7 @@ from app.services.media_storage import media_url_for
 
 MAX_CHAT_ATTACHMENTS = 4
 _ALLOWED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
-_ALLOWED_DOCUMENT_SUFFIXES = {".pdf", ".txt", ".md", ".json", ".csv"}
+_ALLOWED_DOCUMENT_SUFFIXES = {".pdf", ".txt", ".md", ".json", ".csv", ".docx", ".xlsx"}
 
 
 def normalize_chat_attachment_storage_path(path: str) -> str:
@@ -47,6 +47,8 @@ def mime_type_for_path(path: str, fallback: str = "application/octet-stream") ->
         ".md": "text/markdown",
         ".json": "application/json",
         ".csv": "text/csv",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }
     return mapping.get(suffix, fallback)
 

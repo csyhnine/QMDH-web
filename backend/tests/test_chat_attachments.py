@@ -1,4 +1,5 @@
 import json
+import io
 import unittest
 from unittest.mock import patch
 
@@ -229,6 +230,54 @@ class ChatAttachmentTests(unittest.TestCase):
         self.assertIn("请阅读附件", content)
         self.assertIn("附件：notes.txt", content)
         self.assertIn("hello from txt", content)
+
+    def test_chat_message_with_docx_file_injects_extracted_content(self) -> None:
+        from docx import Document
+
+        token = self.login()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        buffer = io.BytesIO()
+        document = Document()
+        document.add_paragraph("word attachment body")
+        document.save(buffer)
+        file_path = write_binary_asset("chat-attachments/spec.docx", buffer.getvalue())
+
+        create_response = self.client.post(
+            "/chat/conversations",
+            headers=headers,
+            json={"model_provider_id": 1, "title": ""},
+        )
+        conversation_id = create_response.json()["id"]
+        seen: dict[str, object] = {}
+
+        async def fake_stream(provider, messages):
+            del provider
+            seen["messages"] = messages
+            yield f"data: {json.dumps({'delta': 'ok'})}\n\n"
+            yield "data: [DONE]\n\n"
+
+        with patch("app.routers.chat.stream_chat_completion", fake_stream):
+            response = self.client.post(
+                f"/chat/conversations/{conversation_id}/messages",
+                headers={**headers, "Content-Type": "application/json"},
+                json={
+                    "content": "请阅读 Word 附件",
+                    "attachments": [
+                        {
+                            "storage_path": file_path,
+                            "file_name": "spec.docx",
+                            "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            "kind": "file",
+                        }
+                    ],
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        content = seen["messages"][-1]["content"]
+        self.assertIn("附件：spec.docx", content)
+        self.assertIn("word attachment body", content)
 
 
 if __name__ == "__main__":

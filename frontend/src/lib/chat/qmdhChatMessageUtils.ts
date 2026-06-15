@@ -41,3 +41,11 @@ export function getUiMessageText(message: UIMessage): string {
     .map((part) => part.text)
     .join("");
 }
+
+export function getPersistedMessageId(message: UIMessage): number | null {
+  const parsed = Number(message.id);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return null;
+  }
+  return parsed;
+}

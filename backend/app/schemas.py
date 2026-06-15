@@ -749,6 +749,18 @@ class ChatMessageOut(BaseModel):
     created_at: datetime
 
 
+class ChatWordExportIn(BaseModel):
+    message_id: int | None = None
+    content: str = ""
+    file_name: str = ""
+
+    @model_validator(mode="after")
+    def validate_has_source(self) -> ChatWordExportIn:
+        if self.message_id is None and not self.content.strip():
+            raise ValueError("message_id or content is required.")
+        return self
+
+
 class AgentImageTaskCreate(BaseModel):
     title: str = Field(min_length=3, max_length=150)
     project_id: int

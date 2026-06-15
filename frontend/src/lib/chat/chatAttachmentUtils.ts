@@ -3,7 +3,8 @@ import { validateChatDocumentSize, validateReferenceImageSize } from "../../util
 
 export const MAX_CHAT_ATTACHMENTS = 4;
 
-export const CHAT_FILE_ACCEPT = "image/*,.pdf,.txt,.md,.json,.csv";
+export const CHAT_FILE_ACCEPT =
+  "image/*,.pdf,.txt,.md,.json,.csv,.docx,.xlsx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 export type ChatAttachmentKind = "image" | "file";
 
@@ -22,7 +23,7 @@ export type ChatSendAttachment = {
   kind: ChatAttachmentKind;
 };
 
-const DOCUMENT_EXTENSIONS = new Set(["pdf", "txt", "md", "json", "csv"]);
+const DOCUMENT_EXTENSIONS = new Set(["pdf", "txt", "md", "json", "csv", "docx", "xlsx"]);
 
 export function detectChatAttachmentKind(file: File): ChatAttachmentKind | null {
   if (file.type.startsWith("image/")) {

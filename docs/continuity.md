@@ -17,9 +17,9 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**: `docs/tasks.md` → **`Development Sequence (2026-06)`** (Phases 0–3 complete; Grok live smoke done 2026-06-12)
-- Current branch: `main` @ `30cbd1c`
-- GitHub `origin/main`: `30cbd1c` (synced 2026-06-12 via proxy push)
-- Production server: `30cbd1c` — **deployed** via git bundle fallback
+- Current branch: `main` @ `51d8d56`
+- GitHub `origin/main`: `51d8d56` (synced 2026-06-12 via proxy push)
+- Production server: `51d8d56` — **deployed** via git bundle fallback
 - Production URL: **`https://cityusbdisk.cn`** (ICP filed; HTTPS enabled)
 - Phase status (2026-06-12):
   - Phase 0–3: DONE including Haodeya Grok production E2E

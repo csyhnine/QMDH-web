@@ -53,3 +53,11 @@ git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 pus
 
 - `inspiration_posts.media_type` column added by migration / ensure_schema
 - Full docker build output omitted (see deploy script stdout if needed)
+
+## Follow-up deploy (docs archive)
+
+```
+Server HEAD: 51d8d568
+Commit: docs: archive ops role and inspiration share deploy record
+Health: healthy (local + https://cityusbdisk.cn)
+```

@@ -2,6 +2,12 @@ import { type ChangeEvent, type DragEvent, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type InspirationPost } from "../../api";
 import { validateReferenceImageSize } from "../../utils/uploads";
+import {
+  hasInspirationComparePreview,
+  InspirationMainMediaPreview,
+  inspirationFinalMediaCaption,
+  isVideoInspirationPost,
+} from "./inspirationMediaUtils";
 
 /* ─── Props ─── */
 
@@ -35,11 +41,6 @@ export type InspirationPageProps = {
   mode?: "studio" | "admin";
 };
 
-function hasComparePreview(post: InspirationPost): boolean {
-  return post.source_type === "user" && Boolean(post.source_image_path) && Boolean(post.image_path);
-}
-
-/* ─── Component ─── */
 
 export default function InspirationPage({
   posts,
@@ -484,18 +485,22 @@ export default function InspirationPage({
         {visiblePosts.length > 0 ? visiblePosts.map((post) => (
           <article key={post.id} className="inspiration-card">
             <div className="inspiration-card-image" onClick={() => setLightbox(post)} style={{ cursor: "pointer" }}>
-              {hasComparePreview(post) ? (
+              {hasInspirationComparePreview(post) ? (
                 <div className="inspiration-card-compare">
                   <figure className="inspiration-card-compare-figure">
                     <img src={post.source_image_path} alt={`${post.title} 原图`} loading="lazy" />
-                    <figcaption>原图</figcaption>
+                    <figcaption>{isVideoInspirationPost(post) ? "参考图" : "原图"}</figcaption>
                   </figure>
                   <figure className="inspiration-card-compare-figure">
-                    <img src={post.image_path} alt={`${post.title} 最终图`} loading="lazy" />
-                    <figcaption>最终图</figcaption>
+                    <InspirationMainMediaPreview post={post} alt={`${post.title} ${inspirationFinalMediaCaption(post)}`} />
+                    <figcaption>{inspirationFinalMediaCaption(post)}</figcaption>
                   </figure>
                 </div>
-              ) : post.image_path ? <img src={post.image_path} alt={post.title} loading="lazy" /> : <div className="inspiration-card-placeholder" />}
+              ) : post.image_path ? (
+                <InspirationMainMediaPreview post={post} alt={post.title} />
+              ) : (
+                <div className="inspiration-card-placeholder" />
+              )}
               {post.category !== "全部" ? <span className="inspiration-card-badge">{post.category}</span> : null}
               {mode === "admin" ? (
                 <label
@@ -567,17 +572,35 @@ export default function InspirationPage({
         <div className="media-lightbox" onClick={() => setLightbox(null)} onKeyDown={(e) => { if (e.key === "Escape") setLightbox(null); }} tabIndex={0} ref={(el) => el?.focus()}>
           <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()}>
             <button type="button" className="media-lightbox-close" onClick={() => setLightbox(null)}>×</button>
-            {hasComparePreview(lightbox) ? (
+            {hasInspirationComparePreview(lightbox) ? (
               <div className="inspiration-lightbox-compare">
                 <figure className="inspiration-lightbox-figure">
                   <img src={lightbox.source_image_path} alt={`${lightbox.title} 原图`} style={{ maxWidth: "42vw", maxHeight: "72vh", objectFit: "contain" }} />
-                  <figcaption>原图</figcaption>
+                  <figcaption>{isVideoInspirationPost(lightbox) ? "参考图" : "原图"}</figcaption>
                 </figure>
                 <figure className="inspiration-lightbox-figure">
-                  <img src={lightbox.image_path} alt={`${lightbox.title} 最终图`} style={{ maxWidth: "42vw", maxHeight: "72vh", objectFit: "contain" }} />
-                  <figcaption>最终图</figcaption>
+                  {isVideoInspirationPost(lightbox) ? (
+                    <video
+                      src={lightbox.image_path}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      style={{ maxWidth: "42vw", maxHeight: "72vh", objectFit: "contain" }}
+                    />
+                  ) : (
+                    <img src={lightbox.image_path} alt={`${lightbox.title} 最终图`} style={{ maxWidth: "42vw", maxHeight: "72vh", objectFit: "contain" }} />
+                  )}
+                  <figcaption>{inspirationFinalMediaCaption(lightbox)}</figcaption>
                 </figure>
               </div>
+            ) : isVideoInspirationPost(lightbox) ? (
+              <video
+                src={lightbox.image_path}
+                controls
+                playsInline
+                preload="metadata"
+                style={{ maxWidth: "90vw", maxHeight: "80vh", objectFit: "contain" }}
+              />
             ) : (
               <img src={lightbox.image_path} alt={lightbox.title} style={{ maxWidth: "90vw", maxHeight: "80vh", objectFit: "contain" }} />
             )}

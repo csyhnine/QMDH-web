@@ -1,10 +1,27 @@
 import type { StudioShareConfirmLightboxProps } from "./studioMediaLightboxTypes";
 
+function shareConfirmDescription({
+  mediaType,
+  sourceImagePath,
+}: Pick<StudioShareConfirmLightboxProps["shareConfirmState"], "mediaType" | "sourceImagePath">) {
+  if (mediaType === "video") {
+    return sourceImagePath
+      ? "确认后，这条视频会以“参考图 / 最终视频”的形式进入灵感库，其他设计师可以直接看到前后参考关系。"
+      : "确认后，这条视频会作为单条作品进入灵感库，其他设计师可以直接观看。";
+  }
+  return sourceImagePath
+    ? "确认后，这条内容会以“原图 / 最终图”的对比形式进入灵感库，其他设计师可以直接看到前后变化。"
+    : "确认后，这条生成结果会作为单图作品进入灵感库，其他设计师可以直接查看。";
+}
+
 export default function StudioShareConfirmLightbox({
   shareConfirmState,
   onClose,
   onConfirm,
 }: StudioShareConfirmLightboxProps) {
+  const hasCompare = Boolean(shareConfirmState.sourceImagePath);
+  const isVideo = shareConfirmState.mediaType === "video";
+
   return (
     <div
       className="media-lightbox"
@@ -22,20 +39,35 @@ export default function StudioShareConfirmLightbox({
         </header>
         <div className="share-confirm-copy">
           <strong>{shareConfirmState.title}</strong>
-          <p>
-            {"\u786e\u8ba4\u540e\uff0c\u8fd9\u6761\u5185\u5bb9\u4f1a\u4ee5\u201c\u539f\u56fe / \u6700\u7ec8\u56fe\u201d\u7684\u5bf9\u6bd4\u5f62\u5f0f\u8fdb\u5165\u7075\u611f\u5e93\uff0c\u5176\u4ed6\u8bbe\u8ba1\u5e08\u53ef\u4ee5\u76f4\u63a5\u770b\u5230\u524d\u540e\u53d8\u5316\u3002"}
-          </p>
+          <p>{shareConfirmDescription(shareConfirmState)}</p>
         </div>
-        <div className="share-confirm-compare" aria-label={"\u539f\u56fe\u4e0e\u6700\u7ec8\u56fe\u5bf9\u6bd4\u9884\u89c8"}>
-          <figure className="share-confirm-figure">
-            <img src={shareConfirmState.sourceImagePath} alt={"\u539f\u56fe\u9884\u89c8"} />
-            <figcaption>{"\u539f\u56fe"}</figcaption>
-          </figure>
-          <figure className="share-confirm-figure">
-            <img src={shareConfirmState.finalImagePath} alt={"\u6700\u7ec8\u56fe\u9884\u89c8"} />
-            <figcaption>{"\u6700\u7ec8\u56fe"}</figcaption>
-          </figure>
-        </div>
+        {hasCompare ? (
+          <div
+            className="share-confirm-compare"
+            aria-label={isVideo ? "\u53c2\u8003\u56fe\u4e0e\u6700\u7ec8\u89c6\u9891\u5bf9\u6bd4\u9884\u89c8" : "\u539f\u56fe\u4e0e\u6700\u7ec8\u56fe\u5bf9\u6bd4\u9884\u89c8"}
+          >
+            <figure className="share-confirm-figure">
+              <img src={shareConfirmState.sourceImagePath} alt={"\u539f\u56fe\u9884\u89c8"} />
+              <figcaption>{isVideo ? "\u53c2\u8003\u56fe" : "\u539f\u56fe"}</figcaption>
+            </figure>
+            <figure className="share-confirm-figure">
+              {isVideo ? (
+                <video src={shareConfirmState.finalMediaPath} controls playsInline preload="metadata" />
+              ) : (
+                <img src={shareConfirmState.finalMediaPath} alt={"\u6700\u7ec8\u56fe\u9884\u89c8"} />
+              )}
+              <figcaption>{isVideo ? "\u6700\u7ec8\u89c6\u9891" : "\u6700\u7ec8\u56fe"}</figcaption>
+            </figure>
+          </div>
+        ) : (
+          <div className="share-confirm-single" aria-label={isVideo ? "\u89c6\u9891\u9884\u89c8" : "\u6700\u7ec8\u56fe\u9884\u89c8"}>
+            {isVideo ? (
+              <video src={shareConfirmState.finalMediaPath} controls playsInline preload="metadata" />
+            ) : (
+              <img src={shareConfirmState.finalMediaPath} alt={"\u6700\u7ec8\u56fe\u9884\u89c8"} />
+            )}
+          </div>
+        )}
         <footer className="share-confirm-actions">
           <button type="button" className="ghost-button" onClick={onClose}>
             {"\u53d6\u6d88"}

@@ -87,8 +87,9 @@ export type ShareConfirmState = {
   taskId: number;
   assetId: number;
   title: string;
+  mediaType: "image" | "video";
   sourceImagePath: string;
-  finalImagePath: string;
+  finalMediaPath: string;
 };
 
 export type GalleryPreviewState = {

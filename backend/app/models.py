@@ -165,6 +165,7 @@ class InspirationPost(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     source_image_path: Mapped[str] = mapped_column(String(255), default="")
     image_path: Mapped[str] = mapped_column(String(255))
+    media_type: Mapped[str] = mapped_column(String(20), default="image")
     category: Mapped[str] = mapped_column(String(50), default="全部", index=True)
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     source_type: Mapped[str] = mapped_column(String(20), default="user")  # "user" or "external"

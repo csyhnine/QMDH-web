@@ -629,6 +629,7 @@ class InspirationPostOut(BaseModel):
     description: str
     source_image_path: str = ""
     image_path: str
+    media_type: str = "image"
     category: str
     tags: list[str]
     source_type: str
@@ -649,6 +650,7 @@ class InspirationPostCreate(BaseModel):
     description: str = ""
     source_image_path: str = ""
     image_path: str = ""
+    media_type: str = "image"
     category: str = "建筑"
     tags: list[str] = Field(default_factory=list)
     source_type: str = "external"
@@ -664,6 +666,7 @@ class InspirationPostUpdate(BaseModel):
     description: str | None = None
     source_image_path: str | None = None
     image_path: str | None = None
+    media_type: str | None = None
     category: str | None = None
     tags: list[str] | None = None
     source_url: str | None = None

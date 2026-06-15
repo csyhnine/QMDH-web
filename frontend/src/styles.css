@@ -808,6 +808,30 @@ button {
   padding: 0 20px 20px;
 }
 
+.share-confirm-single {
+  padding: 18px 20px 20px;
+}
+
+.share-confirm-single img,
+.share-confirm-single video,
+.share-confirm-figure video {
+  width: 100%;
+  max-height: 320px;
+  aspect-ratio: 4 / 3;
+  border-radius: 14px;
+  background: rgba(17, 24, 39, 0.04);
+  object-fit: contain;
+}
+
+.inspiration-card-compare-figure video,
+.inspiration-lightbox-figure video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  background: #0f172a;
+}
+
 .empty-stage {
   width: min(760px, 100%);
   min-height: 220px;
@@ -4895,6 +4919,13 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  line-height: 1;
+}
+
+.admin-pagination-size > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
 }
 
 .admin-pagination-size select {
@@ -6963,9 +6994,52 @@ textarea:focus-visible {
 }
 
 .usage-logs-table .admin-table-row {
-  min-width: 1480px;
+  min-width: 1540px;
+  align-items: start;
   grid-template-columns:
-    170px minmax(140px, 1fr) 100px 72px minmax(180px, 1.4fr) 92px 88px 72px 72px 110px minmax(220px, 1.6fr);
+    168px 136px 96px 76px 208px 92px 88px 72px 72px 108px minmax(240px, 1fr);
+}
+
+.usage-logs-table .admin-table-head {
+  align-items: center;
+  min-height: 44px;
+}
+
+.usage-logs-table .admin-table-row > span {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.usage-logs-table .admin-table-row > span:nth-child(7),
+.usage-logs-table .admin-table-row > span:nth-child(8),
+.usage-logs-table .admin-table-row > span:nth-child(9),
+.usage-logs-table .admin-table-row > span:nth-child(10) {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.usage-logs-table .admin-table-head > span:nth-child(7),
+.usage-logs-table .admin-table-head > span:nth-child(8),
+.usage-logs-table .admin-table-head > span:nth-child(9),
+.usage-logs-table .admin-table-head > span:nth-child(10) {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.usage-logs-table .admin-table-row strong,
+.usage-logs-table .admin-table-row small {
+  display: block;
+  margin-top: 0;
+  line-height: 1.35;
+}
+
+.usage-logs-table .admin-table-row small {
+  color: #8a96a8;
+  font-size: 0.78rem;
 }
 
 .usage-kind-pill {
@@ -7000,9 +7074,11 @@ textarea:focus-visible {
 }
 
 .usage-log-detail {
+  align-self: stretch;
   white-space: normal;
   word-break: break-word;
   line-height: 1.45;
   color: #475467;
   font-size: 0.82rem;
+  text-align: left;
 }

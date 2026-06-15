@@ -466,6 +466,7 @@ export type InspirationPost = {
   description: string;
   source_image_path: string;
   image_path: string;
+  media_type: string;
   category: string;
   tags: string[];
   source_type: string;

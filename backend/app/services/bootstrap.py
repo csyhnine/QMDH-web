@@ -132,6 +132,10 @@ def ensure_schema(engine: Engine) -> None:
             connection.execute(
                 text("ALTER TABLE inspiration_posts ADD COLUMN source_image_path VARCHAR(255) NOT NULL DEFAULT ''")
             )
+        if inspiration_post_columns and "media_type" not in inspiration_post_columns:
+            connection.execute(
+                text("ALTER TABLE inspiration_posts ADD COLUMN media_type VARCHAR(20) NOT NULL DEFAULT 'image'")
+            )
         if usage_ledger_columns and "input_tokens" not in usage_ledger_columns:
             connection.execute(text("ALTER TABLE usage_ledgers ADD COLUMN input_tokens INTEGER NOT NULL DEFAULT 0"))
         if usage_ledger_columns and "output_tokens" not in usage_ledger_columns:

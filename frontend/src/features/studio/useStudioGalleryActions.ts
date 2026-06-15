@@ -44,7 +44,7 @@ export function useStudioGalleryActions({
           taskId,
           "share",
           "success",
-          result.already_shared ? "这张图已经在灵感库里。" : "已分享到灵感库。"
+          result.already_shared ? "这条内容已经在灵感库里。" : "已分享到灵感库。"
         );
       }
     } catch (error) {
@@ -62,11 +62,11 @@ export function useStudioGalleryActions({
   function openShareConfirm(task: Task, asset: Asset) {
     const result = buildShareConfirmState(task, asset);
     if (result.status === "already-shared") {
-      historyFeedback.pushFeedback(task.id, "share", "info", "这张图已经在灵感库里。");
+      historyFeedback.pushFeedback(task.id, "share", "info", "这条内容已经在灵感库里。");
       return;
     }
-    if (result.status === "missing-source") {
-      historyFeedback.pushFeedback(task.id, "share", "error", "这条记录没有原图，暂时不能分享到灵感库。");
+    if (result.status === "missing-media") {
+      historyFeedback.pushFeedback(task.id, "share", "error", "这条记录没有可分享的文件。");
       return;
     }
     if (result.status === "ready") {

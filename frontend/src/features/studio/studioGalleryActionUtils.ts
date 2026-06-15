@@ -2,6 +2,7 @@ import type { Asset, Task } from "../../api";
 import type { GalleryPreviewState, LoadState, ShareConfirmState } from "./studioTypes";
 import {
   getRenderableUrl,
+  isVideoAsset,
   taskDisplayTitle,
   taskReferenceImages,
 } from "./studioUtils";
@@ -42,7 +43,7 @@ type ShareConfirmBuildResult =
       shareConfirmState: ShareConfirmState;
     }
   | {
-      status: "already-shared" | "missing-source";
+      status: "already-shared" | "missing-media";
     };
 
 export function buildShareConfirmState(task: Task, asset: Asset): ShareConfirmBuildResult {
@@ -50,9 +51,9 @@ export function buildShareConfirmState(task: Task, asset: Asset): ShareConfirmBu
     return { status: "already-shared" };
   }
 
-  const sourceImagePath = taskReferenceImages(task)[0] ?? "";
-  if (!sourceImagePath) {
-    return { status: "missing-source" };
+  const finalMediaPath = getRenderableUrl(asset) ?? asset.storage_path.trim();
+  if (!finalMediaPath) {
+    return { status: "missing-media" };
   }
 
   return {
@@ -61,8 +62,9 @@ export function buildShareConfirmState(task: Task, asset: Asset): ShareConfirmBu
       taskId: task.id,
       assetId: asset.id,
       title: taskDisplayTitle(task, asset),
-      sourceImagePath,
-      finalImagePath: getRenderableUrl(asset) ?? asset.storage_path,
+      mediaType: isVideoAsset(asset) ? "video" : "image",
+      sourceImagePath: taskReferenceImages(task)[0] ?? "",
+      finalMediaPath,
     },
   };
 }

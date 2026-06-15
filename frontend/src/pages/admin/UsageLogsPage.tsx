@@ -378,7 +378,7 @@ export default function UsageLogsPage() {
               <span>{capabilityLabel(record.capability)}</span>
               <span>
                 <strong>{formatLatency(record.latency_ms)}</strong>
-                {record.entry_type === "chat.message.completed" ? <small>流式</small> : <small>非流</small>}
+                {record.entry_type === "chat.message.completed" ? <small>流式</small> : null}
               </span>
               <span>{formatTokenCount(record.input_tokens)}</span>
               <span>{formatTokenCount(record.output_tokens)}</span>

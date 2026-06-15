@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import can_access_project, get_current_auth_user
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import Asset, AssetBookmark, InspirationPost, Project, ProviderCall, Task
+from app.models import Asset, AssetBookmark, AssetType, InspirationPost, Project, ProviderCall, Task
 from app.schemas import AssetOut, AssetShareIn, AssetShareOut, ReferenceUploadIn, ReferenceUploadOut
 from app.services.media_storage import resolve_storage_path, write_binary_asset
 
@@ -273,13 +273,13 @@ def share_asset(
 
     task = db.get(Task, asset.source_task_id) if asset.source_task_id is not None else None
     source_image_path = _derive_inspiration_source_image_path(task)
-    if not source_image_path:
-        raise HTTPException(status_code=400, detail="This result has no source image to compare")
+    media_type = "video" if asset.asset_type == AssetType.video else "image"
     post = InspirationPost(
         title=_derive_inspiration_title(asset, task),
         description=_derive_inspiration_description(asset, task),
         source_image_path=source_image_path,
         image_path=asset.storage_path,
+        media_type=media_type,
         category="\u5efa\u7b51",
         tags=list(dict.fromkeys(tag.strip() for tag in (asset.tags or []) if tag.strip())),
         source_type="user",

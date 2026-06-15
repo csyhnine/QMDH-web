@@ -4,7 +4,7 @@
 
 - This section overrides older historical notes below when they conflict with current code.
 - Runtime roles are now effectively `admin` and `designer`.
-- Legacy `owner` and `ops` inputs are normalized to `admin` at auth boundaries for compatibility, but they are no longer an active product role model.
+- Legacy `owner` inputs normalize to `admin`. Active roles are `admin`, `ops`, and `designer`.
 - Studio history is now account-owned for every role. Same-project membership no longer implies shared history visibility, and admin-role accounts no longer get global history cards through the studio surface.
 - `/admin/projects` and project-member management are no longer part of the active product surface.
 - Projects remain as personal or admin-managed task containers, not collaboration spaces with shared history cards.

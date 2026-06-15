@@ -17,9 +17,9 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**: `docs/tasks.md` → **`Development Sequence (2026-06)`** (Phases 0–3 complete; Grok live smoke done 2026-06-12)
-- Current branch: `main` @ `51d8d56`
-- GitHub `origin/main`: `51d8d56` (synced 2026-06-12 via proxy push)
-- Production server: `51d8d56` — **deployed** via git bundle fallback
+- Current branch: `main` @ `d3d8116`
+- GitHub `origin/main`: `d3d8116` (synced 2026-06-12 via proxy push)
+- Production server: `51d8d56` — **deployed** via git bundle fallback (product code through `30cbd1c`; docs-only commits after)
 - Production URL: **`https://cityusbdisk.cn`** (ICP filed; HTTPS enabled)
 - Phase status (2026-06-12):
   - Phase 0–3: DONE including Haodeya Grok production E2E
@@ -38,7 +38,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Current Product Reality
 
-- Active runtime roles remain only `admin` and `designer`.
+- Active runtime roles: `admin`, `ops`, `designer` (`ops` = designer studio access + inspiration/feedback/templates backoffice; other admin modules show 🔒)
 - Studio history, assets, chat conversations, and personal projects are account-owned, not project-member shared.
 - Backend/admin surfaces remain admin-only.
 - `project_code` / `project_id` still exist as compatibility identifiers, but active product semantics are personal containers.

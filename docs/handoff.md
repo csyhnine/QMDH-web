@@ -13,11 +13,11 @@
 
 ### [2026-06-12] Ops role + inspiration share + usage logs layout deployed
 - Role: Commit, GitHub push, production deploy, archive
-- Branch: `main` @ `51d8d56` (product code `30cbd1c`; docs archive in `51d8d56`)
+- Branch: `main` @ `d3d8116` (product code `30cbd1c`; deploy archive through `51d8d56`)
 - Repo status:
-  - Local `main`: `51d8d56`
-  - GitHub `origin/main`: `51d8d56` (push via proxy `127.0.0.1:7897`)
-  - Production server: `51d8d56` (git bundle fallback)
+  - Local `main`: `d3d8116`
+  - GitHub `origin/main`: `d3d8116` (push via proxy `127.0.0.1:7897`)
+  - Production server: `51d8d56` (git bundle fallback; runtime matches `30cbd1c`)
 - Production URL: **`https://cityusbdisk.cn`**
 - Completed:
   - **运维 ops 角色**：设计师权限 + 灵感/反馈/模板后台；其他模块 🔒

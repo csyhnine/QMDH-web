@@ -42,6 +42,7 @@ export function buildStudioAuthenticatedShellProps({
       activeComposerMenu: studio.activeComposerMenu,
       activeViewIsStudio: true,
       canUseOpsViews: userCanUseOpsViews,
+      canManageUsers: userCanManageUsers,
       derivedState: studio.derivedState,
       fileInputRef: studio.fileInputRef,
       filters: studio.filters,

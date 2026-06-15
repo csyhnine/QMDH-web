@@ -3,9 +3,10 @@ import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
 import { BrandIcon } from "./Brand";
+import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from "../../features/access/roleAccess";
 
 type StudioTab = "generate" | "inspiration" | "feedback" | "chat";
-type AdminTab = "dashboard" | "usage-logs" | "inspiration" | "feedback" | "models" | "templates" | "agents" | "users" | "settings";
+type AdminTab = AdminModuleKey;
 
 type AppShellProps =
   | {
@@ -41,6 +42,7 @@ const studioNavItems: Array<{ key: Exclude<StudioTab, "generate"> | "generate"; 
 export default function AppShell(props: AppShellProps) {
   const navigate = useNavigate();
   const { currentUser, canUseOpsViews, logout } = useAuth();
+  const backofficeHome = defaultAdminHomePath(currentUser?.role);
 
   const className =
     props.kind === "admin"
@@ -69,16 +71,34 @@ export default function AppShell(props: AppShellProps) {
         </div>
         <nav className="rail-nav">
           {props.kind === "admin"
-            ? adminNavItems.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  className={props.active === item.key ? "rail-item active" : "rail-item"}
-                  onClick={() => navigate(item.path)}
-                >
-                  <span>{item.label}</span>
-                </button>
-              ))
+            ? adminNavItems.map((item) => {
+                const allowed = canAccessAdminModule(currentUser?.role, item.key);
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={[
+                      props.active === item.key ? "rail-item active" : "rail-item",
+                      allowed ? "" : "rail-item-locked",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    disabled={!allowed}
+                    aria-disabled={!allowed}
+                    title={allowed ? item.label : `${item.label}（无权限）`}
+                    onClick={() => {
+                      if (allowed) navigate(item.path);
+                    }}
+                  >
+                    <span>{item.label}</span>
+                    {!allowed ? (
+                      <em className="rail-item-lock" aria-hidden="true">
+                        🔒
+                      </em>
+                    ) : null}
+                  </button>
+                );
+              })
             : studioNavItems.map((item) => (
                 <button
                   key={item.key}
@@ -109,7 +129,7 @@ export default function AppShell(props: AppShellProps) {
             </button>
           ) : null}
           {props.kind === "studio" && canUseOpsViews ? (
-            <button type="button" className="rail-logout" onClick={() => navigate("/admin/dashboard")}>
+            <button type="button" className="rail-logout" onClick={() => navigate(backofficeHome)}>
               后台
             </button>
           ) : null}

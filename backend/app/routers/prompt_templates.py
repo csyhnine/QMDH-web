@@ -6,7 +6,7 @@ from sqlalchemy import and_, case, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditEventType, write_audit_log
-from app.core.auth import get_current_auth_user, has_admin_access, require_user_admin
+from app.core.auth import get_current_auth_user, has_content_ops_access, require_content_ops_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import PromptTemplate, PromptTemplateEvent, User
@@ -127,7 +127,7 @@ def _template_is_private_owner(template: PromptTemplate, auth_user: AuthUserProf
 
 def _to_prompt_template_out_for_user(template: PromptTemplate, auth_user: AuthUserProfile) -> PromptTemplateOut:
     payload = _to_prompt_template_out(template)
-    payload.can_manage = has_admin_access(auth_user.role) if template.scope == "shared" else _template_is_private_owner(template, auth_user)
+    payload.can_manage = has_content_ops_access(auth_user.role) if template.scope == "shared" else _template_is_private_owner(template, auth_user)
     return payload
 
 
@@ -195,7 +195,7 @@ def list_prompt_templates(
     for template in templates:
         payload = _to_prompt_template_out(template, stats_map.get(template.id))
         payload.can_manage = (
-            has_admin_access(auth_user.role) if template.scope == "shared" else _template_is_private_owner(template, auth_user)
+            has_content_ops_access(auth_user.role) if template.scope == "shared" else _template_is_private_owner(template, auth_user)
         )
         payloads.append(payload)
     return payloads
@@ -267,7 +267,7 @@ def list_shared_prompt_templates(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> list[PromptTemplateOut]:
-    require_user_admin(auth_user)
+    require_content_ops_access(auth_user)
     templates = db.scalars(
         select(PromptTemplate)
         .join(PromptTemplate.user)
@@ -341,7 +341,7 @@ def create_shared_prompt_template(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> PromptTemplateOut:
-    require_user_admin(auth_user)
+    require_content_ops_access(auth_user)
     user = _get_or_create_user(db, auth_user)
     template = PromptTemplate(
         user_id=user.id,
@@ -382,7 +382,7 @@ def update_shared_prompt_template(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> PromptTemplateOut:
-    require_user_admin(auth_user)
+    require_content_ops_access(auth_user)
     template = _get_shared_template(db, template_id)
     updates = payload.model_dump(exclude_unset=True)
     for field, value in updates.items():
@@ -408,7 +408,7 @@ def delete_shared_prompt_template(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> Response:
-    require_user_admin(auth_user)
+    require_content_ops_access(auth_user)
     template = _get_shared_template(db, template_id)
     write_audit_log(
         db=db,

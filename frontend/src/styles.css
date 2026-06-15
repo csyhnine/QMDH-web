@@ -193,6 +193,24 @@ button {
   background: rgba(37, 99, 235, 0.09);
 }
 
+.admin-shell .rail-item-locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.admin-shell .rail-item-locked:hover {
+  background: transparent;
+  color: inherit;
+}
+
+.admin-shell .rail-item-lock {
+  display: block;
+  margin-top: 4px;
+  font-style: normal;
+  font-size: 0.82rem;
+  line-height: 1;
+}
+
 .rail-user-card {
   width: 100%;
   min-width: 0;

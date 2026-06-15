@@ -20,6 +20,7 @@ import {
 } from "./api";
 import { AppShell, AuthGuard, LoadingFallback } from "./components/shared";
 import { useAuth } from "./context/AuthContext";
+import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from "./features/access/roleAccess";
 
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/admin/DashboardPage"));
@@ -39,14 +40,26 @@ function ProtectedRoute({ children }: { children: JSX.Element }) {
   return <AuthGuard>{children}</AuthGuard>;
 }
 
-function OpsRoute({ children }: { children: JSX.Element }) {
-  const { canUseOpsViews } = useAuth();
-  return canUseOpsViews ? children : <Navigate to="/studio/generate" replace />;
+function AdminModuleRoute({ module, children }: { module: AdminModuleKey; children: JSX.Element }) {
+  const { currentUser, canUseOpsViews } = useAuth();
+  if (!canUseOpsViews) {
+    return <Navigate to="/studio/generate" replace />;
+  }
+  if (!canAccessAdminModule(currentUser?.role, module)) {
+    return <Navigate to={defaultAdminHomePath(currentUser?.role)} replace />;
+  }
+  return children;
 }
 
-function AdminRoute({ children }: { children: JSX.Element }) {
-  const { canManageUsers } = useAuth();
-  return canManageUsers ? children : <Navigate to="/studio/generate" replace />;
+function AdminOnlyRoute({ children }: { children: JSX.Element }) {
+  const { canManageUsers, currentUser, canUseOpsViews } = useAuth();
+  if (!canUseOpsViews) {
+    return <Navigate to="/studio/generate" replace />;
+  }
+  if (!canManageUsers) {
+    return <Navigate to={defaultAdminHomePath(currentUser?.role)} replace />;
+  }
+  return children;
 }
 
 function InspirationRoute() {
@@ -364,26 +377,26 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
-          <Route path="/admin/dashboard" element={<ProtectedRoute><OpsRoute><DashboardRoute /></OpsRoute></ProtectedRoute>} />
+          <Route path="/admin/dashboard" element={<ProtectedRoute><AdminOnlyRoute><DashboardRoute /></AdminOnlyRoute></ProtectedRoute>} />
           <Route
             path="/admin/usage-logs"
             element={
               <ProtectedRoute>
-                <OpsRoute>
+                <AdminOnlyRoute>
                   <AppShell kind="admin" active="usage-logs">
                     <UsageLogsPage />
                   </AppShell>
-                </OpsRoute>
+                </AdminOnlyRoute>
               </ProtectedRoute>
             }
           />
-          <Route path="/admin/users" element={<ProtectedRoute><AdminRoute><UsersRoute /></AdminRoute></ProtectedRoute>} />
-          <Route path="/admin/models" element={<ProtectedRoute><OpsRoute><ModelsRoute /></OpsRoute></ProtectedRoute>} />
-          <Route path="/admin/templates" element={<ProtectedRoute><AdminRoute><PromptTemplatesRoute /></AdminRoute></ProtectedRoute>} />
-          <Route path="/admin/feedback" element={<ProtectedRoute><AdminRoute><AdminFeedbackRoute /></AdminRoute></ProtectedRoute>} />
-          <Route path="/admin/agents" element={<ProtectedRoute><OpsRoute><AgentsRoute /></OpsRoute></ProtectedRoute>} />
-          <Route path="/admin/inspiration" element={<ProtectedRoute><OpsRoute><AdminInspirationRoute /></OpsRoute></ProtectedRoute>} />
-          <Route path="/admin/settings" element={<ProtectedRoute><AdminRoute><SettingsRoute /></AdminRoute></ProtectedRoute>} />
+          <Route path="/admin/users" element={<ProtectedRoute><AdminOnlyRoute><UsersRoute /></AdminOnlyRoute></ProtectedRoute>} />
+          <Route path="/admin/models" element={<ProtectedRoute><AdminOnlyRoute><ModelsRoute /></AdminOnlyRoute></ProtectedRoute>} />
+          <Route path="/admin/templates" element={<ProtectedRoute><AdminModuleRoute module="templates"><PromptTemplatesRoute /></AdminModuleRoute></ProtectedRoute>} />
+          <Route path="/admin/feedback" element={<ProtectedRoute><AdminModuleRoute module="feedback"><AdminFeedbackRoute /></AdminModuleRoute></ProtectedRoute>} />
+          <Route path="/admin/agents" element={<ProtectedRoute><AdminOnlyRoute><AgentsRoute /></AdminOnlyRoute></ProtectedRoute>} />
+          <Route path="/admin/inspiration" element={<ProtectedRoute><AdminModuleRoute module="inspiration"><AdminInspirationRoute /></AdminModuleRoute></ProtectedRoute>} />
+          <Route path="/admin/settings" element={<ProtectedRoute><AdminOnlyRoute><SettingsRoute /></AdminOnlyRoute></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/studio/generate" replace />} />
         </Routes>
       </Suspense>

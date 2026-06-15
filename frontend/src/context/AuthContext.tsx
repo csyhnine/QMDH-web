@@ -6,6 +6,7 @@ import {
   setStoredAuthToken,
   clearStoredAuthToken,
 } from "../api";
+import { canManageUsers as canManageUsersByRole, canUseBackoffice } from "../features/access/roleAccess";
 
 // Re-export for convenience
 export type { AuthUser };
@@ -19,9 +20,9 @@ interface AuthContextValue {
   login: (username: string, password: string) => Promise<void>;
   /** Logout and clear session */
   logout: () => Promise<void>;
-  /** Whether user has admin role */
+  /** Whether user can manage accounts (admin only) */
   canManageUsers: boolean;
-  /** Whether user has admin role */
+  /** Whether user can enter backoffice shell (admin or ops) */
   canUseOpsViews: boolean;
 }
 
@@ -64,8 +65,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentUser(null);
   }, []);
 
-  const canManageUsers = currentUser?.role === "admin";
-  const canUseOpsViews = currentUser?.role === "admin";
+  const canManageUsers = canManageUsersByRole(currentUser?.role);
+  const canUseOpsViews = canUseBackoffice(currentUser?.role);
 
   return (
     <AuthContext.Provider value={{ currentUser, authReady, login, logout, canManageUsers, canUseOpsViews }}>

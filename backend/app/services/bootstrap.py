@@ -27,7 +27,7 @@ LOCAL_DEV_ACCOUNTS = [
     {
         "name": "qmdh.ops",
         "display_name": "Ops",
-        "role": "admin",
+        "role": "ops",
         "password": "qmdh-ops-2026",
         "project_codes": ["*"],
         "monthly_quota": None,

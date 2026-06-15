@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import { api, type ManagedUser, type UserCreatePayload, type UserGroupSummary } from "../../api";
+import { roleLabel } from "../../features/access/roleAccess";
 
 type UserDraft = {
   name: string;
@@ -107,7 +108,7 @@ export default function UsersPage({
   const [savingUser, setSavingUser] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
-  const [roleFilter, setRoleFilter] = useState<"all" | "designer" | "admin">("all");
+  const [roleFilter, setRoleFilter] = useState<"all" | "designer" | "ops" | "admin">("all");
   const [groupFilter, setGroupFilter] = useState<string>("all");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -305,13 +306,14 @@ export default function UsersPage({
                   aria-label="账号角色筛选"
                   value={roleFilter}
                   onChange={(event) => {
-                    setRoleFilter(event.target.value as "all" | "designer" | "admin");
+                    setRoleFilter(event.target.value as "all" | "designer" | "ops" | "admin");
                     resetListPage();
                   }}
                 >
                   <option value="all">全部角色</option>
-                  <option value="designer">designer</option>
-                  <option value="admin">admin</option>
+                  <option value="designer">设计师</option>
+                  <option value="ops">运维</option>
+                  <option value="admin">管理员</option>
                 </select>
                 <select
                   aria-label="账号分组筛选"
@@ -387,7 +389,7 @@ export default function UsersPage({
                       <small>{user.group_name ? "已分组" : "可在右侧编辑"}</small>
                     </span>
                     <span>
-                      <em className="admin-tag">{user.role}</em>
+                      <em className="admin-tag">{roleLabel(user.role)}</em>
                     </span>
                     <span>
                       <strong>{user.billing_plan}</strong>
@@ -478,8 +480,9 @@ export default function UsersPage({
                     value={userDraft.role}
                     onChange={(event) => setUserDraft((current) => ({ ...current, role: event.target.value }))}
                   >
-                    <option value="designer">designer</option>
-                    <option value="admin">admin</option>
+                    <option value="designer">设计师</option>
+                    <option value="ops">运维</option>
+                    <option value="admin">管理员</option>
                   </select>
                 </label>
                 <label className="composer-menu-field">

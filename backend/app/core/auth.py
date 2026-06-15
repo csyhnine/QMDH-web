@@ -11,16 +11,33 @@ from app.core.security import hash_session_token
 from app.database import get_db
 from app.models import AgentClient, AuthSession, User
 
-ADMIN_ROLE_ALIASES = {"owner", "admin", "ops"}
+ADMIN_ROLE_ALIASES = {"owner", "admin"}
+VALID_USER_ROLES = {"admin", "ops", "designer"}
 
 
 def normalize_user_role(role: str) -> str:
     normalized = (role or "").strip().lower()
-    return "admin" if normalized in ADMIN_ROLE_ALIASES else "designer"
+    if normalized in ADMIN_ROLE_ALIASES:
+        return "admin"
+    if normalized == "ops":
+        return "ops"
+    return "designer"
 
 
 def has_admin_access(role: str) -> bool:
     return normalize_user_role(role) == "admin"
+
+
+def has_ops_role(role: str) -> bool:
+    return normalize_user_role(role) == "ops"
+
+
+def has_backoffice_access(role: str) -> bool:
+    return normalize_user_role(role) in {"admin", "ops"}
+
+
+def has_content_ops_access(role: str) -> bool:
+    return has_backoffice_access(role)
 
 
 def get_current_auth_user(
@@ -130,6 +147,16 @@ def require_user_admin(auth_user: AuthUserProfile) -> None:
 def require_ops_access(auth_user: AuthUserProfile) -> None:
     if not has_admin_access(auth_user.role):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operations access required")
+
+
+def require_content_ops_access(auth_user: AuthUserProfile) -> None:
+    if not has_content_ops_access(auth_user.role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Content operations access required")
+
+
+def require_backoffice_access(auth_user: AuthUserProfile) -> None:
+    if not has_backoffice_access(auth_user.role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Backoffice access required")
 
 
 def ensure_project_access(auth_user: AuthUserProfile, project_code: str) -> None:

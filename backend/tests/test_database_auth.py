@@ -243,19 +243,28 @@ class DatabaseAuthTests(unittest.TestCase):
         self.assertEqual(designer_users.status_code, 403)
 
         ops_users = self.client.get("/users", headers={"Authorization": f"Bearer {ops_token}"})
-        self.assertEqual(ops_users.status_code, 200)
+        self.assertEqual(ops_users.status_code, 403)
 
         ops_me = self.client.get("/auth/me", headers={"Authorization": f"Bearer {ops_token}"})
         self.assertEqual(ops_me.status_code, 200)
-        self.assertEqual(ops_me.json()["role"], "admin")
+        self.assertEqual(ops_me.json()["role"], "ops")
         self.assertIn("billing_plan", ops_me.json())
         self.assertIn("billing_status", ops_me.json())
         self.assertIn("quota_policy", ops_me.json())
         self.assertIn("quota_reset_cycle", ops_me.json())
 
         ops_dashboard = self.client.get("/dashboard/stats", headers={"Authorization": f"Bearer {ops_token}"})
-        self.assertEqual(ops_dashboard.status_code, 200)
-        stats = ops_dashboard.json()
+        self.assertEqual(ops_dashboard.status_code, 403)
+
+        ops_usage_logs = self.client.get("/dashboard/usage-logs", headers={"Authorization": f"Bearer {ops_token}"})
+        self.assertEqual(ops_usage_logs.status_code, 403)
+
+        ops_inspiration = self.client.get("/inspiration", headers={"Authorization": f"Bearer {ops_token}"})
+        self.assertEqual(ops_inspiration.status_code, 200)
+
+        admin_dashboard = self.client.get("/dashboard/stats", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(admin_dashboard.status_code, 200)
+        stats = admin_dashboard.json()
         self.assertEqual(stats["total_tasks"], 2)
         self.assertEqual(stats["failed_tasks"], 1)
         self.assertEqual(stats["total_cost"], 1.25)
@@ -273,7 +282,7 @@ class DatabaseAuthTests(unittest.TestCase):
         self.assertEqual(sum(day["total_tasks"] for day in stats["daily_series"]), stats["total_tasks"])
         self.assertEqual(sum(day["chat_total_tokens"] for day in stats["daily_series"]), 200)
         self.assertEqual(len(stats["model_calls_by_day"]), 30)
-        week_view = self.client.get("/dashboard/stats?days=7", headers={"Authorization": f"Bearer {ops_token}"})
+        week_view = self.client.get("/dashboard/stats?days=7", headers={"Authorization": f"Bearer {admin_token}"})
         self.assertEqual(week_view.status_code, 200)
         self.assertEqual(len(week_view.json()["daily_series"]), 7)
         self.assertEqual(stats["failure_reasons"][0]["reason"], "Provider not configured: jimeng")
@@ -288,7 +297,7 @@ class DatabaseAuthTests(unittest.TestCase):
         self.assertEqual(designer_execution["chat_turn_count"], 1)
         self.assertEqual(designer_execution["chat_total_tokens"], 200)
 
-        usage_logs = self.client.get("/dashboard/usage-logs", headers={"Authorization": f"Bearer {ops_token}"})
+        usage_logs = self.client.get("/dashboard/usage-logs", headers={"Authorization": f"Bearer {admin_token}"})
         self.assertEqual(usage_logs.status_code, 200, usage_logs.text)
         usage_payload = usage_logs.json()
         self.assertGreaterEqual(usage_payload["total"], 1)
@@ -848,7 +857,7 @@ class DatabaseAuthTests(unittest.TestCase):
 
         self.assertEqual(admin_user.role, "admin")
         self.assertEqual(admin_user.project_codes, ["*"])
-        self.assertEqual(ops_user.role, "admin")
+        self.assertEqual(ops_user.role, "ops")
         self.assertEqual(ops_user.project_codes, ["*"])
         self.assertEqual(designer.role, "designer")
         self.assertEqual(designer.project_codes, ["QMDH-001"])

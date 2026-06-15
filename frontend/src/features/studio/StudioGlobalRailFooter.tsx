@@ -1,4 +1,5 @@
 import type { StudioGlobalRailFooterProps } from "./studioGlobalRailTypes";
+import { adminHomePath } from "./studioAccessUtils";
 import { formatDate, formatStatus } from "./studioUtils";
 
 function navigateTo(href: string) {
@@ -27,8 +28,8 @@ export default function StudioGlobalRailFooter({
         </div>
       </div>
       {canUseOpsViews && !isAdminView ? (
-        <button type="button" className="rail-logout" onClick={() => navigateTo("/admin/dashboard")}>
-          {"\u770b\u677f"}
+        <button type="button" className="rail-logout" onClick={() => navigateTo(adminHomePath(currentUser))}>
+          {"\u540e\u53f0"}
         </button>
       ) : null}
       {canManageUsers && !isAdminView ? (

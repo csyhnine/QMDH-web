@@ -19,7 +19,7 @@ from app.models import UsageLedger, User
 from app.schemas import UserCreate, UserGroupSummaryOut, UserOut, UserPasswordReset, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
-VALID_ROLES = {"admin", "designer"}
+VALID_ROLES = {"admin", "designer", "ops"}
 VALID_BILLING_PLANS = {"internal", "trial", "standard", "pro", "enterprise"}
 VALID_BILLING_STATUSES = {"active", "suspended", "grace"}
 VALID_QUOTA_POLICIES = {"soft_warn", "hard_block", "unlimited"}
@@ -30,7 +30,7 @@ LEGACY_LOCAL_PRICING_PROVIDERS = {"gpt-image-2"}
 ROLE_ALIASES = {
     "owner": "admin",
     "admin": "admin",
-    "ops": "admin",
+    "ops": "ops",
     "designer": "designer",
 }
 

@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit_log
-from app.core.auth import get_current_auth_user, require_user_admin
+from app.core.auth import get_current_auth_user, has_content_ops_access, require_content_ops_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import User, UserFeedback
@@ -98,7 +98,7 @@ def list_all_feedback(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> list[UserFeedbackOut]:
-    require_user_admin(auth_user)
+    require_content_ops_access(auth_user)
     feedback_items = db.scalars(
         select(UserFeedback).order_by(UserFeedback.updated_at.desc(), UserFeedback.id.desc())
     ).all()
@@ -112,7 +112,7 @@ def reply_feedback(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> UserFeedbackOut:
-    require_user_admin(auth_user)
+    require_content_ops_access(auth_user)
     feedback = db.get(UserFeedback, feedback_id)
     if not feedback:
         raise HTTPException(status_code=404, detail="Feedback not found")

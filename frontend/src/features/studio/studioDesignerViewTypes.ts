@@ -15,6 +15,7 @@ export type StudioDesignerViewProps = {
   activeComposerMenu: ComposerMenuKey;
   activeViewIsStudio: boolean;
   canUseOpsViews: boolean;
+  canManageUsers: boolean;
   derivedState: StudioDerivedState;
   fileInputRef: RefObject<HTMLInputElement | null>;
   filters: FeedFilterState;

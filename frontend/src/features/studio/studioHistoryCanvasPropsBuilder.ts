@@ -3,6 +3,7 @@ import type { StudioDesignerViewProps } from "./studioDesignerViewTypes";
 import type { StudioHistoryCanvasProps } from "./studioHistoryCanvasTypes";
 
 export function buildStudioHistoryCanvasProps({
+  canManageUsers,
   canUseOpsViews,
   derivedState,
   filters,
@@ -42,7 +43,7 @@ export function buildStudioHistoryCanvasProps({
     latestTaskRef: studioView.latestTaskRef,
     providerDisplayNameMap,
     regeneratingTaskId: taskActions.regeneratingTaskId,
-    showDebugDetails: canUseOpsViews,
+    showDebugDetails: canManageUsers,
     studioScrollPaneRef: studioView.studioScrollPaneRef,
     submitting,
     tasks: filteredTasks,

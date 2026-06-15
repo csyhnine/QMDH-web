@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.core.config import ImageProviderProfile, settings
 from app.database import SessionLocal
 from app.models import Asset, AssetType, Project, ProviderCall, Task, TaskStatus, Workflow
+from app.services.image_aspect_ratio import resolve_image_aspect_ratio
 from app.services.media_storage import (
     media_root_path,
     write_base64_asset,
@@ -403,6 +404,25 @@ def _build_openai_headers(profile: ImageProviderProfile, *, async_images: bool =
     return headers
 
 
+def _resolved_image_aspect_ratio(profile: ImageProviderProfile, payload: dict) -> str:
+    return resolve_image_aspect_ratio(
+        str(payload.get("aspect_ratio") or ""),
+        provider_name=profile.provider_name,
+        model_name=profile.model_name,
+        base_url=profile.base_url,
+        reference_images=_extract_reference_images(payload),
+    )
+
+
+def _aspect_ratio_result_fields(profile: ImageProviderProfile, payload: dict) -> dict[str, str]:
+    resolved = _resolved_image_aspect_ratio(profile, payload)
+    return {
+        "aspect_ratio_requested": str(payload.get("aspect_ratio") or "").strip(),
+        "aspect_ratio_resolved": resolved,
+        "aspect_ratio": resolved,
+    }
+
+
 def _openai_image_request_body(
     *,
     profile: ImageProviderProfile,
@@ -412,7 +432,7 @@ def _openai_image_request_body(
     body: dict[str, object] = {
         "model": profile.model_name,
         "prompt": prompt,
-        "size": _openai_size_for_payload(payload),
+        "size": _openai_size_for_aspect_ratio(_resolved_image_aspect_ratio(profile, payload)),
         "quality": profile.quality,
         "output_format": profile.output_format,
     }
@@ -525,18 +545,19 @@ def _build_chat_modalities_image_plan(
     detail = str(payload.get("prompt_supplement") or "").strip()
     if detail:
         content = f"{prompt}\n\nAdditional guidance: {detail}"
+    resolved_aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
     body = {
         "model": profile.model_name,
         "messages": [{"role": "user", "content": content}],
         "modalities": ["image", "text"],
-        "image_config": {"aspect_ratio": str(payload.get("aspect_ratio") or "1:1").strip() or "1:1"},
+        "image_config": {"aspect_ratio": resolved_aspect_ratio},
         "stream": False,
     }
     return ImageRequestPlan(
         endpoint_path="/chat/completions",
         body=body,
         headers=_build_openai_headers(profile),
-        reference_result={},
+        reference_result=_aspect_ratio_result_fields(profile, payload),
         adapter_mode="chat_modalities_image",
         effective_capability="image.generate",
         strategy=CHAT_MODALITIES_IMAGE_STRATEGY,
@@ -568,12 +589,14 @@ def _build_chat_modalities_image_edit_plan(
     }
     if requested_capability != effective_capability:
         reference_result["chat_modalities_image_edit_fallback_from"] = requested_capability
+    reference_result.update(_aspect_ratio_result_fields(profile, payload))
 
+    resolved_aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
     body = {
         "model": profile.model_name,
         "messages": [{"role": "user", "content": content}],
         "modalities": ["image", "text"],
-        "image_config": {"aspect_ratio": str(payload.get("aspect_ratio") or "1:1").strip() or "1:1"},
+        "image_config": {"aspect_ratio": resolved_aspect_ratio},
         "stream": False,
     }
     return ImageRequestPlan(
@@ -623,7 +646,7 @@ def _task_payload_result_fields(payload: dict) -> dict[str, str]:
         "prompt": str(payload.get("prompt") or "").strip(),
         "edit_prompt": str(payload.get("edit_prompt") or "").strip(),
         "style": str(payload.get("style") or "").strip(),
-        "aspect_ratio": str(payload.get("aspect_ratio") or "").strip(),
+        "aspect_ratio_requested": str(payload.get("aspect_ratio") or "").strip(),
         "resolution": str(payload.get("resolution") or "").strip(),
         "deliverable": str(payload.get("deliverable") or "").strip(),
         "prompt_supplement": str(payload.get("prompt_supplement") or "").strip(),
@@ -832,8 +855,7 @@ def _extract_chat_message_content(response_payload: dict) -> str:
     return ""
 
 
-def _openai_size_for_payload(payload: dict) -> str:
-    aspect_ratio = str(payload.get("aspect_ratio") or "").strip()
+def _openai_size_for_aspect_ratio(aspect_ratio: str) -> str:
     mapping = {
         "1:1": "1024x1024",
         "16:9": "1536x1024",
@@ -843,6 +865,11 @@ def _openai_size_for_payload(payload: dict) -> str:
         "9:16": "1024x1536",
     }
     return mapping.get(aspect_ratio, "auto")
+
+
+def _openai_size_for_payload(payload: dict) -> str:
+    aspect_ratio = str(payload.get("aspect_ratio") or "").strip()
+    return _openai_size_for_aspect_ratio(aspect_ratio)
 
 
 def _requested_image_count(payload: dict) -> int:

@@ -450,6 +450,52 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         self.assertEqual(content[1]["image_url"]["url"], reference_image)
         self.assertEqual(outcome.result["request_strategy"], "chat_modalities_image_edit")
 
+    def test_chat_modalities_smart_ratio_resolves_to_provider_whitelist(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="openrouter_gpt_image",
+            api_key="test-key",
+            base_url="https://openrouter.example.test/v1",
+            model_name="openai/gpt-5.4-image-2",
+            timeout_seconds=1,
+            strategies={"image.generate": "chat_modalities_image"},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "openrouter_gpt_image",
+                "openai/gpt-5.4-image-2",
+                ["image.generate"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": "https://cdn.example.test/generated-smart.png"}}
+                        ]
+                    }
+                }
+            ]
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"smart-image")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {"prompt": "Render a compact cultural pavilion", "aspect_ratio": "智能"},
+                    )
+
+        generation_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        self.assertEqual(generation_body["image_config"]["aspect_ratio"], "1:1")
+        self.assertEqual(outcome.result["aspect_ratio"], "1:1")
+        self.assertEqual(outcome.result["aspect_ratio_requested"], "智能")
+
     def test_gemini_image_preview_defaults_to_chat_modalities_strategy_when_strategies_are_empty(self) -> None:
         profile = ImageProviderProfile(
             provider_name="google_gemini-3.1-flash-image-preview",

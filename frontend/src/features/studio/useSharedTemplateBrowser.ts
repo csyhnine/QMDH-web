@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { PromptTemplateRecord } from "../../api";
-import {
-  buildSharedTemplateCategories,
-  filterSharedTemplates,
-  type TemplateQuickFilter,
-} from "./studioTemplateBrowserUtils";
+import { useServerSearch } from "../../lib/search/useServerSearch";
 import {
   buildActiveTemplateHeading,
   expandMissingTemplateCategories,
   isTemplateCategoryAvailable,
   isTemplateSubcategoryAvailable,
 } from "./sharedTemplateBrowserState";
+import {
+  buildSharedTemplateCategories,
+  filterSharedTemplates,
+  type TemplateQuickFilter,
+} from "./studioTemplateBrowserUtils";
 import { useSharedTemplateBrowserActions } from "./useSharedTemplateBrowserActions";
 import { useSharedTemplatePreview } from "./useSharedTemplatePreview";
 import { useSharedTemplateImpressions } from "./useSharedTemplateTracking";
@@ -21,20 +22,21 @@ type UseSharedTemplateBrowserOptions = {
   onApplyTemplate: (template: PromptTemplateRecord) => void;
 };
 
-export function useSharedTemplateBrowser({
-  sharedTemplates,
-  onApplyTemplate,
-}: UseSharedTemplateBrowserOptions) {
+export function useSharedTemplateBrowser({ sharedTemplates, onApplyTemplate }: UseSharedTemplateBrowserOptions) {
   const [templateSearch, setTemplateSearch] = useState("");
   const [templateQuickFilter, setTemplateQuickFilter] = useState<TemplateQuickFilter>("all");
   const [activeTemplateCategory, setActiveTemplateCategory] = useState("all");
   const [activeTemplateSubcategory, setActiveTemplateSubcategory] = useState("all");
   const [expandedTemplateCategories, setExpandedTemplateCategories] = useState<Record<string, boolean>>({});
 
-  const sharedTemplateCategories = useMemo(
-    () => buildSharedTemplateCategories(sharedTemplates),
-    [sharedTemplates]
-  );
+  const {
+    matchIds: templateSearchMatchIds,
+    engine: templateSearchEngine,
+    isSearching: isTemplateSearching,
+    usingServerSearch: usingTemplateServerSearch,
+  } = useServerSearch("templates", templateSearch);
+
+  const sharedTemplateCategories = useMemo(() => buildSharedTemplateCategories(sharedTemplates), [sharedTemplates]);
 
   useEffect(() => {
     if (sharedTemplateCategories.length === 0) return;
@@ -53,13 +55,7 @@ export function useSharedTemplateBrowser({
 
   useEffect(() => {
     if (activeTemplateCategory === "all" || activeTemplateSubcategory === "all") return;
-    if (
-      !isTemplateSubcategoryAvailable(
-        activeTemplateCategory,
-        activeTemplateSubcategory,
-        sharedTemplateCategories
-      )
-    ) {
+    if (!isTemplateSubcategoryAvailable(activeTemplateCategory, activeTemplateSubcategory, sharedTemplateCategories)) {
       setActiveTemplateSubcategory("all");
     }
   }, [activeTemplateCategory, activeTemplateSubcategory, sharedTemplateCategories]);
@@ -71,8 +67,17 @@ export function useSharedTemplateBrowser({
         activeSubcategory: activeTemplateSubcategory,
         quickFilter: templateQuickFilter,
         search: templateSearch,
+        serverMatchIds: usingTemplateServerSearch ? templateSearchMatchIds : null,
       }),
-    [activeTemplateCategory, activeTemplateSubcategory, sharedTemplates, templateQuickFilter, templateSearch]
+    [
+      activeTemplateCategory,
+      activeTemplateSubcategory,
+      sharedTemplates,
+      templateQuickFilter,
+      templateSearch,
+      templateSearchMatchIds,
+      usingTemplateServerSearch,
+    ],
   );
 
   const templatePreview = useSharedTemplatePreview({ templates: filteredSharedTemplates });
@@ -113,6 +118,9 @@ export function useSharedTemplateBrowser({
     sharedTemplateCategories,
     templateQuickFilter,
     templateSearch,
+    templateSearchEngine,
+    isTemplateSearching,
+    templateSearchHitCount: usingTemplateServerSearch ? (templateSearchMatchIds?.length ?? 0) : null,
   };
 }
 

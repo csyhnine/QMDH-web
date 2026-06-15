@@ -87,6 +87,11 @@ def ensure_schema(engine: Engine) -> None:
             connection.execute(
                 text("ALTER TABLE user_feedbacks ADD COLUMN attachment_paths JSON NOT NULL DEFAULT '[]'")
             )
+        chat_message_columns = existing_columns("chat_messages")
+        if chat_message_columns and "attachments_json" not in chat_message_columns:
+            connection.execute(
+                text("ALTER TABLE chat_messages ADD COLUMN attachments_json JSON NOT NULL DEFAULT '[]'")
+            )
         if prompt_template_columns and "scope" not in prompt_template_columns:
             connection.execute(
                 text("ALTER TABLE prompt_templates ADD COLUMN scope VARCHAR(20) NOT NULL DEFAULT 'private'")

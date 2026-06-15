@@ -17,6 +17,7 @@ from app.schemas import (
     PromptTemplateOut,
     PromptTemplateUpdate,
 )
+from app.integrations.search.index_hooks import delete_shared_template, upsert_shared_template
 from app.services.media_storage import resolve_storage_path
 
 router = APIRouter(prefix="/prompt-templates", tags=["prompt_templates"])
@@ -372,6 +373,7 @@ def create_shared_prompt_template(
     )
     db.commit()
     db.refresh(template)
+    upsert_shared_template(template)
     return _to_prompt_template_out_for_user(template, auth_user)
 
 
@@ -399,6 +401,7 @@ def update_shared_prompt_template(
     )
     db.commit()
     db.refresh(template)
+    upsert_shared_template(template)
     return _to_prompt_template_out_for_user(template, auth_user)
 
 
@@ -422,4 +425,5 @@ def delete_shared_prompt_template(
     )
     db.delete(template)
     db.commit()
+    delete_shared_template(template_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

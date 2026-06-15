@@ -17,9 +17,9 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**: `docs/tasks.md` → **`Development Sequence (2026-06)`** (Phases 0–3 complete; Grok live smoke done 2026-06-12)
-- Current branch: `main` @ `d3d8116`
-- GitHub `origin/main`: `d3d8116` (synced 2026-06-12 via proxy push)
-- Production server: `51d8d56` — **deployed** via git bundle fallback (product code through `30cbd1c`; docs-only commits after)
+- Current branch: `main` @ `cfed87f`
+- GitHub `origin/main`: `cfed87f` (synced)
+- Production server: `cfed87f` — **deployed**; `git pull` works when run as `admin`
 - Production URL: **`https://cityusbdisk.cn`** (ICP filed; HTTPS enabled)
 - Phase status (2026-06-12):
   - Phase 0–3: DONE including Haodeya Grok production E2E
@@ -185,8 +185,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Domain: `cityusbdisk.cn`（京ICP备14011242号-4，已备案）
 - Deploy path: `/www/wwwroot/qmdh-web`
 - Deployment model: Docker Compose
-- Current deployed product repo head: `c41778e` (GitHub/local code head: `eb1057f`)
-- Server working tree: clean after bundle deploys
+- Current deployed product repo head: `cfed87f`
+- Server working tree: clean after `sudo -u admin git pull`
 - Verified runtime after latest deploy:
   - `docker compose ps` healthy
   - `https://cityusbdisk.cn/api/v1/health` returns `200`
@@ -194,18 +194,18 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Production `.env` highlights:
   - `QMDH_FRONTEND_ORIGIN=https://cityusbdisk.cn`
   - `QMDH_PUBLIC_MEDIA_BASE_URL=https://cityusbdisk.cn`
-- Current deployment caveat:
-  - server-side `git pull` from GitHub remains unreliable
-  - recent deploys use local `git bundle` fallback (known-good)
+- Current deployment note:
+  - GitHub deploy key is healthy on server `admin` user
+  - `git pull` fails only when run as `root`; use `sudo -u admin git -C /www/wwwroot/qmdh-web pull origin main`
+  - `tmp/deploy_prod.py` now pulls as `admin`; git bundle remains fallback
 - Server access practice:
   - use `admin` for normal git operations when credentials cooperate
   - use `root` for Docker / PostgreSQL / logs / fallback deployment work
 
 ## Known Risks And Follow-Up
 
-- Local push to GitHub may need proxy on dev machine (`127.0.0.1:7897`); server `git pull` still broken until deploy key fixed.
-- Haodeya Grok video tasks are **slow** (minutes); upstream async queue, not local timeout misconfiguration if status eventually completes.
-- Server deploy key still needs repair for normal `git pull`.
+- Local push to GitHub may need proxy on dev machine (`127.0.0.1:7897`).
+- Server git operations must use `admin`; do not run `git pull` as `root`.
 - `prod-001` first-pass Studio split is merged; further hook splits are optional follow-up only.
 - Release/version records are tracked through `CHANGELOG.md`, package versions, and the optional `v0.2.0` Git tag.
 - `storage/` and `tmp/` remain expected local-only directories and must not be committed.
@@ -227,8 +227,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
    - server head
    - server health
 5. If the task involves deploy, remember:
-   - server-side pull may fail
-   - fallback via local `git bundle` is known-good
+   - server git pull must run as `admin`
+   - fallback via local `git bundle` remains known-good
 6. If touching studio UX again, re-check:
    - template picker cards and hover preview
    - regenerate behavior
@@ -240,7 +240,6 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Near-Term Suggested Next Steps
 
-1. Fix server GitHub deploy key to restore `git pull`.
-3. Optional: add ICP filing badge to login / app footer.
-4. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.
-5. Grok rollout reference: `docs/archive/handoff-2026-06-12-grok-video-production.md`.
+1. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.
+2. Optional: add ICP filing badge to login / app footer.
+3. Grok rollout reference: `docs/archive/handoff-2026-06-12-grok-video-production.md`.

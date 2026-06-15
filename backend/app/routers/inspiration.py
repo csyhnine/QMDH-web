@@ -13,6 +13,7 @@ from app.database import get_db
 from app.models import InspirationPost
 from app.schemas import ExtractImagesIn, ExtractImagesOut, InspirationPostCreate, InspirationPostOut, InspirationPostUpdate
 from app.services.inspiration_media import prepare_inspiration_image
+from app.integrations.search.index_hooks import delete_inspiration_post, upsert_inspiration_post
 from app.services.media_storage import resolve_storage_path
 from app.services.url_safety import UnsafeUrlError, assert_public_http_url
 
@@ -115,6 +116,7 @@ def create_inspiration(
     db.add(post)
     db.commit()
     db.refresh(post)
+    upsert_inspiration_post(post)
     return _to_out(post)
 
 
@@ -145,6 +147,7 @@ def delete_inspiration(
         raise HTTPException(status_code=404, detail="Post not found")
     db.delete(post)
     db.commit()
+    delete_inspiration_post(post_id)
     return Response(status_code=204)
 
 
@@ -184,10 +187,8 @@ def update_inspiration(
 
     db.commit()
     db.refresh(post)
+    upsert_inspiration_post(post)
     return _to_out(post)
-
-
-@router.post("/extract-images", response_model=ExtractImagesOut)
 async def extract_images_from_url(
     payload: ExtractImagesIn,
     auth_user: AuthUserProfile = Depends(get_current_auth_user),

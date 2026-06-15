@@ -141,6 +141,12 @@ class Settings(BaseSettings):
     rate_limit_generation_per_minute: int = 10
     rate_limit_login_per_minute: int = 10
     session_cleanup_interval_seconds: int = 3600
+    meilisearch_enabled: bool = False
+    meilisearch_url: str = "http://meilisearch:7700"
+    meilisearch_api_key: str = ""
+    meilisearch_inspiration_index: str = "qmdh_inspiration"
+    meilisearch_templates_index: str = "qmdh_templates"
+    studio_agent_enabled: bool = False
 
     model_config = SettingsConfigDict(
         env_file=(str(BACKEND_DIR / ".env"), str(REPO_ROOT_DIR / ".env")),

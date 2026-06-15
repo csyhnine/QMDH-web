@@ -11,6 +11,24 @@
 
 ## Latest Handoffs
 
+### [2026-06-15] Server git pull restored (admin user)
+- Role: Diagnose deploy key, fix deploy workflow, update docs
+- Branch: `main` @ `cfed87f`
+- Repo status:
+  - Local `main`: `cfed87f`
+  - GitHub `origin/main`: `cfed87f`
+  - Production server: `cfed87f` (`sudo -u admin git pull` verified)
+- Root cause:
+  - GitHub deploy key on `admin` was already healthy
+  - prior failures came from running `git pull` as `root` in `tmp/deploy_prod.py`
+- Completed:
+  - verified `sudo -u admin ssh -T git@github.com` and `git pull origin main`
+  - updated `tmp/deploy_prod.py` to pull as `admin`
+  - updated `docs/server-operations.md` and `docs/continuity.md`
+- Next step:
+  - continue Production Readiness backlog (`prod-002`, `prod-004`, etc.)
+- Safe to hand off: **Yes**
+
 ### [2026-06-12] Ops role + inspiration share + usage logs layout deployed
 - Role: Commit, GitHub push, production deploy, archive
 - Branch: `main` @ `d3d8116` (product code `30cbd1c`; deploy archive through `51d8d56`)
@@ -26,8 +44,7 @@
 - Archive detail: `docs/archive/handoff-2026-06-12-ops-share-usage-logs-deploy.md`
 - Deploy log: `docs/archive/deploy-2026-06-12-30cbd1c.log`
 - Next step:
-  - fix server GitHub deploy key (restore `git pull`)
-  - smoke: ops login, video share, `/admin/usage-logs` alignment
+  - optional: smoke ops login / video share / usage logs in browser
 - Git push note: `git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push origin main` if direct push fails
 - Safe to hand off: **Yes**
 

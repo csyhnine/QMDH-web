@@ -77,3 +77,9 @@ class AuditEventType:
     PROMPT_TEMPLATE_CREATED = "prompt_template.created"
     PROMPT_TEMPLATE_UPDATED = "prompt_template.updated"
     PROMPT_TEMPLATE_DELETED = "prompt_template.deleted"
+
+    # Studio agent events
+    STUDIO_AGENT_ASSIST = "studio_agent.assist"
+
+    # MCP events
+    MCP_TOOL_CALL = "mcp.tool_call"

@@ -24,6 +24,21 @@ services:
       timeout: 5s
       retries: 10
 
+  meilisearch:
+    image: getmeili/meilisearch:v1.14
+    environment:
+      MEILI_ENV: production
+      MEILI_MASTER_KEY: ${QMDH_MEILISEARCH_API_KEY:-qmdh_meili_dev_key}
+    volumes:
+      - meilisearch_data:/meili_data
+    ports:
+      - "${QMDH_MEILISEARCH_HOST_PORT:-7700}:7700"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   backend:
     build:
       context: ./backend
@@ -59,6 +74,12 @@ services:
       QMDH_RATE_LIMIT_GENERATION_PER_MINUTE: ${QMDH_RATE_LIMIT_GENERATION_PER_MINUTE:-10}
       QMDH_RATE_LIMIT_LOGIN_PER_MINUTE: ${QMDH_RATE_LIMIT_LOGIN_PER_MINUTE:-10}
       QMDH_SESSION_CLEANUP_INTERVAL_SECONDS: ${QMDH_SESSION_CLEANUP_INTERVAL_SECONDS:-3600}
+      QMDH_MEILISEARCH_ENABLED: ${QMDH_MEILISEARCH_ENABLED:-false}
+      QMDH_MEILISEARCH_URL: ${QMDH_MEILISEARCH_URL:-http://meilisearch:7700}
+      QMDH_MEILISEARCH_API_KEY: ${QMDH_MEILISEARCH_API_KEY:-}
+      QMDH_MEILISEARCH_INSPIRATION_INDEX: ${QMDH_MEILISEARCH_INSPIRATION_INDEX:-qmdh_inspiration}
+      QMDH_MEILISEARCH_TEMPLATES_INDEX: ${QMDH_MEILISEARCH_TEMPLATES_INDEX:-qmdh_templates}
+      QMDH_STUDIO_AGENT_ENABLED: ${QMDH_STUDIO_AGENT_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -122,3 +143,4 @@ volumes:
   postgres_data:
   redis_data:
   backend_media:
+  meilisearch_data:

@@ -478,9 +478,8 @@
 
 > **以 `Development Sequence (2026-06)` 为准；Grok 生产验证已完成。**
 
-1. **修复服务器 deploy key**，恢复 `git pull`（部署仍可用 git bundle）。
-2. 继续 Production Readiness backlog（`prod-002`、`prod-004` 等）。
-3. 可选：清理本地 worktree `E:\projects\QMDH-web-pr1-review`。
+1. 继续 Production Readiness backlog（`prod-002`、`prod-004` 等）。
+2. 可选：清理本地 worktree `E:\projects\QMDH-web-pr1-review`。
 
 ---
 

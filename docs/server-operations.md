@@ -47,16 +47,25 @@ Important rule:
 
 ## Private Repo Access
 
-The server pulls the private GitHub repo through a Deploy Key.
+The server pulls the private GitHub repo through a Deploy Key owned by the `admin` user.
 
-- Key owner: server `admin` user
+- Key owner: server `admin` user (`/home/admin/.ssh/id_ed25519`)
 - GitHub access mode: `git@github.com:csyhnine/QMDH-web.git`
+- Repo owner on disk: `admin:admin` at `/www/wwwroot/qmdh-web`
 
-If clone / pull starts failing with `Permission denied (publickey)`, check:
+Important:
 
-1. `~/.ssh/id_ed25519`
-2. GitHub repo `Deploy keys`
-3. `ssh -T git@github.com`
+- `git pull` / `git fetch` must run as `admin`, not `root`
+- When already logged in as `root`, use:
+  - `sudo -u admin git -C /www/wwwroot/qmdh-web pull origin main`
+- `root` has no GitHub deploy key; running `git pull` as `root` will fail with `Permission denied (publickey)` even when the deploy key itself is healthy
+
+If clone / pull starts failing with `Permission denied (publickey)`, check in this order:
+
+1. Are you running git as `admin`?
+2. `sudo -u admin ssh -T git@github.com`
+3. `/home/admin/.ssh/id_ed25519`
+4. GitHub repo `Deploy keys`
 
 ## First Deployment Checklist
 
@@ -83,8 +92,8 @@ Always update in this order:
 3. Back up `.env`.
 4. Back up PostgreSQL with a logical dump.
 5. Back up media files from `backend_media`.
-6. Pull latest code:
-   - `git pull origin main`
+6. Pull latest code as `admin`:
+   - `sudo -u admin git -C /www/wwwroot/qmdh-web pull origin main`
 7. If this update includes Alembic migrations, run:
    - `docker compose run --rm backend alembic upgrade head`
 8. Confirm Alembic state:
@@ -102,10 +111,10 @@ Always update in this order:
 ### Update Rule Of Thumb
 
 - No migration in this release:
-  - `git pull origin main`
+  - `sudo -u admin git -C /www/wwwroot/qmdh-web pull origin main`
   - `docker compose up -d --build`
 - Has migration in this release:
-  - `git pull origin main`
+  - `sudo -u admin git -C /www/wwwroot/qmdh-web pull origin main`
   - `docker compose run --rm backend alembic upgrade head`
   - `docker compose run --rm backend alembic current`
   - `docker compose up -d --build`

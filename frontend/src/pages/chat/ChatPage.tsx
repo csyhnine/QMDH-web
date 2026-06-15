@@ -1,7 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useChat } from "@ai-sdk/react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { api, buildApiUrl, getAuthHeaders } from "../../api";
+import { api } from "../../api";
 import { useAuth } from "../../context/AuthContext";
+import { getUiMessageAttachments, getUiMessageText, toUiMessages } from "../../lib/chat/qmdhChatMessageUtils";
+import { QmdhChatTransport } from "../../lib/chat/qmdhChatTransport";
+import { useChatAttachments } from "../../lib/chat/useChatAttachments";
 
 const ACTIVE_CHAT_STORAGE_KEY = "qmdh.active.chat";
 
@@ -13,26 +17,12 @@ type ChatConversation = {
   updated_at: string;
 };
 
-type ChatMessage = {
-  id?: number;
-  role: string;
-  content: string;
-  created_at?: string;
-};
-
 type ChatModel = {
   provider_id: number;
   provider_name: string;
   display_name: string;
   model_name: string;
   base_url: string;
-};
-
-type ChatStreamError = {
-  code?: string;
-  summary?: string;
-  detail?: string;
-  status_code?: number;
 };
 
 function formatConversationTime(value: string) {
@@ -48,24 +38,6 @@ function formatConversationTime(value: string) {
   }).format(date);
 }
 
-function formatStreamError(error: string | ChatStreamError) {
-  if (typeof error === "string") {
-    return `提示：${error}`;
-  }
-
-  const summary = (error.summary || "对话失败，请稍后重试。").trim();
-  const detail = (error.detail || "").trim();
-  const code = (error.code || "").trim();
-  const lines = [summary];
-  if (detail && detail !== summary) {
-    lines.push(`排查线索：${detail}`);
-  }
-  if (code) {
-    lines.push(`错误码：${code}`);
-  }
-  return lines.join("\n");
-}
-
 export default function ChatPage() {
   const { currentUser } = useAuth();
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
@@ -73,14 +45,12 @@ export default function ChatPage() {
     const saved = localStorage.getItem(ACTIVE_CHAT_STORAGE_KEY);
     return saved ? parseInt(saved, 10) : null;
   });
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatModels, setChatModels] = useState<ChatModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<number | null>(() => {
     const saved = localStorage.getItem("qmdh_chat_model");
     return saved ? parseInt(saved, 10) : null;
   });
-  const [streaming, setStreaming] = useState(false);
   const [chatError, setChatError] = useState("");
 
   const messagesRef = useRef<HTMLDivElement | null>(null);
@@ -89,6 +59,40 @@ export default function ChatPage() {
   const shouldAutoScrollRef = useRef(true);
   const previousMessageCountRef = useRef(0);
   const pendingInitialScrollRef = useRef(false);
+  const pendingAttachmentsRef = useRef<{ storage_path: string; file_name: string; mime_type: string }[]>([]);
+  const activeChatIdRef = useRef<number | null>(activeChatId);
+  activeChatIdRef.current = activeChatId;
+
+  const transport = useMemo(
+    () =>
+      new QmdhChatTransport(() => activeChatIdRef.current, () => {
+        const payload = pendingAttachmentsRef.current;
+        pendingAttachmentsRef.current = [];
+        return payload;
+      }),
+    [],
+  );
+
+  const {
+    messages: chatMessages,
+    sendMessage,
+    status,
+    setMessages: setChatMessages,
+    error: streamError,
+  } = useChat({
+    id: activeChatId ? String(activeChatId) : "chat-disabled",
+    transport,
+    onFinish: () => {
+      const conversationId = activeChatIdRef.current;
+      if (conversationId != null) {
+        void refreshConversations(conversationId);
+        void loadConversation(conversationId);
+      }
+    },
+  });
+
+  const streaming = status === "streaming" || status === "submitted";
+  const attachmentState = useChatAttachments({ disabled: streaming || activeChatId == null });
 
   function updateAutoScrollState() {
     const element = messagesRef.current;
@@ -122,7 +126,7 @@ export default function ChatPage() {
     }
     if (!nextConversations.some((conversation) => conversation.id === pinnedConversationId)) {
       setActiveChatId(null);
-      setMessages([]);
+      setChatMessages([]);
       localStorage.removeItem(ACTIVE_CHAT_STORAGE_KEY);
     }
     return nextConversations;
@@ -135,9 +139,9 @@ export default function ChatPage() {
     previousMessageCountRef.current = 0;
     try {
       const nextMessages = await api.getChatMessages(conversationId);
-      setMessages(nextMessages);
+      setChatMessages(toUiMessages(nextMessages));
     } catch (error) {
-      setMessages([]);
+      setChatMessages([]);
       setChatError(error instanceof Error ? error.message : "加载会话消息失败");
     }
   }
@@ -155,7 +159,7 @@ export default function ChatPage() {
           await loadConversation(initialConversationId);
         } else {
           setActiveChatId(null);
-          setMessages([]);
+          setChatMessages([]);
         }
       } catch (error) {
         setChatError(error instanceof Error ? error.message : "加载 Chat 页面失败");
@@ -183,10 +187,18 @@ export default function ChatPage() {
     resizeTextarea();
   }, [chatInput]);
 
-  const lastMessageContent = messages[messages.length - 1]?.content ?? "";
+  useEffect(() => {
+    if (!streamError) {
+      return;
+    }
+    setChatError(streamError.message);
+  }, [streamError]);
+
+  const lastMessage = chatMessages[chatMessages.length - 1];
+  const lastMessageContent = lastMessage ? getUiMessageText(lastMessage) : "";
 
   useEffect(() => {
-    const messageCount = messages.length;
+    const messageCount = chatMessages.length;
     if (messageCount === 0) {
       previousMessageCountRef.current = 0;
       return;
@@ -202,7 +214,7 @@ export default function ChatPage() {
     }
 
     previousMessageCountRef.current = messageCount;
-  }, [activeChatId, lastMessageContent, messages.length]);
+  }, [activeChatId, chatMessages.length, lastMessageContent]);
 
   async function handleCreateConversation() {
     if (!selectedModel) {
@@ -231,7 +243,7 @@ export default function ChatPage() {
           await loadConversation(fallbackConversationId);
         } else {
           setActiveChatId(null);
-          setMessages([]);
+          setChatMessages([]);
         }
       }
     } catch (error) {
@@ -240,109 +252,57 @@ export default function ChatPage() {
   }
 
   async function handleSendMessage() {
-    if (!chatInput.trim() || !activeChatId) {
+    const hasText = Boolean(chatInput.trim());
+    const hasAttachments = attachmentState.attachments.length > 0;
+    if ((!hasText && !hasAttachments) || !activeChatId || streaming || attachmentState.uploading) {
       return;
     }
 
     const content = chatInput.trim();
+    const uiAttachments = attachmentState.attachments.map((item) => ({
+      file_name: item.fileName,
+      mime_type: item.mimeType,
+      url: item.kind === "image" ? item.previewUrl || item.storagePath : item.storagePath,
+      storage_path: item.storagePath,
+      kind: item.kind,
+    }));
+    pendingAttachmentsRef.current = attachmentState.toSendPayload();
     setChatInput("");
     setChatError("");
-    setMessages((prev) => [...prev, { role: "user", content }, { role: "assistant", content: "" }]);
-    setStreaming(true);
+    attachmentState.setError("");
     shouldAutoScrollRef.current = true;
 
     try {
-      const response = await fetch(buildApiUrl(`/chat/conversations/${activeChatId}/messages`), {
-        method: "POST",
-        headers: {
-          ...getAuthHeaders(),
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ content }),
-      });
-
-      if (!response.ok) {
-        let detail = "请求失败";
-        try {
-          const payload = await response.json();
-          detail = payload?.detail || detail;
-        } catch {
-          // Ignore JSON parse failures.
-        }
-        throw new Error(detail);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("聊天响应流不可用");
-      }
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) {
-            continue;
-          }
-          const data = line.slice(6);
-          if (data === "[DONE]") {
+      await sendMessage({ text: content });
+      setChatMessages((current) => {
+        const next = [...current];
+        for (let index = next.length - 1; index >= 0; index -= 1) {
+          if (next[index]?.role === "user") {
+            next[index] = {
+              ...next[index],
+              metadata: {
+                ...(next[index].metadata ?? {}),
+                attachments: uiAttachments,
+              },
+            };
             break;
           }
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.delta) {
-              setMessages((prev) => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                if (last && last.role === "assistant") {
-                  updated[updated.length - 1] = {
-                    ...last,
-                    content: `${last.content}${parsed.delta}`,
-                  };
-                }
-                return updated;
-              });
-            }
-            if (parsed.error) {
-              setMessages((prev) => {
-                const updated = [...prev];
-                updated[updated.length - 1] = {
-                  role: "assistant",
-                  content: formatStreamError(parsed.error as string | ChatStreamError),
-                };
-                return updated;
-              });
-            }
-          } catch {
-            // Ignore malformed chunks.
-          }
         }
-      }
-
-      await refreshConversations(activeChatId);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "未知错误";
-      setMessages((prev) => {
-        const updated = [...prev];
-        updated[updated.length - 1] = {
-          role: "assistant",
-          content: `提示：请求失败，${message}`,
-        };
-        return updated;
+        return next;
       });
+      attachmentState.clearAttachments();
+    } catch (error: unknown) {
+      pendingAttachmentsRef.current = [];
+      const message = error instanceof Error ? error.message : "未知错误";
       setChatError(message);
-    } finally {
-      setStreaming(false);
     }
   }
+
+  const canSendMessage =
+    Boolean(activeChatId) &&
+    !streaming &&
+    !attachmentState.uploading &&
+    (Boolean(chatInput.trim()) || attachmentState.attachments.length > 0);
 
   return (
     <section className="chat-page">
@@ -421,14 +381,54 @@ export default function ChatPage() {
         </header>
 
         {activeChatId ? (
-          <>
+          <div
+            className={`chat-compose${attachmentState.isDragging ? " is-dragging" : ""}`}
+            onDragEnter={attachmentState.handleDragEnter}
+            onDragLeave={attachmentState.handleDragLeave}
+            onDragOver={attachmentState.handleDragOver}
+            onDrop={attachmentState.handleDrop}
+          >
+            {attachmentState.isDragging ? (
+              <div className="chat-drop-overlay" aria-hidden="true">
+                <strong>松开鼠标上传</strong>
+                <span>支持图片，或 PDF / TXT / MD / JSON / CSV</span>
+              </div>
+            ) : null}
             <div className="chat-messages" ref={messagesRef} onScroll={updateAutoScrollState}>
-              {messages.map((message, index) => (
+              {chatMessages.map((message, index) => (
                 <div key={message.id || `${message.role}-${index}`} className={`chat-msg ${message.role}`}>
                   {message.role === "assistant" ? <div className="chat-msg-avatar">AI</div> : null}
                   <div className="chat-msg-bubble">
+                    {getUiMessageAttachments(message).length > 0 ? (
+                      <div className="chat-msg-attachments">
+                        {getUiMessageAttachments(message).map((attachment) =>
+                          attachment.kind === "file" ? (
+                            <a
+                              key={`${attachment.storage_path}-${attachment.url}`}
+                              className="chat-msg-file"
+                              href={attachment.url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <span className="chat-msg-file-icon">DOC</span>
+                              <span className="chat-msg-file-name">{attachment.file_name}</span>
+                            </a>
+                          ) : (
+                            <a
+                              key={`${attachment.storage_path}-${attachment.url}`}
+                              className="chat-msg-attachment"
+                              href={attachment.url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <img src={attachment.url} alt={attachment.file_name || "图片附件"} loading="lazy" />
+                            </a>
+                          ),
+                        )}
+                      </div>
+                    ) : null}
                     <div className="chat-msg-content">
-                      {message.content || (streaming && index === messages.length - 1 ? "..." : "")}
+                      {getUiMessageText(message) || (streaming && index === chatMessages.length - 1 ? "..." : "")}
                     </div>
                   </div>
                   {message.role === "user" ? (
@@ -442,7 +442,62 @@ export default function ChatPage() {
             </div>
 
             <div className="chat-input-area">
+              {attachmentState.attachments.length > 0 || attachmentState.error ? (
+                <div className="chat-attachment-bar">
+                  {attachmentState.attachments.length > 0 ? (
+                    <div className="chat-attachment-list">
+                      {attachmentState.attachments.map((attachment, index) => (
+                        <div
+                          key={attachment.storagePath}
+                          className={`chat-attachment-chip ${attachment.kind === "file" ? "is-file" : ""}`}
+                        >
+                          {attachment.kind === "image" ? (
+                            <img src={attachment.previewUrl} alt={attachment.fileName} />
+                          ) : (
+                            <div className="chat-attachment-file">
+                              <span>DOC</span>
+                              <small>{attachment.fileName}</small>
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            className="chat-attachment-remove"
+                            aria-label={`移除 ${attachment.fileName}`}
+                            onClick={() => attachmentState.removeAttachment(index)}
+                            disabled={streaming || attachmentState.uploading}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {attachmentState.error ? <p className="chat-attachment-error">{attachmentState.error}</p> : null}
+                </div>
+              ) : null}
               <div className="chat-input-box">
+                <input
+                  ref={attachmentState.fileInputRef}
+                  type="file"
+                  accept={attachmentState.accept}
+                  multiple
+                  className="chat-file-input"
+                  onChange={attachmentState.handleFileInputChange}
+                  disabled={streaming || attachmentState.uploading || !attachmentState.canAddMore}
+                />
+                <button
+                  type="button"
+                  className="chat-attach-btn"
+                  aria-label="上传图片或文档"
+                  disabled={streaming || attachmentState.uploading || !attachmentState.canAddMore}
+                  onClick={() => attachmentState.fileInputRef.current?.click()}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                    <circle cx="9" cy="10" r="1.6" fill="currentColor" stroke="none" />
+                    <path d="M21 15l-5.2-5.2a1.5 1.5 0 0 0-2.1 0L7 16.5" />
+                  </svg>
+                </button>
                 <textarea
                   ref={textareaRef}
                   className="chat-textarea"
@@ -454,14 +509,14 @@ export default function ChatPage() {
                       void handleSendMessage();
                     }
                   }}
-                  placeholder="和我聊聊吧"
+                  placeholder="和我聊聊吧，可附带图片或文档"
                   rows={1}
-                  disabled={streaming}
+                  disabled={streaming || attachmentState.uploading}
                 />
                 <button
                   type="button"
                   className="chat-send-btn"
-                  disabled={streaming || !chatInput.trim()}
+                  disabled={!canSendMessage}
                   onClick={() => void handleSendMessage()}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -471,7 +526,7 @@ export default function ChatPage() {
                 </button>
               </div>
             </div>
-          </>
+          </div>
         ) : (
           <div className="chat-empty">
             {chatModels.length === 0 ? (

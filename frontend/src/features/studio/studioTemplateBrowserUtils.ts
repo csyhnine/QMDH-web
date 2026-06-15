@@ -13,6 +13,7 @@ type TemplateFilterOptions = {
   activeSubcategory: string;
   quickFilter: TemplateQuickFilter;
   search: string;
+  serverMatchIds?: number[] | null;
 };
 
 export function buildSharedTemplateCategories(templates: PromptTemplateRecord[]): TemplateCategoryGroup[] {
@@ -36,19 +37,24 @@ export function buildSharedTemplateCategories(templates: PromptTemplateRecord[])
 
 export function filterSharedTemplates(
   templates: PromptTemplateRecord[],
-  { activeCategory, activeSubcategory, quickFilter, search }: TemplateFilterOptions
+  { activeCategory, activeSubcategory, quickFilter, search, serverMatchIds }: TemplateFilterOptions,
 ): PromptTemplateRecord[] {
   const keyword = search.trim().toLowerCase();
   const searched = templates.filter((template) => {
+    if (serverMatchIds) {
+      return serverMatchIds.includes(template.id);
+    }
     if (!keyword) return true;
     const haystack = [
       template.label,
       template.title,
       template.deliverable,
       template.notes,
+      template.prompt,
       template.category,
       template.subcategory,
     ]
+      .filter(Boolean)
       .join(" ")
       .toLowerCase();
     return haystack.includes(keyword);
@@ -67,7 +73,7 @@ export function filterSharedTemplates(
 function compareSharedTemplates(
   left: PromptTemplateRecord,
   right: PromptTemplateRecord,
-  quickFilter: TemplateQuickFilter
+  quickFilter: TemplateQuickFilter,
 ): number {
   if (quickFilter === "featured") {
     const popularityDelta = right.popularity_score - left.popularity_score;

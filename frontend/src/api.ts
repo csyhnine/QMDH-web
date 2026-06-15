@@ -910,6 +910,11 @@ export const api = {
     postJson<void>(`/prompt-templates/${templateId}/events`, payload),
   uploadReferenceImage: (payload: ReferenceUploadPayload) =>
     postJson<ReferenceUploadResponse>("/assets/reference-upload", payload),
+  uploadChatAttachment: (payload: ReferenceUploadPayload) =>
+    postJson<{ file_name: string; storage_path: string; mime_type: string; kind: "image" | "file" }>(
+      "/chat/attachments/upload",
+      payload,
+    ),
   createTask: (payload: TaskCreatePayload) => postJson<Task>("/tasks", payload),
   deleteTask: (taskId: number) => deleteRequest(`/tasks/${taskId}`),
   likeAsset: (assetId: number) => postJson<Asset>(`/assets/${assetId}/like`),
@@ -930,6 +935,45 @@ export const api = {
     ),
   getChatConversations: () => request<{ id: number; title: string; model_provider_id: number | null; created_at: string; updated_at: string }[]>("/chat/conversations"),
   createChatConversation: (model_provider_id: number, title?: string) => postJson<{ id: number; title: string; model_provider_id: number | null; created_at: string; updated_at: string }>("/chat/conversations", { model_provider_id, title: title || "" }),
-  getChatMessages: (convId: number) => request<{ id: number; role: string; content: string; created_at: string }[]>(`/chat/conversations/${convId}/messages`),
+  getChatMessages: (convId: number) =>
+    request<
+      {
+        id: number;
+        role: string;
+        content: string;
+        attachments: { file_name: string; mime_type: string; url: string; storage_path: string; kind: "image" | "file" }[];
+        created_at: string;
+      }[]
+    >(`/chat/conversations/${convId}/messages`),
   deleteChatConversation: (convId: number) => deleteRequest(`/chat/conversations/${convId}`),
+  search: (params: { q: string; domain: "inspiration" | "templates"; limit?: number }) => {
+    const query = new URLSearchParams({
+      q: params.q,
+      domain: params.domain,
+      limit: String(params.limit ?? 20),
+    });
+    return request<{
+      domain: string;
+      query: string;
+      engine: string;
+      hits: { id: number; domain: string; title: string; snippet: string; category: string; tags: string[]; score: number }[];
+    }>(`/search?${query.toString()}`);
+  },
+  searchSync: () =>
+    postJson<{
+      inspiration_documents: number;
+      template_documents: number;
+      engine: string;
+    }>("/search/sync"),
+  searchStatus: () =>
+    request<{
+      meilisearch_enabled: boolean;
+      meilisearch_reachable: boolean;
+      meilisearch_status: string;
+      engine: string;
+      inspiration_index: string;
+      templates_index: string;
+    }>("/search/status"),
+  studioAgentAssist: (payload: { message: string; provider_id: number }) =>
+    postJson<{ reply: string; provider_name: string; model_name: string }>("/studio-agent/assist", payload),
 };

@@ -9,10 +9,7 @@ type StudioSharedTemplateSidebarProps = {
 export default function StudioSharedTemplateSidebar({ browser }: StudioSharedTemplateSidebarProps) {
   return (
     <aside className="template-browser-sidebar">
-      <StudioSharedTemplateSearch
-        setTemplateSearch={browser.setTemplateSearch}
-        templateSearch={browser.templateSearch}
-      />
+      <StudioSharedTemplateSearch browser={browser} />
       <StudioSharedTemplateNav browser={browser} />
     </aside>
   );

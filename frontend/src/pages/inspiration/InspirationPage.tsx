@@ -1,6 +1,7 @@
 import { type ChangeEvent, type DragEvent, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type InspirationPost } from "../../api";
+import { useServerSearch } from "../../lib/search/useServerSearch";
 import { validateReferenceImageSize } from "../../utils/uploads";
 import {
   hasInspirationComparePreview,
@@ -64,6 +65,8 @@ export default function InspirationPage({
   const [bulkTagsText, setBulkTagsText] = useState("");
   const [bulkTagMode, setBulkTagMode] = useState<(typeof TAG_BATCH_MODES)[number]["key"]>("append");
   const [isBatchTagging, setIsBatchTagging] = useState(false);
+  const [isSyncingSearch, setIsSyncingSearch] = useState(false);
+  const [searchSyncSummary, setSearchSyncSummary] = useState("");
   const importUploadInputRef = useRef<HTMLInputElement | null>(null);
   const editUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [importDialog, setImportDialog] = useState<{
@@ -75,11 +78,21 @@ export default function InspirationPage({
   const importedCount = posts.filter((post) => post.source_type === "external").length;
   const sharedCount = posts.filter((post) => post.source_type === "user").length;
   const seedCount = posts.filter((post) => post.source_type !== "external" && post.source_type !== "user").length;
-  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const {
+    trimmedQuery: inspirationSearchQuery,
+    matchIds: inspirationSearchMatchIds,
+    engine: inspirationSearchEngine,
+    isSearching: isInspirationSearching,
+    usingServerSearch: usingInspirationServerSearch,
+  } = useServerSearch("inspiration", searchQuery);
+  const normalizedQuery = inspirationSearchQuery.toLowerCase();
   const visiblePosts = posts.filter((post) => {
     if (sourceFilter === "external" && post.source_type !== "external") return false;
     if (sourceFilter === "user" && post.source_type !== "user") return false;
     if (sourceFilter === "seed" && (post.source_type === "external" || post.source_type === "user")) return false;
+    if (usingInspirationServerSearch && inspirationSearchMatchIds) {
+      return inspirationSearchMatchIds.includes(post.id);
+    }
     if (!normalizedQuery) return true;
     const haystack = [
       post.title,
@@ -325,6 +338,22 @@ export default function InspirationPage({
     }
   }
 
+  async function handleSearchSync() {
+    setIsSyncingSearch(true);
+    setActionError("");
+    setSearchSyncSummary("");
+    try {
+      const result = await api.searchSync();
+      setSearchSyncSummary(
+        `已同步 ${result.inspiration_documents} 条灵感、${result.template_documents} 条模板（${result.engine}）`
+      );
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "同步搜索索引失败");
+    } finally {
+      setIsSyncingSearch(false);
+    }
+  }
+
   return (
     <section className="inspiration-page">
       <header className="inspiration-header">
@@ -343,6 +372,16 @@ export default function InspirationPage({
               {isRefreshing ? "刷新中..." : "刷新"}
             </button>
           ) : null}
+          {mode === "admin" ? (
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={isSyncingSearch}
+              onClick={() => void handleSearchSync()}
+            >
+              {isSyncingSearch ? "同步索引中..." : "同步搜索索引"}
+            </button>
+          ) : null}
           {canContribute ? (
             <button type="button" className="admin-primary-button" onClick={() => {
               setActionError("");
@@ -353,6 +392,7 @@ export default function InspirationPage({
       </header>
 
       {actionError ? <div className="floating-error inspiration-feedback">{actionError}</div> : null}
+      {searchSyncSummary ? <div className="inspiration-search-sync-summary">{searchSyncSummary}</div> : null}
 
       {mode === "admin" ? (
         <>
@@ -470,6 +510,17 @@ export default function InspirationPage({
             </button>
             <span className="inspiration-toolbar-summary">
               当前显示 {visiblePosts.length} / {posts.length} 条，当前结果已选 {selectedVisibleCount} 条，总已选 {selectedPostIds.length} 条
+              {inspirationSearchQuery ? (
+                <>
+                  {" "}
+                  ·{" "}
+                  {isInspirationSearching
+                    ? "搜索中..."
+                    : usingInspirationServerSearch
+                      ? `${inspirationSearchMatchIds?.length ?? 0} 条命中 · ${inspirationSearchEngine ?? "postgres"}`
+                      : `本地匹配 · ${inspirationSearchEngine ?? "postgres"}`}
+                </>
+              ) : null}
             </span>
           </div>
         </>
@@ -480,6 +531,27 @@ export default function InspirationPage({
           <button key={cat} type="button" className={category === cat ? "active" : ""} onClick={() => { setCategory(cat); void loadPosts(cat); }}>{cat}</button>
         ))}
       </nav>
+
+      {mode === "studio" ? (
+        <div className="inspiration-search-row">
+          <input
+            type="search"
+            aria-label="搜索灵感"
+            placeholder="搜索标题、标签、来源或分享人"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+          {inspirationSearchQuery ? (
+            <span className="inspiration-search-meta">
+              {isInspirationSearching
+                ? "搜索中..."
+                : usingInspirationServerSearch
+                  ? `${inspirationSearchMatchIds?.length ?? 0} 条命中 · ${inspirationSearchEngine ?? "postgres"}`
+                  : `本地匹配 · ${inspirationSearchEngine ?? "postgres"}`}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="inspiration-grid">
         {visiblePosts.length > 0 ? visiblePosts.map((post) => (

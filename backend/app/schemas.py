@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models import AssetType, DataClassification, TaskStatus
 
@@ -690,6 +690,33 @@ class ChatModelOut(BaseModel):
     base_url: str
 
 
+class ChatAttachmentIn(BaseModel):
+    storage_path: str = Field(min_length=1, max_length=500)
+    file_name: str = Field(default="", max_length=255)
+    mime_type: str = Field(default="", max_length=100)
+    kind: str = Field(default="", pattern="^(|image|file)$")
+
+
+class ChatAttachmentOut(BaseModel):
+    file_name: str
+    mime_type: str
+    url: str
+    storage_path: str
+    kind: str
+
+
+class ChatAttachmentUploadIn(BaseModel):
+    file_name: str = Field(min_length=1, max_length=255)
+    data_url: str = Field(min_length=20)
+
+
+class ChatAttachmentUploadOut(BaseModel):
+    file_name: str
+    storage_path: str
+    mime_type: str
+    kind: str
+
+
 class ConversationCreate(BaseModel):
     model_provider_id: int
     title: str = ""
@@ -704,13 +731,21 @@ class ConversationOut(BaseModel):
 
 
 class ChatMessageCreate(BaseModel):
-    content: str = Field(min_length=1)
+    content: str = ""
+    attachments: list[ChatAttachmentIn] = Field(default_factory=list, max_length=4)
+
+    @model_validator(mode="after")
+    def validate_has_payload(self) -> ChatMessageCreate:
+        if not self.content.strip() and not self.attachments:
+            raise ValueError("Message must include text or at least one attachment.")
+        return self
 
 
 class ChatMessageOut(BaseModel):
     id: int
     role: str
     content: str
+    attachments: list[ChatAttachmentOut] = Field(default_factory=list)
     created_at: datetime
 
 

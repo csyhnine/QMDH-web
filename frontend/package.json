@@ -6,14 +6,21 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "biome check src/lib",
+    "lint:integrations": "biome check src/lib src/features/studio/StudioAssistantPanel.tsx src/features/studio/useSharedTemplateBrowser.ts src/features/studio/studioTemplateBrowserUtils.ts src/features/studio/StudioSharedTemplateSearch.tsx",
+    "lint:all": "biome check .",
+    "format": "biome format --write src/lib"
   },
   "dependencies": {
+    "ai": "^5.0.0",
+    "@ai-sdk/react": "^2.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^6.30.3"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.0.6",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.0",

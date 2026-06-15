@@ -1,0 +1,4 @@
+# Optional MCP stdio server dependencies.
+# Install only when you need: python -m app.integrations.mcp
+# Note: mcp currently pins an older starlette; keep separate from main requirements.
+mcp==1.12.2

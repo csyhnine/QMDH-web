@@ -547,6 +547,7 @@ class ChatMessage(Base):
     conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
     role: Mapped[str] = mapped_column(String(20))  # "user", "assistant", "system"
     content: Mapped[str] = mapped_column(Text)
+    attachments_json: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
     token_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

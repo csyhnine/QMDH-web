@@ -99,7 +99,7 @@ For a live server update, use this sequence instead of rebuilding blindly:
 cd /www/wwwroot/qmdh-web
 cp .env .env.backup-YYYYMMDD
 docker compose exec postgres pg_dump -U qmdh -d qmdh > qmdh-YYYYMMDD.sql
-git pull origin main
+sudo -u admin git -C /www/wwwroot/qmdh-web pull origin main
 docker compose run --rm backend alembic upgrade head
 docker compose up -d --build
 docker compose ps

@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,12 +14,28 @@ from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import ChatMessage, Conversation, ProviderProfile, User
 from app.schemas import (
+    ChatAttachmentOut,
+    ChatAttachmentUploadIn,
+    ChatAttachmentUploadOut,
     ChatMessageCreate,
     ChatMessageOut,
     ChatModelOut,
     ConversationCreate,
     ConversationOut,
 )
+from app.services.chat_attachment_upload import (
+    build_chat_file_relative_path,
+    build_chat_image_relative_path,
+    decode_chat_file_upload,
+    decode_chat_image_upload,
+)
+from app.services.chat_message_content import (
+    attachment_kind_for_path,
+    build_provider_messages,
+    chat_attachment_out,
+    serialize_chat_attachments,
+)
+from app.services.media_storage import resolve_storage_path, write_binary_asset
 from app.services.chat_service import (
     format_chat_error_message,
     get_chat_models,
@@ -59,6 +75,35 @@ def list_chat_models(
         )
         for model in models
     ]
+
+
+@router.post("/attachments/upload", response_model=ChatAttachmentUploadOut, status_code=status.HTTP_201_CREATED)
+def upload_chat_attachment(
+    payload: ChatAttachmentUploadIn,
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> ChatAttachmentUploadOut:
+    del auth_user
+    file_name = payload.file_name.strip()
+    data_url = payload.data_url.strip()
+
+    if data_url.lower().startswith("data:image/"):
+        extension, content = decode_chat_image_upload(file_name, data_url)
+        relative_path = build_chat_image_relative_path(file_name, extension)
+        kind = "image"
+    else:
+        extension, content = decode_chat_file_upload(file_name, data_url)
+        relative_path = build_chat_file_relative_path(file_name, extension)
+        kind = "file"
+
+    storage_path = write_binary_asset(relative_path, content)
+    from app.services.chat_message_content import mime_type_for_path
+
+    return ChatAttachmentUploadOut(
+        file_name=file_name,
+        storage_path=resolve_storage_path(storage_path),
+        mime_type=mime_type_for_path(relative_path),
+        kind=kind,
+    )
 
 
 @router.post("/conversations", response_model=ConversationOut, status_code=201)
@@ -119,7 +164,17 @@ def get_messages(
         .order_by(ChatMessage.created_at.asc())
     ).all()
     return [
-        ChatMessageOut(id=message.id, role=message.role, content=message.content, created_at=message.created_at)
+        ChatMessageOut(
+            id=message.id,
+            role=message.role,
+            content=message.content,
+            attachments=[
+                ChatAttachmentOut(**chat_attachment_out(item))
+                for item in (message.attachments_json or [])
+                if isinstance(item, dict)
+            ],
+            created_at=message.created_at,
+        )
         for message in messages
     ]
 
@@ -164,15 +219,27 @@ async def send_message(
         enforce_user_quota(db, user=current_user)
 
     content = payload.content.strip()
+    attachments = serialize_chat_attachments(
+        [
+            {
+                "storage_path": item.storage_path,
+                "file_name": item.file_name,
+                "mime_type": item.mime_type,
+                "kind": item.kind,
+            }
+            for item in payload.attachments
+        ]
+    )
     user_message = ChatMessage(
         conversation_id=conversation_id,
         role="user",
         content=content,
+        attachments_json=attachments,
     )
     db.add(user_message)
 
     if conversation.title == "新对话":
-        conversation.title = content[:50]
+        conversation.title = content[:50] or (attachments[0]["file_name"][:50] if attachments else "新对话")
     conversation.updated_at = datetime.now(timezone.utc)
     db.commit()
 
@@ -182,7 +249,7 @@ async def send_message(
         .order_by(ChatMessage.created_at.asc())
     ).all()
     recent = all_messages[-50:] if len(all_messages) > 50 else all_messages
-    api_messages = [{"role": message.role, "content": message.content} for message in recent]
+    api_messages = build_provider_messages(recent)
 
     full_content_parts: list[str] = []
     last_error_payload: dict[str, object] | None = None

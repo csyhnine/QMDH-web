@@ -1,0 +1,55 @@
+# Production deploy log — 2026-06-12 — 30cbd1c
+
+Project: QMDH-web
+Target: https://cityusbdisk.cn
+Deploy script: tmp/deploy_prod.py
+Method: git bundle fallback (server git pull failed)
+
+## Commands executed
+
+```
+cd /www/wwwroot/qmdh-web && cp .env .env.bak-$(date +%Y%m%d-%H%M) 2>/dev/null; git pull origin main
+# → git@github.com: Permission denied (publickey)
+
+git fetch /tmp/qmdh-deploy.bundle main && git reset --hard FETCH_HEAD
+docker compose up -d --build
+curl -fsS http://127.0.0.1:8080/api/v1/health
+curl -fsS https://cityusbdisk.cn/api/v1/health
+docker compose ps
+```
+
+## Result
+
+```
+Server HEAD: 30cbd1c1
+Commit message: feat(studio): expand inspiration sharing and fix usage log table layout
+
+Health (local):  {"status":"healthy","service":"qmdh-api","components":{"database":{"status":"healthy"},"redis":{"status":"healthy"}}}
+Health (public): {"status":"healthy","service":"qmdh-api","components":{"database":{"status":"healthy"},"redis":{"status":"healthy"}}}
+
+Containers:
+- qmdh-web-backend-1   Up (healthy)
+- qmdh-web-frontend-1  Up (8080->80)
+- qmdh-web-worker-1    Up
+- qmdh-web-postgres-1  Up (healthy)
+- qmdh-web-redis-1     Up (healthy)
+```
+
+## Included changes
+
+- b1fce44 — ops role with scoped backoffice access
+- 30cbd1c — inspiration share (no source / video) + usage logs table alignment
+
+## GitHub push (dev machine)
+
+Direct push failed (connection reset). Success via proxy:
+
+```
+git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push origin main
+→ b1fce44..30cbd1c  main -> main
+```
+
+## Notes
+
+- `inspiration_posts.media_type` column added by migration / ensure_schema
+- Full docker build output omitted (see deploy script stdout if needed)

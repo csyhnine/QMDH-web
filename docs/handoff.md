@@ -11,6 +11,26 @@
 
 ## Latest Handoffs
 
+### [2026-06-12] Ops role + inspiration share + usage logs layout deployed
+- Role: Commit, GitHub push, production deploy, archive
+- Branch: `main` @ `30cbd1c` (includes `b1fce44` ops role)
+- Repo status:
+  - Local `main`: `30cbd1c`
+  - GitHub `origin/main`: `30cbd1c` (push via proxy `127.0.0.1:7897`)
+  - Production server: `30cbd1c` (git bundle fallback)
+- Production URL: **`https://cityusbdisk.cn`**
+- Completed:
+  - **运维 ops 角色**：设计师权限 + 灵感/反馈/模板后台；其他模块 🔒
+  - **灵感分享**：支持无原图单图分享、视频分享到灵感库（`media_type`）
+  - **使用日志页**：表格列对齐修复
+- Archive detail: `docs/archive/handoff-2026-06-12-ops-share-usage-logs-deploy.md`
+- Deploy log: `docs/archive/deploy-2026-06-12-30cbd1c.log`
+- Next step:
+  - fix server GitHub deploy key (restore `git pull`)
+  - smoke: ops login, video share, `/admin/usage-logs` alignment
+- Git push note: `git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push origin main` if direct push fails
+- Safe to hand off: **Yes**
+
 ### [2026-06-12] Usage logs + dashboard default 7d deployed
 - Role: Commit, GitHub push, production deploy
 - Branch: `main` @ `6771de1`

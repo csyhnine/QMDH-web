@@ -27,7 +27,7 @@ export function composerReferenceHint(
       if (skuConfig) {
         const uploaded =
           referenceUploadCount > 0 ? `已上传 ${referenceUploadCount} 张。` : "当前未上传图片，纯文本也可提交。";
-        return `${skuConfig.referenceHint} ${uploaded} 720p · 按次计费 · 生成通常 30 秒～数分钟。`;
+        return `${skuConfig.referenceHint} ${uploaded} 720p · 生成通常 30 秒～数分钟。`;
       }
     }
     return referenceUploadCount > 0

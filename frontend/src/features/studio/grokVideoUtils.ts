@@ -12,7 +12,6 @@ export type GrokVideoMode = "i2v" | "ref";
 export type GrokSkuConfig = {
   duration: 5 | 10;
   mode: GrokVideoMode;
-  userPriceDefault: number;
   label: string;
   referenceHint: string;
 };
@@ -23,28 +22,24 @@ export const GROK_VIDEO_SKU_CONFIG: Record<GrokVideoSku, GrokSkuConfig> = {
   "x-ai/grok-imagine-video-i2v": {
     duration: 5,
     mode: "i2v",
-    userPriceDefault: 3.35,
     label: "起始图 · 5 秒",
     referenceHint: "起始图生成视频：可选 1 张起始图，或纯文本提交。",
   },
   "x-ai/grok-imagine-video-i2v-10s": {
     duration: 10,
     mode: "i2v",
-    userPriceDefault: 6.68,
     label: "起始图 · 10 秒",
     referenceHint: "起始图生成视频：可选 1 张起始图，或纯文本提交。",
   },
   "x-ai/grok-imagine-video-ref": {
     duration: 5,
     mode: "ref",
-    userPriceDefault: 3.41,
     label: "多图参考 · 5 秒",
     referenceHint: "多图参考生成（最多 4 张）；可在提示词中用 <IMAGE_1> … <IMAGE_4> 指代各图。",
   },
   "x-ai/grok-imagine-video-ref-10s": {
     duration: 10,
     mode: "ref",
-    userPriceDefault: 6.74,
     label: "多图参考 · 10 秒",
     referenceHint: "多图参考生成（最多 4 张）；可在提示词中用 <IMAGE_1> … <IMAGE_4> 指代各图。",
   },
@@ -54,7 +49,6 @@ export const GROK_VIDEO_SKU_OPTIONS = (Object.entries(GROK_VIDEO_SKU_CONFIG) as 
   ([id, config]) => ({
     id,
     label: config.label,
-    priceLabel: `¥${config.userPriceDefault.toFixed(2)}`,
     detail: `${config.mode === "i2v" ? "起始图生成" : "多图参考"} · ${config.duration}s · 720p`,
   })
 );

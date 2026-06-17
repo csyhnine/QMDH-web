@@ -9,6 +9,7 @@ import {
   inspirationFinalMediaCaption,
   isVideoInspirationPost,
 } from "./inspirationMediaUtils";
+import { copyInspirationPrompt, getInspirationPromptText } from "./inspirationPromptUtils";
 
 /* ─── Props ─── */
 
@@ -55,6 +56,7 @@ export default function InspirationPage({
   const [sourceFilter, setSourceFilter] = useState<(typeof SOURCE_FILTERS)[number]["key"]>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [lightbox, setLightbox] = useState<InspirationPost | null>(null);
+  const [copiedPromptPostId, setCopiedPromptPostId] = useState<number | null>(null);
   const [actionError, setActionError] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<number | null>(null);
@@ -242,6 +244,23 @@ export default function InspirationPage({
       }
       return Array.from(new Set([...current, ...visiblePostIds]));
     });
+  }
+
+  async function handleCopyPrompt(post: InspirationPost) {
+    setActionError("");
+    try {
+      const copied = await copyInspirationPrompt(post);
+      if (!copied) {
+        setActionError("没有可复制的提示词");
+        return;
+      }
+      setCopiedPromptPostId(post.id);
+      window.setTimeout(() => {
+        setCopiedPromptPostId((current) => (current === post.id ? null : current));
+      }, 2000);
+    } catch {
+      setActionError("复制失败，请手动选择提示词文本复制");
+    }
   }
 
   async function handleDelete(post: InspirationPost) {
@@ -590,6 +609,9 @@ export default function InspirationPage({
             </div>
             <div className="inspiration-card-body">
               <h3>{post.title}</h3>
+              {getInspirationPromptText(post) ? (
+                <p className="inspiration-card-prompt-hint">含提示词 · 点击查看并复制</p>
+              ) : null}
               {post.tags.length > 0 ? (
                 <div className="inspiration-card-tags">{post.tags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}</div>
               ) : null}
@@ -641,44 +663,78 @@ export default function InspirationPage({
 
       {/* Lightbox */}
       {lightbox ? (
-        <div className="media-lightbox" onClick={() => setLightbox(null)} onKeyDown={(e) => { if (e.key === "Escape") setLightbox(null); }} tabIndex={0} ref={(el) => el?.focus()}>
-          <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="media-lightbox-close" onClick={() => setLightbox(null)}>×</button>
-            {hasInspirationComparePreview(lightbox) ? (
-              <div className="inspiration-lightbox-compare">
-                <figure className="inspiration-lightbox-figure">
-                  <img src={lightbox.source_image_path} alt={`${lightbox.title} 原图`} style={{ maxWidth: "42vw", maxHeight: "72vh", objectFit: "contain" }} />
-                  <figcaption>{isVideoInspirationPost(lightbox) ? "参考图" : "原图"}</figcaption>
-                </figure>
-                <figure className="inspiration-lightbox-figure">
-                  {isVideoInspirationPost(lightbox) ? (
-                    <video
-                      src={lightbox.image_path}
-                      controls
-                      playsInline
-                      preload="metadata"
-                      style={{ maxWidth: "42vw", maxHeight: "72vh", objectFit: "contain" }}
-                    />
-                  ) : (
-                    <img src={lightbox.image_path} alt={`${lightbox.title} 最终图`} style={{ maxWidth: "42vw", maxHeight: "72vh", objectFit: "contain" }} />
-                  )}
-                  <figcaption>{inspirationFinalMediaCaption(lightbox)}</figcaption>
-                </figure>
+        <div
+          className="media-lightbox"
+          onClick={() => {
+            setLightbox(null);
+            setCopiedPromptPostId(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setLightbox(null);
+              setCopiedPromptPostId(null);
+            }
+          }}
+          tabIndex={0}
+          ref={(el) => el?.focus()}
+        >
+          <div className="inspiration-lightbox-panel" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="media-lightbox-close inspiration-lightbox-close" onClick={() => {
+              setLightbox(null);
+              setCopiedPromptPostId(null);
+            }}>
+              ×
+            </button>
+            <div className="inspiration-lightbox-media">
+              {hasInspirationComparePreview(lightbox) ? (
+                <div className="inspiration-lightbox-compare">
+                  <figure className="inspiration-lightbox-figure">
+                    <img src={lightbox.source_image_path} alt={`${lightbox.title} 原图`} />
+                    <figcaption>{isVideoInspirationPost(lightbox) ? "参考图" : "原图"}</figcaption>
+                  </figure>
+                  <figure className="inspiration-lightbox-figure">
+                    {isVideoInspirationPost(lightbox) ? (
+                      <video src={lightbox.image_path} controls playsInline preload="metadata" />
+                    ) : (
+                      <img src={lightbox.image_path} alt={`${lightbox.title} 最终图`} />
+                    )}
+                    <figcaption>{inspirationFinalMediaCaption(lightbox)}</figcaption>
+                  </figure>
+                </div>
+              ) : isVideoInspirationPost(lightbox) ? (
+                <video src={lightbox.image_path} controls playsInline preload="metadata" className="inspiration-lightbox-single-media" />
+              ) : (
+                <img src={lightbox.image_path} alt={lightbox.title} className="inspiration-lightbox-single-media" />
+              )}
+            </div>
+            <div className="inspiration-lightbox-meta">
+              <div className="inspiration-lightbox-headline">
+                <h3>{lightbox.title}</h3>
+                <div className="inspiration-lightbox-submeta">
+                  {lightbox.source_type === "user" ? <span>由 {lightbox.user_name || "设计师"} 分享</span> : null}
+                  {lightbox.model_name ? <span>模型：{lightbox.model_name}</span> : null}
+                  {lightbox.source_url ? (
+                    <a href={lightbox.source_url} target="_blank" rel="noopener noreferrer">
+                      查看原文 →
+                    </a>
+                  ) : null}
+                </div>
               </div>
-            ) : isVideoInspirationPost(lightbox) ? (
-              <video
-                src={lightbox.image_path}
-                controls
-                playsInline
-                preload="metadata"
-                style={{ maxWidth: "90vw", maxHeight: "80vh", objectFit: "contain" }}
-              />
-            ) : (
-              <img src={lightbox.image_path} alt={lightbox.title} style={{ maxWidth: "90vw", maxHeight: "80vh", objectFit: "contain" }} />
-            )}
-            <div style={{ textAlign: "center", marginTop: "12px", color: "#fff" }}>
-              <h3 style={{ margin: "0 0 8px", fontSize: "18px" }}>{lightbox.title}</h3>
-              {lightbox.source_url ? <a href={lightbox.source_url} target="_blank" rel="noopener noreferrer" style={{ color: "#8bb4ff", fontSize: "14px" }}>查看原文 →</a> : null}
+              {getInspirationPromptText(lightbox) ? (
+                <div className="inspiration-prompt-block">
+                  <div className="inspiration-prompt-head">
+                    <strong>提示词</strong>
+                    <button
+                      type="button"
+                      className="inspiration-copy-prompt-btn"
+                      onClick={() => void handleCopyPrompt(lightbox)}
+                    >
+                      {copiedPromptPostId === lightbox.id ? "已复制" : "复制提示词"}
+                    </button>
+                  </div>
+                  <pre className="inspiration-prompt-text">{getInspirationPromptText(lightbox)}</pre>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

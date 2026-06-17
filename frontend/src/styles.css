@@ -6400,6 +6400,13 @@ textarea:focus-visible {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+.inspiration-card-prompt-hint {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  color: #2563eb;
+}
+
 .inspiration-card-tags {
   display: flex;
   flex-wrap: wrap;
@@ -6530,9 +6537,122 @@ textarea:focus-visible {
 }
 
 .inspiration-lightbox-figure figcaption {
-  color: #fff;
+  color: var(--muted);
   font-size: 0.82rem;
   text-align: center;
+}
+
+.inspiration-lightbox-panel {
+  position: relative;
+  width: min(1080px, 96vw);
+  max-height: min(92vh, 100%);
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+
+.inspiration-lightbox-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.inspiration-lightbox-media {
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(17, 24, 39, 0.04);
+  min-height: 220px;
+  max-height: min(58vh, 720px);
+  overflow: auto;
+}
+
+.inspiration-lightbox-single-media {
+  max-width: 100%;
+  max-height: min(54vh, 680px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+.inspiration-lightbox-meta {
+  display: grid;
+  gap: 14px;
+  padding: 16px 20px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.inspiration-lightbox-headline h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.inspiration-lightbox-submeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.inspiration-lightbox-submeta a {
+  color: #2563eb;
+}
+
+.inspiration-prompt-block {
+  display: grid;
+  gap: 10px;
+}
+
+.inspiration-prompt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inspiration-prompt-head strong {
+  font-size: 0.9rem;
+}
+
+.inspiration-copy-prompt-btn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.inspiration-copy-prompt-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.inspiration-prompt-text {
+  margin: 0;
+  max-height: min(32vh, 280px);
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #1e293b;
+  font-family: inherit;
+  font-size: 0.84rem;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
 }
 
 

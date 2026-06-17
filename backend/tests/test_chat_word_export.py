@@ -2,6 +2,7 @@ import io
 import unittest
 
 from docx import Document
+from docx.oxml.ns import qn
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -77,6 +78,30 @@ class ChatWordExportTests(unittest.TestCase):
         self.assertIn("方案摘要", text)
         self.assertIn("第一点", text)
         self.assertIn("正文内容", text)
+
+    def test_build_chat_word_document_strips_markdown_and_keeps_chinese(self) -> None:
+        docx_bytes = build_chat_word_document(
+            "## **项目结论**\n- **立面材质**：灰色铝板\n正文含 `代码词` 与 [官网](https://example.com)",
+            title="测试对话",
+        )
+        document = Document(io.BytesIO(docx_bytes))
+        text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+        self.assertIn("项目结论", text)
+        self.assertIn("立面材质", text)
+        self.assertIn("灰色铝板", text)
+        self.assertIn("代码词", text)
+        self.assertIn("官网", text)
+        self.assertNotIn("**", text)
+        self.assertNotIn("`", text)
+
+        fonts = {
+            rfonts.get(qn("w:eastAsia"))
+            for paragraph in document.paragraphs
+            for run in paragraph.runs
+            for rfonts in [run._element.rPr.rFonts if run._element.rPr is not None else None]
+            if rfonts is not None
+        }
+        self.assertIn("Microsoft YaHei", fonts)
 
     def test_default_chat_word_file_name(self) -> None:
         file_name = default_chat_word_file_name(conversation_title="项目讨论", message_id=12)

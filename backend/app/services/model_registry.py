@@ -11,6 +11,7 @@ from app.core.encryption import (
     EncryptedValueDecodeError,
     EncryptionKeyUnavailableError,
     decrypt_value_or_raise,
+    normalize_provider_api_key,
 )
 from app.models import ProviderProfile
 from app.services.provider_strategy import normalize_strategies
@@ -50,8 +51,8 @@ def _profile_from_record(record: ProviderProfile) -> ImageProviderProfile:
     if not reference_mode:
         reference_mode = "caption_prompt" if "modelscope.cn" in record.base_url else "disabled"
 
-    decrypted_key = decrypt_value_or_raise(record.api_key)
-    decrypted_secret = decrypt_value_or_raise(record.api_secret) if record.api_secret else ""
+    decrypted_key = normalize_provider_api_key(decrypt_value_or_raise(record.api_key))
+    decrypted_secret = normalize_provider_api_key(decrypt_value_or_raise(record.api_secret)) if record.api_secret else ""
 
     return ImageProviderProfile(
         provider_name=record.provider_name,

@@ -6,8 +6,12 @@ export default function StudioFeedCardResult({
   galleryAssets,
   onAssetPreview,
   onReuse,
+  onUpscaleAsset,
   showRunningState,
   task,
+  upscaleDisabled,
+  upscaleEnabled,
+  upscalingAssetKey,
   virtualProgress,
 }: StudioFeedCardResultProps) {
   return galleryAssets.length > 0 ? (
@@ -16,6 +20,10 @@ export default function StudioFeedCardResult({
       task={task}
       onAssetPreview={onAssetPreview}
       onReuse={onReuse}
+      onUpscaleAsset={onUpscaleAsset}
+      upscaleDisabled={upscaleDisabled}
+      upscaleEnabled={upscaleEnabled}
+      upscalingAssetKey={upscalingAssetKey}
     />
   ) : (
     <StudioFeedEmptyState

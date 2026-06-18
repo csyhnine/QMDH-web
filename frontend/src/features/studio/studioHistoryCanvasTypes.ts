@@ -23,6 +23,8 @@ export type StudioHistoryCanvasProps = {
   studioScrollPaneRef: RefObject<HTMLDivElement | null>;
   submitting: boolean;
   tasks: Task[];
+  upscaleEnabled: boolean;
+  upscalingAssetKey: string | null;
   workspaceName: string;
   onApplyTaskToComposer: (task: Task, asset?: Asset) => void;
   onBookmarkAsset: (taskId: number, assetId: number) => void;
@@ -31,6 +33,7 @@ export type StudioHistoryCanvasProps = {
   onPreviewAsset: (task: Task, asset: Asset) => void;
   onRegenerateTask: (task: Task, asset?: Asset) => void;
   onShareAsset: (task: Task, asset: Asset) => void;
+  onUpscaleAsset: (task: Task, asset: Asset) => void;
 };
 
 export type StudioHistoryScrollProps = Pick<

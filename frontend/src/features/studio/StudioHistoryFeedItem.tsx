@@ -14,6 +14,9 @@ export default function StudioHistoryFeedItem({
   pendingActionByTaskId,
   feedbackByTaskId,
   onRegenerateTask,
+  onUpscaleAsset,
+  upscaleEnabled,
+  upscalingAssetKey,
   onBookmarkAsset,
   onShareAsset,
   onDeleteTask,
@@ -23,6 +26,9 @@ export default function StudioHistoryFeedItem({
   const galleryAssets = buildGalleryAssets(imageAssetsByTaskId.get(task.id) ?? []);
   const linkedAsset = galleryAssets[0];
   const isLatestTask = task.id === latestTask?.id;
+  const pendingAction = pendingActionByTaskId[task.id] ?? null;
+  const upscaleDisabled =
+    submitting || regeneratingTaskId === task.id || pendingAction !== null;
 
   return (
     <StudioFeedCard
@@ -33,6 +39,10 @@ export default function StudioHistoryFeedItem({
       showDebugDetails={showDebugDetails}
       onReuse={() => onRegenerateTask(task, linkedAsset ?? galleryAssets[0])}
       reuseDisabled={submitting || regeneratingTaskId === task.id}
+      upscaleEnabled={upscaleEnabled}
+      upscaleDisabled={upscaleDisabled}
+      upscalingAssetKey={upscalingAssetKey}
+      onUpscaleAsset={(asset) => onUpscaleAsset(task, asset)}
       onBookmark={() => (linkedAsset ? onBookmarkAsset(task.id, linkedAsset.id) : undefined)}
       onShare={() => (linkedAsset ? onShareAsset(task, linkedAsset) : undefined)}
       onDelete={() => onDeleteTask(task)}

@@ -27,6 +27,8 @@ export function getStudioHistoryCanvasProps({
   studioScrollPaneRef,
   submitting,
   tasks,
+  upscaleEnabled,
+  upscalingAssetKey,
   workspaceName,
   onApplyTaskToComposer,
   onBookmarkAsset,
@@ -35,6 +37,7 @@ export function getStudioHistoryCanvasProps({
   onPreviewAsset,
   onRegenerateTask,
   onShareAsset,
+  onUpscaleAsset,
 }: StudioHistoryCanvasProps): StudioHistoryCanvasParts {
   return {
     scrollProps: {
@@ -63,6 +66,9 @@ export function getStudioHistoryCanvasProps({
       pendingActionByTaskId: historyActionPendingByTaskId,
       feedbackByTaskId: historyFeedbackByTaskId,
       onRegenerateTask,
+      onUpscaleAsset,
+      upscaleEnabled,
+      upscalingAssetKey,
       onBookmarkAsset,
       onShareAsset,
       onDeleteTask,

@@ -92,6 +92,8 @@ def _infer_task_capability(entry: UsageLedger, provider_entries: list[UsageLedge
     workflow_key = (entry.workflow_key or "").strip().lower()
     if "edit" in workflow_key:
         return "image.edit"
+    if "upscale" in workflow_key:
+        return "image.upscale"
     if "video" in workflow_key:
         return "video.generate"
     return "image.generate"
@@ -116,11 +118,13 @@ def _empty_execution_bucket() -> dict[str, int]:
 def _apply_task_count(bucket: dict[str, int], capability: str, output_count: int = 0) -> None:
     if capability == "image.edit":
         bucket["image_edit_count"] += 1
+    elif capability == "image.upscale":
+        bucket["image_edit_count"] += 1
     elif capability == "video.generate":
         bucket["video_generate_count"] += 1
     else:
         bucket["image_generate_count"] += 1
-    if capability in {"image.generate", "image.edit"}:
+    if capability in {"image.generate", "image.edit", "image.upscale"}:
         bucket["image_output_count"] += max(int(output_count or 0), 0)
 
 

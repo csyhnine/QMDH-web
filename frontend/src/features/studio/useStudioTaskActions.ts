@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from "react";
 
-import { type Asset, type Task } from "../../api";
+import { api, type Asset, type Task } from "../../api";
 import type { StudioFormState } from "./studioTypes";
 import {
   applyTaskToComposerState,
@@ -8,6 +8,11 @@ import {
   regenerateTaskFeedback,
 } from "./studioTaskActionUtils";
 import type { UseStudioTaskActionsOptions } from "./studioTaskActionsTypes";
+import {
+  buildUpscaleTaskCreatePayload,
+  canUpscaleAsset,
+  findUpscaleProvider,
+} from "./studioUpscaleActions";
 import { useStudioTaskSubmission } from "./useStudioTaskSubmission";
 
 export type StudioTaskActionsState = ReturnType<typeof useStudioTaskActions>;
@@ -30,6 +35,7 @@ export function useStudioTaskActions({
   submissionInFlightRef,
 }: UseStudioTaskActionsOptions) {
   const [regeneratingTaskId, setRegeneratingTaskId] = useState<number | null>(null);
+  const [upscalingAssetKey, setUpscalingAssetKey] = useState<string | null>(null);
   const { submitStudioTask } = useStudioTaskSubmission({
     hasAutoPositionedRef,
     loadData,
@@ -83,6 +89,51 @@ export function useStudioTaskActions({
     }
   }
 
+  async function upscaleAsset(task: Task, asset: Asset) {
+    if (!canUpscaleAsset(asset)) {
+      historyFeedback.pushFeedback(task.id, "upscale", "error", "当前素材无法放大，请换一张图片重试。");
+      return;
+    }
+    if (submissionInFlightRef.current) {
+      historyFeedback.pushFeedback(task.id, "upscale", "info", "当前已有任务在提交，请稍候。");
+      return;
+    }
+
+    const provider = findUpscaleProvider(providers);
+    if (!provider) {
+      historyFeedback.pushFeedback(
+        task.id,
+        "upscale",
+        "error",
+        "未配置高清放大服务，请先在设置中心接入 Bigjpg。"
+      );
+      return;
+    }
+
+    const assetKey = `${task.id}:${asset.id}`;
+    setUpscalingAssetKey(assetKey);
+    historyFeedback.setPendingAction(task.id, "upscale");
+    try {
+      await api.createTask(
+        buildUpscaleTaskCreatePayload({
+          asset,
+          projectCode: studioForm.projectCode,
+          provider,
+          sourceTask: task,
+        })
+      );
+      hasAutoPositionedRef.current = false;
+      await loadData({ force: true });
+      historyFeedback.pushFeedback(task.id, "upscale", "success", "已提交高清放大任务。");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "高清放大提交失败，请稍后重试。";
+      historyFeedback.pushFeedback(task.id, "upscale", "error", message);
+    } finally {
+      setUpscalingAssetKey((current) => (current === assetKey ? null : current));
+      historyFeedback.setPendingAction(task.id, null);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await submitStudioTask(studioForm);
@@ -94,5 +145,7 @@ export function useStudioTaskActions({
     regeneratingTaskId,
     regenerateTask,
     submitStudioTask,
+    upscaleAsset,
+    upscalingAssetKey,
   };
 }

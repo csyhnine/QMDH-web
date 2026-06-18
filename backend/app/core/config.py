@@ -121,6 +121,8 @@ class Settings(BaseSettings):
     openai_image_timeout_seconds: float = 300.0
     openai_image_quality: str = "medium"
     openai_image_output_format: str = "png"
+    bigjpg_api_key: str = ""
+    bigjpg_base_url: str = "https://bigjpg.com/api"
     image_provider_profiles_json: str = "[]"
     auth_users_json: str = (
         '[{"name":"reviewer","token":"dev-reviewer-token","role":"reviewer","project_codes":["QMDH-001"]}]'
@@ -191,6 +193,23 @@ class Settings(BaseSettings):
                 timeout_seconds=self.openai_image_timeout_seconds,
                 quality=self.openai_image_quality,
                 output_format=self.openai_image_output_format,
+            )
+
+        if self.bigjpg_api_key.strip():
+            profiles["bigjpg"] = ImageProviderProfile(
+                provider_name="bigjpg",
+                display_name="Bigjpg 高清放大",
+                api_key=self.bigjpg_api_key.strip(),
+                base_url=normalize_provider_base_url(self.bigjpg_base_url.strip() or "https://bigjpg.com/api"),
+                model_name="bigjpg",
+                timeout_seconds=600.0,
+                output_format="png",
+                pricing_currency="CNY",
+                pricing_unit="per_request",
+                unit_price=0.0,
+                adapter_kind="bigjpg",
+                capabilities=("image.upscale",),
+                strategies={"image.upscale": "bigjpg_upscale"},
             )
 
         raw_profiles = self.image_provider_profiles_json.strip()

@@ -1,6 +1,7 @@
 import type { Asset, Provider, Task } from "../../api";
 import { isGrokSkuId } from "./grokVideoUtils";
-import { isRuntimeStudioProvider } from "./modelAdminUtils";import { IMAGE_EDIT_WORKFLOW_KEY, VIDEO_WORKFLOW_KEY } from "./studioConstants";
+import { isRuntimeStudioProvider } from "./modelAdminUtils";
+import { IMAGE_EDIT_WORKFLOW_KEY, IMAGE_UPSCALE_WORKFLOW_KEY, VIDEO_WORKFLOW_KEY } from "./studioConstants";
 import { inferStyleFromAsset } from "./studioAssetUtils";
 import { inferRequestedImageCount, taskReferenceImages, taskResultString } from "./studioTaskUtils";
 import type { ReferenceUploadItem, StudioFormState } from "./studioTypes";
@@ -35,6 +36,7 @@ export function resolveStudioProviderForForm(
 function creationModeForTask(task: Task): StudioFormState["creationMode"] {
   if (task.workflow_key === VIDEO_WORKFLOW_KEY) return "video";
   if (task.workflow_key === IMAGE_EDIT_WORKFLOW_KEY) return "edit";
+  if (task.workflow_key === IMAGE_UPSCALE_WORKFLOW_KEY) return "generate";
   return "generate";
 }
 
@@ -77,6 +79,7 @@ export function buildStudioFormFromTask({
       notes: taskResultString(task, "motion_prompt") || taskResultString(task, "prompt_supplement") || studioForm.notes,
       referenceImages: nextUploads.map((item) => item.storagePath),
       grokVideoSku: isGrokSkuId(restoredGrokSku) ? restoredGrokSku : studioForm.grokVideoSku,
-    },    nextUploads,
+    },
+    nextUploads,
   };
 }

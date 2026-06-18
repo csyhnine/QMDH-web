@@ -351,7 +351,7 @@ function SettingsRoute() {
         tasks={tasks}
         providerProfiles={providerProfiles}
         users={users}
-        onRefresh={() => void refresh()}
+        onRefresh={refresh}
       />
     </AppShell>
   );

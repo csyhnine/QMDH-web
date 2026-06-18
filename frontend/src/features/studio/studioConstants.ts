@@ -5,6 +5,7 @@ import type {
 
 export const IMAGE_WORKFLOW_KEY = "image-generate";
 export const IMAGE_EDIT_WORKFLOW_KEY = "image-edit";
+export const IMAGE_UPSCALE_WORKFLOW_KEY = "image-upscale";
 export const VIDEO_WORKFLOW_KEY = "video-generate";
 
 export const initialState: LoadState = {
@@ -31,6 +32,12 @@ export const resolutionOptions = [
   { id: "2k", label: "高清 2K" },
   { id: "4k", label: "超清 4K" },
 ];
+
+export const defaultUpscaleOptions = {
+  style: "photo",
+  noise: "1",
+  scale: "2",
+} as const;
 
 export const defaultStudioForm: StudioFormState = {
   creationMode: "generate",

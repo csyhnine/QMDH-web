@@ -72,6 +72,25 @@ def decrypt_value_or_raise(encrypted: str) -> str:
         return encrypted
 
 
+def normalize_provider_api_key(raw: str) -> str:
+    """Strip common paste artifacts such as `X-API-KEY:` prefixes from provider secrets."""
+    value = (raw or "").strip()
+    if not value:
+        return ""
+
+    lowered = value.lower()
+    for prefix in (
+        "x-api-key:",
+        "api-key:",
+        "apikey:",
+        "authorization: bearer ",
+        "bearer ",
+    ):
+        if lowered.startswith(prefix):
+            return value[len(prefix) :].strip()
+    return value
+
+
 def is_encrypted(value: str) -> bool:
     """Check if a value appears to be encrypted (Fernet tokens have specific format)."""
     if not value:

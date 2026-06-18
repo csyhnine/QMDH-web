@@ -354,6 +354,15 @@ def seed_initial_data(db: Session) -> None:
             {"demo_fields": ["source_image", "mask", "edit_prompt"]},
         ),
         (
+            "image-upscale",
+            "高清放大",
+            "调用 Bigjpg AI 超分，将效果图放大到 2x / 4x 等更高分辨率。",
+            "image",
+            "P1",
+            "image.upscale",
+            {"demo_fields": ["source_image", "upscale_style", "upscale_noise", "upscale_scale"]},
+        ),
+        (
             "video-generate",
             "视频生成",
             "将图像素材和镜头说明转成漫游视频或演示短片任务。",

@@ -35,6 +35,7 @@ from app.services.provider_adapters.base import (
     ProviderExecutionError,
     RequestDiagnostics,
 )
+from app.services.provider_adapters.bigjpg_upscale import BigjpgUpscaleProviderAdapter
 from app.services.provider_adapters.dashscope_video import DashScopeVideoProviderAdapter
 from app.services.provider_adapters.haodeya_grok_video import HaodeyaGrokVideoProviderAdapter
 from app.services.provider_adapters.volcengine_ark_video import VolcengineArkVideoProviderAdapter
@@ -80,6 +81,7 @@ class SimulatedProviderAdapter(ProviderAdapter):
         base_latency = {
             "image.generate": randint(18_000, 45_000),
             "image.edit": randint(12_000, 30_000),
+            "image.upscale": randint(20_000, 90_000),
             "document.generate": randint(4_000, 9_000),
             "text.generate": randint(2_000, 6_000),
             "video.generate": randint(60_000, 120_000),
@@ -87,6 +89,7 @@ class SimulatedProviderAdapter(ProviderAdapter):
         base_cost = {
             "image.generate": 0.0,
             "image.edit": 0.0,
+            "image.upscale": 0.0,
             "document.generate": 0.0,
             "text.generate": 0.0,
             "video.generate": 0.0,
@@ -239,8 +242,11 @@ class StrategyProviderAdapter(ProviderAdapter):
         self.haodeya_grok_video_adapter = HaodeyaGrokVideoProviderAdapter(definition, profile)
         self.ark_video_adapter = VolcengineArkVideoProviderAdapter(definition, profile)
         self.jimeng_video_adapter = VolcengineJimengVideoProviderAdapter(definition, profile)
+        self.bigjpg_upscale_adapter = BigjpgUpscaleProviderAdapter(definition, profile)
 
     def execute(self, capability: str, payload: dict) -> ExecutionOutcome:
+        if capability == "image.upscale":
+            return self.bigjpg_upscale_adapter.execute(capability, payload)
         if capability == "video.generate":
             strategy = resolve_strategy_for_capability(
                 capability=capability,
@@ -294,7 +300,14 @@ def _materialize_preview_asset(*, provider_name: str, capability: str, prompt_su
 
 def get_provider_adapter(provider_name: str, db: Session | None = None) -> ProviderAdapter:
     definition = get_provider_definition(provider_name, db)
-    if definition.adapter_kind in {"openai_compatible", "dashscope_native", "volcengine_ark", "jimeng_native", "haodeya_grok"}:
+    if definition.adapter_kind in {
+        "openai_compatible",
+        "dashscope_native",
+        "volcengine_ark",
+        "jimeng_native",
+        "haodeya_grok",
+        "bigjpg",
+    }:
         return StrategyProviderAdapter(definition, get_image_provider_profile(provider_name, db))
     return SimulatedProviderAdapter(definition)
 
@@ -650,6 +663,9 @@ def _task_payload_result_fields(payload: dict) -> dict[str, str]:
         "resolution": str(payload.get("resolution") or "").strip(),
         "deliverable": str(payload.get("deliverable") or "").strip(),
         "prompt_supplement": str(payload.get("prompt_supplement") or "").strip(),
+        "upscale_style": str(payload.get("upscale_style") or "").strip(),
+        "upscale_noise": str(payload.get("upscale_noise") or "").strip(),
+        "upscale_x2": str(payload.get("upscale_x2") or "").strip(),
     }
 
 
@@ -1106,6 +1122,7 @@ def _asset_type_for_capability(capability: str) -> AssetType | None:
     mapping = {
         "image.generate": AssetType.image,
         "image.edit": AssetType.image,
+        "image.upscale": AssetType.image,
         "video.generate": AssetType.video,
     }
     return mapping.get(capability)
@@ -1263,6 +1280,8 @@ def _build_asset_tags(task: Task, workflow: Workflow) -> list[str]:
 
 def _build_asset_name(task: Task, workflow: Workflow, index: int, total: int) -> str:
     prefix = "generated" if workflow.provider_capability == "image.generate" else "edited"
+    if workflow.provider_capability == "image.upscale":
+        prefix = "upscaled"
     if workflow.provider_capability == "video.generate":
         prefix = "video"
     suffix = f" #{index}" if total > 1 else ""

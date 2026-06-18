@@ -1,6 +1,7 @@
 import type { Asset, Task } from "../../api";
 import type { StudioDesignerViewProps } from "./studioDesignerViewTypes";
 import type { StudioHistoryCanvasProps } from "./studioHistoryCanvasTypes";
+import { findUpscaleProvider } from "./studioUpscaleActions";
 
 export function buildStudioHistoryCanvasProps({
   canManageUsers,
@@ -47,6 +48,8 @@ export function buildStudioHistoryCanvasProps({
     studioScrollPaneRef: studioView.studioScrollPaneRef,
     submitting,
     tasks: filteredTasks,
+    upscaleEnabled: Boolean(findUpscaleProvider(state.providers)),
+    upscalingAssetKey: taskActions.upscalingAssetKey,
     workspaceName,
     onApplyTaskToComposer: taskActions.applyTaskToComposer,
     onBookmarkAsset: (taskId, assetId) => void galleryActions.bookmarkAsset(taskId, assetId),
@@ -55,5 +58,6 @@ export function buildStudioHistoryCanvasProps({
     onPreviewAsset: (task: Task, asset: Asset) => setGalleryPreview({ task, asset }),
     onRegenerateTask: (task, asset) => void taskActions.regenerateTask(task, asset),
     onShareAsset: galleryActions.openShareConfirm,
+    onUpscaleAsset: (task, asset) => void taskActions.upscaleAsset(task, asset),
   };
 }

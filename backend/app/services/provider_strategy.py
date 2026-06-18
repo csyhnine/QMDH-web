@@ -17,6 +17,7 @@ DASHSCOPE_ASYNC_VIDEO_STRATEGY = "dashscope_async_video"
 VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY = "volcengine_ark_video_tasks"
 VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY = "volcengine_cv_jimeng_video"
 HAODEYA_GROK_VIDEO_STRATEGY = "haodeya_grok_video"
+BIGJPG_UPSCALE_STRATEGY = "bigjpg_upscale"
 
 KNOWN_STRATEGIES = {
     OPENAI_CHAT_STRATEGY,
@@ -28,6 +29,7 @@ KNOWN_STRATEGIES = {
     VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
     VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
     HAODEYA_GROK_VIDEO_STRATEGY,
+    BIGJPG_UPSCALE_STRATEGY,
 }
 
 FORBIDDEN_BASE_URL_SUFFIXES = (
@@ -42,6 +44,7 @@ _CAPABILITY_ALIASES = {
     CHAT_CAPABILITY: CHAT_CAPABILITY,
     "image.generate": "image.generate",
     "image.edit": "image.edit",
+    "image.upscale": "image.upscale",
     "video.generate": "video.generate",
 }
 
@@ -49,6 +52,7 @@ _ALLOWED_STRATEGIES_BY_CAPABILITY = {
     CHAT_CAPABILITY: {OPENAI_CHAT_STRATEGY},
     "image.generate": {OPENAI_IMAGES_STRATEGY, CHAT_MODALITIES_IMAGE_STRATEGY},
     "image.edit": {OPENAI_IMAGES_STRATEGY, OPENAI_IMAGE_EDITS_STRATEGY, CHAT_MODALITIES_IMAGE_EDIT_STRATEGY},
+    "image.upscale": {BIGJPG_UPSCALE_STRATEGY},
     "video.generate": {
         DASHSCOPE_ASYNC_VIDEO_STRATEGY,
         VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
@@ -138,6 +142,11 @@ def profile_prefers_haodeya_grok_video(*, provider_name: str, model_name: str, b
     }
 
 
+def profile_prefers_bigjpg_upscale(*, provider_name: str, model_name: str, base_url: str) -> bool:
+    identity = f"{provider_name} {model_name} {base_url}".lower()
+    return "bigjpg" in identity
+
+
 def default_strategy_for_capability(
     *,
     capability: str,
@@ -167,6 +176,12 @@ def default_strategy_for_capability(
         ):
             return OPENAI_IMAGE_EDITS_STRATEGY
         return OPENAI_IMAGES_STRATEGY
+    if normalized == "image.upscale" and profile_prefers_bigjpg_upscale(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+    ):
+        return BIGJPG_UPSCALE_STRATEGY
     if normalized == "video.generate" and profile_prefers_dashscope_video(
         provider_name=provider_name,
         model_name=model_name,

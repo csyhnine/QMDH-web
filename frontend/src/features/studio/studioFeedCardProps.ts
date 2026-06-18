@@ -32,6 +32,10 @@ export function buildStudioFeedCardLayoutProps(
       virtualProgress: cardState.virtualProgress,
       onAssetPreview: props.onAssetPreview,
       onReuse: props.onReuse,
+      onUpscaleAsset: props.onUpscaleAsset,
+      upscaleDisabled: props.upscaleDisabled,
+      upscaleEnabled: props.upscaleEnabled,
+      upscalingAssetKey: props.upscalingAssetKey,
     },
     footerProps: {
       asset: props.asset,

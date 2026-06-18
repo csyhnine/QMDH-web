@@ -6,7 +6,7 @@ export function providerGroupLabel(provider: Provider): string {
   if (name.includes("firered")) return "魔搭 / FireRed";
   if (name.includes("z_image") || name.includes("z-image")) return "魔搭 / 造相 Z";
   if (name.includes("qwen")) return "魔搭 / Qwen";
-  if (name.includes("modelscope")) return "魔搭 / 其他";
+  if (name.includes("bigjpg")) return "Bigjpg 高清放大";
   return "其他真实模型";
 }
 
@@ -28,6 +28,10 @@ export function isRuntimeImageProvider(provider: Provider): boolean {
 
 export function isRuntimeVideoProvider(provider: Provider): boolean {
   return provider.outbound && provider.capabilities.includes("video.generate");
+}
+
+export function isRuntimeUpscaleProvider(provider: Provider): boolean {
+  return provider.outbound && provider.capabilities.includes("image.upscale");
 }
 
 export function isRuntimeStudioProvider(provider: Provider, creationMode: "generate" | "edit" | "video"): boolean {

@@ -13,6 +13,9 @@ export default function StudioHistoryFeed({
   pendingActionByTaskId,
   feedbackByTaskId,
   onRegenerateTask,
+  onUpscaleAsset,
+  upscaleEnabled,
+  upscalingAssetKey,
   onBookmarkAsset,
   onShareAsset,
   onDeleteTask,
@@ -35,6 +38,9 @@ export default function StudioHistoryFeed({
           pendingActionByTaskId={pendingActionByTaskId}
           feedbackByTaskId={feedbackByTaskId}
           onRegenerateTask={onRegenerateTask}
+          onUpscaleAsset={onUpscaleAsset}
+          upscaleEnabled={upscaleEnabled}
+          upscalingAssetKey={upscalingAssetKey}
           onBookmarkAsset={onBookmarkAsset}
           onShareAsset={onShareAsset}
           onDeleteTask={onDeleteTask}

@@ -13,6 +13,7 @@ from app.core.encryption import (
     EncryptionKeyUnavailableError,
     decrypt_value_or_raise,
     encrypt_value,
+    normalize_provider_api_key,
 )
 from app.database import get_db
 from app.models import ProviderPricingRule, ProviderProfile
@@ -102,7 +103,7 @@ def _to_profile_out(profile: ProviderProfile) -> ProviderProfileOut:
     has_stored_key = bool(profile.api_key)
 
     try:
-        decrypted_key = decrypt_value_or_raise(profile.api_key)
+        decrypted_key = normalize_provider_api_key(decrypt_value_or_raise(profile.api_key))
     except (EncryptionKeyUnavailableError, EncryptedValueDecodeError):
         decrypted_key = ""
 
@@ -479,8 +480,8 @@ def create_provider_profile(
     profile = ProviderProfile(
         provider_name=payload.provider_name.strip(),
         display_name=(payload.display_name or payload.model_name).strip(),
-        api_key=encrypt_value(payload.api_key.strip()),
-        api_secret=encrypt_value(payload.api_secret.strip()) if payload.api_secret.strip() else "",
+        api_key=encrypt_value(normalize_provider_api_key(payload.api_key)),
+        api_secret=encrypt_value(normalize_provider_api_key(payload.api_secret)) if payload.api_secret.strip() else "",
         base_url=normalized_base_url,
         model_name=payload.model_name.strip(),
         adapter_kind=payload.adapter_kind.strip() or "openai_compatible",
@@ -530,12 +531,12 @@ def update_provider_profile(
 
     updates = payload.model_dump(exclude_unset=True)
     if "api_key" in updates:
-        api_key = (updates.pop("api_key") or "").strip()
+        api_key = normalize_provider_api_key(updates.pop("api_key") or "")
         if api_key:
             _require_encryption_key_configured("updated")
             profile.api_key = encrypt_value(api_key)
     if "api_secret" in updates:
-        api_secret = (updates.pop("api_secret") or "").strip()
+        api_secret = normalize_provider_api_key(updates.pop("api_secret") or "")
         if api_secret:
             _require_encryption_key_configured("updated")
             profile.api_secret = encrypt_value(api_secret)

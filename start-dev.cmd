@@ -138,6 +138,15 @@ if not exist "%FRONTEND_DIR%\node_modules" (
   exit /b 1
 )
 
+if not exist "%FRONTEND_DIR%\node_modules\.bin\vite.cmd" (
+  echo Frontend dependencies look incomplete or corrupted:
+  echo   %FRONTEND_DIR%\node_modules\.bin\vite.cmd
+  echo Repair them with:
+  echo   cd /d "%FRONTEND_DIR%"
+  echo   npm install
+  exit /b 1
+)
+
 exit /b 0
 
 :cleanup_qmdh_dev_processes

@@ -4,6 +4,7 @@ import { filterGrokVideoProviders } from "./grokVideoUtils";
 import { groupProviders, isRuntimeStudioProvider } from "./modelAdminUtils";
 import {
   IMAGE_EDIT_WORKFLOW_KEY,
+  IMAGE_UPSCALE_WORKFLOW_KEY,
   IMAGE_WORKFLOW_KEY,
   VIDEO_WORKFLOW_KEY,
   resolutionOptions,
@@ -65,7 +66,11 @@ export function deriveStudioViewState({
   const scopedTasks = tasks.filter((task) => {
     if (task.project_code !== studioForm.projectCode) return false;
     if (studioForm.creationMode === "video") return task.workflow_key === VIDEO_WORKFLOW_KEY;
-    return task.workflow_key === IMAGE_WORKFLOW_KEY || task.workflow_key === IMAGE_EDIT_WORKFLOW_KEY;
+    return (
+      task.workflow_key === IMAGE_WORKFLOW_KEY ||
+      task.workflow_key === IMAGE_EDIT_WORKFLOW_KEY ||
+      task.workflow_key === IMAGE_UPSCALE_WORKFLOW_KEY
+    );
   });
   const assetsByTaskId = scopedAssets.reduce((map, asset) => {
     if (asset.source_task_id === null) return map;

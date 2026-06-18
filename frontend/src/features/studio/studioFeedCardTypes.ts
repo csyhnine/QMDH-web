@@ -15,6 +15,10 @@ export type StudioFeedCardProps = {
   onShare: () => void;
   onDelete: () => void;
   onAssetPreview?: (asset: Asset) => void;
+  onUpscaleAsset?: (asset: Asset) => void;
+  upscaleDisabled?: boolean;
+  upscaleEnabled?: boolean;
+  upscalingAssetKey?: string | null;
   anchorRef?: RefObject<HTMLElement | null>;
   pendingAction?: HistoryActionKey | null;
   feedback?: HistoryActionFeedback | null;
@@ -55,7 +59,7 @@ export type StudioFeedCardFooterProps = Pick<
 
 export type StudioFeedCardResultProps = Pick<
   StudioFeedCardProps,
-  "galleryAssets" | "onAssetPreview" | "onReuse" | "task"
+  "galleryAssets" | "onAssetPreview" | "onReuse" | "onUpscaleAsset" | "task" | "upscaleDisabled" | "upscaleEnabled" | "upscalingAssetKey"
 > & {
   showRunningState: boolean;
   virtualProgress: number;

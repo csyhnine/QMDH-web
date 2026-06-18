@@ -1,4 +1,8 @@
+import { useMemo, useState } from "react";
+
 import { type ManagedUser, type ProviderProfileRecord, type Task } from "../../api";
+import BigjpgIntegrationPanel, { bigjpgIntegrationStatus, isBigjpgProfile } from "./BigjpgIntegrationPanel";
+import { integrationMenuItems, type IntegrationMenuKey } from "./settingsIntegrationConstants";
 
 function percentOf(value: number, total: number): number {
   if (total === 0) return 0;
@@ -11,8 +15,10 @@ export type SettingsPageProps = {
   tasks: Task[];
   providerProfiles: ProviderProfileRecord[];
   users: ManagedUser[];
-  onRefresh: () => void;
+  onRefresh: () => Promise<void>;
 };
+
+type SettingsTab = "integrations" | "overview";
 
 export default function SettingsPage({
   userCanUseOpsViews,
@@ -22,14 +28,27 @@ export default function SettingsPage({
   users,
   onRefresh,
 }: SettingsPageProps) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>("integrations");
+  const [activeIntegration, setActiveIntegration] = useState<IntegrationMenuKey>("bigjpg");
+
+  const bigjpgProfile = useMemo(
+    () => providerProfiles.find((profile) => isBigjpgProfile(profile)),
+    [providerProfiles]
+  );
+  const bigjpgStatus = bigjpgIntegrationStatus(bigjpgProfile);
+  const connectedIntegrations = integrationMenuItems.filter((item) => {
+    if (item.key !== "bigjpg") return false;
+    return bigjpgStatus.tone === "ready";
+  }).length;
+
   return (
     <section className="admin-page">
       <header className="admin-page-head">
         <div>
           <h1>设置中心</h1>
-          <p>查看当前系统配置、账号控制范围和运行状态摘要。</p>
+          <p>管理外部工具接入、查看系统运行摘要。集成配置保存后立即作用于 Studio 与任务执行。</p>
         </div>
-        <button type="button" className="admin-primary-button" onClick={onRefresh}>
+        <button type="button" className="admin-primary-button" onClick={() => void onRefresh()}>
           刷新状态
         </button>
       </header>
@@ -39,121 +58,130 @@ export default function SettingsPage({
       ) : (
         <>
           <div className="settings-tabs">
-            <button type="button" className="active">
-              系统设置
+            <button
+              type="button"
+              className={activeTab === "integrations" ? "active" : ""}
+              onClick={() => setActiveTab("integrations")}
+            >
+              外部工具集成
             </button>
-            <button type="button">权限说明</button>
-            <button type="button">数据概览</button>
-            <button type="button">安全设置</button>
-            <button type="button">集成配置</button>
+            <button
+              type="button"
+              className={activeTab === "overview" ? "active" : ""}
+              onClick={() => setActiveTab("overview")}
+            >
+              运行概览
+            </button>
           </div>
-          <div className="settings-layout">
-            <aside className="settings-menu">
-              {["基本信息", "界面设置", "时区与日期", "计量单位", "语言设置", "系统维护"].map((item, index) => (
-                <button key={item} type="button" className={index === 0 ? "active" : ""}>
-                  {item}
-                </button>
-              ))}
-            </aside>
 
-            <section className="settings-main">
-              <article className="admin-table-panel settings-info-card">
-                <div className="admin-detail-head">
-                  <h2>基本信息</h2>
-                  <p>这里只展示当前系统事实，不在这个页面直接写入配置。</p>
-                </div>
-                <div className="settings-field-grid">
-                  <label className="composer-menu-field">
-                    <span>系统名称</span>
-                    <input value="QMDH 设计师工作台" readOnly />
-                  </label>
-                  <label className="composer-menu-field">
-                    <span>组织名称</span>
-                    <input value="QMDH Studio" readOnly />
-                  </label>
-                  <label className="composer-menu-field composer-menu-field-full">
-                    <span>产品定位</span>
-                    <input value="单用户中心的 AI 生成工作台，管理员负责后台面板和账号范围控制。" readOnly />
-                  </label>
-                  <label className="composer-menu-field">
-                    <span>时区</span>
-                    <input value="UTC+08:00 Asia/Shanghai" readOnly />
-                  </label>
-                  <label className="composer-menu-field">
-                    <span>版本</span>
-                    <input value="MVP 1.0" readOnly />
-                  </label>
-                </div>
-              </article>
+          {activeTab === "integrations" ? (
+            <div className="settings-layout settings-layout-integrations">
+              <aside className="settings-menu">
+                {integrationMenuItems.map((item) => {
+                  const status =
+                    item.key === "bigjpg" ? bigjpgIntegrationStatus(bigjpgProfile) : { label: "待接入", tone: "idle" as const };
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className={activeIntegration === item.key ? "active" : ""}
+                      onClick={() => setActiveIntegration(item.key)}
+                    >
+                      <span className="settings-menu-item-label">{item.label}</span>
+                      <small className={`settings-integration-badge is-${status.tone}`}>{status.label}</small>
+                    </button>
+                  );
+                })}
+              </aside>
 
-              <article className="admin-table-panel settings-switch-card">
-                <div className="admin-detail-head">
-                  <h2>当前能力</h2>
-                  <p>这些开关表示当前代码和接口已经具备的能力概览。</p>
-                </div>
-                <div className="settings-switch-grid">
-                  {([
-                    ["模型配置", "管理员可以维护 Provider 与模型配置。", true],
-                    ["账号管理", "管理员可以维护账号、角色、状态和额度。", true],
-                    ["个人历史隔离", "设计师只能看到自己的任务和资产历史。", true],
-                    ["个人项目分组", "左侧个人项目只作为任务分组容器使用。", true],
-                    ["项目成员协作", "已不再作为产品能力暴露。", false],
-                    ["导出报告", "当前保留入口，尚未接入完整导出。", false],
-                    ["维护模式", "当前未接入真实切换开关。", false],
-                  ] as const).map(([title, desc, enabled]) => (
-                    <div key={title} className="settings-switch-row">
-                      <span>
-                        <strong>{title}</strong>
-                        <small>{desc}</small>
-                      </span>
-                      <em className={enabled ? "on" : ""}>{enabled ? "ON" : "OFF"}</em>
-                    </div>
-                  ))}
-                </div>
-              </article>
-            </section>
-
-            <aside className="admin-detail-panel settings-resource-panel">
-              <div className="admin-detail-head">
-                <h2>系统资源使用</h2>
-                <p>基于当前运行态和业务数据做的轻量摘要。</p>
-              </div>
-              <div className="resource-meter">
-                <span>任务记录</span>
-                <b>
-                  <i style={{ width: `${percentOf(tasks.length, 200)}%` }} />
-                </b>
-                <em>{tasks.length} / 200</em>
-              </div>
-              <div className="resource-meter">
-                <span>模型配置</span>
-                <b>
-                  <i style={{ width: `${percentOf(providerProfiles.length, 20)}%` }} />
-                </b>
-                <em>{providerProfiles.length} / 20</em>
-              </div>
-              <div className="resource-meter">
-                <span>账号数量</span>
-                <b>
-                  <i style={{ width: `${percentOf(users.length, 50)}%` }} />
-                </b>
-                <em>{users.length} / 50</em>
-              </div>
-              <div className="settings-quick-actions">
-                <button type="button" onClick={() => (window.location.href = "/admin/models")}>
-                  模型管理
-                </button>
-                {userCanManageUsers ? (
-                  <button type="button" onClick={() => (window.location.href = "/admin/users")}>
-                    账号管理
-                  </button>
+              <section className="settings-main">
+                {activeIntegration === "bigjpg" ? (
+                  <BigjpgIntegrationPanel profile={bigjpgProfile} onRefresh={onRefresh} />
                 ) : null}
-                <button type="button" onClick={() => (window.location.href = "/admin/dashboard")}>
-                  运营看板
-                </button>
-              </div>
-            </aside>
-          </div>
+              </section>
+
+              <aside className="admin-detail-panel settings-resource-panel">
+                <div className="admin-detail-head">
+                  <h2>集成状态</h2>
+                  <p>已接入的外部能力会出现在 Studio 对应模式中。</p>
+                </div>
+                <div className={`settings-integration-status-card is-${bigjpgStatus.tone}`}>
+                  <strong>Bigjpg 高清放大</strong>
+                  <span>{bigjpgStatus.label}</span>
+                  <p>{bigjpgStatus.detail}</p>
+                </div>
+                <div className="resource-meter">
+                  <span>已接入工具</span>
+                  <b>
+                    <i style={{ width: `${percentOf(connectedIntegrations, integrationMenuItems.length)}%` }} />
+                  </b>
+                  <em>
+                    {connectedIntegrations} / {integrationMenuItems.length}
+                  </em>
+                </div>
+                <div className="settings-quick-actions">
+                  <button type="button" onClick={() => (window.location.href = "/studio/generate")}>
+                    打开 Studio
+                  </button>
+                  <button type="button" onClick={() => (window.location.href = "/admin/models")}>
+                    模型管理
+                  </button>
+                </div>
+              </aside>
+            </div>
+          ) : (
+            <div className="settings-layout settings-layout-overview">
+              <section className="settings-main settings-main-wide">
+                <article className="admin-table-panel settings-info-card">
+                  <div className="admin-detail-head">
+                    <h2>运行摘要</h2>
+                    <p>基于当前后台数据的轻量概览。</p>
+                  </div>
+                  <div className="settings-field-grid">
+                    <label className="composer-menu-field">
+                      <span>任务记录</span>
+                      <input value={String(tasks.length)} readOnly />
+                    </label>
+                    <label className="composer-menu-field">
+                      <span>模型配置</span>
+                      <input value={String(providerProfiles.length)} readOnly />
+                    </label>
+                    <label className="composer-menu-field">
+                      <span>账号数量</span>
+                      <input value={String(users.length)} readOnly />
+                    </label>
+                    <label className="composer-menu-field">
+                      <span>外部集成</span>
+                      <input value={`${connectedIntegrations} 项已接入`} readOnly />
+                    </label>
+                  </div>
+                </article>
+
+                <article className="admin-table-panel settings-switch-card">
+                  <div className="admin-detail-head">
+                    <h2>平台能力</h2>
+                    <p>当前版本已具备的主要模块。</p>
+                  </div>
+                  <div className="settings-switch-grid">
+                    {([
+                      ["外部工具集成", "在设置中心维护 Bigjpg 等第三方 API。", true],
+                      ["高清放大", "历史卡片「放大」按钮可提交 Bigjpg 超分任务。", bigjpgStatus.tone === "ready"],
+                      ["模型配置", "管理员可在模型管理维护 Provider。", true],
+                      ["账号管理", "管理员可维护账号、角色与额度。", userCanManageUsers],
+                    ] as const).map(([title, desc, enabled]) => (
+                      <div key={title} className="settings-switch-row">
+                        <span>
+                          <strong>{title}</strong>
+                          <small>{desc}</small>
+                        </span>
+                        <em className={enabled ? "on" : ""}>{enabled ? "ON" : "OFF"}</em>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              </section>
+            </div>
+          )}
         </>
       )}
     </section>

@@ -1701,6 +1701,15 @@ button {
 
 .feed-gallery-item {
   position: relative;
+  border: none;
+  border-radius: 20px;
+  overflow: hidden;
+  background: transparent;
+}
+
+.feed-gallery-preview {
+  display: block;
+  width: 100%;
   padding: 0;
   border: none;
   border-radius: 20px;
@@ -1710,13 +1719,46 @@ button {
   text-align: left;
 }
 
-.feed-card-compact .feed-gallery-item {
+.feed-card-compact .feed-gallery-item,
+.feed-card-compact .feed-gallery-preview {
   border-radius: 16px;
 }
 
-.feed-gallery-item:focus-visible {
+.feed-gallery-preview:focus-visible {
   outline: 3px solid rgba(37, 99, 235, 0.35);
   outline-offset: 2px;
+}
+
+.feed-gallery-upscale-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: white;
+  background: rgba(15, 23, 42, 0.72);
+  cursor: pointer;
+}
+
+.feed-gallery-upscale-button:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.92);
+}
+
+.feed-gallery-upscale-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.feed-card-compact .feed-gallery-upscale-button {
+  top: 8px;
+  right: 8px;
+  padding: 5px 8px;
+  font-size: 0.68rem;
 }
 
 .feed-gallery-zoom-hint {
@@ -5444,11 +5486,13 @@ button {
 
 .settings-menu button {
   min-height: 46px;
-  padding: 0 14px;
+  padding: 10px 14px;
   border-radius: 10px;
   color: #344054;
   text-align: left;
   font-weight: 700;
+  display: grid;
+  gap: 4px;
 }
 
 .settings-menu button.active {
@@ -5510,6 +5554,137 @@ button {
 .settings-switch-row em.on {
   background: #eafaf2;
   color: #10a760;
+}
+
+.settings-layout-integrations {
+  grid-template-columns: 280px minmax(0, 1fr) 360px;
+}
+
+.settings-layout-overview .settings-main-wide {
+  grid-column: 1 / -1;
+}
+
+.settings-menu-item-label {
+  display: block;
+}
+
+.settings-integration-badge {
+  color: #667085;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.settings-integration-badge.is-ready {
+  color: #10a760;
+}
+
+.settings-integration-badge.is-warning {
+  color: #d97706;
+}
+
+.settings-integration-badge.is-idle {
+  color: #98a2b3;
+}
+
+.settings-integration-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.settings-integration-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+}
+
+.settings-integration-toggle small {
+  display: block;
+  margin-top: 4px;
+  color: #667085;
+}
+
+.settings-integration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.settings-integration-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+  text-decoration: none;
+}
+
+.settings-integration-notes {
+  margin: 18px 0 0;
+  padding-left: 18px;
+  color: #475467;
+  display: grid;
+  gap: 8px;
+}
+
+.settings-integration-status-card {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid #e6ebf2;
+  background: #f8fafc;
+  display: grid;
+  gap: 6px;
+}
+
+.settings-integration-status-card strong {
+  font-size: 1rem;
+}
+
+.settings-integration-status-card span {
+  color: #2563eb;
+  font-weight: 800;
+}
+
+.settings-integration-status-card p {
+  margin: 0;
+  color: #667085;
+  line-height: 1.5;
+}
+
+.settings-integration-status-card.is-ready {
+  border-color: #b7ebd2;
+  background: #f3fcf7;
+}
+
+.settings-integration-status-card.is-ready span {
+  color: #10a760;
+}
+
+.settings-integration-status-card.is-warning {
+  border-color: #f8dfac;
+  background: #fffaf0;
+}
+
+.settings-integration-status-card.is-warning span {
+  color: #d97706;
+}
+
+.settings-integration-status-card.is-idle span {
+  color: #98a2b3;
+}
+
+.floating-success {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #ecfdf3;
+  color: #027a48;
+  border: 1px solid #abefc6;
 }
 
 .resource-meter {

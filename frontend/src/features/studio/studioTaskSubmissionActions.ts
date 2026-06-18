@@ -33,10 +33,9 @@ export function buildTaskSubmissionPayload({
   provider,
 }: BuildTaskSubmissionPayloadOptions): TaskSubmissionDraft {
   const workflowKey = getStudioWorkflowKeyForProvider(provider, form.creationMode);
-  const taskTitle = deriveTaskTitleFromPrompt(
-    form.prompt,
-    form.title.trim() || defaultStudioForm.title
-  );
+  const taskTitle = deriveTaskTitleFromPrompt(form.prompt, form.title.trim() || defaultStudioForm.title);
+  const taskPayload =
+    form.creationMode === "video" ? buildVideoPayload(form, provider) : buildImagePayload(form, workflowKey);
 
   return {
     taskTitle,
@@ -47,8 +46,7 @@ export function buildTaskSubmissionPayload({
       project_code: form.projectCode,
       requested_provider: provider.provider_name,
       classification: form.classification,
-      payload:
-        form.creationMode === "video" ? buildVideoPayload(form, provider) : buildImagePayload(form, workflowKey),
+      payload: taskPayload,
     },
   };
 }

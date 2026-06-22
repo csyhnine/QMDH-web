@@ -1,6 +1,8 @@
 import type { Asset, Task } from "../../api";
 import StudioAssetTile from "./StudioAssetTile";
+import StudioFeedGalleryUpscaleMenu from "./StudioFeedGalleryUpscaleMenu";
 import { canUpscaleAsset } from "./studioUpscaleActions";
+import type { UpscaleOptions } from "./studioUpscaleOptions";
 import { taskResultString } from "./studioUtils";
 
 type StudioFeedGalleryProps = {
@@ -10,7 +12,7 @@ type StudioFeedGalleryProps = {
   upscaleEnabled?: boolean;
   upscalingAssetKey?: string | null;
   onAssetPreview?: (asset: Asset) => void;
-  onUpscaleAsset?: (asset: Asset) => void;
+  onUpscaleAsset?: (asset: Asset, options: UpscaleOptions) => void;
   onReuse: () => void;
 };
 
@@ -54,15 +56,12 @@ export default function StudioFeedGallery({
               />
             </button>
             {showUpscale ? (
-              <button
-                type="button"
-                className="feed-gallery-upscale-button"
-                disabled={upscaleDisabled || isUpscaling}
-                onClick={() => onUpscaleAsset?.(asset)}
-                aria-label="高清放大"
-              >
-                {isUpscaling ? "放大中..." : "放大"}
-              </button>
+              <StudioFeedGalleryUpscaleMenu
+                asset={asset}
+                disabled={upscaleDisabled}
+                isUpscaling={isUpscaling}
+                onSubmit={(selectedAsset, options) => onUpscaleAsset?.(selectedAsset, options)}
+              />
             ) : null}
           </div>
         );

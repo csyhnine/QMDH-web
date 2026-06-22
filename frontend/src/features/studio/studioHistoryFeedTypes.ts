@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 
 import type { Asset, Task } from "../../api";
 import type { HistoryActionFeedback, HistoryActionKey } from "./studioTypes";
+import type { UpscaleOptions } from "./studioUpscaleOptions";
 
 export type StudioHistoryFeedProps = {
   tasks: Task[];
@@ -15,7 +16,7 @@ export type StudioHistoryFeedProps = {
   pendingActionByTaskId: Record<number, HistoryActionKey | null>;
   feedbackByTaskId: Record<number, HistoryActionFeedback | undefined>;
   onRegenerateTask: (task: Task, asset?: Asset) => void;
-  onUpscaleAsset: (task: Task, asset: Asset) => void;
+  onUpscaleAsset: (task: Task, asset: Asset, options: UpscaleOptions) => void;
   upscaleEnabled: boolean;
   upscalingAssetKey: string | null;
   onBookmarkAsset: (taskId: number, assetId: number) => void;

@@ -33,11 +33,7 @@ export const resolutionOptions = [
   { id: "4k", label: "超清 4K" },
 ];
 
-export const defaultUpscaleOptions = {
-  style: "photo",
-  noise: "1",
-  scale: "2",
-} as const;
+export { defaultUpscaleOptions } from "./studioUpscaleOptions";
 
 export const defaultStudioForm: StudioFormState = {
   creationMode: "generate",

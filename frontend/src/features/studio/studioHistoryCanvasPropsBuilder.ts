@@ -58,6 +58,6 @@ export function buildStudioHistoryCanvasProps({
     onPreviewAsset: (task: Task, asset: Asset) => setGalleryPreview({ task, asset }),
     onRegenerateTask: (task, asset) => void taskActions.regenerateTask(task, asset),
     onShareAsset: galleryActions.openShareConfirm,
-    onUpscaleAsset: (task, asset) => void taskActions.upscaleAsset(task, asset),
+    onUpscaleAsset: (task, asset, options) => void taskActions.upscaleAsset(task, asset, options),
   };
 }

@@ -117,7 +117,7 @@ const capabilityDefinitions: CapabilityDefinition[] = [
 ];
 
 const adapterOptions: AdapterOption[] = [
-  { key: "haodeya_grok", label: "Haodeya Grok Video", support: "partial", note: "单条 profile 即可；model_name 可用 grok-imagine-video，四档 SKU 在 Studio 视频模式内切换。" },
+  { key: "haodeya_grok", label: "Grok 视频", support: "partial", note: "单条 profile 即可；model_name 可用 grok-imagine-video，四档 SKU 在 Studio 视频模式内切换。" },
   { key: "volcengine_ark", label: "Volcengine Ark Video", support: "partial", note: "Supports Seedance / Ark content generation tasks; probe will not create a live video." },
   { key: "openai_compatible", label: "OpenAI Compatible", support: "ready", note: "当前后端已支持这一适配器的 Chat、图像生成和图像编辑。" },
   { key: "dashscope_native", label: "DashScope Video", support: "partial", note: "支持 Wan / HappyHorse 的 DashScope 异步视频任务；探测不会创建真实视频。" },

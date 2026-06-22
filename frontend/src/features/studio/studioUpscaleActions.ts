@@ -1,6 +1,8 @@
 import type { Asset, Provider, Task, TaskCreatePayload } from "../../api";
-import { IMAGE_UPSCALE_WORKFLOW_KEY, defaultUpscaleOptions } from "./studioConstants";
+import { IMAGE_UPSCALE_WORKFLOW_KEY } from "./studioConstants";
 import { isRuntimeUpscaleProvider } from "./modelAdminUtils";
+import type { UpscaleOptions } from "./studioUpscaleOptions";
+import { defaultUpscaleOptions } from "./studioUpscaleOptions";
 
 export function findUpscaleProvider(providers: Provider[]): Provider | undefined {
   return providers.find((provider) => isRuntimeUpscaleProvider(provider));
@@ -12,11 +14,13 @@ export function canUpscaleAsset(asset: Asset | undefined): boolean {
 
 export function buildUpscaleTaskCreatePayload({
   asset,
+  options = defaultUpscaleOptions,
   projectCode,
   provider,
   sourceTask,
 }: {
   asset: Asset;
+  options?: UpscaleOptions;
   projectCode: string;
   provider: Provider;
   sourceTask: Task;
@@ -33,9 +37,9 @@ export function buildUpscaleTaskCreatePayload({
     payload: {
       source_image: storagePath,
       reference_image: storagePath,
-      upscale_style: defaultUpscaleOptions.style,
-      upscale_noise: defaultUpscaleOptions.noise,
-      upscale_x2: defaultUpscaleOptions.scale,
+      upscale_style: options.style,
+      upscale_noise: options.noise,
+      upscale_x2: options.scale,
       source_task_id: sourceTask.id,
       source_asset_id: asset.id,
     },

@@ -382,7 +382,7 @@ async def probe_provider_profile(
             provider_label = "Volcengine Ark"
         elif strategy == HAODEYA_GROK_VIDEO_STRATEGY:
             checked_url = f"{profile.base_url.rstrip('/')}{_HAODEYA_GROK_VIDEO_PROBE_ENDPOINT}"
-            provider_label = "Haodeya Grok Imagine"
+            provider_label = "Grok 视频"
         else:
             config = profile.adapter_config or {}
             action = str(config.get("submit_action") or "CVSync2AsyncSubmitTask")

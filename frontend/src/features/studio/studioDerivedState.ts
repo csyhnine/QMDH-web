@@ -1,7 +1,7 @@
 import type { Asset, Project, Provider, Task, Workflow } from "../../api";
 import type { FeedFilterState } from "./studioHistoryPaneTypes";
 import { filterGrokVideoProviders } from "./grokVideoUtils";
-import { groupProviders, isRuntimeStudioProvider } from "./modelAdminUtils";
+import { groupProviders, isRuntimeStudioProvider, publicProviderDisplayName } from "./modelAdminUtils";
 import {
   IMAGE_EDIT_WORKFLOW_KEY,
   IMAGE_UPSCALE_WORKFLOW_KEY,
@@ -51,10 +51,7 @@ export function deriveStudioViewState({
     (provider) => provider.provider_name === studioForm.requestedProvider
   );
   const providerDisplayNameMap = new Map(
-    providers.map((provider) => [
-      provider.provider_name,
-      provider.display_name || provider.model_name || provider.provider_name,
-    ])
+    providers.map((provider) => [provider.provider_name, publicProviderDisplayName(provider)])
   );
   const selectedWorkflowKey = getStudioWorkflowKeyForProvider(selectedProvider, studioForm.creationMode);
   const selectedWorkflow = workflows.find((workflow) => workflow.key === selectedWorkflowKey);

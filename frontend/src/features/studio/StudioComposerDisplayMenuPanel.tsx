@@ -26,7 +26,7 @@ export default function StudioComposerDisplayMenuPanel({
         isGrokVideo ? (
           <div className="composer-menu-field composer-menu-field-full">
             <span>分辨率</span>
-            <p className="composer-menu-note">720p（Grok 固定，不可更改）</p>
+            <p className="composer-menu-note">720p（固定分辨率，不可更改）</p>
           </div>
         ) : null
       ) : (

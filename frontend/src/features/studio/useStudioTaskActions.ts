@@ -13,6 +13,7 @@ import {
   canUpscaleAsset,
   findUpscaleProvider,
 } from "./studioUpscaleActions";
+import { upscaleOptionsSummary, type UpscaleOptions } from "./studioUpscaleOptions";
 import { useStudioTaskSubmission } from "./useStudioTaskSubmission";
 
 export type StudioTaskActionsState = ReturnType<typeof useStudioTaskActions>;
@@ -89,7 +90,7 @@ export function useStudioTaskActions({
     }
   }
 
-  async function upscaleAsset(task: Task, asset: Asset) {
+  async function upscaleAsset(task: Task, asset: Asset, options: UpscaleOptions) {
     if (!canUpscaleAsset(asset)) {
       historyFeedback.pushFeedback(task.id, "upscale", "error", "当前素材无法放大，请换一张图片重试。");
       return;
@@ -105,7 +106,7 @@ export function useStudioTaskActions({
         task.id,
         "upscale",
         "error",
-        "未配置高清放大服务，请先在设置中心接入 Bigjpg。"
+        "未配置高清放大服务，请先在设置中心完成接入。"
       );
       return;
     }
@@ -117,6 +118,7 @@ export function useStudioTaskActions({
       await api.createTask(
         buildUpscaleTaskCreatePayload({
           asset,
+          options,
           projectCode: studioForm.projectCode,
           provider,
           sourceTask: task,
@@ -124,7 +126,7 @@ export function useStudioTaskActions({
       );
       hasAutoPositionedRef.current = false;
       await loadData({ force: true });
-      historyFeedback.pushFeedback(task.id, "upscale", "success", "已提交高清放大任务。");
+      historyFeedback.pushFeedback(task.id, "upscale", "success", `已提交高清放大任务（${upscaleOptionsSummary(options)}）。`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "高清放大提交失败，请稍后重试。";
       historyFeedback.pushFeedback(task.id, "upscale", "error", message);

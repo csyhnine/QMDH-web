@@ -55,7 +55,7 @@ class BigjpgUpscaleProviderAdapter:
         x2 = _normalize_x2(payload)
         input_url = resolve_public_media_url(source_image)
         if not input_url.startswith(("http://", "https://")):
-            raise ValueError("Upscale source image must resolve to a public http(s) URL for Bigjpg")
+            raise ValueError("放大原图必须解析为公网可访问的 http(s) URL")
 
         endpoint_path = BIGJPG_TASK_ENDPOINT
         diagnostics = RequestDiagnostics(
@@ -181,8 +181,8 @@ def _normalize_style(payload: dict) -> str:
 
 
 def _normalize_noise(payload: dict) -> str:
-    value = str(payload.get("upscale_noise") or payload.get("noise") or "1").strip()
-    return value if value in _VALID_NOISE else "1"
+    value = str(payload.get("upscale_noise") or payload.get("noise") or "0").strip()
+    return value if value in _VALID_NOISE else "0"
 
 
 def _normalize_x2(payload: dict) -> str:
@@ -253,15 +253,15 @@ def _submit_bigjpg_task(
     status = str(payload.get("status") or "").strip().lower()
     if status == "requires_vip":
         raise ValueError(
-            "Bigjpg 返回 requires_vip：免费版网页端支持 2x/4x 放大，但 API 调用通常需要付费套餐（基础版及以上）。"
-            "请在 Bigjpg 用户中心「API」页确认当前密钥是否已开通接口权限；未开通时需先升级会员后再使用历史卡片「放大」。"
+            "当前 API 账户未开通接口权限或套餐不足（requires_vip）。"
+            "请确认密钥对应账户已开通 API，并在设置中心重新保存后再试。"
         )
     if status in {"param_error", "valid_api_key_required", "error"}:
         if status == "valid_api_key_required":
             raise ValueError(
-                "Bigjpg 未接受 API Key：请确认设置中心只填写密钥本身（不要包含 X-API-KEY: 前缀），并重新保存。"
+                "API 未接受当前 Key：请确认设置中心只填写密钥本身（不要包含 X-API-KEY: 前缀），并重新保存。"
             )
-        raise ValueError(f"Bigjpg task submit rejected: {payload}")
+        raise ValueError(f"高清放大任务提交被拒绝: {payload}")
     if not _extract_task_id(payload):
         raise ValueError(f"Bigjpg task submit returned no task id: {payload}")
     return payload

@@ -3,6 +3,7 @@ import type { RefObject } from "react";
 import type { Asset, Provider, Task } from "../../api";
 import type { FeedFilterState, HistoryNotice } from "./studioHistoryPaneTypes";
 import type { HistoryActionFeedback, HistoryActionKey } from "./studioTypes";
+import type { UpscaleOptions } from "./studioUpscaleOptions";
 
 export type StudioHistoryCanvasProps = {
   availableProviders: Provider[];
@@ -33,7 +34,7 @@ export type StudioHistoryCanvasProps = {
   onPreviewAsset: (task: Task, asset: Asset) => void;
   onRegenerateTask: (task: Task, asset?: Asset) => void;
   onShareAsset: (task: Task, asset: Asset) => void;
-  onUpscaleAsset: (task: Task, asset: Asset) => void;
+  onUpscaleAsset: (task: Task, asset: Asset, options: UpscaleOptions) => void;
 };
 
 export type StudioHistoryScrollProps = Pick<

@@ -198,7 +198,7 @@ class Settings(BaseSettings):
         if self.bigjpg_api_key.strip():
             profiles["bigjpg"] = ImageProviderProfile(
                 provider_name="bigjpg",
-                display_name="Bigjpg 高清放大",
+                display_name="高清放大",
                 api_key=self.bigjpg_api_key.strip(),
                 base_url=normalize_provider_base_url(self.bigjpg_base_url.strip() or "https://bigjpg.com/api"),
                 model_name="bigjpg",

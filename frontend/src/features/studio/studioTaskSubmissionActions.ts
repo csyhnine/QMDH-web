@@ -1,5 +1,6 @@
 import type { PromptTemplateRecord, Provider, Task, TaskCreatePayload } from "../../api";
 import { defaultStudioForm } from "./studioConstants";
+import { publicProviderDisplayName } from "./modelAdminUtils";
 import type { StudioFormState, SubmissionTracker } from "./studioTypes";
 import { buildImagePayload, buildVideoPayload, clampImageCount, deriveTaskTitleFromPrompt, getStudioWorkflowKeyForProvider } from "./studioUtils";
 
@@ -60,7 +61,7 @@ export function buildPendingSubmissionTracker({
   return {
     taskId: null,
     taskTitle,
-    providerName: provider.display_name ?? provider.model_name ?? form.requestedProvider,
+    providerName: publicProviderDisplayName(provider),
     imageCount: form.creationMode === "video" ? 1 : clampImageCount(form.imageCount),
     hasReferenceImage: referenceImageCount > 0,
     stage: "submitting",
@@ -76,7 +77,7 @@ export function buildCreatedSubmissionTracker({
   return {
     taskId: task.id,
     taskTitle: task.title,
-    providerName: provider.display_name ?? provider.model_name ?? task.requested_provider,
+    providerName: publicProviderDisplayName(provider),
     imageCount:
       form.creationMode === "video"
         ? 1

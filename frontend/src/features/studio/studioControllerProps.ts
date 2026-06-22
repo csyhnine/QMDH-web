@@ -1,3 +1,4 @@
+import { publicProviderDisplayName } from "./modelAdminUtils";
 import { buildSubmissionProgress } from "./studioSubmissionProgress";
 import type { LoadState, SubmissionTracker } from "./studioTypes";
 export { buildStudioControllerResult } from "./studioControllerResult";
@@ -16,7 +17,10 @@ export function selectedReferenceUploadProviderName({
   fallbackProviderName: string;
   selectedProvider: { display_name?: string | null; model_name?: string | null } | null | undefined;
 }): string {
-  return selectedProvider?.display_name ?? selectedProvider?.model_name ?? fallbackProviderName;
+  if (!selectedProvider) {
+    return fallbackProviderName;
+  }
+  return publicProviderDisplayName(selectedProvider);
 }
 
 export function buildStudioControllerSubmissionProgress({

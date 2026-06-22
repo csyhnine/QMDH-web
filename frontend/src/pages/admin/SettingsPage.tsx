@@ -106,7 +106,7 @@ export default function SettingsPage({
                   <p>已接入的外部能力会出现在 Studio 对应模式中。</p>
                 </div>
                 <div className={`settings-integration-status-card is-${bigjpgStatus.tone}`}>
-                  <strong>Bigjpg 高清放大</strong>
+                  <strong>高清放大</strong>
                   <span>{bigjpgStatus.label}</span>
                   <p>{bigjpgStatus.detail}</p>
                 </div>
@@ -164,8 +164,8 @@ export default function SettingsPage({
                   </div>
                   <div className="settings-switch-grid">
                     {([
-                      ["外部工具集成", "在设置中心维护 Bigjpg 等第三方 API。", true],
-                      ["高清放大", "历史卡片「放大」按钮可提交 Bigjpg 超分任务。", bigjpgStatus.tone === "ready"],
+                      ["外部工具集成", "在设置中心维护第三方超分等 API。", true],
+                      ["高清放大", "历史卡片「放大」按钮可提交超分任务。", bigjpgStatus.tone === "ready"],
                       ["模型配置", "管理员可在模型管理维护 Provider。", true],
                       ["账号管理", "管理员可维护账号、角色与额度。", userCanManageUsers],
                     ] as const).map(([title, desc, enabled]) => (

@@ -13,7 +13,7 @@ export const integrationMenuItems: Array<{
 }> = [
   {
     key: "bigjpg",
-    label: "Bigjpg 高清放大",
+    label: "高清放大",
     description: "历史卡片「放大」按钮使用的 AI 超分服务。",
   },
 ];

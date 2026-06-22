@@ -29,7 +29,7 @@ function toDraft(profile: ProviderProfileRecord | undefined): BigjpgDraft {
 function buildPayload(draft: BigjpgDraft): ProviderProfileCreatePayload {
   return {
     provider_name: BIGJPG_PROVIDER_NAME,
-    display_name: "Bigjpg 高清放大",
+    display_name: "高清放大",
     api_key: draft.apiKey,
     base_url: draft.baseUrl.trim(),
     model_name: "bigjpg",
@@ -72,7 +72,7 @@ export default function BigjpgIntegrationPanel({ profile, onRefresh }: BigjpgInt
     }
 
     if (!hasProfile && !draft.apiKey.trim()) {
-      setFeedback({ tone: "error", message: "首次接入请填写 Bigjpg API Key。" });
+      setFeedback({ tone: "error", message: "首次接入请填写 API Key。" });
       return;
     }
 
@@ -104,7 +104,7 @@ export default function BigjpgIntegrationPanel({ profile, onRefresh }: BigjpgInt
       }
       setDraft((current) => ({ ...current, apiKey: "" }));
       await onRefresh();
-      setFeedback({ tone: "success", message: "Bigjpg 集成配置已保存，历史卡片「放大」将使用此连接。" });
+      setFeedback({ tone: "success", message: "高清放大服务已保存，历史卡片「放大」将使用此连接。" });
     } catch (error) {
       const message = error instanceof Error ? error.message : "保存失败，请稍后重试。";
       setFeedback({ tone: "error", message });
@@ -117,7 +117,7 @@ export default function BigjpgIntegrationPanel({ profile, onRefresh }: BigjpgInt
     <div className="settings-integration-panel">
       <article className="admin-table-panel settings-info-card">
         <div className="admin-detail-head">
-          <h2>Bigjpg 高清放大</h2>
+          <h2>高清放大</h2>
           <p>
             配置外部超分 API，供历史卡片「放大」按钮使用。密钥会加密保存在后台，不会明文展示。
           </p>
@@ -137,7 +137,7 @@ export default function BigjpgIntegrationPanel({ profile, onRefresh }: BigjpgInt
           <label className="composer-menu-field composer-menu-field-full">
             <span>API Key</span>
             <input
-              name="bigjpg-api-key"
+              name="upscale-api-key"
               type="password"
               value={draft.apiKey}
               onChange={(event) => setDraft((current) => ({ ...current, apiKey: event.target.value }))}
@@ -149,7 +149,7 @@ export default function BigjpgIntegrationPanel({ profile, onRefresh }: BigjpgInt
           <label className="settings-integration-toggle composer-menu-field composer-menu-field-full">
             <span>
               <strong>启用集成</strong>
-              <small>关闭后历史卡片将无法提交 Bigjpg 放大任务。</small>
+              <small>关闭后历史卡片将无法提交高清放大任务。</small>
             </span>
             <input
               type="checkbox"
@@ -163,7 +163,7 @@ export default function BigjpgIntegrationPanel({ profile, onRefresh }: BigjpgInt
               {saving ? "保存中..." : hasProfile ? "更新配置" : "保存并接入"}
             </button>
             <a className="ghost-button settings-integration-link" href={BIGJPG_DOCS_URL} target="_blank" rel="noreferrer">
-              打开 Bigjpg API 文档
+              打开接口文档
             </a>
           </div>
         </form>
@@ -179,9 +179,9 @@ export default function BigjpgIntegrationPanel({ profile, onRefresh }: BigjpgInt
           <p>保存后无需重启服务，任务执行时会自动读取最新配置。</p>
         </div>
         <ul className="settings-integration-notes">
-          <li>免费版在 Bigjpg 网站可放大至 4x，但<strong> API 接口通常需付费套餐</strong>（基础版 ¥35 起）；若任务报 requires_vip，即属此类限制。</li>
-          <li>免费账号 API 一般仅支持 2x / 4x 倍率；8x / 16x 需更高级套餐。</li>
-          <li>放大任务需要原图具备公网可访问 URL，请确保生产环境已配置媒体外网地址（如 cityusbdisk.cn）。</li>
+          <li>部分账户的 API 接口需付费套餐；若任务返回 requires_vip，即属此类限制。</li>
+          <li>一般可用 2x / 4x 倍率；8x / 16x 可能需更高级套餐。</li>
+          <li>放大任务需要原图具备公网可访问 URL，请确保生产环境已配置媒体外网地址。</li>
           <li>也可在「模型管理」中查看完整 Provider 记录；此处为集成快捷入口。</li>
         </ul>
       </article>
@@ -198,7 +198,7 @@ export function bigjpgIntegrationStatus(profile: ProviderProfileRecord | undefin
     return {
       label: "未接入",
       tone: "idle",
-      detail: "尚未保存 Bigjpg API 配置。",
+      detail: "尚未保存高清放大 API 配置。",
     };
   }
   if (!profile.has_api_key) {
@@ -218,7 +218,7 @@ export function bigjpgIntegrationStatus(profile: ProviderProfileRecord | undefin
   return {
     label: "已接入",
     tone: "ready",
-    detail: `使用 ${profile.base_url}，历史卡片放大可用。`,
+    detail: "历史卡片「放大」可用。",
   };
 }
 

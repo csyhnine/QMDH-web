@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 
 import type { Asset, Task } from "../../api";
 import type { HistoryActionFeedback, HistoryActionKey } from "./studioTypes";
+import type { UpscaleOptions } from "./studioUpscaleOptions";
 
 export type StudioFeedCardProps = {
   task: Task;
@@ -15,7 +16,7 @@ export type StudioFeedCardProps = {
   onShare: () => void;
   onDelete: () => void;
   onAssetPreview?: (asset: Asset) => void;
-  onUpscaleAsset?: (asset: Asset) => void;
+  onUpscaleAsset?: (asset: Asset, options: UpscaleOptions) => void;
   upscaleDisabled?: boolean;
   upscaleEnabled?: boolean;
   upscalingAssetKey?: string | null;

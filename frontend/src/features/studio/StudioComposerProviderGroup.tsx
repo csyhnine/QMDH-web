@@ -1,4 +1,5 @@
 import type { StudioComposerProviderGroupProps } from "./studioComposerProviderMenuTypes";
+import { publicProviderDisplayName, publicProviderModelLine } from "./modelAdminUtils";
 
 export default function StudioComposerProviderGroup({
   group,
@@ -19,8 +20,8 @@ export default function StudioComposerProviderGroup({
           }
           onClick={() => onProviderSelect(provider.provider_name)}
         >
-          <strong>{provider.display_name || provider.model_name}</strong>
-          <span>{provider.model_name}</span>
+          <strong>{publicProviderDisplayName(provider)}</strong>
+          {publicProviderModelLine(provider) ? <span>{publicProviderModelLine(provider)}</span> : null}
         </button>
       ))}
     </div>

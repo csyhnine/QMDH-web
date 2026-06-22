@@ -356,7 +356,7 @@ def seed_initial_data(db: Session) -> None:
         (
             "image-upscale",
             "高清放大",
-            "调用 Bigjpg AI 超分，将效果图放大到 2x / 4x 等更高分辨率。",
+            "调用 AI 超分，将效果图放大到 2x / 4x 等更高分辨率。",
             "image",
             "P1",
             "image.upscale",

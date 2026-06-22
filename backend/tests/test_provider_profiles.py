@@ -636,7 +636,7 @@ class ProviderProfileTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["status"], "configured")
         self.assertIn("/videos", payload["checked_url"])
-        self.assertIn("Haodeya Grok", payload["detail"])
+        self.assertIn("Grok 视频", payload["detail"])
         mock_async_client.assert_not_called()
 
     def test_probe_provider_profile_rejects_unsupported_adapter(self) -> None:

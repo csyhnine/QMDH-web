@@ -630,6 +630,99 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         self.assertTrue(outcome.result["storage_path"].startswith("generated/openrouter_gemini_image/"))
 
+    def test_chat_completions_image_strategy_uses_cpa_style_request(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="cpa_gemini_image",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="gemini-3.1-flash-image",
+            timeout_seconds=1,
+            strategies={"image.generate": "chat_completions_image"},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "cpa_gemini_image",
+                "gemini-3.1-flash-image",
+                ["image.generate"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        data_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yh3cAAAAASUVORK5CYII="
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "",
+                        "images": [{"type": "image_url", "image_url": {"url": data_url}}],
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": 37, "completion_tokens": 1120, "total_tokens": 1157},
+        }
+
+        with patch("app.services.task_executor.urlopen", side_effect=[_FakeResponse(generation_payload)]) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {"prompt": "生成一只可爱的猫，只要图片", "aspect_ratio": "16:9"},
+                    )
+
+        generation_request = mocked_urlopen.call_args_list[0].args[0]
+        generation_body = json.loads(generation_request.data.decode("utf-8"))
+
+        self.assertTrue(generation_request.full_url.endswith("/chat/completions"))
+        self.assertEqual(generation_body["model"], "gemini-3.1-flash-image")
+        self.assertEqual(generation_body["max_tokens"], 4096)
+        self.assertNotIn("modalities", generation_body)
+        self.assertNotIn("image_config", generation_body)
+        self.assertIn("Aspect ratio: 16:9.", generation_body["messages"][0]["content"])
+        self.assertEqual(outcome.result["request_strategy"], "chat_completions_image")
+        self.assertTrue(outcome.result["storage_path"].startswith("generated/cpa_gemini_image/"))
+
+    def test_cpa_gemini_image_defaults_to_chat_completions_strategy_when_strategies_are_empty(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="cpa_gemini_image",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="gemini-3.1-flash-image",
+            timeout_seconds=1,
+            strategies={},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "cpa_gemini_image",
+                "gemini-3.1-flash-image",
+                ["image.generate"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": "",
+                        "images": [{"image_url": {"url": "https://cdn.example.test/generated-cpa.png"}}],
+                    }
+                }
+            ]
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"cpa-image")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute("image.generate", {"prompt": "生成一只猫"})
+
+        generation_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        self.assertNotIn("modalities", generation_body)
+        self.assertEqual(outcome.result["request_strategy"], "chat_completions_image")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,6 +13,8 @@ OPENAI_IMAGES_STRATEGY = "openai_images"
 OPENAI_IMAGE_EDITS_STRATEGY = "openai_image_edits"
 CHAT_MODALITIES_IMAGE_STRATEGY = "chat_modalities_image"
 CHAT_MODALITIES_IMAGE_EDIT_STRATEGY = "chat_modalities_image_edit"
+CHAT_COMPLETIONS_IMAGE_STRATEGY = "chat_completions_image"
+CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY = "chat_completions_image_edit"
 DASHSCOPE_ASYNC_VIDEO_STRATEGY = "dashscope_async_video"
 VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY = "volcengine_ark_video_tasks"
 VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY = "volcengine_cv_jimeng_video"
@@ -25,6 +27,8 @@ KNOWN_STRATEGIES = {
     OPENAI_IMAGE_EDITS_STRATEGY,
     CHAT_MODALITIES_IMAGE_STRATEGY,
     CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
+    CHAT_COMPLETIONS_IMAGE_STRATEGY,
+    CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY,
     DASHSCOPE_ASYNC_VIDEO_STRATEGY,
     VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
     VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
@@ -50,8 +54,13 @@ _CAPABILITY_ALIASES = {
 
 _ALLOWED_STRATEGIES_BY_CAPABILITY = {
     CHAT_CAPABILITY: {OPENAI_CHAT_STRATEGY},
-    "image.generate": {OPENAI_IMAGES_STRATEGY, CHAT_MODALITIES_IMAGE_STRATEGY},
-    "image.edit": {OPENAI_IMAGES_STRATEGY, OPENAI_IMAGE_EDITS_STRATEGY, CHAT_MODALITIES_IMAGE_EDIT_STRATEGY},
+    "image.generate": {OPENAI_IMAGES_STRATEGY, CHAT_MODALITIES_IMAGE_STRATEGY, CHAT_COMPLETIONS_IMAGE_STRATEGY},
+    "image.edit": {
+        OPENAI_IMAGES_STRATEGY,
+        OPENAI_IMAGE_EDITS_STRATEGY,
+        CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
+        CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY,
+    },
     "image.upscale": {BIGJPG_UPSCALE_STRATEGY},
     "video.generate": {
         DASHSCOPE_ASYNC_VIDEO_STRATEGY,
@@ -115,6 +124,21 @@ def profile_prefers_chat_modalities_image(*, provider_name: str, model_name: str
     return False
 
 
+def profile_prefers_chat_completions_image(*, provider_name: str, model_name: str, base_url: str) -> bool:
+    normalized_model = str(model_name or "").strip().lower()
+    if not normalized_model or normalized_model.startswith("google/"):
+        return False
+    if normalized_model in {"gemini-3.1-flash-image", "gemini-3-flash-image"}:
+        return True
+    identity = f"{provider_name} {model_name} {base_url}".lower()
+    return (
+        "gemini" in identity
+        and "flash" in identity
+        and "image" in identity
+        and "preview" not in identity
+    )
+
+
 def profile_prefers_dashscope_video(*, provider_name: str, model_name: str, base_url: str) -> bool:
     identity = f"{provider_name} {model_name} {base_url}".lower()
     return "dashscope" in identity or "aliyuncs.com" in identity or "wan" in identity or "happyhorse" in identity
@@ -166,6 +190,15 @@ def default_strategy_for_capability(
             return CHAT_MODALITIES_IMAGE_STRATEGY
         if normalized == "image.edit":
             return CHAT_MODALITIES_IMAGE_EDIT_STRATEGY
+    if profile_prefers_chat_completions_image(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+    ):
+        if normalized == "image.generate":
+            return CHAT_COMPLETIONS_IMAGE_STRATEGY
+        if normalized == "image.edit":
+            return CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY
     if normalized == "image.generate":
         return OPENAI_IMAGES_STRATEGY
     if normalized == "image.edit":

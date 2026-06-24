@@ -41,6 +41,8 @@ from app.services.provider_adapters.haodeya_grok_video import HaodeyaGrokVideoPr
 from app.services.provider_adapters.volcengine_ark_video import VolcengineArkVideoProviderAdapter
 from app.services.provider_adapters.volcengine_jimeng_video import VolcengineJimengVideoProviderAdapter
 from app.services.provider_strategy import (
+    CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY,
+    CHAT_COMPLETIONS_IMAGE_STRATEGY,
     CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
     CHAT_MODALITIES_IMAGE_STRATEGY,
     DASHSCOPE_ASYNC_VIDEO_STRATEGY,
@@ -179,7 +181,10 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
                     data = _extract_image_data(response_payload)
 
                 if not data:
-                    raise ValueError("Image generation returned no image data")
+                    hint = ""
+                    if request_plan.endpoint_path == "/chat/completions":
+                        hint = " Check choices[0].message.images when content is empty."
+                    raise ValueError(f"Image generation returned no image data.{hint}")
 
                 response_model = str(response_payload.get("model", self.profile.model_name))
                 if response_model not in response_models:
@@ -368,7 +373,11 @@ def _build_image_request_plan(
             base_url=profile.base_url,
             strategies=profile.strategies,
         )
-        if edit_strategy in {OPENAI_IMAGE_EDITS_STRATEGY, CHAT_MODALITIES_IMAGE_EDIT_STRATEGY}:
+        if edit_strategy in {
+            OPENAI_IMAGE_EDITS_STRATEGY,
+            CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
+            CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY,
+        }:
             effective_capability = "image.edit"
             strategy = edit_strategy
 
@@ -397,6 +406,21 @@ def _build_image_request_plan(
         )
     if strategy == CHAT_MODALITIES_IMAGE_EDIT_STRATEGY:
         return _build_chat_modalities_image_edit_plan(
+            profile=profile,
+            requested_capability=capability,
+            effective_capability=effective_capability,
+            payload=payload,
+            prompt=prompt,
+        )
+    if strategy == CHAT_COMPLETIONS_IMAGE_STRATEGY:
+        return _build_chat_completions_image_plan(
+            profile=profile,
+            requested_capability=capability,
+            payload=payload,
+            prompt=prompt,
+        )
+    if strategy == CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY:
+        return _build_chat_completions_image_edit_plan(
             profile=profile,
             requested_capability=capability,
             effective_capability=effective_capability,
@@ -620,6 +644,96 @@ def _build_chat_modalities_image_edit_plan(
         adapter_mode="chat_modalities_image",
         effective_capability=effective_capability,
         strategy=CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
+    )
+
+
+def _build_chat_completions_image_content(
+    *,
+    profile: ImageProviderProfile,
+    payload: dict,
+    prompt: str,
+) -> str:
+    content = prompt
+    detail = str(payload.get("prompt_supplement") or "").strip()
+    if detail:
+        content = f"{prompt}\n\nAdditional guidance: {detail}"
+    resolved_aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
+    if resolved_aspect_ratio:
+        content = f"{content}\n\nAspect ratio: {resolved_aspect_ratio}."
+    return content
+
+
+def _build_chat_completions_image_plan(
+    *,
+    profile: ImageProviderProfile,
+    requested_capability: str,
+    payload: dict,
+    prompt: str,
+) -> ImageRequestPlan:
+    del requested_capability
+    body = {
+        "model": profile.model_name,
+        "messages": [
+            {
+                "role": "user",
+                "content": _build_chat_completions_image_content(profile=profile, payload=payload, prompt=prompt),
+            }
+        ],
+        "max_tokens": 4096,
+        "stream": False,
+    }
+    return ImageRequestPlan(
+        endpoint_path="/chat/completions",
+        body=body,
+        headers=_build_openai_headers(profile),
+        reference_result=_aspect_ratio_result_fields(profile, payload),
+        adapter_mode="chat_completions_image",
+        effective_capability="image.generate",
+        strategy=CHAT_COMPLETIONS_IMAGE_STRATEGY,
+    )
+
+
+def _build_chat_completions_image_edit_plan(
+    *,
+    profile: ImageProviderProfile,
+    requested_capability: str,
+    effective_capability: str,
+    payload: dict,
+    prompt: str,
+) -> ImageRequestPlan:
+    reference_images = _extract_reference_images(payload)
+    if not reference_images:
+        raise ValueError("Image edit task requires a reference image for this provider profile")
+
+    content: list[dict[str, object]] = [
+        {"type": "text", "text": _build_chat_completions_image_content(profile=profile, payload=payload, prompt=prompt)}
+    ]
+    for item in reference_images:
+        content.append({"type": "image_url", "image_url": {"url": _reference_image_to_model_url(item)}})
+
+    reference_result: dict[str, object] = {
+        "reference_image_used": True,
+        "reference_image_count": len(reference_images),
+        "reference_image_mode": "chat_completions_image_edit",
+    }
+    if requested_capability != effective_capability:
+        reference_result["chat_completions_image_edit_fallback_from"] = requested_capability
+    reference_result.update(_aspect_ratio_result_fields(profile, payload))
+
+    body = {
+        "model": profile.model_name,
+        "messages": [{"role": "user", "content": content}],
+        "max_tokens": 4096,
+        "stream": False,
+    }
+    return ImageRequestPlan(
+        endpoint_path="/chat/completions",
+        body=body,
+        headers=_build_openai_headers(profile),
+        reference_result=reference_result,
+        adapter_mode="chat_completions_image",
+        effective_capability=effective_capability,
+        strategy=CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY,
     )
 
 

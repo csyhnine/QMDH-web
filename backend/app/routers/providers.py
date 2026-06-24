@@ -35,6 +35,8 @@ from app.schemas import (
 from app.services.model_registry import list_provider_capabilities
 from app.services.provider_strategy import (
     CHAT_CAPABILITY,
+    CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY,
+    CHAT_COMPLETIONS_IMAGE_STRATEGY,
     CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
     CHAT_MODALITIES_IMAGE_STRATEGY,
     DASHSCOPE_ASYNC_VIDEO_STRATEGY,
@@ -269,6 +271,46 @@ def _build_probe_request(profile: ProviderProfile, api_key: str) -> tuple[str, s
                 },
             },
             "多模态图片编辑接口可用，当前模型已通过最小请求校验。",
+        )
+
+    if strategy == CHAT_COMPLETIONS_IMAGE_STRATEGY:
+        return (
+            "POST",
+            f"{base_url}/chat/completions",
+            {
+                "headers": headers,
+                "json": {
+                    "model": profile.model_name,
+                    "messages": [{"role": "user", "content": "ping"}],
+                    "max_tokens": 256,
+                    "stream": False,
+                },
+            },
+            "CPA 风格 chat 生图接口可用，当前模型已通过最小请求校验。",
+        )
+
+    if strategy == CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY:
+        return (
+            "POST",
+            f"{base_url}/chat/completions",
+            {
+                "headers": headers,
+                "json": {
+                    "model": profile.model_name,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "ping"},
+                                {"type": "image_url", "image_url": {"url": _PROBE_IMAGE_DATA_URL}},
+                            ],
+                        }
+                    ],
+                    "max_tokens": 256,
+                    "stream": False,
+                },
+            },
+            "CPA 风格 chat 图片编辑接口可用，当前模型已通过最小请求校验。",
         )
 
     return (

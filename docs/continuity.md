@@ -17,10 +17,10 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**: `docs/tasks.md` → **`Development Sequence (2026-06)`** (Phases 0–3 complete; Grok live smoke done 2026-06-12)
-- Current branch: `main` @ `51aba1b` (local has **uncommitted** Studio/创作区/使用日志改动)
-- GitHub `origin/main`: `51aba1b`
-- Production server git: `51aba1b5`; backend/worker Gemini 代码经 **hotpatch** 生效（镜像 rebuild 待补）
-- Production frontend: 未含本次 Studio/创作区本地改动
+- Current branch: `main` @ `cecab36`（local = GitHub `origin/main`，工作区干净）
+- GitHub `origin/main`: `cecab36`
+- Production server git: `51aba1b5`；**`cecab36` 尚未部署**（负责人 2026-06-26 明确暂不部署）
+- Production runtime: Gemini 后端 hotpatch 仍生效（≈ `51aba1b`）；frontend / 使用日志 / 看板新功能 **未上线**
 - Production URL: **`https://cityusbdisk.cn`** (ICP filed; HTTPS enabled)
 - Phase status (2026-06-12):
   - Phase 0–3: DONE including Haodeya Grok production E2E
@@ -80,12 +80,20 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - Studio four-tier SKU switcher + single admin `haodeya_grok` provider profile
   - Text-only and i2v-with-reference-image flows verified end-to-end
   - Reference images upload in Studio; public URL via `https://cityusbdisk.cn/media/...`
-- Current studio composer reality:
+- Current studio composer reality (2026-06-26, `cecab36`):
   - the composer can auto-collapse into a compact bar while browsing history
   - focusing, opening menus, hovering the collapsed bar, uploading references, or submitting expands it again
-- Current history card reality:
+  - resolution UI shows **标准 1K** (actual output tier); **高清 2K** is disabled with「即将上线」
+  - image batch size is capped at **3** (no 4-image option)
+  - bottom toolbar uses a fixed grid so template/model/ratio/count triggers do not reflow; long labels ellipsis
+  - **Enter** inserts newline; **Ctrl+Enter** (Mac: ⌘+Enter) submits; shortcut hint is inside the submit button
+  - reference images remove via top-right × on preview; bottom filename list removed (`StudioReferenceUploadList.tsx` deleted)
+  - removed stale composer chrome (workflow name, style tag, service online/offline labels)
+- Current history card reality (2026-06-26):
   - cards are denser than earlier versions
-  - generated image previews now preserve full image content through proportional shrink (`contain`) instead of banner-like crop
+  - 1–4 generated images share one layout: summary on top, horizontal gallery, footer actions below
+  - gallery scrollbar aligns to the main history column right edge
+  - generated image previews preserve full image content through proportional shrink (`contain`) instead of banner-like crop
 - Current admin model reality:
   - provider profiles can be enabled or disabled from the model list without changing existing pricing rules
   - toggling a provider profile updates only the `enabled` state
@@ -140,7 +148,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - `StudioComposerToolbarMenus` is now a thin template/provider/display/count menu composition shell; `StudioComposerTemplateMenuSlot`, `StudioComposerProviderMenuSlot`, `StudioComposerDisplayMenuSlot`, and `StudioComposerCountMenuSlot` own menu-specific prop partitioning
   - `StudioComposerProviderMenu` is now a thin provider-menu shell; trigger, panel, grouped rows, and prop contracts live in `StudioComposerProviderMenuTrigger`, `StudioComposerProviderMenuPanel`, `StudioComposerProviderGroup`, and `studioComposerProviderMenuTypes`
   - `StudioComposerDisplayMenu` is now a thin display-menu shell; trigger, panel, reusable option group, and prop contracts live in `StudioComposerDisplayMenuTrigger`, `StudioComposerDisplayMenuPanel`, `StudioComposerOptionGroup`, and `studioComposerDisplayMenuTypes`
-  - `StudioComposerBody` for composer body composition; mode switching, reference-image dropzone, reference upload chips, and prompt textarea now live in `StudioComposerModeSwitch`, `StudioReferenceDropzone`, `StudioReferenceUploadList`, and `StudioPromptTextarea`
+  - `StudioComposerBody` for composer body composition; mode switching, reference-image dropzone, and prompt textarea live in `StudioComposerModeSwitch`, `StudioReferenceDropzone`, and `StudioPromptTextarea`
   - `StudioComposerCollapsedBar` for collapsed composer summary and expand affordance
   - `StudioGalleryPreviewLightbox` and `StudioShareConfirmLightbox` for generated-image preview and share-confirm modals
   - `StudioWorkspaceHeader`, `StudioNewProjectForm`, and `StudioWorkspaceProjectList` for the workspace pane header, project creation form, and project list/rename UI
@@ -179,6 +187,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Refined studio template browser layout, preview presentation, and hover stability.
 - Added auto-collapse / expand behavior for the studio composer while browsing history.
 - Compressed history-card chrome while preserving full generated image content through proportional preview scaling.
+- **`cecab36` (2026-06-26, on GitHub; not deployed):** unified history gallery layout; composer 1K/2K resolution UX, max-3 images, fixed toolbar, Ctrl+Enter submit, reference × remove; dashboard group-spend custom date range; usage-log KPI + double-billing fix with `test_usage_logs.py`.
 
 ## Current Server Snapshot
 
@@ -186,10 +195,11 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Domain: `cityusbdisk.cn`（京ICP备14011242号-4，已备案）
 - Deploy path: `/www/wwwroot/qmdh-web`
 - Deployment model: Docker Compose
-- Current deployed product repo head: `51aba1b5` (git); runtime backend/worker matches via hotpatch
+- Current deployed product repo head: `51aba1b5` (git); runtime backend/worker ≈ `51aba1b` via hotpatch
+- Latest product commit on GitHub: `cecab36` (**pending deploy**)
 - Latest session archive: `docs/archive/handoff-2026-06-22-studio-gemini-composer.md`
 - Gemini CPA doc: `docs/cpa-gemini-image-integration.md`
-- Local WIP (not on production): Studio 历史卡片布局、使用日志修复、创作区 UX（参考图 ×、无效标签移除）
+- Pending production deploy from `cecab36`: Studio CSS/创作区、看板分组支出、使用日志修复（frontend rebuild + backend)
 - Server working tree: clean after `sudo -u admin git pull`
 - Verified runtime after latest deploy:
   - `docker compose ps` healthy
@@ -245,6 +255,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Near-Term Suggested Next Steps
 
-1. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.
-2. Optional: add ICP filing badge to login / app footer.
-3. Grok rollout reference: `docs/archive/handoff-2026-06-12-grok-video-production.md`.
+1. When owner approves deploy: `sudo -u admin git pull` on server → rebuild frontend + backend/worker; do not touch `.env` or run migrations unless instructed.
+2. Rebuild backend/worker Docker images to bake in Gemini code and drop hotpatch drift.
+3. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.
+4. Optional: smoke CPA `gemini-3.1-flash-image` in Studio after deploy.
+5. Grok rollout reference: `docs/archive/handoff-2026-06-12-grok-video-production.md`.

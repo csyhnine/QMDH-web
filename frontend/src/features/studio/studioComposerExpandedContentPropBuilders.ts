@@ -11,7 +11,6 @@ export function getStudioComposerLeadingProps({
   selectedProviderModelName,
   selectedResolutionLabel,
   studioForm,
-  workflowName,
   workspaceName,
 }: StudioComposerExpandedContentProps): StudioComposerLeadingProps {
   return {
@@ -19,7 +18,6 @@ export function getStudioComposerLeadingProps({
     selectedProviderModelName,
     selectedResolutionLabel,
     studioForm,
-    workflowName,
     workspaceName,
   };
 }
@@ -32,6 +30,7 @@ export function getStudioComposerBodyProps({
   onModeChange,
   onOpenReferencePicker,
   onPromptChange,
+  onPromptSubmitShortcut,
   onReferenceDrop,
   onRemoveReferenceUpload,
 }: StudioComposerExpandedContentProps): StudioComposerBodyProps {
@@ -43,6 +42,7 @@ export function getStudioComposerBodyProps({
     onModeChange,
     onOpenReferencePicker,
     onPromptChange,
+    onPromptSubmitShortcut,
     onReferenceDrop,
     onRemoveReferenceUpload,
   };

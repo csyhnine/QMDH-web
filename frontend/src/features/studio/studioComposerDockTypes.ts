@@ -12,6 +12,8 @@ import type {
 export type ResolutionOption = {
   id: string;
   label: string;
+  disabled?: boolean;
+  hint?: string;
 };
 
 export type ProviderGroup = {
@@ -45,7 +47,7 @@ export type StudioComposerDockProps = {
   onProviderSelect: (providerName: string) => void;
   onGrokVideoSkuSelect: (sku: import("./grokVideoUtils").GrokVideoSku) => void;
   onRemoveReferenceUpload: (index: number) => void;
-  onReferenceDrop: (event: DragEvent<HTMLButtonElement>) => void;
+  onReferenceDrop: (event: DragEvent<HTMLElement>) => void;
   onReferenceInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onResolutionSelect: (resolutionId: string) => void;
   onSaveCustomTemplate: () => void;
@@ -60,8 +62,6 @@ export type StudioComposerDockProps = {
   selectedGrokSkuLabel: string | null;
   selectedProviderModelName: string | null;
   selectedResolutionLabel: string | null;
-  selectedStyleLabel: string;
-  serviceHealthy: boolean;
   studioForm: StudioFormState;
   submitting: boolean;
   submissionProgress: SubmissionTracker | null;
@@ -69,6 +69,5 @@ export type StudioComposerDockProps = {
   templateDraftLabel: string;
   templateDraftTitle: string;
   uploadingReference: boolean;
-  workflowName: string;
   workspaceName: string;
 };

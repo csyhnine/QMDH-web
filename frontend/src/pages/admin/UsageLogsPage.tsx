@@ -110,7 +110,8 @@ function formatWindowCost(rows: UsageLogPage["window_cost_by_currency"]): string
   return rows
     .map((row) => {
       const symbol = row.currency === "CNY" ? "¥" : row.currency === "USD" ? "$" : "";
-      return `${symbol}${row.total_cost.toFixed(2)} ${row.currency}`;
+      const amount = row.total_cost.toFixed(row.currency === "USD" ? 4 : 2);
+      return symbol ? `${symbol}${amount}` : `${amount} ${row.currency}`;
     })
     .join(" + ");
 }

@@ -1,5 +1,6 @@
 import type { StudioFeedCardProps } from "./studioFeedCardTypes";
 import {
+  deriveTaskTitleFromPrompt,
   summarizeReferenceImageLabel,
   taskDisplayTitle,
   taskHasReferenceImage,
@@ -15,10 +16,18 @@ export function useStudioFeedCardState({
   feedback,
   task,
 }: Pick<StudioFeedCardProps, "asset" | "feedback" | "task">) {
-  const displayTitle = taskDisplayTitle(task, asset);
+  const displayTitle = (() => {
+    const promptSource =
+      asset?.prompt_text ??
+      (typeof task.result["prompt"] === "string" ? String(task.result["prompt"]) : "");
+    if (promptSource.trim()) {
+      return deriveTaskTitleFromPrompt(promptSource, taskDisplayTitle(task, asset), 56);
+    }
+    return taskDisplayTitle(task, asset);
+  })();
   const summary = taskSummary(task, asset);
-  const summaryPreview = truncateText(summary, 160);
-  const hasLongSummary = summaryPreview !== summary;
+  const summaryPreview = truncateText(summary, 72);
+  const hasLongSummary = summary.replace(/\s+/g, " ").trim().length > 56;
   const showRunningState = task.status === "pending" || task.status === "running";
   const referenceImages = taskReferenceImages(task);
   const referenceImageCount = taskReferenceImageCount(task);

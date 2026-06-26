@@ -17,9 +17,10 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**: `docs/tasks.md` → **`Development Sequence (2026-06)`** (Phases 0–3 complete; Grok live smoke done 2026-06-12)
-- Current branch: `main` @ `cfed87f`
-- GitHub `origin/main`: `cfed87f` (synced)
-- Production server: `cfed87f` — **deployed**; `git pull` works when run as `admin`
+- Current branch: `main` @ `51aba1b` (local has **uncommitted** Studio/创作区/使用日志改动)
+- GitHub `origin/main`: `51aba1b`
+- Production server git: `51aba1b5`; backend/worker Gemini 代码经 **hotpatch** 生效（镜像 rebuild 待补）
+- Production frontend: 未含本次 Studio/创作区本地改动
 - Production URL: **`https://cityusbdisk.cn`** (ICP filed; HTTPS enabled)
 - Phase status (2026-06-12):
   - Phase 0–3: DONE including Haodeya Grok production E2E
@@ -185,7 +186,10 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Domain: `cityusbdisk.cn`（京ICP备14011242号-4，已备案）
 - Deploy path: `/www/wwwroot/qmdh-web`
 - Deployment model: Docker Compose
-- Current deployed product repo head: `cfed87f`
+- Current deployed product repo head: `51aba1b5` (git); runtime backend/worker matches via hotpatch
+- Latest session archive: `docs/archive/handoff-2026-06-22-studio-gemini-composer.md`
+- Gemini CPA doc: `docs/cpa-gemini-image-integration.md`
+- Local WIP (not on production): Studio 历史卡片布局、使用日志修复、创作区 UX（参考图 ×、无效标签移除）
 - Server working tree: clean after `sudo -u admin git pull`
 - Verified runtime after latest deploy:
   - `docker compose ps` healthy
@@ -209,7 +213,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - `prod-001` first-pass Studio split is merged; further hook splits are optional follow-up only.
 - Release/version records are tracked through `CHANGELOG.md`, package versions, and the optional `v0.2.0` Git tag.
 - `storage/` and `tmp/` remain expected local-only directories and must not be committed.
-- Server deploy fallback still depends on `git bundle`.
+- Server deploy fallback still depends on `git bundle` or **hotpatch** when Docker Hub pull fails.
+- Production backend/worker may run hotpatched code not yet baked into Docker images; rebuild when registry stable.
 - Image upload still uses base64 data URLs and keeps a 10MB per-image limit; raising it safely requires changing both frontend/backend limits and possibly nginx body size.
 - Auto-collapsing composer behavior is improved but still a likely UX hotspot; if touched again, re-check bottom-edge expand behavior and scroll jitter.
 - Older docs may still contain stale wording about historical `owner / ops` roles or project-member sharing; when docs disagree, trust `docs/product-boundary.md`, `docs/handoff.md`, and this file.

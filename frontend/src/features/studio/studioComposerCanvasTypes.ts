@@ -37,8 +37,6 @@ export type StudioComposerCanvasProps = {
   selectedGrokSkuLabel: string | null;
   selectedProviderModelName: string | null;
   selectedResolutionLabel: string | null;
-  selectedStyleLabel: string;
-  serviceHealthy: boolean;
   sharedTemplates: PromptTemplateRecord[];
   showComposer: boolean;
   studioForm: StudioFormState;
@@ -48,7 +46,6 @@ export type StudioComposerCanvasProps = {
   templateDraftTitle: string;
   templateFeedback: TemplateFeedback | null;
   uploadingReference: boolean;
-  workflowName: string;
   workspaceName: string;
   onApplyTemplate: (template: PromptTemplateRecord) => void;
   onAspectRatioSelect: (ratio: string) => void;
@@ -63,7 +60,7 @@ export type StudioComposerCanvasProps = {
   onPromptChange: (value: string) => void;
   onProviderSelect: (providerName: string) => void;
   onGrokVideoSkuSelect: (sku: import("./grokVideoUtils").GrokVideoSku) => void;
-  onReferenceDrop: (event: DragEvent<HTMLButtonElement>) => void;
+  onReferenceDrop: (event: DragEvent<HTMLElement>) => void;
   onReferenceInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemoveReferenceUpload: (index: number) => void;
   onResolutionSelect: (resolutionId: string) => void;

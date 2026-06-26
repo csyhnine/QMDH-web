@@ -15,7 +15,7 @@ const defaultDraft: PromptTemplateDraft = {
   prompt: "",
   style: "modern",
   aspect_ratio: "16:9",
-  resolution: "4k",
+  resolution: "1k",
   deliverable: "",
   notes: "",
   source_image_path: "",
@@ -234,7 +234,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
         prompt: draft.prompt.trim(),
         style: draft.style.trim() || "modern",
         aspect_ratio: draft.aspect_ratio.trim() || "16:9",
-        resolution: draft.resolution.trim() || "4k",
+        resolution: draft.resolution.trim() || "1k",
         deliverable: draft.deliverable.trim(),
         notes: draft.notes.trim(),
         source_image_path: draft.source_image_path.trim(),
@@ -431,7 +431,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
               <div className="template-editor-row">
                 <label className="composer-menu-field">
                   <span>分辨率</span>
-                  <input value={draft.resolution} onChange={(event) => setDraft((current) => ({ ...current, resolution: event.target.value }))} placeholder="4k" />
+                  <input value={draft.resolution} onChange={(event) => setDraft((current) => ({ ...current, resolution: event.target.value }))} placeholder="1k" />
                 </label>
                 <label className="composer-menu-field">
                   <span>交付说明</span>

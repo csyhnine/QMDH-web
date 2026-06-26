@@ -1,4 +1,5 @@
 import type { PromptTemplateCreatePayload, PromptTemplateRecord } from "../../api";
+import { normalizeStudioResolution } from "./studioConstants";
 import type { CustomPromptTemplate, StudioFormState, TemplateFeedback } from "./studioTypes";
 import { sortTemplatesByUpdatedAt } from "./studioUtils";
 
@@ -82,7 +83,7 @@ export function buildCustomTemplatePayload({
     prompt: draft.prompt,
     style: studioForm.style,
     aspect_ratio: studioForm.aspectRatio,
-    resolution: studioForm.resolution,
+    resolution: normalizeStudioResolution(studioForm.resolution),
     deliverable: studioForm.deliverable,
     notes: studioForm.notes,
     source_image_path: "",

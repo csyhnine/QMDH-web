@@ -34,3 +34,15 @@ export function truncateText(value: string, maxLength: number): string {
   if (normalized.length <= maxLength) return normalized;
   return `${normalized.slice(0, maxLength).trimEnd()}…`;
 }
+
+export function briefProviderLabel(value: string): string {
+  const normalized = value
+    .replace(/^google_/i, "")
+    .replace(/^modelscope_/i, "")
+    .replace(/_/g, " ")
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return value;
+  return truncateText(normalized, 24);
+}

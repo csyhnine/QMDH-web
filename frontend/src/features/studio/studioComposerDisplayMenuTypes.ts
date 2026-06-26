@@ -27,6 +27,8 @@ export type StudioComposerDisplayMenuPanelProps = Pick<
 export type StudioComposerOptionGroupOption = {
   id: string;
   label: string;
+  disabled?: boolean;
+  hint?: string;
 };
 
 export type StudioComposerOptionGroupProps = {

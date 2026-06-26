@@ -7,8 +7,6 @@ export default function StudioComposerToolbar(props: StudioComposerToolbarProps)
     availableProviderCount,
     composerToolbarRef,
     hasActiveProject,
-    selectedStyleLabel,
-    serviceHealthy,
     submitting,
     submissionProgress,
     uploadingReference,
@@ -16,13 +14,19 @@ export default function StudioComposerToolbar(props: StudioComposerToolbarProps)
 
   return (
     <div className="composer-toolbar" ref={composerToolbarRef}>
-      <StudioComposerToolbarMenus {...props} />
+      <div
+        className={
+          props.studioForm.creationMode === "video"
+            ? "composer-toolbar-menus is-video"
+            : "composer-toolbar-menus is-image"
+        }
+      >
+        <StudioComposerToolbarMenus {...props} />
+      </div>
       <StudioComposerSubmitActions
         availableProviderCount={availableProviderCount}
         creationMode={props.studioForm.creationMode}
         hasActiveProject={hasActiveProject}
-        selectedStyleLabel={selectedStyleLabel}
-        serviceHealthy={serviceHealthy}
         submitting={submitting}
         submissionProgress={submissionProgress}
         uploadingReference={uploadingReference}

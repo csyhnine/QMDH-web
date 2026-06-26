@@ -19,7 +19,8 @@ type StudioComposerDockParts = {
 export function getStudioComposerDockProps(
   props: StudioComposerDockProps,
   promptTextareaRef: RefObject<HTMLTextAreaElement | null>,
-  onExpand: () => void
+  onExpand: () => void,
+  onPromptSubmitShortcut: () => void
 ): StudioComposerDockParts {
   const modeLabel = composerModeLabel(props.studioForm.creationMode);
   const compactPromptPreview = composerPromptPreview(props.studioForm.prompt);
@@ -46,6 +47,7 @@ export function getStudioComposerDockProps(
       modeLabel,
       promptTextareaRef,
       referenceHint,
+      onPromptSubmitShortcut,
     },
   };
 }

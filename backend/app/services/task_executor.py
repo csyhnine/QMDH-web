@@ -1008,7 +1008,7 @@ def _requested_image_count(payload: dict) -> int:
         count = int(raw_value)
     except (TypeError, ValueError):
         count = 1
-    return max(1, min(4, count))
+    return max(1, min(3, count))
 
 
 def _submit_image_generation_request(

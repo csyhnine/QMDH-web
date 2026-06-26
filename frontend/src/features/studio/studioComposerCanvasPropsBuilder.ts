@@ -32,8 +32,6 @@ export function buildStudioComposerCanvasProps({
     providerGroups,
     selectedProvider,
     selectedResolution,
-    selectedStyle,
-    selectedWorkflow,
     workspaceName,
   } = derivedState;
 
@@ -79,8 +77,6 @@ export function buildStudioComposerCanvasProps({
     selectedGrokSkuLabel: grokSkuConfig?.label ?? null,
     selectedProviderModelName: selectedProvider?.display_name ?? selectedProvider?.model_name ?? null,
     selectedResolutionLabel: isGrokVideo ? "720p（固定）" : selectedResolution?.label ?? null,
-    selectedStyleLabel: selectedStyle?.label ?? studioForm.style,
-    serviceHealthy: state.health === "healthy",
     sharedTemplates: studioTemplates.sharedTemplates,
     showComposer: activeViewIsStudio,
     studioForm,
@@ -90,7 +86,6 @@ export function buildStudioComposerCanvasProps({
     templateDraftTitle: studioTemplates.templateDraftTitle,
     templateFeedback: studioTemplates.templateFeedback,
     uploadingReference: referenceUpload.uploadingReference,
-    workflowName: selectedWorkflow?.name ?? "閸ユ儳鍎氶悽鐔稿灇",
     workspaceName,
     onApplyTemplate: studioTemplates.applyTemplate,
     onAspectRatioSelect: (ratio) => setStudioForm((current) => ({ ...current, aspectRatio: ratio })),

@@ -1,3 +1,4 @@
+import { studioImageCountOptions } from "./studioConstants";
 import type { ComposerMenuKey, StudioFormState } from "./studioTypes";
 
 type StudioComposerCountMenuProps = {
@@ -14,7 +15,7 @@ export default function StudioComposerCountMenu({
   onToggleComposerMenu,
 }: StudioComposerCountMenuProps) {
   return (
-    <div className="composer-menu">
+    <div className="composer-menu composer-menu-count">
       <button
         type="button"
         className={activeComposerMenu === "count" ? "composer-menu-trigger is-open" : "composer-menu-trigger"}
@@ -24,7 +25,7 @@ export default function StudioComposerCountMenu({
       </button>
       {activeComposerMenu === "count" ? (
         <div className="composer-menu-panel composer-menu-panel-list">
-          {[1, 2, 3, 4].map((count) => (
+          {studioImageCountOptions.map((count) => (
             <button
               key={count}
               type="button"

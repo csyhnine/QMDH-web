@@ -120,30 +120,58 @@ function StudioFeedbackRoute() {
   );
 }
 
+function buildDashboardDateWindow(days: number): { startDate: string; endDate: string } {
+  const endDate = new Date();
+  const startDate = new Date(endDate);
+  startDate.setDate(endDate.getDate() - (days - 1));
+  return {
+    startDate: startDate.toISOString().slice(0, 10),
+    endDate: endDate.toISOString().slice(0, 10),
+  };
+}
+
 function DashboardRoute() {
   const [dashboard, setDashboard] = useState<DashboardStats | null>(null);
   const [groupSummaries, setGroupSummaries] = useState<UserGroupSummary[]>([]);
   const [dashboardStatsDays, setDashboardStatsDays] = useState(7);
+  const [groupSummaryRange, setGroupSummaryRange] = useState(() => buildDashboardDateWindow(7));
+  const [groupRangeFollowsDashboard, setGroupRangeFollowsDashboard] = useState(true);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
-  async function refresh(days = dashboardStatsDays) {
-    const endDate = new Date();
-    const startDate = new Date(endDate);
-    startDate.setDate(endDate.getDate() - (days - 1));
-    const startDateText = startDate.toISOString().slice(0, 10);
-    const endDateText = endDate.toISOString().slice(0, 10);
+  async function refresh(
+    days = dashboardStatsDays,
+    groupRange: { startDate: string; endDate: string } = groupSummaryRange,
+  ) {
     const [nextDashboard, nextGroupSummaries] = await Promise.all([
       api.dashboardStats(days),
-      api.userGroupSummaries(startDateText, endDateText),
+      api.userGroupSummaries(groupRange.startDate, groupRange.endDate),
     ]);
     setDashboard(nextDashboard);
     setGroupSummaries(nextGroupSummaries);
     setLastSyncedAt(new Date().toISOString());
   }
 
+  function handleChangeDays(days: number) {
+    setDashboardStatsDays(days);
+    if (groupRangeFollowsDashboard) {
+      setGroupSummaryRange(buildDashboardDateWindow(days));
+    }
+  }
+
+  function handleApplyGroupSummaryRange(range: { startDate: string; endDate: string }) {
+    setGroupRangeFollowsDashboard(false);
+    setGroupSummaryRange(range);
+  }
+
+  function handleSyncGroupSummaryRange() {
+    const range = buildDashboardDateWindow(dashboardStatsDays);
+    setGroupRangeFollowsDashboard(true);
+    setGroupSummaryRange(range);
+  }
+
   useEffect(() => {
-    void refresh(dashboardStatsDays);
-  }, [dashboardStatsDays]);
+    void refresh(dashboardStatsDays, groupSummaryRange);
+  }, [dashboardStatsDays, groupSummaryRange]);
 
   return (
     <AppShell kind="admin" active="dashboard">
@@ -152,8 +180,12 @@ function DashboardRoute() {
         groupSummaries={groupSummaries}
         userCanUseOpsViews={true}
         dashboardStatsDays={dashboardStatsDays}
+        groupSummaryRange={groupSummaryRange}
+        groupRangeFollowsDashboard={groupRangeFollowsDashboard}
         lastSyncedAt={lastSyncedAt}
-        onChangeDays={setDashboardStatsDays}
+        onChangeDays={handleChangeDays}
+        onApplyGroupSummaryRange={handleApplyGroupSummaryRange}
+        onSyncGroupSummaryRange={handleSyncGroupSummaryRange}
         onRefresh={() => void refresh()}
       />
     </AppShell>

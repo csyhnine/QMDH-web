@@ -28,10 +28,26 @@ export const stylePresets = [
 
 export const aspectRatioOptions = ["智能", "21:9", "16:9", "3:2", "4:3", "1:1", "3:4", "2:3", "9:16"];
 
+export const maxStudioImageCount = 3;
+
+export const studioImageCountOptions = [1, 2, 3] as const;
+
 export const resolutionOptions = [
-  { id: "2k", label: "高清 2K" },
-  { id: "4k", label: "超清 4K" },
+  { id: "1k", label: "标准 1K" },
+  { id: "2k", label: "高清 2K", disabled: true, hint: "即将上线" },
 ];
+
+/** Maps legacy 2k/4k UI values to the actual output tier available today. */
+export function normalizeStudioResolution(resolution: string | undefined | null): string {
+  const normalized = String(resolution || "").trim().toLowerCase();
+  if (normalized === "1k") return "1k";
+  return "1k";
+}
+
+export function studioResolutionLabel(resolution: string | undefined | null): string {
+  const id = normalizeStudioResolution(resolution);
+  return resolutionOptions.find((option) => option.id === id)?.label ?? "标准 1K";
+}
 
 export { defaultUpscaleOptions } from "./studioUpscaleOptions";
 
@@ -44,7 +60,7 @@ export const defaultStudioForm: StudioFormState = {
   classification: "B",
   style: "modern",
   aspectRatio: "16:9",
-  resolution: "4k",
+  resolution: "1k",
   imageCount: 1,
   deliverable: "",
   referenceImages: [],

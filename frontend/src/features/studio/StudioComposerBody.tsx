@@ -1,7 +1,6 @@
 import StudioComposerModeSwitch from "./StudioComposerModeSwitch";
 import StudioPromptTextarea from "./StudioPromptTextarea";
 import StudioReferenceDropzone from "./StudioReferenceDropzone";
-import StudioReferenceUploadList from "./StudioReferenceUploadList";
 import type { StudioComposerBodyProps } from "./studioComposerExpandedContentTypes";
 
 export default function StudioComposerBody({
@@ -12,6 +11,7 @@ export default function StudioComposerBody({
   onModeChange,
   onOpenReferencePicker,
   onPromptChange,
+  onPromptSubmitShortcut,
   onReferenceDrop,
   onRemoveReferenceUpload,
 }: StudioComposerBodyProps) {
@@ -23,9 +23,6 @@ export default function StudioComposerBody({
           referenceUploads={referenceUploads}
           onOpenReferencePicker={onOpenReferencePicker}
           onReferenceDrop={onReferenceDrop}
-        />
-        <StudioReferenceUploadList
-          referenceUploads={referenceUploads}
           onRemoveReferenceUpload={onRemoveReferenceUpload}
         />
       </div>
@@ -35,6 +32,7 @@ export default function StudioComposerBody({
         referenceHint={referenceHint}
         studioForm={studioForm}
         onPromptChange={onPromptChange}
+        onPromptSubmitShortcut={onPromptSubmitShortcut}
       />
     </div>
   );

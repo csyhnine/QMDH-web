@@ -9,11 +9,23 @@ export default function StudioHistoryCanvas(props: StudioHistoryCanvasProps) {
   return (
     <div
       ref={scrollProps.studioScrollPaneRef}
-      className={scrollProps.isStudioDockLayout ? "studio-scroll-pane" : "studio-scroll-fallback"}
+      className={
+        scrollProps.isStudioDockLayout
+          ? "studio-scroll-pane studio-scroll-pane-track"
+          : "studio-scroll-fallback"
+      }
     >
-      <StudioHistoryPane {...paneProps}>
-        <StudioHistoryFeed {...feedProps} />
-      </StudioHistoryPane>
+      {scrollProps.isStudioDockLayout ? (
+        <div className="studio-scroll-content">
+          <StudioHistoryPane {...paneProps}>
+            <StudioHistoryFeed {...feedProps} />
+          </StudioHistoryPane>
+        </div>
+      ) : (
+        <StudioHistoryPane {...paneProps}>
+          <StudioHistoryFeed {...feedProps} />
+        </StudioHistoryPane>
+      )}
     </div>
   );
 }

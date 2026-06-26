@@ -56,6 +56,8 @@ export type StudioFeedCardFooterProps = Pick<
   | "onShare"
 > & {
   createdAt: string;
+  providerDisplayName: string;
+  task: Task;
 };
 
 export type StudioFeedCardResultProps = Pick<

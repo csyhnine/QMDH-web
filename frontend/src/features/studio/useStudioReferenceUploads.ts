@@ -99,7 +99,7 @@ export function useStudioReferenceUploads({
     void handleReferenceFiles(files);
   }
 
-  function handleReferenceDrop(event: DragEvent<HTMLButtonElement>) {
+  function handleReferenceDrop(event: DragEvent<HTMLElement>) {
     event.preventDefault();
     const files = event.dataTransfer.files ? Array.from(event.dataTransfer.files) : [];
     void handleReferenceFiles(files);

@@ -1,10 +1,14 @@
 import type { Asset, Task } from "../../api";
 import { truncateText } from "./studioFormatUtils";
 
-export function deriveTaskTitleFromPrompt(prompt: string, fallback = "未命名任务"): string {
+export function deriveTaskTitleFromPrompt(
+  prompt: string,
+  fallback = "未命名任务",
+  maxLength = 36
+): string {
   const normalized = prompt.replace(/\s+/g, " ").trim();
   if (!normalized) return fallback;
-  return truncateText(normalized, 36);
+  return truncateText(normalized, maxLength);
 }
 
 export function taskSummary(task: Task, asset?: Asset): string {

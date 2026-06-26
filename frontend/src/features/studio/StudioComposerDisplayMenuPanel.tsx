@@ -1,4 +1,5 @@
 import StudioComposerOptionGroup from "./StudioComposerOptionGroup";
+import { normalizeStudioResolution } from "./studioConstants";
 import { isGrokHaodeyaProvider } from "./grokVideoUtils";
 import type { StudioComposerDisplayMenuPanelProps } from "./studioComposerDisplayMenuTypes";
 
@@ -31,7 +32,7 @@ export default function StudioComposerDisplayMenuPanel({
         ) : null
       ) : (
         <StudioComposerOptionGroup
-          activeId={studioForm.resolution}
+          activeId={normalizeStudioResolution(studioForm.resolution)}
           gridClassName="composer-chip-grid composer-chip-grid-two"
           options={resolutionOptions}
           title="分辨率"

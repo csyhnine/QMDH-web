@@ -1,4 +1,5 @@
 import type { PromptTemplateRecord } from "../../api";
+import { normalizeStudioResolution } from "./studioConstants";
 import type { CustomPromptTemplate, PromptTemplateFormValue, StudioFormState } from "./studioTypes";
 
 export function applyTemplateToForm(template: PromptTemplateFormValue, current: StudioFormState): StudioFormState {
@@ -8,7 +9,7 @@ export function applyTemplateToForm(template: PromptTemplateFormValue, current: 
     prompt: template.prompt,
     style: template.style,
     aspectRatio: template.aspectRatio,
-    resolution: template.resolution,
+    resolution: normalizeStudioResolution(template.resolution),
     deliverable: template.deliverable,
     notes: template.notes,
   };
@@ -21,7 +22,7 @@ export function toTemplateFormValue(template: PromptTemplateRecord): PromptTempl
     prompt: template.prompt,
     style: template.style,
     aspectRatio: template.aspect_ratio || "16:9",
-    resolution: template.resolution,
+    resolution: normalizeStudioResolution(template.resolution),
     deliverable: template.deliverable,
     notes: template.notes,
   };

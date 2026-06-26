@@ -1,0 +1,53 @@
+# Deploy log: Gemini CPA partial update (2026-06-22)
+
+Target: https://cityusbdisk.cn
+Method: git pull + hotpatch (docker build failed)
+Operator: Cursor agent session
+
+## Scope
+
+- IN: Gemini CPA backend (3 Python files)
+- OUT: frontend, migration, .env, usage logs fix, Studio layout
+
+## Commits deployed (git only)
+
+```
+51aba1b fix(providers): CPA gemini-3.1-flash-image 走 chat/completions 策略
+```
+
+Files on server after pull:
+- backend/app/services/provider_strategy.py
+- backend/app/services/task_executor.py
+- backend/app/routers/providers.py
+- backend/tests/test_task_executor_openai.py
+- docs/cpa-gemini-image-integration.md
+
+## Step log
+
+1. git push origin main → 51aba1b OK
+2. DEPLOY_SKIP_MIGRATIONS=1 DEPLOY_SKIP_ENV_TOUCH=1 DEPLOY_SERVICES="backend worker" python tmp/deploy_prod.py
+   - sudo -u admin git pull → Fast-forward to 51aba1b5 OK
+   - docker compose up -d --build backend worker → FAILED
+   - Error: python:3.12-slim metadata fetch from Docker Hub (content descriptor not found)
+3. tmp/hotpatch_gemini_prod.py
+   - docker cp × 3 files → backend + worker containers OK
+   - docker compose restart backend worker OK
+4. tmp/verify_gemini_prod.py
+   - health local + domain OK
+   - CHAT_COMPLETIONS_IMAGE_STRATEGY present
+   - auto_detect gemini-3.1-flash-image → True
+
+## Verification
+
+```
+Server HEAD: 51aba1b5
+curl http://127.0.0.1:8080/api/v1/health → {"status":"healthy",...}
+curl https://cityusbdisk.cn/api/v1/health → {"status":"healthy",...}
+docker compose ps backend worker → Up, backend healthy
+```
+
+## Follow-up
+
+- Rebuild backend/worker images when Docker Hub stable
+- Confirm CPA Provider configured in admin UI on production DB
+- Smoke: Studio image.generate with gemini-3.1-flash-image via newapi.haodeya.xyz

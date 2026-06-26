@@ -5,7 +5,6 @@ export default function StudioComposerLeading({
   selectedProviderModelName,
   selectedResolutionLabel,
   studioForm,
-  workflowName,
   workspaceName,
 }: StudioComposerLeadingProps) {
   return (
@@ -16,7 +15,6 @@ export default function StudioComposerLeading({
       </div>
       <div className="composer-statusline">
         <span>{modeLabel}</span>
-        <span>{workflowName}</span>
         <span>{selectedProviderModelName ?? studioForm.requestedProvider}</span>
         <span>
           {studioForm.aspectRatio} / {selectedResolutionLabel ?? studioForm.resolution}

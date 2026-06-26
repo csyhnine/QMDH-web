@@ -621,6 +621,19 @@ def get_dashboard_stats(
 USAGE_LOG_DEFAULT_ENTRY_TYPES = ("provider_call.recorded", "chat.message.completed", "task.finalized")
 
 
+def _usage_log_billable_entry_types(
+    *,
+    include_task_summary: bool,
+    entry_type: str | None,
+    allowed_entry_types: list[str],
+) -> tuple[str, ...]:
+    if entry_type and entry_type != "all":
+        return (entry_type,) if entry_type in allowed_entry_types else tuple(allowed_entry_types)
+    if include_task_summary:
+        return ("task.finalized", "chat.message.completed")
+    return ("provider_call.recorded", "chat.message.completed")
+
+
 def _usage_log_kind(entry: UsageLedger) -> str:
     if entry.entry_type == "chat.message.completed":
         return "对话"
@@ -782,10 +795,20 @@ def list_usage_logs(
     safe_page = min(page, total_pages) if total_pages else 1
     offset = (safe_page - 1) * page_size
 
+    cost_entry_types = _usage_log_billable_entry_types(
+        include_task_summary=include_task_summary,
+        entry_type=entry_type,
+        allowed_entry_types=allowed_entry_types,
+    )
+    cost_filters = [
+        *filters,
+        UsageLedger.entry_type.in_(cost_entry_types),
+    ]
+
     cost_rows = db.execute(
         select(UsageLedger.cost_currency, func.sum(UsageLedger.cost))
         .outerjoin(User, UsageLedger.user_id == User.id)
-        .where(*filters)
+        .where(*cost_filters)
         .group_by(UsageLedger.cost_currency)
     ).all()
 

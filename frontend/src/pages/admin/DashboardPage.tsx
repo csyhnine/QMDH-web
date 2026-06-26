@@ -80,13 +80,22 @@ function groupLabel(groupName: string): string {
   return groupName.trim() || "未分组";
 }
 
+export type DashboardDateRange = {
+  startDate: string;
+  endDate: string;
+};
+
 export type DashboardPageProps = {
   dashboard: DashboardStats | null;
   groupSummaries: UserGroupSummary[];
   userCanUseOpsViews: boolean;
   dashboardStatsDays: number;
+  groupSummaryRange: DashboardDateRange;
+  groupRangeFollowsDashboard: boolean;
   lastSyncedAt: string | null;
   onChangeDays: (days: number) => void;
+  onApplyGroupSummaryRange: (range: DashboardDateRange) => void;
+  onSyncGroupSummaryRange: () => void;
   onRefresh: () => void;
 };
 
@@ -95,13 +104,19 @@ export default function DashboardPage({
   groupSummaries,
   userCanUseOpsViews,
   dashboardStatsDays,
+  groupSummaryRange,
+  groupRangeFollowsDashboard,
   lastSyncedAt,
   onChangeDays,
+  onApplyGroupSummaryRange,
+  onSyncGroupSummaryRange,
   onRefresh,
 }: DashboardPageProps) {
   const [accountUsagePage, setAccountUsagePage] = useState(1);
   const [groupSummaryPage, setGroupSummaryPage] = useState(1);
   const [exportingGroups, setExportingGroups] = useState(false);
+  const [groupRangeDraft, setGroupRangeDraft] = useState(groupSummaryRange);
+  const [groupRangeError, setGroupRangeError] = useState("");
 
   const accountUsageTotalPages = Math.max(
     1,
@@ -120,6 +135,15 @@ export default function DashboardPage({
       setGroupSummaryPage(groupSummaryTotalPages);
     }
   }, [groupSummaryPage, groupSummaryTotalPages]);
+
+  useEffect(() => {
+    setGroupRangeDraft(groupSummaryRange);
+    setGroupRangeError("");
+  }, [groupSummaryRange]);
+
+  useEffect(() => {
+    setGroupSummaryPage(1);
+  }, [groupSummaryRange.startDate, groupSummaryRange.endDate]);
 
   if (!userCanUseOpsViews) {
     return (
@@ -160,11 +184,25 @@ export default function DashboardPage({
     groupSummaryPageStart + GROUP_SUMMARY_PAGE_SIZE,
   );
   const { startDate, endDate } = buildDateWindow(dashboardStatsDays);
+  const { startDate: groupStartDate, endDate: groupEndDate } = groupSummaryRange;
+
+  function handleApplyGroupRange() {
+    if (!groupRangeDraft.startDate || !groupRangeDraft.endDate) {
+      setGroupRangeError("请选择起始和结束日期");
+      return;
+    }
+    if (groupRangeDraft.startDate > groupRangeDraft.endDate) {
+      setGroupRangeError("起始日期不能晚于结束日期");
+      return;
+    }
+    setGroupRangeError("");
+    onApplyGroupSummaryRange(groupRangeDraft);
+  }
 
   async function handleExportGroupSummary() {
     setExportingGroups(true);
     try {
-      await api.exportUserGroupSummariesCsv(startDate, endDate);
+      await api.exportUserGroupSummariesCsv(groupStartDate, groupEndDate);
     } finally {
       setExportingGroups(false);
     }
@@ -394,15 +432,55 @@ export default function DashboardPage({
         </section>
 
         <section className="ops-panel ops-panel-wide">
-          <div className="ops-panel-head">
+          <div className="ops-panel-head ops-panel-head-stack">
             <div>
               <h2>分组支出统计</h2>
-              <span>{`结算窗口：${startDate} 至 ${endDate}`}</span>
+              <span>
+                {groupRangeFollowsDashboard
+                  ? `结算窗口：${groupStartDate} 至 ${groupEndDate}（跟随看板 ${dashboardStatsDays} 天）`
+                  : `结算窗口：${groupStartDate} 至 ${groupEndDate}（自定义）`}
+              </span>
             </div>
-            <button type="button" className="ops-icon-button" disabled={exportingGroups} onClick={() => void handleExportGroupSummary()}>
-              {exportingGroups ? "导出中..." : "导出 CSV"}
-            </button>
+            <div className="ops-group-range-toolbar">
+              <label className="ops-group-range-field">
+                <span>起始日期</span>
+                <input
+                  type="date"
+                  value={groupRangeDraft.startDate}
+                  onChange={(event) =>
+                    setGroupRangeDraft((current) => ({ ...current, startDate: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="ops-group-range-field">
+                <span>结束日期</span>
+                <input
+                  type="date"
+                  value={groupRangeDraft.endDate}
+                  onChange={(event) =>
+                    setGroupRangeDraft((current) => ({ ...current, endDate: event.target.value }))
+                  }
+                />
+              </label>
+              <button type="button" className="ops-icon-button" onClick={handleApplyGroupRange}>
+                查询
+              </button>
+              {!groupRangeFollowsDashboard ? (
+                <button type="button" className="ops-icon-button ops-icon-button-muted" onClick={onSyncGroupSummaryRange}>
+                  跟随看板窗口
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="ops-icon-button"
+                disabled={exportingGroups}
+                onClick={() => void handleExportGroupSummary()}
+              >
+                {exportingGroups ? "导出中..." : "导出 CSV"}
+              </button>
+            </div>
           </div>
+          {groupRangeError ? <div className="floating-error ops-group-range-error">{groupRangeError}</div> : null}
           {groupSummaries.length > 0 ? (
             <div className="admin-list-summary">
               <span>

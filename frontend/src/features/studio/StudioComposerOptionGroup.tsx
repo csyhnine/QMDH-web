@@ -15,10 +15,21 @@ export default function StudioComposerOptionGroup({
           <button
             key={option.id}
             type="button"
-            className={activeId === option.id ? "composer-chip-button is-active" : "composer-chip-button"}
-            onClick={() => onSelect(option.id)}
+            className={[
+              "composer-chip-button",
+              activeId === option.id ? "is-active" : "",
+              option.disabled ? "is-disabled" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            disabled={option.disabled}
+            aria-disabled={option.disabled || undefined}
+            onClick={() => {
+              if (!option.disabled) onSelect(option.id);
+            }}
           >
-            {option.label}
+            <span>{option.label}</span>
+            {option.hint ? <small className="composer-chip-hint">{option.hint}</small> : null}
           </button>
         ))}
       </div>

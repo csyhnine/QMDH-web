@@ -3,8 +3,10 @@ import type { CSSProperties } from "react";
 import type { Asset } from "../../api";
 import { stylePresets } from "./studioConstants";
 
+import { maxStudioImageCount } from "./studioConstants";
+
 export function clampImageCount(value: number): number {
-  return Math.max(1, Math.min(4, Math.trunc(value || 1)));
+  return Math.max(1, Math.min(maxStudioImageCount, Math.trunc(value || 1)));
 }
 
 export function clampReferenceImageCount(value: number): number {

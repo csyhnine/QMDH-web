@@ -1,7 +1,7 @@
 import type { Asset, Provider, Task } from "../../api";
 import { isGrokSkuId } from "./grokVideoUtils";
 import { isRuntimeStudioProvider } from "./modelAdminUtils";
-import { IMAGE_EDIT_WORKFLOW_KEY, IMAGE_UPSCALE_WORKFLOW_KEY, VIDEO_WORKFLOW_KEY } from "./studioConstants";
+import { IMAGE_EDIT_WORKFLOW_KEY, IMAGE_UPSCALE_WORKFLOW_KEY, VIDEO_WORKFLOW_KEY, normalizeStudioResolution } from "./studioConstants";
 import { inferStyleFromAsset } from "./studioAssetUtils";
 import { inferRequestedImageCount, taskReferenceImages, taskResultString } from "./studioTaskUtils";
 import type { ReferenceUploadItem, StudioFormState } from "./studioTypes";
@@ -73,7 +73,7 @@ export function buildStudioFormFromTask({
       requestedProvider: nextProvider,
       style: taskResultString(task, "style") || inferStyleFromAsset(asset, studioForm.style),
       aspectRatio: taskResultString(task, "aspect_ratio") || studioForm.aspectRatio,
-      resolution: taskResultString(task, "resolution") || studioForm.resolution,
+      resolution: normalizeStudioResolution(taskResultString(task, "resolution") || studioForm.resolution),
       imageCount: nextMode === "video" ? 1 : inferRequestedImageCount(task),
       deliverable: taskResultString(task, "storyboard") || taskResultString(task, "deliverable") || studioForm.deliverable,
       notes: taskResultString(task, "motion_prompt") || taskResultString(task, "prompt_supplement") || studioForm.notes,

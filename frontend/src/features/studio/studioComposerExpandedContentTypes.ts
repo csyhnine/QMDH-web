@@ -7,6 +7,7 @@ export type StudioComposerExpandedContentProps = StudioComposerDockProps & {
   modeLabel: string;
   promptTextareaRef: RefObject<HTMLTextAreaElement | null>;
   referenceHint: string;
+  onPromptSubmitShortcut: () => void;
 };
 
 export type StudioComposerCollapsedBarProps = Pick<
@@ -28,7 +29,6 @@ export type StudioComposerLeadingProps = Pick<
   | "selectedProviderModelName"
   | "selectedResolutionLabel"
   | "studioForm"
-  | "workflowName"
   | "workspaceName"
 >;
 
@@ -41,6 +41,7 @@ export type StudioComposerBodyProps = Pick<
   | "onModeChange"
   | "onOpenReferencePicker"
   | "onPromptChange"
+  | "onPromptSubmitShortcut"
   | "onReferenceDrop"
   | "onRemoveReferenceUpload"
 >;
@@ -53,17 +54,13 @@ export type StudioComposerModeSwitchProps = {
 export type StudioReferenceDropzoneProps = {
   referenceUploads: ReferenceUploadItem[];
   onOpenReferencePicker: () => void;
-  onReferenceDrop: (event: DragEvent<HTMLButtonElement>) => void;
-};
-
-export type StudioReferenceUploadListProps = {
-  referenceUploads: ReferenceUploadItem[];
+  onReferenceDrop: (event: DragEvent<HTMLElement>) => void;
   onRemoveReferenceUpload: (index: number) => void;
 };
 
 export type StudioPromptTextareaProps = Pick<
   StudioComposerBodyProps,
-  "promptTextareaRef" | "referenceHint" | "studioForm" | "onPromptChange"
+  "promptTextareaRef" | "referenceHint" | "studioForm" | "onPromptChange" | "onPromptSubmitShortcut"
 >;
 
 export type StudioComposerReferenceFileInputProps = Pick<

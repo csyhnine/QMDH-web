@@ -14,16 +14,22 @@ export default function StudioComposerDock(props: StudioComposerDockProps) {
     onSubmit,
   } = props;
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   function focusPromptAfterExpand() {
     onComposerExpand();
     window.requestAnimationFrame(() => promptTextareaRef.current?.focus());
   }
 
+  function handlePromptSubmitShortcut() {
+    formRef.current?.requestSubmit();
+  }
+
   const { collapsedBarProps, expandedContentProps } = getStudioComposerDockProps(
     props,
     promptTextareaRef,
-    focusPromptAfterExpand
+    focusPromptAfterExpand,
+    handlePromptSubmitShortcut
   );
 
   function handleComposerBlur(event: React.FocusEvent<HTMLFormElement>) {
@@ -35,6 +41,7 @@ export default function StudioComposerDock(props: StudioComposerDockProps) {
 
   return (
     <form
+      ref={formRef}
       className={composerCollapsed ? "composer-dock is-collapsed" : "composer-dock"}
       onSubmit={onSubmit}
       onFocusCapture={() => onComposerFocusChange(true)}

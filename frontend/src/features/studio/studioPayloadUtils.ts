@@ -1,5 +1,5 @@
 import type { Provider } from "../../api";
-import { IMAGE_EDIT_WORKFLOW_KEY, IMAGE_WORKFLOW_KEY, VIDEO_WORKFLOW_KEY } from "./studioConstants";
+import { IMAGE_EDIT_WORKFLOW_KEY, IMAGE_WORKFLOW_KEY, VIDEO_WORKFLOW_KEY, normalizeStudioResolution } from "./studioConstants";
 import { resolveSelectedGrokSku, getSelectedGrokSkuConfig, isGrokHaodeyaProvider } from "./grokVideoUtils";
 import type { StudioFormState } from "./studioTypes";
 import { clampImageCount } from "./studioAssetUtils";
@@ -11,7 +11,7 @@ export function buildImagePayload(form: StudioFormState, workflowKey: string): R
   const payload: Record<string, unknown> = {
     style: form.style,
     aspect_ratio: form.aspectRatio,
-    resolution: form.resolution,
+    resolution: normalizeStudioResolution(form.resolution),
     image_count: clampImageCount(form.imageCount),
     deliverable: form.deliverable,
     prompt_supplement: form.notes,

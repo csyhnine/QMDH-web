@@ -16,8 +16,6 @@ export type StudioComposerToolbarProps = Pick<
   | "selectedGrokSkuLabel"
   | "selectedProviderModelName"
   | "selectedResolutionLabel"
-  | "selectedStyleLabel"
-  | "serviceHealthy"
   | "sharedTemplates"
   | "studioForm"
   | "submitting"

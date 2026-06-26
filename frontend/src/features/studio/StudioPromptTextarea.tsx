@@ -6,7 +6,23 @@ export default function StudioPromptTextarea({
   referenceHint,
   studioForm,
   onPromptChange,
+  onPromptSubmitShortcut,
 }: StudioPromptTextareaProps) {
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) {
+      return;
+    }
+
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      onPromptSubmitShortcut();
+      return;
+    }
+
+    // Plain Enter inserts a newline in the textarea; stop the form from treating it as submit.
+    event.stopPropagation();
+  }
+
   return (
     <label className="composer-textarea">
       <textarea
@@ -14,6 +30,7 @@ export default function StudioPromptTextarea({
         rows={4}
         value={studioForm.prompt}
         onChange={(event) => onPromptChange(event.target.value)}
+        onKeyDown={handleKeyDown}
         placeholder={composerPromptPlaceholder(studioForm.creationMode)}
       />
       <span className="composer-textarea-hint">{referenceHint}</span>

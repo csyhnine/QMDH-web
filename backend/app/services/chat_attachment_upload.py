@@ -12,8 +12,8 @@ from fastapi import HTTPException, status
 from app.core.config import settings
 from app.services.media_storage import _normalize_relative_path, is_legacy_absolute_path, media_root_path
 
-MAX_CHAT_IMAGE_BYTES = 10 * 1024 * 1024
-MAX_CHAT_FILE_BYTES = 5 * 1024 * 1024
+MAX_CHAT_IMAGE_BYTES = 20 * 1024 * 1024
+MAX_CHAT_FILE_BYTES = 10 * 1024 * 1024
 CHAT_ATTACHMENT_PREFIXES = ("references/", "chat-attachments/")
 _ALLOWED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 _ALLOWED_DOCUMENT_SUFFIXES = {".pdf", ".txt", ".md", ".json", ".csv", ".docx", ".xlsx"}
@@ -58,7 +58,7 @@ def decode_chat_image_upload(file_name: str, data_url: str) -> tuple[str, bytes]
     if len(content) > MAX_CHAT_IMAGE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Chat image must be 10MB or smaller.",
+            detail="Chat image must be 20MB or smaller.",
         )
     return extension, content
 
@@ -81,7 +81,7 @@ def decode_chat_file_upload(file_name: str, data_url: str) -> tuple[str, bytes]:
     if len(content) > MAX_CHAT_FILE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Chat document must be 5MB or smaller.",
+            detail="Chat document must be 10MB or smaller.",
         )
     return suffix.lstrip("."), content
 

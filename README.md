@@ -1,25 +1,59 @@
 # QMDH Web
 
-设计院内部 AI 升级平台的一期开发骨架，当前包含：
+**当前版本：1.1.0（本地开发）** · **生产环境：1.0.0** · [CHANGELOG](CHANGELOG.md)
 
-- `backend/`: FastAPI 后端，提供统一工作流、任务、资产、看板接口
-- `frontend/`: React 前端，展示平台健康状态、工作流、任务和资产
-- `qmdh-plan.md`: 当前项目规划文档
+设计院内部 AI 升级平台，当前包含：
+
+- `backend/`：FastAPI 后端，提供工作流、任务、资产、看板、反馈等接口
+- `frontend/`：React 前端，Studio 创作区、运营后台与管理看板
+- `docs/`：协作文档、部署说明与项目状态
+
+## 版本说明
+
+| 环境 | 版本 | Git 基线 | 状态 |
+|------|------|----------|------|
+| 生产 [`cityusbdisk.cn`](https://cityusbdisk.cn) | **1.0.0** | `51aba1b` | 已部署 MVP 基线 |
+| 本地 / 待部署 | **1.1.0** | `main` + WIP | 下一版功能集，尚未上线 |
+
+**版本号管理**
+
+- 单一来源：仓库根目录 [`VERSION`](VERSION)
+- 同步位置：根目录与 `frontend/` 的 `package.json`、`CHANGELOG.md`
+- 健康检查：`GET /api/v1/health?detail=full` 返回 `version` 字段
+- 发版流程：更新 `VERSION` → 同步 `package.json` → 写 `CHANGELOG.md` → 打 Git tag（如 `v1.1.0`）→ 部署
+
+### 1.0.0（生产）
+
+- Studio 图像生成闭环、模板与历史
+- 统一模型接入、任务异步执行与成本留痕
+- Gemini CPA 生图路由
+- 管理看板、使用日志、反馈（单次问答）、单机 Docker Compose 部署
+
+### 1.1.0（本地，相对 1.0.0 新增）
+
+- Studio **2K 生图**与历史卡片分辨率 / 像素尺寸
+- Studio 创作区 UX 迭代（最多 3 张、快捷键提交等）
+- **反馈多轮对话**（用户 ↔ 管理员线程）
+- 上传限制 **图片 20MB / 文档 10MB**
+- 历史时间东八区显示、运营看板日期筛选与 CSV 导出、使用日志修复
+
+部署 v1.1.0 前需执行 `alembic upgrade head`（反馈线程新表）。详见 [CHANGELOG](CHANGELOG.md) 与 [docs/handoff.md](docs/handoff.md)。
 
 ## 当前实现范围
 
-- 统一模型接入注册表
+- 统一模型接入注册表与 Provider 策略
 - 统一任务记录、异步执行与成本留痕
-- 统一工作流目录
-- 统一资产列表
-- 管理看板基础统计
+- Studio 图像生成、模板浏览与历史管理
+- 统一资产列表与灵感库
+- 管理看板、使用日志、反馈与运营后台
+- 单机 Docker Compose 服务器部署基线
 
 ## 本地记录体系
 
-- `docs/prd/`: 平台与模块 PRD
-- `docs/projects/project-index.json`: 项目索引
-- `docs/projects/<项目编号>/status.md`: 项目阶段状态
-- `docs/projects/<项目编号>/milestones.json`: 项目里程碑状态
+- `docs/prd/`：平台与模块 PRD
+- `docs/projects/project-index.json`：项目索引
+- `docs/projects/<项目编号>/status.md`：项目阶段状态
+- `docs/handoff.md`：最新交接与部署状态
 
 ## 启动方式
 
@@ -42,10 +76,9 @@ npm run dev:all
 - 后端：`http://127.0.0.1:18010/api/v1/health`
 - 前端：`http://127.0.0.1:18080`
 
-如果只想检查依赖是否准备好：
+> 本地开发统一使用 `http://127.0.0.1:18080` → `http://127.0.0.1:18010`。`5180`、`8000`、`19010` 为历史调试端口，勿与 `start-dev.cmd` 并行占用。
 
-> Local dev is standardized on `http://127.0.0.1:18080 -> http://127.0.0.1:18010`.
-> Treat `5180`, `8000`, and `19010` as legacy/manual debugging ports, and do not run them alongside `start-dev.cmd`.
+如果只想检查依赖是否准备好：
 
 ```bash
 npm run dev:check
@@ -83,7 +116,7 @@ python -m app.worker
 
 ## 服务器部署
 
-MVP 1.0 已补充单机服务器部署基线，见 [DEPLOYMENT.md](E:\projects\QMDH-web\DEPLOYMENT.md)。
+MVP 部署说明见 [DEPLOYMENT.md](DEPLOYMENT.md) 与 [docs/deployment.md](docs/deployment.md)。
 
 当前推荐部署结构：
 
@@ -93,9 +126,4 @@ MVP 1.0 已补充单机服务器部署基线，见 [DEPLOYMENT.md](E:\projects\Q
 - `postgres`：业务数据库
 - `redis`：队列
 
-## 后续建议
-
-1. 把模拟供应商调用替换成真实适配器
-2. 接入 Redis 持久化队列与失败重试
-3. 增加登录、权限和项目级访问控制
-4. 增加真实文件上传和对象存储接入
+升级至 **v1.1.0** 时，除常规 `git pull` + `docker compose up -d --build` 外，还需 **`alembic upgrade head`**。

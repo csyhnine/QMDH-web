@@ -121,11 +121,15 @@ def profile_prefers_chat_modalities_image(*, provider_name: str, model_name: str
     identity = f"{provider_name} {model_name} {base_url}".lower()
     if "gemini" in identity and "image" in identity and "preview" in identity:
         return True
+    if "haodeya" in identity and "gpt-image" in identity:
+        return True
     return False
 
 
 def profile_prefers_chat_completions_image(*, provider_name: str, model_name: str, base_url: str) -> bool:
     normalized_model = str(model_name or "").strip().lower()
+    if normalized_model.endswith("-2k"):
+        normalized_model = normalized_model[:-3]
     if not normalized_model or normalized_model.startswith("google/"):
         return False
     if normalized_model in {"gemini-3.1-flash-image", "gemini-3-flash-image"}:

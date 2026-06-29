@@ -278,7 +278,7 @@ class AgentApiTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 413, response.text)
-        self.assertIn("10MB or smaller", response.text)
+        self.assertIn("20MB or smaller", response.text)
 
     def test_workflow_intent_job_can_be_completed_with_research_note(self) -> None:
         created = self.client.post(

@@ -339,6 +339,25 @@ class UserFeedback(Base):
 
     user: Mapped[User] = relationship(foreign_keys=[user_id])
     replied_by: Mapped[User | None] = relationship(foreign_keys=[replied_by_user_id])
+    messages: Mapped[list["UserFeedbackMessage"]] = relationship(
+        back_populates="feedback",
+        order_by="UserFeedbackMessage.created_at",
+    )
+
+
+class UserFeedbackMessage(Base):
+    __tablename__ = "user_feedback_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    feedback_id: Mapped[int] = mapped_column(ForeignKey("user_feedbacks.id"), index=True)
+    author_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    author_role: Mapped[str] = mapped_column(String(20), index=True)
+    body: Mapped[str] = mapped_column(Text, default="")
+    attachment_paths: Mapped[list[str]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    feedback: Mapped[UserFeedback] = relationship(back_populates="messages")
+    author: Mapped[User] = relationship()
 
 
 class AgentClient(Base):

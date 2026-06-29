@@ -1,13 +1,26 @@
+import type { Task } from "../../api";
+import { formatChinaMonthDayTime } from "../../lib/datetime";
+import { studioResolutionLabel } from "./studioConstants";
+import { taskResultString } from "./studioTaskProgressUtils";
+export function formatFeedCardResolutionLabel(task: Task): string {
+  const imageSize = taskResultString(task, "image_size").trim();
+  if (imageSize) return imageSize;
+  const resolution = taskResultString(task, "resolution");
+  if (resolution) return studioResolutionLabel(resolution);
+  return "";
+}
+
+export function formatFeedCardPixelSize(task: Task): string {
+  const width = Number(task.result["output_width"]);
+  const height = Number(task.result["output_height"]);
+  if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+    return `${Math.round(width)}×${Math.round(height)}`;
+  }
+  return taskResultString(task, "aspect_ratio_resolved") || taskResultString(task, "aspect_ratio");
+}
+
 export function formatDate(value: string | null): string {
-  if (!value) return "未记录";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  return formatChinaMonthDayTime(value);
 }
 
 export function formatDuration(ms: number): string {

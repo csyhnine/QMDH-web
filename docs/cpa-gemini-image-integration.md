@@ -35,11 +35,45 @@ Last updated: `2026-06-22`
 
 ## QMDH 执行层行为
 
+### 1K（默认）
+
 - 自动走 `POST {base_url}/chat/completions`
 - 请求体含 `model`、`messages`、`max_tokens: 4096`，**不带** `modalities` / `image_config`
 - 宽高比通过 prompt 追加 `Aspect ratio: 16:9.` 等文本提示
 - 响应优先解析 `message.images[].image_url.url`（支持 `data:image/...;base64,...`）
 - **不会**调用 `/v1/images/generations`（CPA 上会 400）
+
+### 2K
+
+2K 生图必须同时传 `image_config.image_size: "2K"` 与 `aspect_ratio`（如 `"16:9"`）。**仅**把 model 改成 `*-2k` 而不传 `image_size`，上游仍会按 1K 出图（例如 16:9 只有 1376×768）。
+
+**验收看像素：**
+
+| 比例 | 2K 期望尺寸 |
+| --- | --- |
+| 16:9 | 2752×1536 |
+| 1:1 | 约 2048×2048 |
+
+若仍是 1376×768 → 说明 `image_size: "2K"` 没传到上游。
+
+**OpenRouter / qmdh（`chat_modalities_image`，模型名含 `preview`）**
+
+- **不要**在模型名后拼 `-2k`（如 `...-preview-2k` 会 400）
+- 仍用 1K 模型名（如 `google/gemini-3.1-flash-image-preview`），在 `image_config` 里设 `image_size: "2K"`
+- 请求含 `modalities: ["text", "image"]`、`max_tokens: 8192` 与 `image_config: { aspect_ratio, image_size: "2K" }`
+
+**CPA / Antigravity（`chat_completions_image`，直连 Antigravity 网关）**
+
+- 2K 时使用模型名 `gemini-3.1-flash-image-2k`（相对 1K 配置 **追加 `-2k` 后缀**）
+- 同时发送 `modalities: ["text", "image"]`、`max_tokens: 8192` 与 `image_config: { aspect_ratio, image_size: "2K" }`
+- 1K 仍走无 `image_config` 的 prompt 比例写法
+
+**Haodeya 网关（`newapi.haodeya.xyz`，含 CPA 命名的 Provider）**
+
+- 2K 实测应走 **preview / OpenRouter 风格**：**不要**拼 `-2k` 后缀
+- QMDH 会自动把 `gemini-3.1-flash-image` 映射为 `google/gemini-3.1-flash-image-preview`，把 `gpt-image-2` 映射为 `openai/gpt-5.4-image-2`
+- 请求统一走 `chat_modalities_image` 形态（`modalities` + `image_config.image_size: "2K"`）
+- 任务结果里可核对 `upstream_request` 字段（model / image_config）
 
 ## 探测（Probe）
 

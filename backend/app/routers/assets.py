@@ -16,7 +16,7 @@ from app.services.media_storage import resolve_storage_path, write_binary_asset
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
-MAX_REFERENCE_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_REFERENCE_IMAGE_BYTES = 20 * 1024 * 1024
 
 
 def _owned_task_ids(db: Session, auth_user: AuthUserProfile) -> set[int]:
@@ -176,7 +176,7 @@ def _decode_reference_upload(data_url: str) -> bytes:
     if len(content) > MAX_REFERENCE_IMAGE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Reference image must be 10MB or smaller",
+            detail="Reference image must be 20MB or smaller",
         )
     return content
 

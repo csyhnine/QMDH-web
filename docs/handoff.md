@@ -11,56 +11,49 @@
 
 ## Latest Handoffs
 
-### [2026-06-26] Studio 创作区与运营看板 UX — GitHub 已同步，生产待部署
-- Role: Studio 布局/创作区 UX、运营看板、使用日志修复、交接文档
-- Branch: `main` @ `cecab36`
+### [2026-06-26] v1.1.0 — push GitHub，**生产仍为 v1.0.0，勿部署**
+- Role: v1.1.0 功能合入、版本号管理、反馈多轮对话、上传限制、2K 生图与历史 meta
+- Branch: `main` @ **本 commit**
+- Version:
+  - **生产 `https://cityusbdisk.cn`：v1.0.0**（Git `51aba1b`，未 pull 本次改动）
+  - **GitHub `main`：v1.1.0**（`VERSION` / `CHANGELOG.md` / `README.md`）
 - Repo status:
-  - Local `main`: `cecab36`（工作区干净；`assets/` 未跟踪，可忽略）
-  - GitHub `origin/main`: `cecab36`
-  - Production server git: `51aba1b5`（**尚未** pull / deploy 本次改动）
-  - Production **runtime**: Gemini 后端 hotpatch 仍生效；frontend 与 `cecab36` 功能 **未上线**
-- Production URL: **`https://cityusbdisk.cn`**
-- Completed (commit `cecab36`, GitHub):
-  - Studio 历史卡片 1–4 张统一「上文案 / 下图横向平铺 / 底操作栏」；滚动条贴主栏最右
-  - 创作区：标准 1K 标注 + 2K 占位、一次最多 3 张、工具栏固定网格、Ctrl+Enter 提交、参考图右上角 ×、移除无效状态标签与底部文件名列表（删 `StudioReferenceUploadList.tsx`）
-  - 运营看板：分组支出统计支持自定义起止日期 + CSV 导出
-  - 使用日志：KPI 对齐、双重计费修复（`dashboard.py` + `backend/tests/test_usage_logs.py`）
-  - 后端：`image_count` 上限改为 3
-- Archive detail: `docs/archive/handoff-2026-06-22-studio-gemini-composer.md`（含 Gemini 热更新背景）
-- CPA 配置文档: `docs/cpa-gemini-image-integration.md`
-- Next step（**勿擅自部署**，除非负责人明确要求）:
-  - 生产 `sudo -u admin git pull` + `docker compose up -d --build frontend backend worker`（或 `tmp/deploy_prod.py`；跳过 migration / 不改 `.env`）
-  - 补做 `docker compose build backend worker` 消除 Gemini hotpatch 与镜像漂移
-  - Studio 实测 CPA `gemini-3.1-flash-image` 生图
+  - Local + GitHub `main`: v1.1.0 全量改动已 commit / push
+  - Production server git: `51aba1b5`（**负责人要求：先不部署**）
+- Completed (v1.1.0):
+  - Studio **2K 生图**（Haodeya；Gemini 2K + 16:9 → 2752×1536，本地已验收）
+  - 历史卡片：分辨率 + 像素尺寸 + **Asia/Shanghai** 时间
+  - **反馈多轮对话**（`user_feedback_messages` + 用户/管理员线程 UI）
+  - 上传限制：**图片 20MB / 文档 10MB**（前后端 + nginx `35m`）
+  - 版本管理：`VERSION`、`backend/app/version.py`、健康检查返回版本号
+  - 文档：`README.md`、`CHANGELOG.md`、`docs/cpa-gemini-image-integration.md`
+  - 含此前 `cecab36`：Studio 创作区 UX、运营看板日期/CSV、使用日志修复
+- Local verification:
+  - Gemini @ Haodeya：1K ✅、2K ✅
+  - `test_feedback_api.py`：6 passed
+  - **GPT `gpt-image-2`：401** — Provider Key 配置问题，非代码问题
+- **勿 commit**: `assets/` 本地截图
+- 未来部署 v1.1.0（**非本次**）:
+  1. `sudo -u admin git -C /www/wwwroot/qmdh-web pull origin main`
+  2. **`alembic upgrade head`**（`user_feedback_messages`）
+  3. `docker compose up -d --build frontend backend worker`
+  4. 验收：2K 2752×1536、反馈多轮、health `version=1.1.0`
+- Next step: 负责人确认后再部署生产
 - Safe to hand off: **Yes**
+
+### [2026-06-26] Studio 创作区与运营看板 UX — 已并入 v1.1.0
+- Commit `cecab36` 内容已包含在 v1.1.0；生产仍未部署。
+- Archive: `docs/archive/handoff-2026-06-22-studio-gemini-composer.md`
 
 ### [2026-06-22] Gemini CPA 生产热更新（后端）
 - Role: Gemini CPA 适配、局部生产部署
-- Branch: `main` @ `51aba1b` → 后续 Studio/看板改动已在 `cecab36`
+- Branch: `main` @ `51aba1b` → 后续改动已合入 v1.1.0
 - Production URL: **`https://cityusbdisk.cn`**
 - Completed (production):
   - CPA `gemini-3.1-flash-image` → `chat_completions_image`（commit `51aba1b`）
   - `git pull` + hotpatch backend/worker（Docker Hub 拉 `python:3.12-slim` 失败时的兜底）
 - Deploy log: `docs/archive/deploy-2026-06-22-gemini-hotpatch.log`
-- Next step: 见 `[2026-06-26]` 生产部署项
+- Next step: 见 v1.1.0 部署项（待负责人确认）
 - Safe to hand off: **Yes**
 
-### [2026-06-15] Server git pull restored (admin user)
-- Role: Diagnose deploy key, fix deploy workflow, update docs
-- Branch: `main` @ `cfed87f`
-- Repo status:
-  - Local `main`: `cfed87f`
-  - GitHub `origin/main`: `cfed87f`
-  - Production server: `cfed87f` (`sudo -u admin git pull` verified)
-- Root cause:
-  - GitHub deploy key on `admin` was already healthy
-  - prior failures came from running `git pull` as `root` in `tmp/deploy_prod.py`
-- Completed:
-  - verified `sudo -u admin ssh -T git@github.com` and `git pull origin main`
-  - updated `tmp/deploy_prod.py` to pull as `admin`
-  - updated `docs/server-operations.md` and `docs/continuity.md`
-- Next step:
-  - continue Production Readiness backlog (`prod-002`, `prod-004`, etc.)
-- Safe to hand off: **Yes**
-
-<!-- Older entries: docs/archive/handoff-2026-06-12-ops-share-usage-logs-deploy.md, handoff-2026-06-12-grok-video-production.md -->
+<!-- Older entries: docs/archive/handoff-2026-06-15-server-git-pull.md, handoff-2026-06-12-ops-share-usage-logs-deploy.md -->

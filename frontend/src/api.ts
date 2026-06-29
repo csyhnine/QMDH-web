@@ -1,3 +1,5 @@
+import { formatUploadSize, MAX_REFERENCE_UPLOAD_BYTES } from "./utils/uploads";
+
 export type Workflow = {
   id: number;
   key: string;
@@ -627,6 +629,18 @@ export type AgentSkillReleaseCreatePayload = {
 
 export type AgentSkillReleaseUpdatePayload = Partial<AgentSkillReleaseCreatePayload>;
 
+export type FeedbackMessage = {
+  id: number;
+  feedback_id: number;
+  author_role: "user" | "admin";
+  author_user_id: number;
+  author_user_name: string;
+  author_display_name: string;
+  body: string;
+  attachment_paths: string[];
+  created_at: string;
+};
+
 export type FeedbackRecord = {
   id: number;
   user_id: number;
@@ -641,12 +655,18 @@ export type FeedbackRecord = {
   replied_at: string | null;
   created_at: string;
   updated_at: string;
+  messages: FeedbackMessage[];
 };
 
 export type FeedbackCreatePayload = {
   title: string;
   message: string;
   attachment_paths: string[];
+};
+
+export type FeedbackMessageCreatePayload = {
+  message: string;
+  attachment_paths?: string[];
 };
 
 export type FeedbackAdminUpdatePayload = {
@@ -711,7 +731,7 @@ async function buildError(response: Response): Promise<Error> {
   }
 
   if (response.status === 413) {
-    return new Error("上传图片过大，请将单张图片压缩到 10MB 以内后重试。");
+    return new Error(`上传图片过大，请将单张图片压缩到 ${formatUploadSize(MAX_REFERENCE_UPLOAD_BYTES)} 以内后重试。`);
   }
 
   if (response.status >= 500) {
@@ -821,6 +841,8 @@ export const api = {
   },
   feedback: () => request<FeedbackRecord[]>("/feedback"),
   createFeedback: (payload: FeedbackCreatePayload) => postJson<FeedbackRecord>("/feedback", payload),
+  appendFeedbackMessage: (feedbackId: number, payload: FeedbackMessageCreatePayload) =>
+    postJson<FeedbackRecord>(`/feedback/${feedbackId}/messages`, payload),
   adminFeedback: () => request<FeedbackRecord[]>("/feedback/admin"),
   replyFeedback: (feedbackId: number, payload: FeedbackAdminUpdatePayload) =>
     patchJson<FeedbackRecord>(`/feedback/admin/${feedbackId}`, payload),

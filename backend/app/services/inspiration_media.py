@@ -17,7 +17,7 @@ _BROWSER_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 )
-_MAX_REMOTE_IMAGE_BYTES = 10 * 1024 * 1024
+_MAX_REMOTE_IMAGE_BYTES = 20 * 1024 * 1024
 
 
 class _SafeRedirectHandler(HTTPRedirectHandler):

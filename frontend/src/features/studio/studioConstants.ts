@@ -34,13 +34,13 @@ export const studioImageCountOptions = [1, 2, 3] as const;
 
 export const resolutionOptions = [
   { id: "1k", label: "标准 1K" },
-  { id: "2k", label: "高清 2K", disabled: true, hint: "即将上线" },
+  { id: "2k", label: "高清 2K" },
 ];
 
-/** Maps legacy 2k/4k UI values to the actual output tier available today. */
+/** Normalizes legacy 4k UI values to 1k; keeps 1k/2k for upstream model suffix routing. */
 export function normalizeStudioResolution(resolution: string | undefined | null): string {
   const normalized = String(resolution || "").trim().toLowerCase();
-  if (normalized === "1k") return "1k";
+  if (normalized === "2k") return "2k";
   return "1k";
 }
 

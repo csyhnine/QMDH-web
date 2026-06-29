@@ -356,6 +356,23 @@ class UserFeedbackAdminUpdate(BaseModel):
     admin_reply: str = Field(min_length=1, max_length=4000)
 
 
+class UserFeedbackMessageCreate(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    attachment_paths: list[str] = Field(default_factory=list, max_length=6)
+
+
+class FeedbackMessageOut(BaseModel):
+    id: int
+    feedback_id: int
+    author_role: str
+    author_user_id: int
+    author_user_name: str
+    author_display_name: str
+    body: str
+    attachment_paths: list[str] = Field(default_factory=list)
+    created_at: datetime
+
+
 class UserFeedbackOut(BaseModel):
     id: int
     user_id: int
@@ -370,6 +387,7 @@ class UserFeedbackOut(BaseModel):
     replied_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+    messages: list[FeedbackMessageOut] = Field(default_factory=list)
 
 
 class ProviderCapability(BaseModel):

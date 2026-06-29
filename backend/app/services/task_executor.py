@@ -4,7 +4,7 @@ import json
 import logging
 import mimetypes
 import re
-from base64 import b64encode
+from base64 import b64decode, b64encode
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.core.config import ImageProviderProfile, settings
 from app.database import SessionLocal
 from app.models import Asset, AssetType, Project, ProviderCall, Task, TaskStatus, Workflow
-from app.services.image_aspect_ratio import resolve_image_aspect_ratio
+from app.services.image_aspect_ratio import read_image_dimensions, resolve_image_aspect_ratio
 from app.services.media_storage import (
     media_root_path,
     write_base64_asset,
@@ -52,6 +52,7 @@ from app.services.provider_strategy import (
     VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
     VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
     resolve_strategy_for_capability,
+    profile_prefers_chat_completions_image,
 )
 from app.services.usage_ledger import ensure_usage_ledger_for_task
 
@@ -161,6 +162,7 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
         try:
             started_at = perf_counter()
             storage_paths: list[str] = []
+            output_dimensions: tuple[int, int] | None = None
             usage_records: list[dict] = []
             response_models: list[str] = []
 
@@ -195,15 +197,16 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
                     usage_records.append(usage_payload)
 
                 for item in data:
-                    storage_paths.append(
-                        _persist_generated_image(
-                            provider_name=self.definition.provider_name,
-                            image_payload=item,
-                            prompt=prompt,
-                            output_format=self.profile.output_format,
-                            timeout_seconds=self.profile.timeout_seconds,
-                        )
+                    storage_path, image_dimensions = _persist_generated_image(
+                        provider_name=self.definition.provider_name,
+                        image_payload=item,
+                        prompt=prompt,
+                        output_format=self.profile.output_format,
+                        timeout_seconds=self.profile.timeout_seconds,
                     )
+                    storage_paths.append(storage_path)
+                    if output_dimensions is None and image_dimensions is not None:
+                        output_dimensions = image_dimensions
                     if len(storage_paths) >= requested_count:
                         break
 
@@ -222,9 +225,13 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
                 "requested_image_count": requested_count,
                 "output_count": len(storage_paths),
                 "billing": billing,
+                "upstream_request": _upstream_request_excerpt(request_plan.body),
                 **_request_diagnostics_payload(diagnostics),
                 **request_plan.reference_result,
             }
+            if output_dimensions is not None:
+                result["output_width"] = output_dimensions[0]
+                result["output_height"] = output_dimensions[1]
 
             return ExecutionOutcome(
                 model_name=self.profile.model_name,
@@ -382,6 +389,21 @@ def _build_image_request_plan(
             strategy = edit_strategy
 
     if strategy == OPENAI_IMAGES_STRATEGY:
+        if _should_use_chat_modalities_plan_for_2k(profile=profile, strategy=strategy, payload=payload):
+            if effective_capability == "image.edit":
+                return _build_chat_modalities_image_edit_plan(
+                    profile=profile,
+                    requested_capability=capability,
+                    effective_capability=effective_capability,
+                    payload=payload,
+                    prompt=prompt,
+                )
+            return _build_chat_modalities_image_plan(
+                profile=profile,
+                requested_capability=capability,
+                payload=payload,
+                prompt=prompt,
+            )
         return _build_openai_images_plan(
             profile=profile,
             requested_capability=capability,
@@ -413,6 +435,13 @@ def _build_image_request_plan(
             prompt=prompt,
         )
     if strategy == CHAT_COMPLETIONS_IMAGE_STRATEGY:
+        if _should_use_chat_modalities_plan_for_2k(profile=profile, strategy=strategy, payload=payload):
+            return _build_chat_modalities_image_plan(
+                profile=profile,
+                requested_capability=capability,
+                payload=payload,
+                prompt=prompt,
+            )
         return _build_chat_completions_image_plan(
             profile=profile,
             requested_capability=capability,
@@ -420,6 +449,14 @@ def _build_image_request_plan(
             prompt=prompt,
         )
     if strategy == CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY:
+        if _should_use_chat_modalities_plan_for_2k(profile=profile, strategy=strategy, payload=payload):
+            return _build_chat_modalities_image_edit_plan(
+                profile=profile,
+                requested_capability=capability,
+                effective_capability=effective_capability,
+                payload=payload,
+                prompt=prompt,
+            )
         return _build_chat_completions_image_edit_plan(
             profile=profile,
             requested_capability=capability,
@@ -458,6 +495,114 @@ def _aspect_ratio_result_fields(profile: ImageProviderProfile, payload: dict) ->
         "aspect_ratio_resolved": resolved,
         "aspect_ratio": resolved,
     }
+
+
+def _normalize_image_resolution(payload: dict) -> str:
+    raw = str(payload.get("resolution") or "1k").strip().lower()
+    if raw == "2k":
+        return "2k"
+    return "1k"
+
+
+IMAGE_GENERATION_MODALITIES: tuple[str, ...] = ("text", "image")
+IMAGE_GENERATION_MAX_TOKENS_1K = 4096
+IMAGE_GENERATION_MAX_TOKENS_2K = 8192
+HAODEYA_2K_UPSTREAM_MODELS: dict[str, str] = {
+    "gemini-3.1-flash-image": "google/gemini-3.1-flash-image-preview",
+    "gemini-3-flash-image": "google/gemini-3.1-flash-image-preview",
+    "gpt-image-2": "openai/gpt-5.4-image-2",
+}
+
+
+def _image_generation_max_tokens(payload: dict) -> int:
+    if _normalize_image_resolution(payload) == "2k":
+        return IMAGE_GENERATION_MAX_TOKENS_2K
+    return IMAGE_GENERATION_MAX_TOKENS_1K
+
+
+def _uses_haodeya_gateway(profile: ImageProviderProfile) -> bool:
+    return "haodeya" in profile.base_url.lower()
+
+
+def _resolve_haodeya_2k_upstream_model(base_model: str) -> str | None:
+    normalized = _strip_image_model_2k_suffix(base_model).lower()
+    return HAODEYA_2K_UPSTREAM_MODELS.get(normalized)
+
+
+def _should_use_chat_modalities_plan_for_2k(
+    *,
+    profile: ImageProviderProfile,
+    strategy: str,
+    payload: dict,
+) -> bool:
+    if _normalize_image_resolution(payload) != "2k" or not _uses_haodeya_gateway(profile):
+        return False
+    return strategy in {
+        OPENAI_IMAGES_STRATEGY,
+        CHAT_COMPLETIONS_IMAGE_STRATEGY,
+        CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY,
+    }
+
+
+def _upstream_request_excerpt(body: dict[str, object]) -> dict[str, object]:
+    excerpt: dict[str, object] = {"model": body.get("model")}
+    if body.get("modalities"):
+        excerpt["modalities"] = body.get("modalities")
+    if body.get("max_tokens") is not None:
+        excerpt["max_tokens"] = body.get("max_tokens")
+    image_config = body.get("image_config")
+    if isinstance(image_config, dict):
+        excerpt["image_config"] = image_config
+    return excerpt
+
+
+def _strip_image_model_2k_suffix(model_name: str) -> str:
+    normalized = str(model_name or "").strip()
+    if normalized.lower().endswith("-2k"):
+        return normalized[:-3]
+    return normalized
+
+
+def _uses_cpa_2k_model_suffix(profile: ImageProviderProfile) -> bool:
+    return profile_prefers_chat_completions_image(
+        provider_name=profile.provider_name,
+        model_name=_strip_image_model_2k_suffix(profile.model_name),
+        base_url=profile.base_url,
+    )
+
+
+def _resolve_image_model_name(profile: ImageProviderProfile, payload: dict) -> str:
+    base_model = _strip_image_model_2k_suffix(profile.model_name)
+    if _normalize_image_resolution(payload) != "2k":
+        return base_model
+    if _uses_haodeya_gateway(profile):
+        mapped = _resolve_haodeya_2k_upstream_model(base_model)
+        return mapped or base_model
+    if _uses_cpa_2k_model_suffix(profile):
+        return f"{base_model}-2k"
+    return base_model
+
+
+def _build_upstream_image_config(profile: ImageProviderProfile, payload: dict) -> dict[str, str]:
+    aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
+    config: dict[str, str] = {
+        "aspect_ratio": aspect_ratio,
+        "aspectRatio": aspect_ratio,
+    }
+    if _normalize_image_resolution(payload) == "2k":
+        config["image_size"] = "2K"
+        config["imageSize"] = "2K"
+    return config
+
+
+def _image_generation_result_fields(profile: ImageProviderProfile, payload: dict) -> dict[str, str]:
+    fields = _aspect_ratio_result_fields(profile, payload)
+    resolution = _normalize_image_resolution(payload)
+    fields["resolution"] = resolution
+    fields["image_model_resolved"] = _resolve_image_model_name(profile, payload)
+    if resolution == "2k":
+        fields["image_size"] = "2K"
+    return fields
 
 
 def _openai_image_request_body(
@@ -582,19 +727,19 @@ def _build_chat_modalities_image_plan(
     detail = str(payload.get("prompt_supplement") or "").strip()
     if detail:
         content = f"{prompt}\n\nAdditional guidance: {detail}"
-    resolved_aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
     body = {
-        "model": profile.model_name,
+        "model": _resolve_image_model_name(profile, payload),
         "messages": [{"role": "user", "content": content}],
-        "modalities": ["image", "text"],
-        "image_config": {"aspect_ratio": resolved_aspect_ratio},
+        "modalities": list(IMAGE_GENERATION_MODALITIES),
+        "max_tokens": _image_generation_max_tokens(payload),
+        "image_config": _build_upstream_image_config(profile, payload),
         "stream": False,
     }
     return ImageRequestPlan(
         endpoint_path="/chat/completions",
         body=body,
         headers=_build_openai_headers(profile),
-        reference_result=_aspect_ratio_result_fields(profile, payload),
+        reference_result=_image_generation_result_fields(profile, payload),
         adapter_mode="chat_modalities_image",
         effective_capability="image.generate",
         strategy=CHAT_MODALITIES_IMAGE_STRATEGY,
@@ -626,14 +771,14 @@ def _build_chat_modalities_image_edit_plan(
     }
     if requested_capability != effective_capability:
         reference_result["chat_modalities_image_edit_fallback_from"] = requested_capability
-    reference_result.update(_aspect_ratio_result_fields(profile, payload))
+    reference_result.update(_image_generation_result_fields(profile, payload))
 
-    resolved_aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
     body = {
-        "model": profile.model_name,
+        "model": _resolve_image_model_name(profile, payload),
         "messages": [{"role": "user", "content": content}],
-        "modalities": ["image", "text"],
-        "image_config": {"aspect_ratio": resolved_aspect_ratio},
+        "modalities": list(IMAGE_GENERATION_MODALITIES),
+        "max_tokens": _image_generation_max_tokens(payload),
+        "image_config": _build_upstream_image_config(profile, payload),
         "stream": False,
     }
     return ImageRequestPlan(
@@ -652,11 +797,14 @@ def _build_chat_completions_image_content(
     profile: ImageProviderProfile,
     payload: dict,
     prompt: str,
+    include_aspect_ratio_in_prompt: bool = True,
 ) -> str:
     content = prompt
     detail = str(payload.get("prompt_supplement") or "").strip()
     if detail:
         content = f"{prompt}\n\nAdditional guidance: {detail}"
+    if not include_aspect_ratio_in_prompt:
+        return content
     resolved_aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
     if resolved_aspect_ratio:
         content = f"{content}\n\nAspect ratio: {resolved_aspect_ratio}."
@@ -671,22 +819,31 @@ def _build_chat_completions_image_plan(
     prompt: str,
 ) -> ImageRequestPlan:
     del requested_capability
-    body = {
-        "model": profile.model_name,
+    use_image_config = _normalize_image_resolution(payload) == "2k"
+    body: dict[str, object] = {
+        "model": _resolve_image_model_name(profile, payload),
         "messages": [
             {
                 "role": "user",
-                "content": _build_chat_completions_image_content(profile=profile, payload=payload, prompt=prompt),
+                "content": _build_chat_completions_image_content(
+                    profile=profile,
+                    payload=payload,
+                    prompt=prompt,
+                    include_aspect_ratio_in_prompt=not use_image_config,
+                ),
             }
         ],
-        "max_tokens": 4096,
+        "max_tokens": _image_generation_max_tokens(payload),
         "stream": False,
     }
+    if use_image_config:
+        body["modalities"] = list(IMAGE_GENERATION_MODALITIES)
+        body["image_config"] = _build_upstream_image_config(profile, payload)
     return ImageRequestPlan(
         endpoint_path="/chat/completions",
         body=body,
         headers=_build_openai_headers(profile),
-        reference_result=_aspect_ratio_result_fields(profile, payload),
+        reference_result=_image_generation_result_fields(profile, payload),
         adapter_mode="chat_completions_image",
         effective_capability="image.generate",
         strategy=CHAT_COMPLETIONS_IMAGE_STRATEGY,
@@ -705,8 +862,17 @@ def _build_chat_completions_image_edit_plan(
     if not reference_images:
         raise ValueError("Image edit task requires a reference image for this provider profile")
 
+    use_image_config = _normalize_image_resolution(payload) == "2k"
     content: list[dict[str, object]] = [
-        {"type": "text", "text": _build_chat_completions_image_content(profile=profile, payload=payload, prompt=prompt)}
+        {
+            "type": "text",
+            "text": _build_chat_completions_image_content(
+                profile=profile,
+                payload=payload,
+                prompt=prompt,
+                include_aspect_ratio_in_prompt=not use_image_config,
+            ),
+        }
     ]
     for item in reference_images:
         content.append({"type": "image_url", "image_url": {"url": _reference_image_to_model_url(item)}})
@@ -718,14 +884,17 @@ def _build_chat_completions_image_edit_plan(
     }
     if requested_capability != effective_capability:
         reference_result["chat_completions_image_edit_fallback_from"] = requested_capability
-    reference_result.update(_aspect_ratio_result_fields(profile, payload))
+    reference_result.update(_image_generation_result_fields(profile, payload))
 
-    body = {
-        "model": profile.model_name,
+    body: dict[str, object] = {
+        "model": _resolve_image_model_name(profile, payload),
         "messages": [{"role": "user", "content": content}],
-        "max_tokens": 4096,
+        "max_tokens": _image_generation_max_tokens(payload),
         "stream": False,
     }
+    if use_image_config:
+        body["modalities"] = list(IMAGE_GENERATION_MODALITIES)
+        body["image_config"] = _build_upstream_image_config(profile, payload)
     return ImageRequestPlan(
         endpoint_path="/chat/completions",
         body=body,
@@ -1073,7 +1242,7 @@ def _persist_generated_image(
     prompt: str,
     output_format: str,
     timeout_seconds: float,
-) -> str:
+) -> tuple[str, tuple[int, int] | None]:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     safe_stub = "".join(char if char.isalnum() else "-" for char in prompt.lower())[:40].strip("-") or "image"
 
@@ -1081,7 +1250,7 @@ def _persist_generated_image(
         image_bytes, content_type = _download_generated_image(str(image_url), timeout_seconds=timeout_seconds)
         extension = _extension_for_downloaded_image(str(image_url), content_type, output_format)
         relative_path = f"generated/{provider_name}/{timestamp}-{safe_stub}-{randint(1000, 9999)}.{extension}"
-        return write_binary_asset(relative_path, image_bytes)
+        return write_binary_asset(relative_path, image_bytes), read_image_dimensions(image_bytes)
 
     b64_json = image_payload.get("b64_json")
     if not b64_json:
@@ -1091,8 +1260,9 @@ def _persist_generated_image(
     if extension == "jpg":
         extension = "jpeg"
 
+    image_bytes = b64decode(str(b64_json))
     relative_path = f"generated/{provider_name}/{timestamp}-{safe_stub}-{randint(1000, 9999)}.{extension}"
-    return write_base64_asset(relative_path, str(b64_json))
+    return write_base64_asset(relative_path, str(b64_json)), read_image_dimensions(image_bytes)
 
 
 def _uses_modelscope_async_mode(profile: ImageProviderProfile) -> bool:

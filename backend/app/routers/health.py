@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import asyncio
 import time
-from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.version import __version__
 
 router = APIRouter(tags=["health"])
 
@@ -19,12 +19,7 @@ _GLOBAL_BUDGET = 5.0
 
 
 def _resolve_application_version() -> str:
-    for dist_name in ("qmdh-web", "qmdh-web-backend", "QMDH-web"):
-        try:
-            return version(dist_name)
-        except PackageNotFoundError:
-            continue
-    return "unknown"
+    return __version__
 
 
 async def _check_database() -> dict[str, Any]:

@@ -153,6 +153,73 @@ class FeedbackApiTests(unittest.TestCase):
         self.assertEqual(listed.status_code, 200, listed.text)
         self.assertEqual(listed.json()[0]["admin_reply"], "We fixed this and deployed a patch.")
 
+    def test_user_and_admin_can_continue_feedback_thread(self) -> None:
+        created = self.client.post(
+            "/feedback",
+            headers=self._designer_headers(),
+            json={"title": "Threaded feedback", "message": "Initial issue description."},
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+        feedback_id = created.json()["id"]
+
+        first_reply = self.client.patch(
+            f"/feedback/admin/{feedback_id}",
+            headers=self._admin_headers(),
+            json={"status": "replied", "admin_reply": "Thanks, we are investigating."},
+        )
+        self.assertEqual(first_reply.status_code, 200, first_reply.text)
+
+        user_follow_up = self.client.post(
+            f"/feedback/{feedback_id}/messages",
+            headers=self._designer_headers(),
+            json={"message": "It still happens after refresh."},
+        )
+        self.assertEqual(user_follow_up.status_code, 200, user_follow_up.text)
+        self.assertEqual(user_follow_up.json()["status"], "open")
+
+        second_reply = self.client.patch(
+            f"/feedback/admin/{feedback_id}",
+            headers=self._admin_headers(),
+            json={"status": "replied", "admin_reply": "We deployed another fix."},
+        )
+        self.assertEqual(second_reply.status_code, 200, second_reply.text)
+
+        admin_list = self.client.get("/feedback/admin", headers=self._admin_headers())
+        self.assertEqual(admin_list.status_code, 200, admin_list.text)
+        thread = admin_list.json()[0]["messages"]
+        self.assertEqual(len(thread), 4)
+        self.assertEqual(thread[0]["author_role"], "user")
+        self.assertEqual(thread[0]["body"], "Initial issue description.")
+        self.assertEqual(thread[1]["author_role"], "admin")
+        self.assertEqual(thread[1]["body"], "Thanks, we are investigating.")
+        self.assertEqual(thread[2]["author_role"], "user")
+        self.assertEqual(thread[2]["body"], "It still happens after refresh.")
+        self.assertEqual(thread[3]["author_role"], "admin")
+        self.assertEqual(thread[3]["body"], "We deployed another fix.")
+        self.assertEqual(admin_list.json()[0]["admin_reply"], "We deployed another fix.")
+
+    def test_user_cannot_append_message_to_closed_feedback(self) -> None:
+        created = self.client.post(
+            "/feedback",
+            headers=self._designer_headers(),
+            json={"title": "Closed thread", "message": "Please close this."},
+        )
+        feedback_id = created.json()["id"]
+
+        closed = self.client.patch(
+            f"/feedback/admin/{feedback_id}",
+            headers=self._admin_headers(),
+            json={"status": "closed", "admin_reply": "Resolved and closed."},
+        )
+        self.assertEqual(closed.status_code, 200, closed.text)
+
+        follow_up = self.client.post(
+            f"/feedback/{feedback_id}/messages",
+            headers=self._designer_headers(),
+            json={"message": "One more note."},
+        )
+        self.assertEqual(follow_up.status_code, 400, follow_up.text)
+
     def test_ensure_schema_backfills_feedback_attachment_column_for_legacy_database(self) -> None:
         engine = create_engine(
             "sqlite://",

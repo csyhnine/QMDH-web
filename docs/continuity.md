@@ -17,10 +17,10 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**: `docs/tasks.md` → **`Development Sequence (2026-06)`** (Phases 0–3 complete; Grok live smoke done 2026-06-12)
-- Current branch: `main` @ `cecab36`（local = GitHub `origin/main`，工作区干净）
-- GitHub `origin/main`: `cecab36`
-- Production server git: `51aba1b5`；**`cecab36` 尚未部署**（负责人 2026-06-26 明确暂不部署）
-- Production runtime: Gemini 后端 hotpatch 仍生效（≈ `51aba1b`）；frontend / 使用日志 / 看板新功能 **未上线**
+- Current branch: `main` @ `7cdf9f4`（GitHub `origin/main`）+ **本地 WIP 未提交**（见 `docs/handoff.md` `[2026-06-29]`）
+- GitHub `origin/main`: `7cdf9f4`（文档）；产品功能最新在 `cecab36` + 本地 WIP
+- Production server git: `51aba1b5`；**`cecab36` / `7cdf9f4` / 2K WIP 均未部署**
+- Production runtime: Gemini 后端 hotpatch 仍生效（≈ `51aba1b`）；frontend / 2K / 历史 meta / 看板 / 使用日志 **未上线**
 - Production URL: **`https://cityusbdisk.cn`** (ICP filed; HTTPS enabled)
 - Phase status (2026-06-12):
   - Phase 0–3: DONE including Haodeya Grok production E2E
@@ -80,20 +80,29 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - Studio four-tier SKU switcher + single admin `haodeya_grok` provider profile
   - Text-only and i2v-with-reference-image flows verified end-to-end
   - Reference images upload in Studio; public URL via `https://cityusbdisk.cn/media/...`
-- Current studio composer reality (2026-06-26, `cecab36`):
+- Current studio composer reality（**本地 WIP，2026-06-29 已验收**）:
   - the composer can auto-collapse into a compact bar while browsing history
   - focusing, opening menus, hovering the collapsed bar, uploading references, or submitting expands it again
-  - resolution UI shows **标准 1K** (actual output tier); **高清 2K** is disabled with「即将上线」
+  - resolution UI: **标准 1K** / **高清 2K** 均可选；2K 通过 `image_config.image_size: "2K"` 驱动上游
   - image batch size is capped at **3** (no 4-image option)
   - bottom toolbar uses a fixed grid so template/model/ratio/count triggers do not reflow; long labels ellipsis
   - **Enter** inserts newline; **Ctrl+Enter** (Mac: ⌘+Enter) submits; shortcut hint is inside the submit button
   - reference images remove via top-right × on preview; bottom filename list removed (`StudioReferenceUploadList.tsx` deleted)
   - removed stale composer chrome (workflow name, style tag, service online/offline labels)
-- Current history card reality (2026-06-26):
+- Current history card reality（**本地 WIP**）:
   - cards are denser than earlier versions
   - 1–4 generated images share one layout: summary on top, horizontal gallery, footer actions below
   - gallery scrollbar aligns to the main history column right edge
   - generated image previews preserve full image content through proportional shrink (`contain`) instead of banner-like crop
+  - footer meta（gallery 布局）: 模型简称 + **分辨率（1K/2K）** + **像素尺寸（宽×高）** + 耗时；时间戳按 **东八区**
+  - 2K 验收：16:9 → **2752×1536**；若仍 **1376×768** 说明 `image_size` 未传到上游
+- Current image 2K routing reality（**本地 WIP，`task_executor.py`**）:
+  - **Haodeya**（`newapi.haodeya.xyz`）：2K 用 preview 模型名 + `image_config`，**不要** `-2k` 后缀
+    - `gemini-3.1-flash-image` → `google/gemini-3.1-flash-image-preview`
+    - `gpt-image-2` → `openai/gpt-5.4-image-2`（需有效 API Key）
+  - **直连 Antigravity CPA**：2K 仍可用 `gemini-3.1-flash-image-2k` + `image_config`
+  - 任务 result 可查 `upstream_request` / `output_width` / `output_height`
+  - 详 `docs/cpa-gemini-image-integration.md`
 - Current admin model reality:
   - provider profiles can be enabled or disabled from the model list without changing existing pricing rules
   - toggling a provider profile updates only the `enabled` state
@@ -187,7 +196,9 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Refined studio template browser layout, preview presentation, and hover stability.
 - Added auto-collapse / expand behavior for the studio composer while browsing history.
 - Compressed history-card chrome while preserving full generated image content through proportional preview scaling.
-- **`cecab36` (2026-06-26, on GitHub; not deployed):** unified history gallery layout; composer 1K/2K resolution UX, max-3 images, fixed toolbar, Ctrl+Enter submit, reference × remove; dashboard group-spend custom date range; usage-log KPI + double-billing fix with `test_usage_logs.py`.
+- **`cecab36` (2026-06-26, on GitHub; not deployed):** unified history gallery layout; composer max-3 images, fixed toolbar, Ctrl+Enter submit, reference × remove; dashboard group-spend custom date range; usage-log KPI + double-billing fix with `test_usage_logs.py`.
+- **v1.1.0 (GitHub):** 2K 生图、历史 meta、反馈多轮、上传 20MB/10MB、版本号 `VERSION`；本地 Gemini 1K/2K 与反馈 API 已验收。
+- **Production remains v1.0.0** @ `51aba1b` — intentionally not deployed yet.
 
 ## Current Server Snapshot
 
@@ -195,11 +206,11 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Domain: `cityusbdisk.cn`（京ICP备14011242号-4，已备案）
 - Deploy path: `/www/wwwroot/qmdh-web`
 - Deployment model: Docker Compose
-- Current deployed product repo head: `51aba1b5` (git); runtime backend/worker ≈ `51aba1b` via hotpatch
-- Latest product commit on GitHub: `cecab36` (**pending deploy**)
-- Latest session archive: `docs/archive/handoff-2026-06-22-studio-gemini-composer.md`
-- Gemini CPA doc: `docs/cpa-gemini-image-integration.md`
-- Pending production deploy from `cecab36`: Studio CSS/创作区、看板分组支出、使用日志修复（frontend rebuild + backend)
+- **Production version: v1.0.0** — Git `51aba1b5`; runtime backend/worker ≈ `51aba1b` via hotpatch
+- **GitHub `main`: v1.1.0** — pushed; includes `cecab36` Studio/看板 + 2K/反馈/上传/版本管理
+- Latest session archive: `docs/handoff.md` → `[2026-06-26] v1.1.0`
+- Gemini CPA doc: `docs/cpa-gemini-image-integration.md`（含 2K 验收表）
+- **Pending production deploy: v1.1.0**（需 `alembic upgrade head` + rebuild；负责人未授权前勿部署）
 - Server working tree: clean after `sudo -u admin git pull`
 - Verified runtime after latest deploy:
   - `docker compose ps` healthy
@@ -221,11 +232,11 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Local push to GitHub may need proxy on dev machine (`127.0.0.1:7897`).
 - Server git operations must use `admin`; do not run `git pull` as `root`.
 - `prod-001` first-pass Studio split is merged; further hook splits are optional follow-up only.
-- Release/version records are tracked through `CHANGELOG.md`, package versions, and the optional `v0.2.0` Git tag.
+- Release/version records are tracked through root `VERSION`, `CHANGELOG.md`, package versions, and Git tags such as `v1.0.0` / `v1.1.0`.
 - `storage/` and `tmp/` remain expected local-only directories and must not be committed.
 - Server deploy fallback still depends on `git bundle` or **hotpatch** when Docker Hub pull fails.
 - Production backend/worker may run hotpatched code not yet baked into Docker images; rebuild when registry stable.
-- Image upload still uses base64 data URLs and keeps a 10MB per-image limit; raising it safely requires changing both frontend/backend limits and possibly nginx body size.
+- Image upload still uses base64 data URLs and keeps a 20MB per-image / 10MB per-document limit; raising it further requires changing both frontend/backend limits and nginx `client_max_body_size` (currently 35m).
 - Auto-collapsing composer behavior is improved but still a likely UX hotspot; if touched again, re-check bottom-edge expand behavior and scroll jitter.
 - Older docs may still contain stale wording about historical `owner / ops` roles or project-member sharing; when docs disagree, trust `docs/product-boundary.md`, `docs/handoff.md`, and this file.
 

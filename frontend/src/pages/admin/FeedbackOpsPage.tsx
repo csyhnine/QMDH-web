@@ -1,12 +1,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 
-import { api, type FeedbackRecord } from "../../api";
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
+import { api, type FeedbackMessage, type FeedbackRecord } from "../../api";
+import { formatChinaMonthDayTime } from "../../lib/datetime";
 
 type ReplyDraft = {
   status: "open" | "replied" | "closed";
@@ -24,6 +19,41 @@ export type FeedbackOpsPageProps = {
   onRefresh: () => void;
   onSetError: (error: string) => void;
 };
+
+function messageAuthorLabel(message: FeedbackMessage): string {
+  if (message.author_role === "admin") {
+    return message.author_display_name || message.author_user_name || "管理员";
+  }
+  return message.author_display_name || message.author_user_name || "用户";
+}
+
+function FeedbackMessageList({ messages }: { messages: FeedbackMessage[] }) {
+  return (
+    <div className="feedback-message-list">
+      {messages.map((message) => (
+        <div
+          key={`${message.feedback_id}-${message.id}-${message.created_at}`}
+          className={`feedback-message-card ${message.author_role === "admin" ? "is-admin" : "is-user"}`}
+        >
+          <div className="feedback-message-head">
+            <strong>{messageAuthorLabel(message)}</strong>
+            <small>{formatChinaMonthDayTime(message.created_at)}</small>
+          </div>
+          <p>{message.body}</p>
+          {message.attachment_paths.length > 0 ? (
+            <div className="feedback-thread-attachments">
+              {message.attachment_paths.map((path) => (
+                <a key={path} href={path} target="_blank" rel="noreferrer" className="feedback-thread-image">
+                  <img src={path} alt="反馈截图" />
+                </a>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSetError }: FeedbackOpsPageProps) {
   const [selectedId, setSelectedId] = useState<number | null>(feedbackItems[0]?.id ?? null);
@@ -44,7 +74,7 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
     setSelectedId(selectedFeedback.id);
     setReplyDraft({
       status: (selectedFeedback.status as ReplyDraft["status"]) || "replied",
-      admin_reply: selectedFeedback.admin_reply || "",
+      admin_reply: "",
     });
   }, [selectedFeedback?.id]);
 
@@ -65,6 +95,7 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
         status: replyDraft.status,
         admin_reply: replyDraft.admin_reply.trim(),
       });
+      setReplyDraft((current) => ({ ...current, admin_reply: "" }));
       onSetError("");
       onRefresh();
     } catch (err) {
@@ -79,7 +110,7 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
       <header className="admin-page-head">
         <div>
           <h1>反馈收件箱</h1>
-          <p>这里只有管理员可见。在这里回复后，提交反馈的用户会在自己的反馈页看到你的回复。</p>
+          <p>每条反馈都是一条对话线程。你可以多次回复，用户也会在同一线程里继续补充说明。</p>
         </div>
         <button type="button" className="admin-primary-button" onClick={onRefresh}>
           刷新收件箱
@@ -158,11 +189,11 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
                   </em>
                 </span>
                 <span>
-                  <strong>{formatDate(item.updated_at)}</strong>
-                  <small>{formatDate(item.created_at)}</small>
+                  <strong>{formatChinaMonthDayTime(item.updated_at)}</strong>
+                  <small>{formatChinaMonthDayTime(item.created_at)}</small>
                 </span>
                 <span>
-                  <strong>{item.admin_reply ? "已回复" : "待回复"}</strong>
+                  <strong>{item.messages.some((message) => message.author_role === "admin") ? "已回复" : "待回复"}</strong>
                   <small>{item.replied_by_user_name || "尚未认领"}</small>
                 </span>
               </button>
@@ -175,25 +206,13 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
             <form className="admin-side-form" onSubmit={handleReply}>
               <div className="admin-detail-head">
                 <h2>{selectedFeedback.title}</h2>
-                <p>{selectedFeedback.user_display_name || selectedFeedback.user_name} 于 {formatDate(selectedFeedback.created_at)} 提交了这条反馈。</p>
+                <p>{selectedFeedback.user_display_name || selectedFeedback.user_name} 于 {formatChinaMonthDayTime(selectedFeedback.created_at)} 发起了这条反馈。</p>
               </div>
 
               <div className="feedback-detail-card">
-                <span>用户描述</span>
-                <p>{selectedFeedback.message}</p>
+                <span>对话记录</span>
+                <FeedbackMessageList messages={selectedFeedback.messages} />
               </div>
-              {selectedFeedback.attachment_paths.length > 0 ? (
-                <div className="feedback-detail-card">
-                  <span>用户截图</span>
-                  <div className="feedback-thread-attachments">
-                    {selectedFeedback.attachment_paths.map((path) => (
-                      <a key={path} href={path} target="_blank" rel="noreferrer" className="feedback-thread-image">
-                        <img src={path} alt="反馈截图" />
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
 
               <label className="composer-menu-field">
                 <span>状态</span>
@@ -213,12 +232,12 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
               </label>
 
               <label className="composer-menu-field">
-                <span>管理员回复</span>
+                <span>发送回复</span>
                 <textarea
                   className="feedback-textarea"
                   value={replyDraft.admin_reply}
                   onChange={(event) => setReplyDraft((current) => ({ ...current, admin_reply: event.target.value }))}
-                  placeholder="在这里回复问题原因、修复进展，或需要用户补充的信息。"
+                  placeholder="在这里回复问题原因、修复进展，或向用户追问更多信息。"
                 />
               </label>
 
@@ -226,7 +245,7 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
 
               <div className="template-editor-actions">
                 <button type="submit" className="submit-button" disabled={saving}>
-                  {saving ? "保存中..." : "保存回复"}
+                  {saving ? "发送中..." : "发送回复"}
                 </button>
               </div>
             </form>

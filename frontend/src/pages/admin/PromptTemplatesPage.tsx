@@ -1,7 +1,7 @@
 import { type ChangeEvent, type DragEvent, type FormEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, type PromptTemplateCreatePayload, type PromptTemplateRecord } from "../../api";
-import { validateReferenceImageSize } from "../../utils/uploads";
+import { formatUploadSize, MAX_REFERENCE_UPLOAD_BYTES, validateReferenceImageSize } from "../../utils/uploads";
 
 type PromptTemplateDraft = PromptTemplateCreatePayload;
 type UploadField = "source_image_path" | "preview_image_path";
@@ -102,7 +102,7 @@ function TemplateImageUploader(props: ImageUploaderProps) {
         ) : (
           <div className="template-preview-dropzone-copy">
             <strong>{`点击或拖拽上传${props.title}`}</strong>
-            <span>支持 PNG / JPG / WEBP，单张不超过 10MB。</span>
+            <span>{`支持 PNG / JPG / WEBP，单张不超过 ${formatUploadSize(MAX_REFERENCE_UPLOAD_BYTES)}。`}</span>
           </div>
         )}
       </button>

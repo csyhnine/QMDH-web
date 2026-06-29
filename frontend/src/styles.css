@@ -1572,6 +1572,56 @@ button {
   border-color: rgba(148, 163, 184, 0.16);
 }
 
+.feedback-message-list {
+  display: grid;
+  gap: 12px;
+}
+
+.feedback-message-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.feedback-message-card.is-user {
+  background: rgba(248, 250, 252, 0.95);
+}
+
+.feedback-message-card.is-admin {
+  background: rgba(239, 246, 255, 0.95);
+  border-color: rgba(59, 130, 246, 0.18);
+}
+
+.feedback-message-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feedback-message-head strong,
+.feedback-message-head small {
+  display: block;
+}
+
+.feedback-message-head small {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.feedback-message-card p {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.feedback-followup-form {
+  display: grid;
+  gap: 12px;
+}
+
 .stat-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

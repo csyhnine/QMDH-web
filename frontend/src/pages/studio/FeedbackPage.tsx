@@ -1,19 +1,14 @@
 import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
 
-import { api, type FeedbackRecord } from "../../api";
-import { validateReferenceImageSize } from "../../utils/uploads";
+import { api, type FeedbackMessage, type FeedbackRecord } from "../../api";
+import { formatChinaMonthDayTime } from "../../lib/datetime";
+import { formatUploadSize, MAX_REFERENCE_UPLOAD_BYTES, validateReferenceImageSize } from "../../utils/uploads";
 
 type FeedbackAttachment = {
   fileName: string;
   previewUrl: string;
   storagePath: string;
 };
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
 
 type Draft = {
   title: string;
@@ -34,10 +29,47 @@ export type FeedbackPageProps = {
   onSetError: (error: string) => void;
 };
 
+function messageAuthorLabel(message: FeedbackMessage): string {
+  if (message.author_role === "admin") {
+    return message.author_display_name || message.author_user_name || "管理员";
+  }
+  return message.author_display_name || message.author_user_name || "我";
+}
+
+function FeedbackMessageList({ messages }: { messages: FeedbackMessage[] }) {
+  return (
+    <div className="feedback-message-list">
+      {messages.map((message) => (
+        <div
+          key={`${message.feedback_id}-${message.id}-${message.created_at}`}
+          className={`feedback-message-card ${message.author_role === "admin" ? "is-admin" : "is-user"}`}
+        >
+          <div className="feedback-message-head">
+            <strong>{messageAuthorLabel(message)}</strong>
+            <small>{formatChinaMonthDayTime(message.created_at)}</small>
+          </div>
+          <p>{message.body}</p>
+          {message.attachment_paths.length > 0 ? (
+            <div className="feedback-thread-attachments">
+              {message.attachment_paths.map((path) => (
+                <a key={path} href={path} target="_blank" rel="noreferrer" className="feedback-thread-image">
+                  <img src={path} alt="反馈截图" />
+                </a>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetError }: FeedbackPageProps) {
   const [draft, setDraft] = useState<Draft>(defaultDraft);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [followUpDrafts, setFollowUpDrafts] = useState<Record<number, string>>({});
+  const [followUpSavingId, setFollowUpSavingId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const repliedCount = feedbackItems.filter((item) => item.status === "replied").length;
@@ -73,6 +105,27 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
       onSetError(err instanceof Error ? err.message : "提交反馈失败");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleFollowUpSubmit(event: FormEvent<HTMLFormElement>, feedbackId: number) {
+    event.preventDefault();
+    const message = (followUpDrafts[feedbackId] || "").trim();
+    if (!message) {
+      onSetError("请先填写补充说明。");
+      return;
+    }
+
+    setFollowUpSavingId(feedbackId);
+    try {
+      await api.appendFeedbackMessage(feedbackId, { message });
+      setFollowUpDrafts((current) => ({ ...current, [feedbackId]: "" }));
+      onSetError("");
+      onRefresh();
+    } catch (err) {
+      onSetError(err instanceof Error ? err.message : "发送补充说明失败");
+    } finally {
+      setFollowUpSavingId(null);
     }
   }
 
@@ -151,7 +204,7 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
       <div className="feedback-page-copy">
         <span className="workspace-kicker">反馈</span>
         <h1>把问题、建议和使用阻塞直接发给管理员</h1>
-        <p>你的反馈会直接进入后台反馈收件箱，管理员回复后会同步显示在右侧历史记录里。</p>
+        <p>提交后可在同一条反馈里继续补充说明，管理员回复后也会在同一线程里显示。</p>
       </div>
 
       <div className="stat-strip feedback-stat-strip">
@@ -223,7 +276,7 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
                   ))}
                 </div>
               ) : (
-                <div className="feedback-upload-empty">最多上传 4 张截图，单张不超过 10MB。</div>
+                <div className="feedback-upload-empty">{`最多上传 4 张截图，单张不超过 ${formatUploadSize(MAX_REFERENCE_UPLOAD_BYTES)}。`}</div>
               )}
             </div>
             {error ? <div className="floating-error">{error}</div> : null}
@@ -242,14 +295,14 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
           <div className="feedback-panel-head">
             <div>
               <h2>我的反馈记录</h2>
-              <p>这里只会显示你自己的反馈，以及管理员给你的回复。</p>
+              <p>每条反馈都是一条对话线程，你可以继续追问，管理员也会在同一线程里回复。</p>
             </div>
           </div>
           <div className="feedback-thread-list">
             {feedbackItems.length === 0 ? (
               <div className="history-digest-empty">
                 <strong>还没有反馈记录</strong>
-                <p>提交第一条反馈后，管理员的回复会显示在这里。</p>
+                <p>提交第一条反馈后，后续讨论会显示在这里。</p>
               </div>
             ) : (
               feedbackItems.map((item) => (
@@ -257,34 +310,43 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
                   <div className="feedback-thread-top">
                     <div>
                       <strong>{item.title}</strong>
-                      <small>{formatDate(item.created_at)}</small>
+                      <small>{formatChinaMonthDayTime(item.updated_at)}</small>
                     </div>
                     <em className={`status-pill ${item.status === "replied" ? "status-completed" : item.status === "closed" ? "status-failed" : "status-running"}`}>
                       {item.status === "replied" ? "已回复" : item.status === "closed" ? "已关闭" : "待处理"}
                     </em>
                   </div>
-                  <p>{item.message}</p>
-                  {item.attachment_paths.length > 0 ? (
-                    <div className="feedback-thread-attachments">
-                      {item.attachment_paths.map((path) => (
-                        <a key={path} href={path} target="_blank" rel="noreferrer" className="feedback-thread-image">
-                          <img src={path} alt="反馈截图" />
-                        </a>
-                      ))}
-                    </div>
-                  ) : null}
-                  {item.admin_reply ? (
-                    <div className="feedback-reply-card">
-                      <span>管理员回复</span>
-                      <strong>{item.replied_by_user_name || "管理员"}</strong>
-                      <p>{item.admin_reply}</p>
-                      <small>{item.replied_at ? formatDate(item.replied_at) : ""}</small>
+
+                  <FeedbackMessageList messages={item.messages} />
+
+                  {item.status === "closed" ? (
+                    <div className="feedback-reply-card is-pending">
+                      <span>对话状态</span>
+                      <p>这条反馈已关闭。如需继续讨论，请提交一条新的反馈。</p>
                     </div>
                   ) : (
-                    <div className="feedback-reply-card is-pending">
-                      <span>管理员回复</span>
-                      <p>暂时还没有回复，管理员处理后会显示在这里。</p>
-                    </div>
+                    <form className="feedback-followup-form" onSubmit={(event) => void handleFollowUpSubmit(event, item.id)}>
+                      <label className="composer-menu-field">
+                        <span>继续补充</span>
+                        <textarea
+                          className="feedback-textarea"
+                          value={followUpDrafts[item.id] || ""}
+                          maxLength={4000}
+                          onChange={(event) =>
+                            setFollowUpDrafts((current) => ({
+                              ...current,
+                              [item.id]: event.target.value,
+                            }))
+                          }
+                          placeholder="管理员回复后，你可以在这里继续补充现象、截图说明或新的复现步骤。"
+                        />
+                      </label>
+                      <div className="template-editor-actions">
+                        <button type="submit" className="ghost-button" disabled={followUpSavingId === item.id}>
+                          {followUpSavingId === item.id ? "发送中..." : "发送补充说明"}
+                        </button>
+                      </div>
+                    </form>
                   )}
                 </article>
               ))

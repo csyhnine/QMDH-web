@@ -24,7 +24,7 @@
   - Studio **2K 生图**（Haodeya；Gemini 2K + 16:9 → 2752×1536，本地已验收）
   - 历史卡片：分辨率 + 像素尺寸 + **Asia/Shanghai** 时间
   - **反馈多轮对话**（`user_feedback_messages` + 用户/管理员线程 UI）
-  - 上传限制：**图片 20MB / 文档 10MB**（前后端 + nginx `35m`）
+  - 上传限制：**图片 20MB / 文档 10MB**（前后端 + nginx `35m`；兼容上游图像编辑网关限制）
   - 版本管理：`VERSION`、`backend/app/version.py`、健康检查返回版本号
   - 文档：`README.md`、`CHANGELOG.md`、`docs/cpa-gemini-image-integration.md`
   - 含此前 `cecab36`：Studio 创作区 UX、运营看板日期/CSV、使用日志修复

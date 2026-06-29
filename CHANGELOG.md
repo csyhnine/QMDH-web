@@ -17,7 +17,7 @@
 
 - Studio 创作区 UX 迭代：标准 1K 标注、一次最多 3 张、工具栏固定网格、Ctrl+Enter 提交、参考图右上角移除
 - 历史卡片统一「上文案 / 下图横向平铺 / 底操作栏」布局
-- 上传限制调整为 **图片 20MB、文档 10MB**（nginx `client_max_body_size` 同步为 35m）
+- 上传限制调整为 **图片 20MB、文档 10MB**（nginx `client_max_body_size` 35m；图像编辑需兼容上游 30MB 网关限制）
 - 历史卡片时间按 **Asia/Shanghai** 显示（修复 UTC 少 8 小时）
 
 ### Fixed

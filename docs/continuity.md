@@ -236,7 +236,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - `storage/` and `tmp/` remain expected local-only directories and must not be committed.
 - Server deploy fallback still depends on `git bundle` or **hotpatch** when Docker Hub pull fails.
 - Production backend/worker may run hotpatched code not yet baked into Docker images; rebuild when registry stable.
-- Image upload still uses base64 data URLs and keeps a 20MB per-image / 10MB per-document limit; raising it further requires changing both frontend/backend limits and nginx `client_max_body_size` (currently 35m).
+- Image upload still uses base64 data URLs and keeps a 20MB per-image / 10MB per-document limit; nginx `client_max_body_size` is 35m. Image edit sends base64 to upstream (~4/3 size); keep references ≤20MB to stay under typical 30MB gateway limits.
 - Auto-collapsing composer behavior is improved but still a likely UX hotspot; if touched again, re-check bottom-edge expand behavior and scroll jitter.
 - Older docs may still contain stale wording about historical `owner / ops` roles or project-member sharing; when docs disagree, trust `docs/product-boundary.md`, `docs/handoff.md`, and this file.
 

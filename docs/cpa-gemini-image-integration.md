@@ -1,6 +1,6 @@
 # CPA 链路 · gemini-3.1-flash-image（QMDH 对接说明）
 
-Last updated: `2026-06-22`
+Last updated: `2026-07-01`
 
 本文说明 QMDH 如何对接 **CPA / Antigravity** 链路上的 `gemini-3.1-flash-image`，以及与 **OpenRouter（qmdh）** 链路的区别。
 
@@ -68,12 +68,18 @@ Last updated: `2026-06-22`
 - 同时发送 `modalities: ["text", "image"]`、`max_tokens: 8192` 与 `image_config: { aspect_ratio, image_size: "2K" }`
 - 1K 仍走无 `image_config` 的 prompt 比例写法
 
-**Haodeya 网关（`newapi.haodeya.xyz`，含 CPA 命名的 Provider）**
+**Haodeya 网关（`newapi.haodeya.xyz`）**
 
-- 2K 实测应走 **preview / OpenRouter 风格**：**不要**拼 `-2k` 后缀
-- QMDH 会自动把 `gemini-3.1-flash-image` 映射为 `google/gemini-3.1-flash-image-preview`，把 `gpt-image-2` 映射为 `openai/gpt-5.4-image-2`
-- 请求统一走 `chat_modalities_image` 形态（`modalities` + `image_config.image_size: "2K"`）
-- 任务结果里可核对 `upstream_request` 字段（model / image_config）
+- 详 **`docs/archive/haodeya-image-model-routing-2026-07.md`**（PRO 渠道 9 / Nano Banana 2 渠道 3、踩坑、热补丁记录）
+- Haodeya **按 model 名分渠道与计费**；**尊重后台 Profile `model_name`**，执行层不得把 PRO 改写成 preview
+- **Nano Banana PRO**（`gemini-3.1-flash-image` · 渠道 **9**）：
+  - 1K：无 `modalities` / `image_config`，`max_tokens: 4096`
+  - 2K：同上 model + `modalities` + `image_config: { aspect_ratio, image_size: "2K" }`（仅 snake_case），`max_tokens: 8192`
+- **Nano Banana 2**（`google/gemini-3.1-flash-image-preview` · 渠道 **3**）：preview 线路，2K 同样靠 `image_config`
+- **GPT**（`openai/gpt-5.4-image-2`）：1K/2K 同一 model；**勿**发 `...-2k` 后缀（400）
+- **勿**对 Gemini 发 `gemini-3.1-flash-image-2k`：网关可能 200 但仍 1K 像素
+- 16:9 2K 验收：**2752×1536**
+- 可选 `adapter_config`：`unit_price_1k` / `unit_price_2k` / `upstream_model_{1k|2k}`
 
 ## 探测（Probe）
 

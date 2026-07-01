@@ -211,7 +211,11 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
                         break
 
             latency_ms = max(1, round((perf_counter() - started_at) * 1000))
-            billing = _calculate_image_billing(profile=self.profile, output_count=len(storage_paths))
+            billing = _calculate_image_billing(
+                profile=self.profile,
+                output_count=len(storage_paths),
+                payload=payload,
+            )
             result = {
                 "summary": f"{self.definition.provider_name} completed a live {capability} run.",
                 "payload_keys": list(payload.keys()),
@@ -279,8 +283,19 @@ class StrategyProviderAdapter(ProviderAdapter):
         return self.image_adapter.execute(capability, payload)
 
 
-def _calculate_image_billing(*, profile: ImageProviderProfile, output_count: int) -> dict:
-    unit_price = round(float(profile.unit_price or 0.0), 6)
+def _resolve_image_unit_price(profile: ImageProviderProfile, payload: dict | None) -> float:
+    resolution = _normalize_image_resolution(payload or {})
+    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    tier_key = f"unit_price_{resolution}"
+    tier_value = adapter_config.get(tier_key)
+    if tier_value is not None:
+        return round(float(tier_value), 6)
+    return round(float(profile.unit_price or 0.0), 6)
+
+
+def _calculate_image_billing(*, profile: ImageProviderProfile, output_count: int, payload: dict | None = None) -> dict:
+    unit_price = _resolve_image_unit_price(profile, payload)
+    resolution = _normalize_image_resolution(payload or {})
     pricing_unit = (profile.pricing_unit or "per_image").strip() or "per_image"
     currency = (profile.pricing_currency or "CNY").strip().upper() or "CNY"
     billable_units = output_count if pricing_unit == "per_image" else 1
@@ -294,6 +309,7 @@ def _calculate_image_billing(*, profile: ImageProviderProfile, output_count: int
         "pricing_unit": pricing_unit,
         "unit_price": unit_price,
         "billable_units": billable_units,
+        "resolution_tier": resolution,
         "source": "provider_profile",
     }
 
@@ -507,11 +523,9 @@ def _normalize_image_resolution(payload: dict) -> str:
 IMAGE_GENERATION_MODALITIES: tuple[str, ...] = ("text", "image")
 IMAGE_GENERATION_MAX_TOKENS_1K = 4096
 IMAGE_GENERATION_MAX_TOKENS_2K = 8192
-HAODEYA_2K_UPSTREAM_MODELS: dict[str, str] = {
-    "gemini-3.1-flash-image": "google/gemini-3.1-flash-image-preview",
-    "gemini-3-flash-image": "google/gemini-3.1-flash-image-preview",
-    "gpt-image-2": "openai/gpt-5.4-image-2",
-}
+HAODEYA_GEMINI_CPA_BASE_MODELS = frozenset({"gemini-3.1-flash-image", "gemini-3-flash-image"})
+HAODEYA_GEMINI_OR_BASE_MODELS = frozenset({"google/gemini-3.1-flash-image-preview"})
+HAODEYA_GPT_BASE_MODELS = frozenset({"gpt-image-2", "openai/gpt-5.4-image-2"})
 
 
 def _image_generation_max_tokens(payload: dict) -> int:
@@ -524,9 +538,36 @@ def _uses_haodeya_gateway(profile: ImageProviderProfile) -> bool:
     return "haodeya" in profile.base_url.lower()
 
 
-def _resolve_haodeya_2k_upstream_model(base_model: str) -> str | None:
-    normalized = _strip_image_model_2k_suffix(base_model).lower()
-    return HAODEYA_2K_UPSTREAM_MODELS.get(normalized)
+def _normalize_haodeya_base_model(model_name: str) -> str:
+    return _strip_image_model_2k_suffix(model_name).strip()
+
+
+def _resolve_haodeya_upstream_model(base_model: str, resolution: str, profile: ImageProviderProfile) -> str:
+    """Map Provider profile model + resolution to Haodeya upstream model IDs.
+
+    Respect admin-configured profiles: CPA SKU (`gemini-3.1-flash-image` → channel 9) must not be
+    rewritten to OR preview (channel 3). Studio 1K/2K on the same profile share one upstream model;
+    2K is differentiated via `image_config.image_size: "2K"` (+ modalities), never `-2k` suffix.
+    """
+    tier = _normalize_image_resolution({"resolution": resolution})
+    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    override_key = f"upstream_model_{tier}"
+    override = adapter_config.get(override_key)
+    if isinstance(override, str) and override.strip():
+        return override.strip()
+
+    normalized = _normalize_haodeya_base_model(base_model).lower()
+
+    if normalized in HAODEYA_GEMINI_CPA_BASE_MODELS:
+        return _normalize_haodeya_base_model(base_model)
+
+    if normalized in HAODEYA_GEMINI_OR_BASE_MODELS:
+        return "google/gemini-3.1-flash-image-preview"
+
+    if normalized in HAODEYA_GPT_BASE_MODELS:
+        return "openai/gpt-5.4-image-2"
+
+    return _normalize_haodeya_base_model(base_model)
 
 
 def _should_use_chat_modalities_plan_for_2k(
@@ -573,23 +614,28 @@ def _uses_cpa_2k_model_suffix(profile: ImageProviderProfile) -> bool:
 
 def _resolve_image_model_name(profile: ImageProviderProfile, payload: dict) -> str:
     base_model = _strip_image_model_2k_suffix(profile.model_name)
-    if _normalize_image_resolution(payload) != "2k":
-        return base_model
+    resolution = _normalize_image_resolution(payload)
     if _uses_haodeya_gateway(profile):
-        mapped = _resolve_haodeya_2k_upstream_model(base_model)
-        return mapped or base_model
-    if _uses_cpa_2k_model_suffix(profile):
+        return _resolve_haodeya_upstream_model(base_model, resolution, profile)
+    if resolution == "2k" and _uses_cpa_2k_model_suffix(profile):
         return f"{base_model}-2k"
     return base_model
 
 
 def _build_upstream_image_config(profile: ImageProviderProfile, payload: dict) -> dict[str, str]:
     aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
-    config: dict[str, str] = {
+    resolution = _normalize_image_resolution(payload)
+    if _uses_haodeya_gateway(profile):
+        # Haodeya channel 9 CPA 2K (2026-07): gemini-3.1-flash-image + modalities + snake_case image_config.
+        config: dict[str, str] = {"aspect_ratio": aspect_ratio}
+        if resolution == "2k":
+            config["image_size"] = "2K"
+        return config
+    config = {
         "aspect_ratio": aspect_ratio,
         "aspectRatio": aspect_ratio,
     }
-    if _normalize_image_resolution(payload) == "2k":
+    if resolution == "2k":
         config["image_size"] = "2K"
         config["imageSize"] = "2K"
     return config

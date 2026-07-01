@@ -25,6 +25,7 @@ _FAILED_STATUSES = {"error", "failed", "failure"}
 _VALID_STYLES = {"art", "photo"}
 _VALID_NOISE = {"-1", "0", "1", "2", "3"}
 _VALID_X2 = {"1", "2", "3", "4"}
+_IMAGE_EXTENSIONS = frozenset({"png", "jpg", "jpeg", "webp"})
 
 
 class BigjpgUpscaleProviderAdapter:
@@ -83,7 +84,12 @@ class BigjpgUpscaleProviderAdapter:
                 output_url,
                 timeout_seconds=float(self.profile.timeout_seconds),
             )
-            extension = _extension_for_downloaded_image(output_url, content_type, self.profile.output_format)
+            extension = _extension_for_downloaded_image(
+                output_url,
+                content_type,
+                self.profile.output_format,
+                image_bytes,
+            )
             storage_path = write_binary_asset(
                 _build_storage_path(self.definition.provider_name, extension),
                 image_bytes,
@@ -147,17 +153,46 @@ def _download_upscaled_image(image_url: str, *, timeout_seconds: float) -> tuple
         raise ValueError(f"Upscaled image download request failed: {exc.reason}") from exc
 
 
-def _extension_for_downloaded_image(image_url: str, content_type: str, output_format: str) -> str:
-    if content_type:
-        guessed = mimetypes.guess_extension(content_type)
-        if guessed:
-            return guessed.lstrip(".").replace("jpeg", "jpg")
+def _extension_from_image_bytes(data: bytes) -> str | None:
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+def _normalize_image_extension(extension: str) -> str | None:
+    normalized = extension.strip().lower().lstrip(".")
+    if normalized == "jpeg":
+        return "jpg"
+    return normalized if normalized in _IMAGE_EXTENSIONS else None
+
+
+def _extension_for_downloaded_image(
+    image_url: str,
+    content_type: str,
+    output_format: str,
+    image_bytes: bytes,
+) -> str:
+    sniffed = _extension_from_image_bytes(image_bytes)
+    if sniffed:
+        return sniffed
+
+    normalized_type = content_type.split(";", 1)[0].strip().lower() if content_type else ""
+    if normalized_type.startswith("image/"):
+        guessed = mimetypes.guess_extension(normalized_type, strict=False)
+        if guessed and (extension := _normalize_image_extension(guessed)):
+            return extension
+
     parsed = urlparse(image_url)
-    suffix = parsed.path.rsplit(".", 1)[-1].lower() if "." in parsed.path else ""
-    if suffix in {"png", "jpg", "jpeg", "webp"}:
-        return suffix
-    normalized = (output_format or "png").strip().lower()
-    return normalized if normalized in {"png", "jpg", "jpeg", "webp"} else "png"
+    suffix = parsed.path.rsplit(".", 1)[-1] if "." in parsed.path else ""
+    if extension := _normalize_image_extension(suffix):
+        return extension
+
+    normalized = _normalize_image_extension(output_format or "png")
+    return normalized or "png"
 
 
 def _resolve_source_image(payload: dict) -> str:

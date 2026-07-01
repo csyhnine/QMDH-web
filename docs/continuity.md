@@ -16,24 +16,21 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Current Baseline
 
-- **Active development sequence**: `docs/tasks.md` → **`Development Sequence (2026-06)`** (Phases 0–3 complete; Grok live smoke done 2026-06-12)
-- Current branch: `main` @ `7cdf9f4`（GitHub `origin/main`）+ **本地 WIP 未提交**（见 `docs/handoff.md` `[2026-06-29]`）
-- GitHub `origin/main`: `7cdf9f4`（文档）；产品功能最新在 `cecab36` + 本地 WIP
-- Production server git: `51aba1b5`；**`cecab36` / `7cdf9f4` / 2K WIP 均未部署**
-- Production runtime: Gemini 后端 hotpatch 仍生效（≈ `51aba1b`）；frontend / 2K / 历史 meta / 看板 / 使用日志 **未上线**
-- Production URL: **`https://cityusbdisk.cn`** (ICP filed; HTTPS enabled)
-- Phase status (2026-06-12):
-  - Phase 0–3: DONE including Haodeya Grok production E2E
-  - Video generation latency: typically **2–6+ minutes** per task (upstream async; not a local bug)
-- `GenerateStudioShell.tsx` is now a ~24-line entrypoint; Studio modules live under `frontend/src/features/studio/`
-- `scripts/smoke-studio.mjs` + `npm run smoke:studio` available for API smoke
+- **Active development sequence**: `docs/tasks.md` → **`Development Sequence (2026-06)`** + **Chat Agent B1**（`chat-004`，本地 WIP）
+- Current branch: `main` @ **`0090a2a`（v1.1.0，与生产对齐）** + **本地 WIP 未提交**（Chat B1、deploy 脚本等）
+- Production: **`https://cityusbdisk.cn`** — **v1.1.0** @ `0090a2a`（2026-06-29 full rebuild + migrate）
+- Chat Agent direction: **Web `/studio/chat` = 唯一带 tools 入口**；Studio 浮动助手已下线；OpenClaw/skills 仍走 `/agent/*` + deprecated `/studio-agent/assist`
+- Agent roadmap（详见 `docs/tasks.md`）:
+  - **B1 DONE（本地）**: `agent_mode` + 院内只读 tools
+  - **确认顺序**: **agent-gov-001 → chat-b2-001 → ref-intent-001（B3）**
+  - 并行可选: `agent-memory-001`、`crawl-001` C1（B3 前置）
 - Local dev URLs:
   - frontend: `http://127.0.0.1:18080`
   - backend: `http://127.0.0.1:18010`
 - Local helper commands:
   - startup: `cmd /c start-dev.cmd`
   - build: `npm run build`
-  - smoke: `npm run smoke:studio`
+  - smoke: `npm run smoke:studio`, `npm run smoke:chat`（可选 `agent_mode` SSE；`QMDH_SMOKE_AGENT_MODE=0` 跳过）
   - backend slice: `backend\.venv\Scripts\python.exe -m pytest tests\test_database_auth.py -q`
 - Do not commit: `storage/`, `tmp/`, `.env`, `backend/app.db`, `frontend/dist/`, `node_modules/`
 
@@ -96,13 +93,11 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - generated image previews preserve full image content through proportional shrink (`contain`) instead of banner-like crop
   - footer meta（gallery 布局）: 模型简称 + **分辨率（1K/2K）** + **像素尺寸（宽×高）** + 耗时；时间戳按 **东八区**
   - 2K 验收：16:9 → **2752×1536**；若仍 **1376×768** 说明 `image_size` 未传到上游
-- Current image 2K routing reality（**本地 WIP，`task_executor.py`**）:
-  - **Haodeya**（`newapi.haodeya.xyz`）：2K 用 preview 模型名 + `image_config`，**不要** `-2k` 后缀
-    - `gemini-3.1-flash-image` → `google/gemini-3.1-flash-image-preview`
-    - `gpt-image-2` → `openai/gpt-5.4-image-2`（需有效 API Key）
-  - **直连 Antigravity CPA**：2K 仍可用 `gemini-3.1-flash-image-2k` + `image_config`
-  - 任务 result 可查 `upstream_request` / `output_width` / `output_height`
-  - 详 `docs/cpa-gemini-image-integration.md`
+- Current image 2K routing reality（**2026-07-01，已热补丁生产；详 `docs/archive/haodeya-image-model-routing-2026-07.md`**）:
+  - **Nano Banana PRO**（`gemini-3.1-flash-image`）→ Haodeya **渠道 9**；1K/2K **同一上游 model**；2K 靠 `modalities` + `image_config.image_size:"2K"`
+  - **Nano Banana 2**（`google/gemini-3.1-flash-image-preview`）→ **渠道 3**
+  - **禁止**把 PRO 映射成 preview；**禁止** `-2k` 后缀（GPT/Gemini）
+  - 验收：PRO 2K · 16:9 → **2752×1536**
 - Current admin model reality:
   - provider profiles can be enabled or disabled from the model list without changing existing pricing rules
   - toggling a provider profile updates only the `enabled` state
@@ -197,8 +192,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Added auto-collapse / expand behavior for the studio composer while browsing history.
 - Compressed history-card chrome while preserving full generated image content through proportional preview scaling.
 - **`cecab36` (2026-06-26, on GitHub; not deployed):** unified history gallery layout; composer max-3 images, fixed toolbar, Ctrl+Enter submit, reference × remove; dashboard group-spend custom date range; usage-log KPI + double-billing fix with `test_usage_logs.py`.
-- **v1.1.0 (GitHub):** 2K 生图、历史 meta、反馈多轮、上传 20MB/10MB、版本号 `VERSION`；本地 Gemini 1K/2K 与反馈 API 已验收。
-- **Production remains v1.0.0** @ `51aba1b` — intentionally not deployed yet.
+- **v1.1.0 (deployed 2026-06-29):** 2K 生图、历史 meta、反馈多轮、上传 20MB/10MB；生产 Git `0090a2a`，health `version=1.1.0`.
+- **Production is v1.1.0** @ `0090a2a` — deployed with full Docker rebuild; see deploy archive below.
 
 ## Current Server Snapshot
 
@@ -206,11 +201,11 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Domain: `cityusbdisk.cn`（京ICP备14011242号-4，已备案）
 - Deploy path: `/www/wwwroot/qmdh-web`
 - Deployment model: Docker Compose
-- **Production version: v1.0.0** — Git `51aba1b5`; runtime backend/worker ≈ `51aba1b` via hotpatch
-- **GitHub `main`: v1.1.0** — pushed; includes `cecab36` Studio/看板 + 2K/反馈/上传/版本管理
-- Latest session archive: `docs/handoff.md` → `[2026-06-26] v1.1.0`
+- **Production version: v1.1.0** — Git `0090a2a9`; images rebuilt 2026-06-29
+- **GitHub `main`:** aligned with production @ `0090a2a`
+- Latest session archive: `docs/handoff.md` → `[2026-06-29] v1.1.0 已部署生产`
+- **Deploy lessons archive:** `docs/archive/deploy-2026-06-29-v1.1.0-production.md`
 - Gemini CPA doc: `docs/cpa-gemini-image-integration.md`（含 2K 验收表）
-- **Pending production deploy: v1.1.0**（需 `alembic upgrade head` + rebuild；负责人未授权前勿部署）
 - Server working tree: clean after `sudo -u admin git pull`
 - Verified runtime after latest deploy:
   - `docker compose ps` healthy
@@ -235,7 +230,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Release/version records are tracked through root `VERSION`, `CHANGELOG.md`, package versions, and Git tags such as `v1.0.0` / `v1.1.0`.
 - `storage/` and `tmp/` remain expected local-only directories and must not be committed.
 - Server deploy fallback still depends on `git bundle` or **hotpatch** when Docker Hub pull fails.
-- Production backend/worker may run hotpatched code not yet baked into Docker images; rebuild when registry stable.
+- Full backend rebuild on ECS may take **~45–50 min** when Docker pip layer cache is cold; see `docs/archive/deploy-2026-06-29-v1.1.0-production.md`.
+- **Deploy order:** build backend **before** `alembic upgrade head` when release adds new migration files; never run parallel `docker compose build backend`.
 - Image upload still uses base64 data URLs and keeps a 20MB per-image / 10MB per-document limit; nginx `client_max_body_size` is 35m. Image edit sends base64 to upstream (~4/3 size); keep references ≤20MB to stay under typical 30MB gateway limits.
 - Auto-collapsing composer behavior is improved but still a likely UX hotspot; if touched again, re-check bottom-edge expand behavior and scroll jitter.
 - Older docs may still contain stale wording about historical `owner / ops` roles or project-member sharing; when docs disagree, trust `docs/product-boundary.md`, `docs/handoff.md`, and this file.

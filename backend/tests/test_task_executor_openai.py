@@ -769,9 +769,11 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         self.assertEqual(generation_body["max_tokens"], 8192)
         self.assertEqual(generation_body["image_config"]["aspect_ratio"], "16:9")
         self.assertEqual(generation_body["image_config"]["image_size"], "2K")
+        self.assertNotIn("aspectRatio", generation_body["image_config"])
+        self.assertNotIn("imageSize", generation_body["image_config"])
         self.assertNotIn("-2k", generation_body["model"].lower())
 
-    def test_chat_completions_image_2k_on_haodeya_maps_to_preview_model(self) -> None:
+    def test_chat_completions_image_2k_on_haodeya_cpa_keeps_channel9_model(self) -> None:
         profile = ImageProviderProfile(
             provider_name="cpa_gemini_image",
             api_key="test-key",
@@ -812,13 +814,200 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
                     )
 
         generation_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
-        self.assertEqual(generation_body["model"], "google/gemini-3.1-flash-image-preview")
+        self.assertEqual(generation_body["model"], "gemini-3.1-flash-image")
         self.assertEqual(generation_body["modalities"], ["text", "image"])
         self.assertEqual(generation_body["max_tokens"], 8192)
         self.assertEqual(generation_body["image_config"]["aspect_ratio"], "16:9")
         self.assertEqual(generation_body["image_config"]["image_size"], "2K")
-        self.assertNotIn("-2k", generation_body["model"].lower())
+        self.assertNotIn("aspectRatio", generation_body["image_config"])
+        self.assertNotIn("imageSize", generation_body["image_config"])
+        self.assertNotIn("preview", generation_body["model"].lower())
+        self.assertEqual(outcome.result["upstream_request"]["model"], "gemini-3.1-flash-image")
+
+    def test_chat_completions_image_2k_on_haodeya_preview_profile_keeps_preview_model(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="nano_banana_2",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="google/gemini-3.1-flash-image-preview",
+            timeout_seconds=1,
+            strategies={"image.generate": "chat_completions_image"},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "nano_banana_2",
+                "google/gemini-3.1-flash-image-preview",
+                ["image.generate"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": "",
+                        "images": [{"image_url": {"url": "https://cdn.example.test/generated-preview-2k.png"}}],
+                    }
+                }
+            ]
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"preview-2k-image")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {"prompt": "生成一只可爱的猫，只要图片", "aspect_ratio": "16:9", "resolution": "2k"},
+                    )
+
+        generation_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        self.assertEqual(generation_body["model"], "google/gemini-3.1-flash-image-preview")
+        self.assertEqual(generation_body["image_config"]["image_size"], "2K")
         self.assertEqual(outcome.result["upstream_request"]["model"], "google/gemini-3.1-flash-image-preview")
+
+    def test_chat_completions_image_2k_on_haodeya_gpt_keeps_base_model_without_2k_suffix(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="openai_gpt-5.4-image-2",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="openai/gpt-5.4-image-2",
+            timeout_seconds=1,
+            strategies={"image.generate": "chat_completions_image"},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "openai_gpt-5.4-image-2",
+                "openai/gpt-5.4-image-2",
+                ["image.generate"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": "",
+                        "images": [{"image_url": {"url": "https://cdn.example.test/generated-gpt-2k.png"}}],
+                    }
+                }
+            ]
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"gpt-2k-image")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {"prompt": "生成建筑效果图", "aspect_ratio": "16:9", "resolution": "2k"},
+                    )
+
+        generation_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        self.assertEqual(generation_body["model"], "openai/gpt-5.4-image-2")
+        self.assertEqual(generation_body["modalities"], ["text", "image"])
+        self.assertEqual(generation_body["image_config"]["image_size"], "2K")
+        self.assertNotIn("-2k", generation_body["model"].lower())
+        self.assertEqual(outcome.result["upstream_request"]["model"], "openai/gpt-5.4-image-2")
+
+    def test_chat_completions_image_1k_on_haodeya_cpa_keeps_channel9_model(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="cpa_gemini_image",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="gemini-3.1-flash-image",
+            timeout_seconds=1,
+            strategies={"image.generate": "chat_completions_image"},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "cpa_gemini_image",
+                "gemini-3.1-flash-image",
+                ["image.generate"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": "",
+                        "images": [{"image_url": {"url": "https://cdn.example.test/generated-1k.png"}}],
+                    }
+                }
+            ]
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"1k-image")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {"prompt": "生成一只可爱的猫，只要图片", "aspect_ratio": "16:9", "resolution": "1k"},
+                    )
+
+        generation_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        self.assertEqual(generation_body["model"], "gemini-3.1-flash-image")
+        self.assertNotIn("modalities", generation_body)
+        self.assertEqual(outcome.result["image_model_resolved"], "gemini-3.1-flash-image")
+
+    def test_image_billing_uses_adapter_config_resolution_prices(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="cpa_gemini_image",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="gemini-3.1-flash-image",
+            timeout_seconds=1,
+            pricing_currency="CNY",
+            pricing_unit="per_image",
+            unit_price=0.5,
+            adapter_config={"unit_price_1k": 0.64, "unit_price_2k": 0.98},
+            strategies={"image.generate": "chat_completions_image"},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "cpa_gemini_image",
+                "gemini-3.1-flash-image",
+                ["image.generate"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": "",
+                        "images": [{"image_url": {"url": "https://cdn.example.test/generated-2k.png"}}],
+                    }
+                }
+            ]
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"2k-image")],
+        ):
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {"prompt": "生成一只可爱的猫", "aspect_ratio": "16:9", "resolution": "2k"},
+                    )
+
+        self.assertEqual(outcome.result["billing"]["unit_price"], 0.98)
+        self.assertEqual(outcome.result["billing"]["resolution_tier"], "2k")
+        self.assertEqual(outcome.result["billing"]["cost"], 0.98)
 
     def test_chat_completions_image_2k_on_direct_cpa_gateway_keeps_model_suffix(self) -> None:
         profile = ImageProviderProfile(

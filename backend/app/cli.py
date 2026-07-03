@@ -11,6 +11,7 @@ from app.services.inspiration_refresh import (
     refresh_seed_inspiration_media,
 )
 from app.services.haodeya_pricing import sync_haodeya_pricing
+from app.services.task_cost_backfill import backfill_task_costs
 from app.services.session_cleanup import run_session_cleanup_once
 from seed_users import seed_staff_users
 
@@ -50,6 +51,15 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "sync_haodeya_pricing",
         help="Apply upstream Haodeya/qmdh pricing to provider profiles and chat pricing rules",
+    )
+    backfill_parser = subparsers.add_parser(
+        "backfill_task_costs",
+        help="Recalculate historical image/Grok task costs and sync usage ledgers",
+    )
+    backfill_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report changes without writing to the database",
     )
     return parser
 
@@ -134,6 +144,24 @@ def main(argv: list[str] | None = None) -> int:
                     "updated_rules": result.updated_rules,
                     "deactivated_rules": result.deactivated_rules,
                     "skipped_profiles": result.skipped_profiles,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0
+
+    if args.command == "backfill_task_costs":
+        with SessionLocal() as db:
+            result = backfill_task_costs(db, dry_run=bool(args.dry_run))
+        print(
+            json.dumps(
+                {
+                    "scanned": result.scanned,
+                    "updated": result.updated,
+                    "unchanged": result.unchanged,
+                    "skipped": result.skipped,
+                    "dry_run": result.dry_run,
+                    "samples": result.samples,
                 },
                 ensure_ascii=False,
             )

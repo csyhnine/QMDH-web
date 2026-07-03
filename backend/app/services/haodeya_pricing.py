@@ -9,24 +9,36 @@ from sqlalchemy.orm import Session
 from app.models import ProviderPricingRule, ProviderProfile
 from app.services.billing import CHAT_PRICING_METRICS
 
-# Source: upstream Haodeya contract for qmdh / default group (2026-06-12).
+# Source: upstream Haodeya contract for qmdh / default group (2026-07-03).
 CHAT_UNIT_SIZE = 1_000_000.0
 PRICING_CURRENCY = "CNY"
 
 GROK_VIDEO_SKU_PRICES: dict[str, float] = {
-    "x-ai/grok-imagine-video-i2v": 3.35,
-    "x-ai/grok-imagine-video-ref": 3.41,
-    "x-ai/grok-imagine-video-i2v-10s": 6.68,
-    "x-ai/grok-imagine-video-ref-10s": 6.74,
+    "x-ai/grok-imagine-video-i2v": 3.33,
+    "x-ai/grok-imagine-video-ref": 3.33,
+    "x-ai/grok-imagine-video-i2v-10s": 6.66,
+    "x-ai/grok-imagine-video-ref-10s": 6.66,
 }
 
 IMAGE_MODEL_PRICES: dict[str, dict[str, Any]] = {
     "google/gemini-3.1-flash-image-preview": {
-        "unit_price": 0.67,
+        "unit_price_1k": 0.67,
+        "unit_price_2k": 0.95,
+        "pricing_unit": "per_image",
+    },
+    "gemini-3.1-flash-image": {
+        "unit_price_1k": 0.67,
+        "unit_price_2k": 0.95,
         "pricing_unit": "per_image",
     },
     "openai/gpt-5.4-image-2": {
-        "unit_price": 1.56,
+        "unit_price_1k": 1.62,
+        "unit_price_2k": 2.67,
+        "pricing_unit": "per_image",
+    },
+    "gpt-image-2": {
+        "unit_price_1k": 1.62,
+        "unit_price_2k": 2.67,
         "pricing_unit": "per_image",
     },
 }
@@ -53,12 +65,34 @@ class PricingSyncResult:
     skipped_profiles: list[str]
 
 
-def grok_video_unit_price(sku: str) -> float:
-    return float(GROK_VIDEO_SKU_PRICES.get(str(sku or "").strip(), 0.0))
+def _grok_sku_duration_tier(sku: str) -> str:
+    normalized = str(sku or "").strip()
+    if normalized.endswith("-10s") or "10s" in normalized:
+        return "10s"
+    return "5s"
 
 
-def calculate_grok_video_billing(*, sku: str, output_count: int = 1) -> dict[str, Any]:
-    unit_price = round(grok_video_unit_price(sku), 6)
+def grok_video_unit_price(sku: str, adapter_config: dict[str, Any] | None = None) -> float:
+    normalized = str(sku or "").strip()
+    config = adapter_config if isinstance(adapter_config, dict) else {}
+    billing_tier = "2k" if _grok_sku_duration_tier(normalized) == "10s" else "1k"
+    tier_key = f"unit_price_{billing_tier}"
+    override = config.get(tier_key)
+    if override is None:
+        legacy_key = f"unit_price_{_grok_sku_duration_tier(normalized)}"
+        override = config.get(legacy_key)
+    if override is not None:
+        return float(override)
+    return float(GROK_VIDEO_SKU_PRICES.get(normalized, 0.0))
+
+
+def calculate_grok_video_billing(
+    *,
+    sku: str,
+    output_count: int = 1,
+    adapter_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    unit_price = round(grok_video_unit_price(sku, adapter_config), 6)
     billable_units = max(int(output_count or 0), 1)
     return {
         "cost": round(unit_price * billable_units, 4),
@@ -73,6 +107,28 @@ def calculate_grok_video_billing(*, sku: str, output_count: int = 1) -> dict[str
 
 def _normalize_model_name(value: str) -> str:
     return str(value or "").strip()
+
+
+def _image_pricing_for_model(model_name: str) -> dict[str, Any] | None:
+    normalized = _normalize_model_name(model_name)
+    return IMAGE_MODEL_PRICES.get(normalized)
+
+
+def _apply_image_profile_pricing(profile: ProviderProfile, image_pricing: dict[str, Any]) -> str:
+    profile.pricing_currency = PRICING_CURRENCY
+    profile.pricing_unit = str(image_pricing["pricing_unit"])
+    unit_price_1k = float(image_pricing.get("unit_price_1k") or image_pricing.get("unit_price") or 0.0)
+    profile.unit_price = unit_price_1k
+
+    adapter_config = dict(profile.adapter_config or {})
+    if "unit_price_1k" in image_pricing:
+        adapter_config["unit_price_1k"] = float(image_pricing["unit_price_1k"])
+    if "unit_price_2k" in image_pricing:
+        adapter_config["unit_price_2k"] = float(image_pricing["unit_price_2k"])
+    profile.adapter_config = adapter_config
+
+    unit_price_2k = adapter_config.get("unit_price_2k", profile.unit_price)
+    return f"{profile.provider_name}:1k={profile.unit_price},2k={unit_price_2k} {PRICING_CURRENCY}"
 
 
 def _chat_rule_prices(model_name: str) -> dict[str, float] | None:
@@ -132,17 +188,16 @@ def sync_haodeya_pricing(db: Session) -> PricingSyncResult:
             profile.pricing_currency = PRICING_CURRENCY
             profile.pricing_unit = "per_video"
             profile.unit_price = HAODEYA_GROK_PROFILE_FALLBACK_PRICE
-            updated_profiles.append(f"{profile.provider_name}:per_video={profile.unit_price}")
+            adapter_config = dict(profile.adapter_config or {})
+            adapter_config["unit_price_1k"] = 3.33
+            adapter_config["unit_price_2k"] = 6.66
+            profile.adapter_config = adapter_config
+            updated_profiles.append(f"{profile.provider_name}:5s=3.33,10s=6.66 {PRICING_CURRENCY}")
             changed = True
 
-        image_pricing = IMAGE_MODEL_PRICES.get(model_name)
+        image_pricing = _image_pricing_for_model(model_name)
         if image_pricing and "image.generate" in (profile.capabilities or []):
-            profile.pricing_currency = PRICING_CURRENCY
-            profile.pricing_unit = str(image_pricing["pricing_unit"])
-            profile.unit_price = float(image_pricing["unit_price"])
-            updated_profiles.append(
-                f"{profile.provider_name}:{profile.pricing_unit}={profile.unit_price} {PRICING_CURRENCY}"
-            )
+            updated_profiles.append(_apply_image_profile_pricing(profile, image_pricing))
             changed = True
 
         chat_prices = _chat_rule_prices(model_name)

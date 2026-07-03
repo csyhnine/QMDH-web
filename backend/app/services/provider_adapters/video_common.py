@@ -40,6 +40,51 @@ def video_prompt(payload: dict) -> str:
     return "\n\n".join(part for part in parts if part)
 
 
+def resolve_profile_tier_unit_price(profile: ImageProviderProfile, tier: str) -> float:
+    normalized_tier = str(tier or "1k").strip().lower()
+    if normalized_tier not in {"1k", "2k"}:
+        normalized_tier = "1k"
+    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    tier_key = f"unit_price_{normalized_tier}"
+    tier_value = adapter_config.get(tier_key)
+    if tier_value is not None:
+        return round(float(tier_value), 6)
+    return round(float(profile.unit_price or 0.0), 6)
+
+
+def calculate_tiered_media_billing(
+    *,
+    profile: ImageProviderProfile,
+    output_count: int,
+    tier: str,
+    pricing_unit: str | None = None,
+    per_output_units: bool = True,
+) -> dict:
+    unit_price = resolve_profile_tier_unit_price(profile, tier)
+    normalized_tier = str(tier or "1k").strip().lower()
+    if normalized_tier not in {"1k", "2k"}:
+        normalized_tier = "1k"
+    resolved_pricing_unit = (pricing_unit or profile.pricing_unit or "per_image").strip() or "per_image"
+    currency = (profile.pricing_currency or "CNY").strip().upper() or "CNY"
+    if resolved_pricing_unit in {"per_image", "per_video"}:
+        billable_units = output_count if per_output_units else 1
+    elif resolved_pricing_unit == "per_request":
+        billable_units = 1
+    else:
+        resolved_pricing_unit = "per_image" if per_output_units else "per_request"
+        billable_units = output_count if per_output_units else 1
+    cost = round(unit_price * billable_units, 4)
+    return {
+        "cost": cost,
+        "currency": currency,
+        "pricing_unit": resolved_pricing_unit,
+        "unit_price": unit_price,
+        "billable_units": billable_units,
+        "resolution_tier": normalized_tier,
+        "source": "provider_profile",
+    }
+
+
 def calculate_video_billing(*, profile: ImageProviderProfile, output_count: int) -> dict:
     unit_price = round(float(profile.unit_price or 0.0), 6)
     pricing_unit = (profile.pricing_unit or "per_video").strip() or "per_video"

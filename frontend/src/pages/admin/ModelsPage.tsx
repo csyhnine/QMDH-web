@@ -29,7 +29,8 @@ type ProviderProfileDraft = {
   timeoutSeconds: number;
   pricingCurrency: string;
   pricingUnit: string;
-  unitPrice: number;
+  unitPrice1k: string;
+  unitPrice2k: string;
   enabled: boolean;
   referenceMode: string;
   referenceCaptionModel: string;
@@ -93,7 +94,8 @@ const defaultProviderProfileDraft: ProviderProfileDraft = {
   timeoutSeconds: 300,
   pricingCurrency: "CNY",
   pricingUnit: "per_image",
-  unitPrice: 0,
+  unitPrice1k: "",
+  unitPrice2k: "",
   enabled: true,
   referenceMode: "disabled",
   referenceCaptionModel: "",
@@ -105,9 +107,11 @@ const defaultPricingRuleDraft: ProviderPricingRuleDraft = {
   metric: "input_tokens",
   unitSize: "1000000",
   unitPrice: "0",
-  currency: "USD",
+  currency: "CNY",
   isActive: true,
 };
+
+const PRICING_TIER_ADAPTER_KEYS = ["unit_price_1k", "unit_price_2k", "unit_price_5s", "unit_price_10s"] as const;
 
 const capabilityDefinitions: CapabilityDefinition[] = [
   { key: "chat.completions", label: "Chat", description: "分配到 Chat 页面", support: "ready" },
@@ -184,6 +188,11 @@ function summarizeProfileSupport(adapterKind: string, capabilities: string[]): S
 }
 
 function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfileDraft {
+  const adapterConfig = profile.adapter_config ?? {};
+  const unitPrice1k =
+    readAdapterConfigPrice(adapterConfig, "unit_price_1k") ||
+    readAdapterConfigPrice(adapterConfig, "unit_price_5s") ||
+    String(profile.unit_price ?? "");
   return {
     providerName: profile.provider_name,
     displayName: profile.display_name || profile.model_name,
@@ -194,13 +203,16 @@ function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfile
     adapterKind: profile.adapter_kind,
     capabilities: profile.capabilities.join(", "),
     strategies: JSON.stringify(profile.strategies ?? {}, null, 2),
-    adapterConfig: JSON.stringify(profile.adapter_config ?? {}, null, 2),
+    adapterConfig: JSON.stringify(stripPricingTierKeys(adapterConfig), null, 2),
     quality: profile.quality ?? "medium",
     outputFormat: profile.output_format ?? "png",
     timeoutSeconds: profile.timeout_seconds ?? 300,
     pricingCurrency: profile.pricing_currency ?? "CNY",
     pricingUnit: profile.pricing_unit ?? "per_image",
-    unitPrice: profile.unit_price ?? 0,
+    unitPrice1k,
+    unitPrice2k:
+      readAdapterConfigPrice(adapterConfig, "unit_price_2k") ||
+      readAdapterConfigPrice(adapterConfig, "unit_price_10s"),
     enabled: profile.enabled,
     referenceMode: profile.reference_mode ?? "disabled",
     referenceCaptionModel: profile.reference_caption_model ?? "",
@@ -209,11 +221,10 @@ function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfile
 
 function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileCreatePayload {
   let strategies: Record<string, string> = {};
-  let adapterConfig: Record<string, unknown> = {};
   const rawStrategies = draft.strategies.trim();
   if (rawStrategies) strategies = JSON.parse(rawStrategies) as Record<string, string>;
-  const rawAdapterConfig = draft.adapterConfig.trim();
-  if (rawAdapterConfig) adapterConfig = JSON.parse(rawAdapterConfig) as Record<string, unknown>;
+  const adapterConfig = buildAdapterConfigFromDraft(draft);
+  const unitPrice1k = draft.unitPrice1k.trim() ? Number(draft.unitPrice1k) : 0;
   return {
     provider_name: draft.providerName.trim(),
     display_name: draft.displayName.trim(),
@@ -230,7 +241,7 @@ function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileC
     timeout_seconds: draft.timeoutSeconds || 300,
     pricing_currency: draft.pricingCurrency || "CNY",
     pricing_unit: draft.pricingUnit || "per_image",
-    unit_price: draft.unitPrice || 0,
+    unit_price: unitPrice1k,
     enabled: draft.enabled,
     reference_mode: draft.referenceMode || "disabled",
     reference_caption_model: draft.referenceCaptionModel || "",
@@ -299,10 +310,77 @@ function formatPricingMetricLabel(metric: string): string {
   if (metric === "input_tokens") return "输入 tokens";
   if (metric === "output_tokens") return "输出 tokens";
   if (metric === "cached_input_tokens") return "缓存命中 tokens";
-  if (metric === "per_image") return "按张图片";
-  if (metric === "per_video") return "按条视频";
-  if (metric === "per_request") return "按次请求";
   return metric;
+}
+
+function parseAdapterConfigObject(raw: string): Record<string, unknown> {
+  const trimmed = raw.trim();
+  if (!trimmed) return {};
+  return JSON.parse(trimmed) as Record<string, unknown>;
+}
+
+function readAdapterConfigPrice(config: Record<string, unknown>, key: string): string {
+  const value = config[key];
+  if (value === null || value === undefined || value === "") return "";
+  return String(value);
+}
+
+function stripPricingTierKeys(config: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...config };
+  for (const key of PRICING_TIER_ADAPTER_KEYS) {
+    delete next[key];
+  }
+  return next;
+}
+
+function assignAdapterConfigPrice(config: Record<string, unknown>, key: string, raw: string): void {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    delete config[key];
+    return;
+  }
+  config[key] = Number(trimmed);
+}
+
+function buildAdapterConfigFromDraft(draft: ProviderProfileDraft): Record<string, unknown> {
+  const config = stripPricingTierKeys(parseAdapterConfigObject(draft.adapterConfig));
+  assignAdapterConfigPrice(config, "unit_price_1k", draft.unitPrice1k);
+  assignAdapterConfigPrice(config, "unit_price_2k", draft.unitPrice2k);
+  return config;
+}
+
+function profileUsesVideoTierPricing(capabilities: string[], adapterKind: string): boolean {
+  return profileHasVideoBilling(capabilities) || adapterKind === "haodeya_grok";
+}
+
+function tierPriceFieldLabels(capabilities: string[], adapterKind: string): { first: string; second: string; help: string } {
+  if (profileUsesVideoTierPricing(capabilities, adapterKind) && !profileHasImageBilling(capabilities)) {
+    return {
+      first: "5s 单价",
+      second: "10s 单价",
+      help: "Grok 视频按 SKU 时长分档计费，5s 写入 1K 档、10s 写入 2K 档，与生图共用同一 adapter_config 字段。",
+    };
+  }
+  if (profileUsesVideoTierPricing(capabilities, adapterKind) && profileHasImageBilling(capabilities)) {
+    return {
+      first: "1K / 5s 单价",
+      second: "2K / 10s 单价",
+      help: "生图按 Studio 分辨率计费；Grok 视频 5s 用 1K 档、10s 用 2K 档。",
+    };
+  }
+  return {
+    first: "1K 单价",
+    second: "2K 单价",
+    help: "生图任务按 Studio 档位写入日志成本：1K 用 1K 价，2K 用 2K 价；未填 2K 时会回退到 1K 价。",
+  };
+}
+
+function profileHasImageBilling(capabilities: string[]): boolean {
+  return capabilities.some((capability) => capability === "image.generate" || capability === "image.edit");
+}
+
+function profileHasVideoBilling(capabilities: string[]): boolean {
+  return capabilities.includes("video.generate");
 }
 
 /* ─── Props ─── */
@@ -337,7 +415,7 @@ function toPricingRulePayload(draft: ProviderPricingRuleDraft): ProviderPricingR
     metric: draft.metric.trim(),
     unit_size: Number(draft.unitSize) || 1,
     unit_price: Number(draft.unitPrice) || 0,
-    currency: draft.currency.trim() || "USD",
+    currency: draft.currency.trim() || "CNY",
     is_active: draft.isActive,
   };
 }
@@ -368,7 +446,8 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
 
   const enabledProviderProfiles = providerProfiles.filter((p) => p.enabled);
   const disabledProviderProfiles = providerProfiles.filter((p) => !p.enabled);
-  const chatProviderProfileCount = providerProfiles.filter((p) => p.capabilities.includes("chat.completions")).length;
+  const chatProviderProfiles = providerProfiles.filter((p) => p.capabilities.includes("chat.completions"));
+  const chatProviderProfileCount = chatProviderProfiles.length;
   const imageProviderProfileCount = providerProfiles.filter((p) => p.capabilities.some((c) => c === "image.generate" || c === "image.edit")).length;
   const experimentalProviderProfileCount = providerProfiles.filter((p) => {
     const support = summarizeProfileSupport(p.adapter_kind, p.capabilities);
@@ -376,12 +455,18 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
   }).length;
 
   useEffect(() => {
-    if (pricingRuleDraft.providerProfileId || providerProfiles.length === 0) return;
+    if (pricingRuleDraft.providerProfileId || chatProviderProfiles.length === 0) return;
     setPricingRuleDraft((current) => ({
       ...current,
-      providerProfileId: String(providerProfiles[0].id),
+      providerProfileId: String(chatProviderProfiles[0].id),
     }));
-  }, [pricingRuleDraft.providerProfileId, providerProfiles]);
+  }, [pricingRuleDraft.providerProfileId, chatProviderProfiles]);
+
+  const draftCapabilities = parseCapabilities(providerDraft.capabilities);
+  const draftHasImageBilling = profileHasImageBilling(draftCapabilities);
+  const draftHasVideoBilling = profileUsesVideoTierPricing(draftCapabilities, providerDraft.adapterKind);
+  const draftHasTierBilling = draftHasImageBilling || draftHasVideoBilling;
+  const tierPriceLabels = tierPriceFieldLabels(draftCapabilities, providerDraft.adapterKind);
 
   const filteredProviderProfiles = providerProfiles.filter((profile) => {
     const searchText = `${profile.display_name} ${profile.provider_name} ${profile.model_name}`.toLowerCase();
@@ -393,30 +478,53 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
   });
   const selectedPricingProfileId =
     pricingRuleDraft.providerProfileId ||
-    (editingProviderProfileId !== null ? String(editingProviderProfileId) : providerProfiles[0] ? String(providerProfiles[0].id) : "");
+    (editingProviderProfileId !== null && draftCapabilities.includes("chat.completions")
+      ? String(editingProviderProfileId)
+      : chatProviderProfiles[0]
+        ? String(chatProviderProfiles[0].id)
+        : "");
   const filteredPricingRules = pricingRules
-    .filter((rule) => String(rule.provider_profile_id) === selectedPricingProfileId)
-    .sort((left, right) => left.capability.localeCompare(right.capability) || left.metric.localeCompare(right.metric));
+    .filter(
+      (rule) =>
+        String(rule.provider_profile_id) === selectedPricingProfileId &&
+        rule.capability === "chat.completions"
+    )
+    .sort((left, right) => left.metric.localeCompare(right.metric));
 
   function renderBillingSummary(profile: ProviderProfileRecord) {
-    const hasImageCapability = profile.capabilities.some((capability) => capability === "image.generate" || capability === "image.edit");
-    const hasVideoCapability = profile.capabilities.includes("video.generate");
+    const hasImageCapability = profileHasImageBilling(profile.capabilities);
+    const hasVideoCapability = profileHasVideoBilling(profile.capabilities);
+    const adapterConfig = profile.adapter_config ?? {};
+    const unitPrice1k = readAdapterConfigPrice(adapterConfig, "unit_price_1k") || String(profile.unit_price ?? 0);
+    const unitPrice2k = readAdapterConfigPrice(adapterConfig, "unit_price_2k");
     const chatRuleCount = pricingRules.filter(
       (rule) => rule.provider_profile_id === profile.id && rule.capability === "chat.completions" && rule.is_active
     ).length;
+    const currency = profile.pricing_currency || "CNY";
     return (
       <>
-        {hasImageCapability || hasVideoCapability ? (
+        {hasImageCapability ? (
           <>
-            <strong>{`${profile.unit_price} ${profile.pricing_currency}`}</strong>
-            <small>{`${hasVideoCapability && !hasImageCapability ? "视频" : "图片"} ${formatPricingUnitLabel(profile.pricing_unit)}`}</small>
+            <strong>{unitPrice2k ? `1K ${unitPrice1k} / 2K ${unitPrice2k}` : `${unitPrice1k} ${currency}`}</strong>
+            <small>{`图片 ${formatPricingUnitLabel(profile.pricing_unit)}`}</small>
           </>
-        ) : (
+        ) : null}
+        {hasVideoCapability ? (
+          <>
+            <strong>
+              {unitPrice2k
+                ? `5s ${unitPrice1k} / 10s ${unitPrice2k} ${currency}`
+                : `${unitPrice1k} ${currency}`}
+            </strong>
+            <small>{`视频 ${formatPricingUnitLabel(profile.pricing_unit)}`}</small>
+          </>
+        ) : null}
+        {!hasImageCapability && !hasVideoCapability ? (
           <>
             <strong>按下方规则</strong>
-            <small>图片未启用</small>
+            <small>任务单价未配置</small>
           </>
-        )}
+        ) : null}
         {profile.capabilities.includes("chat.completions") ? <small>{`Chat 规则 ${chatRuleCount} 条`}</small> : null}
       </>
     );
@@ -432,9 +540,14 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
 
   function resetPricingRuleDraft(profileId?: number | null) {
     setEditingPricingRuleId(null);
+    const defaultProfileId =
+      profileId ??
+      (editingProviderProfileId !== null && draftCapabilities.includes("chat.completions")
+        ? editingProviderProfileId
+        : chatProviderProfiles[0]?.id ?? null);
     setPricingRuleDraft({
       ...defaultPricingRuleDraft,
-      providerProfileId: profileId ? String(profileId) : providerProfiles[0] ? String(providerProfiles[0].id) : "",
+      providerProfileId: defaultProfileId ? String(defaultProfileId) : "",
     });
   }
 
@@ -456,7 +569,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
     try {
       payload = toProviderProfilePayload(providerDraft);
     } catch {
-      onSetError("Strategies 必须是合法 JSON，例如 {\"image.generate\":\"openai_images\"}");
+      onSetError("Strategies / Adapter Config 必须是合法 JSON");
       return;
     }
     if (!payload.provider_name || !payload.base_url || !payload.model_name) { onSetError("请填写 provider 名称、base URL 和模型名称"); return; }
@@ -510,9 +623,12 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
 
   async function handleSavePricingRule(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
-    const payload = toPricingRulePayload(pricingRuleDraft);
-    if (!payload.provider_profile_id || !payload.capability || !payload.metric) {
-      onSetError("请先选择模型并填写计费能力、指标和单价");
+    const payload = toPricingRulePayload({
+      ...pricingRuleDraft,
+      capability: "chat.completions",
+    });
+    if (!payload.provider_profile_id || !payload.metric) {
+      onSetError("请先选择 Chat 模型并填写 token 指标和单价");
       return;
     }
     setSavingPricingRule(true);
@@ -743,14 +859,20 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                 <input value={providerDraft.capabilities} onChange={(e) => setProviderDraft((c) => ({ ...c, capabilities: e.target.value }))} placeholder="image.generate, chat.completions" />
               </label>
               <label className="composer-menu-field composer-menu-field-full"><span>Strategies</span><textarea rows={5} value={providerDraft.strategies} onChange={(e) => setProviderDraft((c) => ({ ...c, strategies: e.target.value }))} placeholder={'{\n  "chat": "openai_chat",\n  "image.generate": "chat_modalities_image",\n  "image.edit": "chat_modalities_image_edit",\n  "video.generate": "haodeya_grok_video"\n}'} /></label>
-              <label className="composer-menu-field composer-menu-field-full"><span>Adapter Config</span><textarea rows={5} value={providerDraft.adapterConfig} onChange={(e) => setProviderDraft((c) => ({ ...c, adapterConfig: e.target.value }))} placeholder={'{\n  "service": "cv",\n  "region": "cn-north-1",\n  "version": "2022-08-31",\n  "submit_action": "CVSync2AsyncSubmitTask",\n  "result_action": "CVSync2AsyncGetResult",\n  "req_key": "jimeng_t2v_v30"\n}'} /></label>
+              <label className="composer-menu-field composer-menu-field-full"><span>Adapter Config</span><textarea rows={5} value={providerDraft.adapterConfig} onChange={(e) => setProviderDraft((c) => ({ ...c, adapterConfig: e.target.value }))} placeholder={'{\n  "service": "cv",\n  "region": "cn-north-1",\n  "version": "2022-08-31",\n  "submit_action": "CVSync2AsyncSubmitTask",\n  "result_action": "CVSync2AsyncGetResult",\n  "req_key": "jimeng_t2v_v30"\n}'} /><small>分档单价请在下方填写；此处仅保留路由、区域等非计价字段。</small></label>
               <label className="composer-menu-field"><span>Quality</span><input value={providerDraft.quality} onChange={(e) => setProviderDraft((c) => ({ ...c, quality: e.target.value }))} placeholder="medium" /></label>
               <label className="composer-menu-field"><span>Format</span><select value={providerDraft.outputFormat} onChange={(e) => setProviderDraft((c) => ({ ...c, outputFormat: e.target.value }))}><option value="png">png</option><option value="jpeg">jpeg</option><option value="webp">webp</option><option value="mp4">mp4</option></select></label>
               <label className="composer-menu-field"><span>Timeout</span><input type="number" min="30" value={providerDraft.timeoutSeconds} onChange={(e) => setProviderDraft((c) => ({ ...c, timeoutSeconds: Number(e.target.value) || 300 }))} /></label>
               <p className="admin-form-help">建议图片任务从 300 秒起步；视频任务可按上游建议调整到 600-900 秒。</p>
-              <label className="composer-menu-field"><span>计费币种</span><input value={providerDraft.pricingCurrency} onChange={(e) => setProviderDraft((c) => ({ ...c, pricingCurrency: e.target.value }))} placeholder="CNY" /></label>
-              <label className="composer-menu-field"><span>计费单位</span><select value={providerDraft.pricingUnit} onChange={(e) => setProviderDraft((c) => ({ ...c, pricingUnit: e.target.value }))}><option value="per_image">按张图片</option><option value="per_video">按条视频</option><option value="per_request">按次请求</option></select></label>
-              <label className="composer-menu-field"><span>单价</span><input type="number" min="0" step="0.0001" value={providerDraft.unitPrice} onChange={(e) => setProviderDraft((c) => ({ ...c, unitPrice: Number(e.target.value) || 0 }))} placeholder="0" /></label>
+              {draftHasTierBilling ? (
+                <>
+                  <label className="composer-menu-field"><span>计费币种</span><input value={providerDraft.pricingCurrency} onChange={(e) => setProviderDraft((c) => ({ ...c, pricingCurrency: e.target.value }))} placeholder="CNY" /></label>
+                  <label className="composer-menu-field"><span>计费单位</span><select value={providerDraft.pricingUnit} onChange={(e) => setProviderDraft((c) => ({ ...c, pricingUnit: e.target.value }))}><option value="per_image">按张图片</option><option value="per_video">按条视频</option><option value="per_request">按次请求</option></select></label>
+                  <label className="composer-menu-field"><span>{tierPriceLabels.first}</span><input type="number" min="0" step="0.0001" value={providerDraft.unitPrice1k} onChange={(e) => setProviderDraft((c) => ({ ...c, unitPrice1k: e.target.value }))} placeholder="0" /></label>
+                  <label className="composer-menu-field"><span>{tierPriceLabels.second}</span><input type="number" min="0" step="0.0001" value={providerDraft.unitPrice2k} onChange={(e) => setProviderDraft((c) => ({ ...c, unitPrice2k: e.target.value }))} placeholder="0" /></label>
+                  <p className="admin-form-help composer-menu-field-full">{tierPriceLabels.help}</p>
+                </>
+              ) : null}
               <label className="composer-menu-field"><span>Reference</span><select value={providerDraft.referenceMode} onChange={(e) => setProviderDraft((c) => ({ ...c, referenceMode: e.target.value }))}><option value="disabled">disabled</option><option value="caption_prompt">caption_prompt</option></select></label>
               <label className="composer-menu-field"><span>Caption Model</span><input value={providerDraft.referenceCaptionModel} onChange={(e) => setProviderDraft((c) => ({ ...c, referenceCaptionModel: e.target.value }))} placeholder="Qwen/Qwen3-VL-8B-Instruct" /></label>
             </div>
@@ -762,18 +884,22 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
             </div>
             <div className="template-editor" style={{ marginTop: 24 }}>
               <div className="template-section-head">
-                <strong>计费规则</strong>
-                <span>图片仍沿用上方兼容单价，Chat 与细分 usage 在这里单独配置。</span>
+                <strong>Chat Token 计费规则</strong>
+                <span>仅用于 Chat 对话；生图 / 视频任务按上方分档单价计费。</span>
               </div>
               <div className="template-empty">
-                图片任务当前按上方模型配置计费，只支持“按张图片”或“按次请求”两种口径。Chat 当前按这里的独立规则计费，
-                支持输入 tokens、输出 tokens、缓存命中 tokens。若某个 Chat 模型还没配置规则，调用仍可继续，但成本会记为 0，且不会回补历史账单。
+                Chat 按每百万 tokens 计价，支持输入 tokens、输出 tokens、缓存命中 tokens。
+                若某个 Chat 模型还没配置规则，调用仍可继续，但成本会记为 0，且不会回补历史账单。
               </div>
+              {chatProviderProfiles.length === 0 ? (
+                <div className="template-empty">当前还没有启用 Chat 能力的模型，无需配置 token 规则。</div>
+              ) : (
+                <>
               <div className="template-list admin-template-list">
                 {filteredPricingRules.length > 0 ? filteredPricingRules.map((rule) => (
                   <div key={rule.id} className="template-list-item">
                     <button type="button" className="template-card template-card-main" onClick={() => handleEditPricingRule(rule)}>
-                      <strong>{rule.capability}</strong>
+                      <strong>chat.completions</strong>
                       <span>{formatPricingMetricLabel(rule.metric)}</span>
                       <small>{`${rule.unit_price} ${rule.currency} / ${rule.unit_size}`}</small>
                     </button>
@@ -790,35 +916,23 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                       </button>
                     </div>
                   </div>
-                )) : <div className="template-empty">当前模型还没有独立计费规则。</div>}
+                )) : <div className="template-empty">当前 Chat 模型还没有 token 计费规则。</div>}
               </div>
               <div className="admin-side-form">
                 <div className="template-editor-row template-editor-row-3">
                   <label className="composer-menu-field">
-                    <span>模型</span>
+                    <span>Chat 模型</span>
                     <select
                       value={selectedPricingProfileId}
                       onChange={(e) =>
                         setPricingRuleDraft((current) => ({ ...current, providerProfileId: e.target.value }))
                       }
                     >
-                      {providerProfiles.map((profile) => (
+                      {chatProviderProfiles.map((profile) => (
                         <option key={profile.id} value={profile.id}>
                           {profile.provider_name}
                         </option>
                       ))}
-                    </select>
-                  </label>
-                  <label className="composer-menu-field">
-                    <span>能力</span>
-                    <select
-                      value={pricingRuleDraft.capability}
-                      onChange={(e) => setPricingRuleDraft((current) => ({ ...current, capability: e.target.value }))}
-                    >
-                      <option value="chat.completions">chat.completions</option>
-                      <option value="image.generate">image.generate</option>
-                      <option value="image.edit">image.edit</option>
-                      <option value="video.generate">video.generate</option>
                     </select>
                   </label>
                   <label className="composer-menu-field">
@@ -830,9 +944,6 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                       <option value="input_tokens">input_tokens</option>
                       <option value="output_tokens">output_tokens</option>
                       <option value="cached_input_tokens">cached_input_tokens</option>
-                      <option value="per_image">per_image</option>
-                      <option value="per_video">per_video</option>
-                      <option value="per_request">per_request</option>
                     </select>
                   </label>
                 </div>
@@ -862,6 +973,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                     <input
                       value={pricingRuleDraft.currency}
                       onChange={(e) => setPricingRuleDraft((current) => ({ ...current, currency: e.target.value }))}
+                      placeholder="CNY"
                     />
                   </label>
                 </div>
@@ -877,7 +989,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                   <button
                     type="button"
                     className="submit-button"
-                    disabled={savingPricingRule || providerProfiles.length === 0}
+                    disabled={savingPricingRule || chatProviderProfiles.length === 0}
                     onClick={() => void handleSavePricingRule()}
                   >
                     {savingPricingRule ? "保存中..." : editingPricingRuleId === null ? "新增规则" : "更新规则"}
@@ -887,7 +999,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                     className="ghost-button"
                     onClick={() =>
                       resetPricingRuleDraft(
-                        selectedPricingProfileId ? Number(selectedPricingProfileId) : providerProfiles[0]?.id ?? null
+                        selectedPricingProfileId ? Number(selectedPricingProfileId) : chatProviderProfiles[0]?.id ?? null
                       )
                     }
                   >
@@ -895,6 +1007,8 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                   </button>
                 </div>
               </div>
+                </>
+              )}
             </div>
           </form>
         </aside>

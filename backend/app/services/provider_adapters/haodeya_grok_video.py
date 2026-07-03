@@ -13,7 +13,7 @@ from app.services.provider_adapters.video_common import (
     resolve_public_media_url,
     video_prompt,
 )
-from app.services.haodeya_pricing import calculate_grok_video_billing
+from app.services.provider_adapters.video_common import calculate_tiered_media_billing
 from app.services.provider_strategy import HAODEYA_GROK_VIDEO_STRATEGY, resolve_strategy_for_capability
 
 HAODEYA_VIDEO_ENDPOINT_PATH = "/videos"
@@ -96,7 +96,17 @@ class HaodeyaGrokVideoProviderAdapter:
                 output_format=self.profile.output_format,
             )
             latency_ms = max(1, round((perf_counter() - started_at) * 1000))
-            billing = calculate_grok_video_billing(sku=sku, output_count=1)
+            billing = calculate_tiered_media_billing(
+                profile=self.profile,
+                output_count=1,
+                tier=_grok_sku_billing_tier(sku),
+                pricing_unit="per_video",
+            )
+            billing = {
+                **billing,
+                "video_sku": sku,
+                "source": "provider_profile",
+            }
             result = {
                 "summary": f"{self.definition.provider_name} completed a live video.generate run.",
                 "payload_keys": list(payload.keys()),
@@ -130,6 +140,15 @@ class HaodeyaGrokVideoProviderAdapter:
             )
         except Exception as exc:
             raise ProviderExecutionError(str(exc), diagnostics=diagnostics) from exc
+
+
+def _grok_sku_billing_tier(sku: str) -> str:
+    meta = GROK_VIDEO_SKUS.get(str(sku or "").strip())
+    if isinstance(meta, dict) and int(meta.get("duration") or 5) >= 10:
+        return "2k"
+    if str(sku or "").strip().endswith("-10s") or "10s" in str(sku or ""):
+        return "2k"
+    return "1k"
 
 
 def _resolve_grok_sku(profile: ImageProviderProfile, payload: dict) -> str:

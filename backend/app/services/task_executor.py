@@ -284,34 +284,23 @@ class StrategyProviderAdapter(ProviderAdapter):
 
 
 def _resolve_image_unit_price(profile: ImageProviderProfile, payload: dict | None) -> float:
+    from app.services.provider_adapters.video_common import resolve_profile_tier_unit_price
+
     resolution = _normalize_image_resolution(payload or {})
-    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
-    tier_key = f"unit_price_{resolution}"
-    tier_value = adapter_config.get(tier_key)
-    if tier_value is not None:
-        return round(float(tier_value), 6)
-    return round(float(profile.unit_price or 0.0), 6)
+    return resolve_profile_tier_unit_price(profile, resolution)
 
 
 def _calculate_image_billing(*, profile: ImageProviderProfile, output_count: int, payload: dict | None = None) -> dict:
-    unit_price = _resolve_image_unit_price(profile, payload)
+    from app.services.provider_adapters.video_common import calculate_tiered_media_billing
+
     resolution = _normalize_image_resolution(payload or {})
-    pricing_unit = (profile.pricing_unit or "per_image").strip() or "per_image"
-    currency = (profile.pricing_currency or "CNY").strip().upper() or "CNY"
-    billable_units = output_count if pricing_unit == "per_image" else 1
-    if pricing_unit not in {"per_image", "per_request"}:
-        pricing_unit = "per_image"
-        billable_units = output_count
-    cost = round(unit_price * billable_units, 4)
-    return {
-        "cost": cost,
-        "currency": currency,
-        "pricing_unit": pricing_unit,
-        "unit_price": unit_price,
-        "billable_units": billable_units,
-        "resolution_tier": resolution,
-        "source": "provider_profile",
-    }
+    billing = calculate_tiered_media_billing(
+        profile=profile,
+        output_count=output_count,
+        tier=resolution,
+        pricing_unit=profile.pricing_unit,
+    )
+    return billing
 
 
 def _materialize_preview_asset(*, provider_name: str, capability: str, prompt_summary: str) -> str:

@@ -25,9 +25,21 @@ class HaodeyaPricingTests(unittest.TestCase):
 
     def test_grok_sku_billing_uses_upstream_prices(self) -> None:
         billing = calculate_grok_video_billing(sku="x-ai/grok-imagine-video-ref-10s")
-        self.assertEqual(billing["cost"], 6.74)
+        self.assertEqual(billing["cost"], 6.66)
         self.assertEqual(billing["currency"], "CNY")
         self.assertEqual(billing["source"], "haodeya_grok_sku")
+
+    def test_grok_sku_billing_honors_adapter_config_overrides(self) -> None:
+        billing = calculate_grok_video_billing(
+            sku="x-ai/grok-imagine-video-i2v",
+            adapter_config={"unit_price_1k": 3.33, "unit_price_2k": 6.66},
+        )
+        self.assertEqual(billing["cost"], 3.33)
+        billing_10s = calculate_grok_video_billing(
+            sku="x-ai/grok-imagine-video-ref-10s",
+            adapter_config={"unit_price_1k": 3.33, "unit_price_2k": 6.66},
+        )
+        self.assertEqual(billing_10s["cost"], 6.66)
 
     def test_sync_haodeya_pricing_updates_profiles_and_chat_rules(self) -> None:
         with self.SessionLocal() as db:
@@ -61,6 +73,20 @@ class HaodeyaPricingTests(unittest.TestCase):
             )
             db.add(
                 ProviderProfile(
+                    provider_name="openai_gpt-5.4-image-2",
+                    api_key=encrypt_value("test-key"),
+                    base_url="https://newapi.haodeya.xyz/v1",
+                    model_name="openai/gpt-5.4-image-2",
+                    adapter_kind="openai_compatible",
+                    capabilities=["image.generate"],
+                    pricing_currency="USD",
+                    pricing_unit="per_image",
+                    unit_price=1.56,
+                    enabled=True,
+                )
+            )
+            db.add(
+                ProviderProfile(
                     provider_name="haodeya_grok",
                     api_key=encrypt_value("test-key"),
                     base_url="https://newapi.haodeya.xyz/v1",
@@ -84,6 +110,9 @@ class HaodeyaPricingTests(unittest.TestCase):
                     ProviderProfile.provider_name == "google_gemini-3.1-flash-image-preview"
                 )
             )
+            gpt_image_profile = db.scalar(
+                select(ProviderProfile).where(ProviderProfile.provider_name == "openai_gpt-5.4-image-2")
+            )
             grok_profile = db.scalar(select(ProviderProfile).where(ProviderProfile.provider_name == "haodeya_grok"))
             chat_rules = db.scalars(
                 select(ProviderPricingRule).where(
@@ -94,7 +123,11 @@ class HaodeyaPricingTests(unittest.TestCase):
 
         self.assertEqual(image_profile.pricing_currency, "CNY")
         self.assertEqual(image_profile.unit_price, 0.67)
-        self.assertEqual(grok_profile.unit_price, 3.35)
+        self.assertEqual(image_profile.adapter_config["unit_price_1k"], 0.67)
+        self.assertEqual(image_profile.adapter_config["unit_price_2k"], 0.95)
+        self.assertEqual(gpt_image_profile.unit_price, 1.62)
+        self.assertEqual(gpt_image_profile.adapter_config["unit_price_2k"], 2.67)
+        self.assertEqual(grok_profile.unit_price, 3.33)
         self.assertIn("openai_gpt-5.4:input_tokens=23.8", result.updated_rules)
         self.assertIn("openai_gpt-5.4:output_tokens=142.8", result.updated_rules)
         self.assertEqual(

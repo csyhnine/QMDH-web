@@ -3,6 +3,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from dataclasses import replace
 from unittest.mock import patch
 
 from app.core.config import ImageProviderProfile
@@ -59,7 +60,7 @@ class HaodeyaGrokVideoAdapterTests(unittest.TestCase):
             output_format="mp4",
             timeout_seconds=30,
             pricing_unit="per_video",
-            unit_price=3.35,
+            unit_price=3.33,
         )
 
     def test_execute_submits_i2v_polls_and_persists_video(self) -> None:
@@ -110,10 +111,45 @@ class HaodeyaGrokVideoAdapterTests(unittest.TestCase):
                         },
                     )
 
-        self.assertEqual(outcome.cost, 3.35)
+        self.assertEqual(outcome.cost, 3.33)
         self.assertEqual(outcome.result["video_sku"], "x-ai/grok-imagine-video-i2v")
         self.assertTrue(outcome.result["storage_path"].startswith("generated/grok_i2v_5s/"))
         self.assertEqual(len(seen_requests), 3)
+
+    def test_execute_uses_adapter_config_tier_prices(self) -> None:
+        profile = replace(
+            self._profile(),
+            adapter_config={"unit_price_1k": 3.33, "unit_price_2k": 6.66},
+        )
+        adapter = HaodeyaGrokVideoProviderAdapter(
+            ProviderDefinition("grok_i2v_5s", profile.model_name, ["video.generate"], adapter_kind="haodeya_grok"),
+            profile,
+        )
+
+        def fake_urlopen(request, timeout):
+            url = request.full_url
+            if url.endswith("/videos") and request.method == "POST":
+                return _FakeJsonResponse({"id": "job-tier", "status": "pending"})
+            if url.endswith("/videos/job-tier"):
+                return _FakeJsonResponse({"id": "job-tier", "status": "completed"})
+            if url.endswith("/videos/job-tier/content"):
+                return _FakeBinaryResponse(b"fake-video-bytes")
+            raise AssertionError(f"Unexpected request: {url} {request.method}")
+
+        with patch.dict(os.environ, {"QMDH_MEDIA_ROOT": self.tempdir}, clear=False):
+            with patch("app.services.provider_adapters.haodeya_grok_video.urlopen", side_effect=fake_urlopen):
+                with patch("app.services.provider_adapters.haodeya_grok_video.sleep"):
+                    outcome = adapter.execute(
+                        "video.generate",
+                        {
+                            "prompt": "slow dolly in",
+                            "video_sku": "x-ai/grok-imagine-video-i2v",
+                            "reference_image": "https://cdn.example.com/start.jpg",
+                        },
+                    )
+
+        self.assertEqual(outcome.cost, 3.33)
+        self.assertEqual(outcome.result["billing"]["resolution_tier"], "1k")
 
     def test_ref_mode_builds_input_references(self) -> None:
         profile = ImageProviderProfile(
@@ -127,7 +163,7 @@ class HaodeyaGrokVideoAdapterTests(unittest.TestCase):
             output_format="mp4",
             timeout_seconds=30,
             pricing_unit="per_video",
-            unit_price=6.74,
+            unit_price=6.66,
         )
         adapter = HaodeyaGrokVideoProviderAdapter(
             ProviderDefinition("grok_ref_10s", profile.model_name, ["video.generate"], adapter_kind="haodeya_grok"),

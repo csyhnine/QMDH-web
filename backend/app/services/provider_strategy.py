@@ -19,6 +19,7 @@ DASHSCOPE_ASYNC_VIDEO_STRATEGY = "dashscope_async_video"
 VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY = "volcengine_ark_video_tasks"
 VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY = "volcengine_cv_jimeng_video"
 HAODEYA_GROK_VIDEO_STRATEGY = "haodeya_grok_video"
+HAODEYA_ASYNC_IMAGE_STRATEGY = "haodeya_async_image"
 BIGJPG_UPSCALE_STRATEGY = "bigjpg_upscale"
 
 KNOWN_STRATEGIES = {
@@ -33,6 +34,7 @@ KNOWN_STRATEGIES = {
     VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
     VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
     HAODEYA_GROK_VIDEO_STRATEGY,
+    HAODEYA_ASYNC_IMAGE_STRATEGY,
     BIGJPG_UPSCALE_STRATEGY,
 }
 
@@ -54,12 +56,18 @@ _CAPABILITY_ALIASES = {
 
 _ALLOWED_STRATEGIES_BY_CAPABILITY = {
     CHAT_CAPABILITY: {OPENAI_CHAT_STRATEGY},
-    "image.generate": {OPENAI_IMAGES_STRATEGY, CHAT_MODALITIES_IMAGE_STRATEGY, CHAT_COMPLETIONS_IMAGE_STRATEGY},
+    "image.generate": {
+        OPENAI_IMAGES_STRATEGY,
+        CHAT_MODALITIES_IMAGE_STRATEGY,
+        CHAT_COMPLETIONS_IMAGE_STRATEGY,
+        HAODEYA_ASYNC_IMAGE_STRATEGY,
+    },
     "image.edit": {
         OPENAI_IMAGES_STRATEGY,
         OPENAI_IMAGE_EDITS_STRATEGY,
         CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
         CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY,
+        HAODEYA_ASYNC_IMAGE_STRATEGY,
     },
     "image.upscale": {BIGJPG_UPSCALE_STRATEGY},
     "video.generate": {
@@ -175,6 +183,19 @@ def profile_prefers_bigjpg_upscale(*, provider_name: str, model_name: str, base_
     return "bigjpg" in identity
 
 
+def profile_prefers_haodeya_async_image(*, provider_name: str, model_name: str, base_url: str) -> bool:
+    identity = f"{provider_name} {model_name} {base_url}".lower()
+    return "newapi.haodeya.xyz" in identity or "gpt-image-2-vip" in identity
+
+
+def profile_prefers_toapis_image(*, provider_name: str, model_name: str, base_url: str) -> bool:
+    return profile_prefers_haodeya_async_image(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+    )
+
+
 def default_strategy_for_capability(
     *,
     capability: str,
@@ -185,6 +206,13 @@ def default_strategy_for_capability(
     normalized = normalize_capability_key(capability)
     if normalized == CHAT_CAPABILITY:
         return OPENAI_CHAT_STRATEGY
+    if profile_prefers_haodeya_async_image(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+    ):
+        if normalized in {"image.generate", "image.edit"}:
+            return HAODEYA_ASYNC_IMAGE_STRATEGY
     if profile_prefers_chat_modalities_image(
         provider_name=provider_name,
         model_name=model_name,

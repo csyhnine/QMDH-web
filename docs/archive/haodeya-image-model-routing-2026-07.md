@@ -134,6 +134,8 @@ python -m pytest tests/test_task_executor_openai.py -q -k haodeya
 
 ---
 
-## 7. 与 Chat / 多 Agent 的边界
+## 7. 与 Chat / 多 Agent / VIP 异步的边界
 
-本次留档**仅**图像执行层与 Provider 配置；Chat B1、gov-001、multi-agent 等为**另一轨道**，见 `docs/handoff.md` 与 `docs/tasks.md`，勿与 `task_executor.py` 混提交意图。
+- **Gemini/GPT 同步线**：上文 §1–§6
+- **GPT-Image-2-VIP 异步线**（`haodeya_async_image`）：见 **[`haodeya-gpt-image-vip-async-2026-07.md`](haodeya-gpt-image-vip-async-2026-07.md)**
+- Chat B1、gov-001、multi-agent：见 `docs/handoff.md` 与 `docs/tasks.md`，**勿与 VIP 改动混提交**

@@ -40,6 +40,7 @@ from app.services.provider_adapters.dashscope_video import DashScopeVideoProvide
 from app.services.provider_adapters.haodeya_grok_video import HaodeyaGrokVideoProviderAdapter
 from app.services.provider_adapters.volcengine_ark_video import VolcengineArkVideoProviderAdapter
 from app.services.provider_adapters.volcengine_jimeng_video import VolcengineJimengVideoProviderAdapter
+from app.services.provider_adapters.video_common import resolve_public_media_url
 from app.services.provider_strategy import (
     CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY,
     CHAT_COMPLETIONS_IMAGE_STRATEGY,
@@ -49,6 +50,7 @@ from app.services.provider_strategy import (
     HAODEYA_GROK_VIDEO_STRATEGY,
     OPENAI_IMAGE_EDITS_STRATEGY,
     OPENAI_IMAGES_STRATEGY,
+    HAODEYA_ASYNC_IMAGE_STRATEGY,
     VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
     VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
     resolve_strategy_for_capability,
@@ -175,7 +177,11 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
                     endpoint_path=request_plan.endpoint_path,
                 )
 
-                if _uses_modelscope_async_mode(self.profile) and request_plan.endpoint_path.startswith("/images/"):
+                if request_plan.adapter_mode == "haodeya_async_image" and request_plan.endpoint_path.startswith("/images/"):
+                    data = _extract_image_data(response_payload)
+                    if not data:
+                        data = _poll_haodeya_async_image_result(self.profile, response_payload)
+                elif _uses_modelscope_async_mode(self.profile) and request_plan.endpoint_path.startswith("/images/"):
                     data = _extract_image_data(response_payload)
                     if not data:
                         data = _poll_modelscope_image_result(self.profile, response_payload)
@@ -237,8 +243,9 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
                 result["output_width"] = output_dimensions[0]
                 result["output_height"] = output_dimensions[1]
 
+            resolved_model = str(request_plan.body.get("model") or self.profile.model_name)
             return ExecutionOutcome(
-                model_name=self.profile.model_name,
+                model_name=resolved_model,
                 latency_ms=latency_ms,
                 cost=billing["cost"],
                 cost_currency=billing["currency"],
@@ -377,6 +384,7 @@ def _build_image_request_plan(
         capability == "image.generate"
         and reference_images
         and "image.edit" in definition.capabilities
+        and not _uses_haodeya_async_image_gateway(profile)
     ):
         edit_strategy = resolve_strategy_for_capability(
             capability="image.edit",
@@ -393,6 +401,14 @@ def _build_image_request_plan(
             effective_capability = "image.edit"
             strategy = edit_strategy
 
+    if strategy == HAODEYA_ASYNC_IMAGE_STRATEGY:
+        return _build_haodeya_async_image_plan(
+            profile=profile,
+            requested_capability=capability,
+            effective_capability=effective_capability,
+            payload=payload,
+            prompt=prompt,
+        )
     if strategy == OPENAI_IMAGES_STRATEGY:
         if _should_use_chat_modalities_plan_for_2k(profile=profile, strategy=strategy, payload=payload):
             if effective_capability == "image.edit":
@@ -504,6 +520,8 @@ def _aspect_ratio_result_fields(profile: ImageProviderProfile, payload: dict) ->
 
 def _normalize_image_resolution(payload: dict) -> str:
     raw = str(payload.get("resolution") or "1k").strip().lower()
+    if raw == "4k":
+        return "4k"
     if raw == "2k":
         return "2k"
     return "1k"
@@ -525,6 +543,177 @@ def _image_generation_max_tokens(payload: dict) -> int:
 
 def _uses_haodeya_gateway(profile: ImageProviderProfile) -> bool:
     return "haodeya" in profile.base_url.lower()
+
+
+def _uses_haodeya_async_image_gateway(profile: ImageProviderProfile) -> bool:
+    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    flavor = str(adapter_config.get("provider_flavor") or "").strip().lower()
+    if flavor in {"haodeya_async_image", "toapis"}:
+        return True
+    identity = f"{profile.provider_name} {profile.model_name} {profile.base_url}".lower()
+    return "newapi.haodeya.xyz" in identity or "gpt-image-2-vip" in identity
+
+
+def _uses_toapis_gateway(profile: ImageProviderProfile) -> bool:
+    return _uses_haodeya_async_image_gateway(profile)
+
+
+def _haodeya_async_api_root(profile: ImageProviderProfile) -> str:
+    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    override = adapter_config.get("api_root")
+    if isinstance(override, str) and override.strip():
+        return override.strip().rstrip("/")
+    return profile.base_url.rstrip("/")
+
+
+def _extract_toapis_task_id(submit_payload: dict) -> str:
+    for key in ("id", "task_id", "job_id"):
+        value = str(submit_payload.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _extract_toapis_polling_url(submit_payload: dict) -> str:
+    for key in ("polling_url", "poll_url", "status_url"):
+        value = str(submit_payload.get(key) or "").strip()
+        if value.startswith(("http://", "https://")):
+            return value
+
+    metadata = submit_payload.get("metadata")
+    if isinstance(metadata, dict):
+        for key in ("polling_url", "poll_url", "status_url"):
+            value = str(metadata.get(key) or "").strip()
+            if value.startswith(("http://", "https://")):
+                return value
+    return ""
+
+
+def _haodeya_async_poll_url(
+    profile: ImageProviderProfile,
+    *,
+    task_id: str,
+    submit_payload: dict,
+) -> str:
+    polling_url = _extract_toapis_polling_url(submit_payload)
+    if polling_url:
+        return polling_url
+
+    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    api_root = _haodeya_async_api_root(profile)
+    template = str(adapter_config.get("poll_path_template") or "/images/generations/{task_id}").strip()
+    if "{task_id}" in template:
+        return f"{api_root}{template.format(task_id=task_id)}"
+    suffix = template if template.startswith("/") else f"/{template}"
+    return f"{api_root}{suffix.rstrip('/')}/{task_id}"
+
+
+def _toapis_poll_url_candidates(
+    profile: ImageProviderProfile,
+    *,
+    task_id: str,
+    submit_payload: dict,
+) -> list[str]:
+    return [_haodeya_async_poll_url(profile, task_id=task_id, submit_payload=submit_payload)]
+
+
+def _toapis_api_root(profile: ImageProviderProfile) -> str:
+    return _haodeya_async_api_root(profile)
+
+
+def _normalize_haodeya_async_base_model(model_name: str) -> str:
+    normalized = str(model_name or "").strip()
+    lowered = normalized.lower()
+    for suffix in ("-4k", "-2k"):
+        if lowered.endswith(suffix):
+            return normalized[: -len(suffix)]
+    return normalized
+
+
+def _normalize_toapis_base_model(model_name: str) -> str:
+    return _normalize_haodeya_async_base_model(model_name)
+
+
+def _resolve_haodeya_async_upstream_model(profile: ImageProviderProfile, resolution: str) -> str:
+    tier = _normalize_image_resolution({"resolution": resolution})
+    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    override_key = f"upstream_model_{tier}"
+    override = adapter_config.get(override_key)
+    if isinstance(override, str) and override.strip():
+        return override.strip()
+
+    base_model = _normalize_haodeya_async_base_model(profile.model_name) or "gpt-image-2-vip"
+    # Haodeya gateway -2k SKU is still rolling out (2026-07): use base model + resolution field for 2K.
+    if tier in {"1k", "2k"}:
+        return base_model
+    return f"{base_model}-{tier}"
+
+
+def _resolve_toapis_upstream_model(profile: ImageProviderProfile, resolution: str) -> str:
+    return _resolve_haodeya_async_upstream_model(profile, resolution)
+
+
+def _reference_image_to_public_url(reference_image: str) -> str:
+    normalized = reference_image.strip()
+    if normalized.startswith("data:image/"):
+        raise ValueError("Haodeya async image requires public HTTPS image URLs; base64 reference images are not supported.")
+    if normalized.startswith(("http://", "https://")):
+        if not normalized.startswith("https://"):
+            raise ValueError("Haodeya async image requires public HTTPS image URLs for reference images.")
+        return normalized
+
+    public_url = resolve_public_media_url(normalized)
+    if not public_url.startswith("https://"):
+        raise ValueError("Haodeya async image requires public HTTPS image URLs for reference images.")
+    return public_url
+
+
+def _build_haodeya_async_image_plan(
+    *,
+    profile: ImageProviderProfile,
+    requested_capability: str,
+    effective_capability: str,
+    payload: dict,
+    prompt: str,
+) -> ImageRequestPlan:
+    reference_images = _extract_reference_images(payload)
+    resolution = _normalize_image_resolution(payload)
+    prompt_text = prompt
+    detail = str(payload.get("prompt_supplement") or "").strip()
+    if detail:
+        prompt_text = f"{prompt}\n\nAdditional guidance: {detail}"
+
+    body: dict[str, object] = {
+        "model": _resolve_haodeya_async_upstream_model(profile, resolution),
+        "prompt": prompt_text,
+        "size": _resolved_image_aspect_ratio(profile, payload),
+        "resolution": resolution,
+        "quality": profile.quality or "high",
+        "response_format": "url",
+        "n": 1,
+    }
+
+    reference_result = _image_generation_result_fields(profile, payload)
+    if reference_images:
+        body["image_urls"] = [_reference_image_to_public_url(item) for item in reference_images]
+        reference_result = {
+            **reference_result,
+            "reference_image_used": True,
+            "reference_image_mode": "haodeya_async_image_urls",
+            "reference_image_count": len(reference_images),
+        }
+    if requested_capability != effective_capability:
+        reference_result["haodeya_async_capability_note"] = requested_capability
+
+    return ImageRequestPlan(
+        endpoint_path="/images/generations",
+        body=body,
+        headers=_build_openai_headers(profile),
+        reference_result=reference_result,
+        adapter_mode="haodeya_async_image",
+        effective_capability=effective_capability,
+        strategy=HAODEYA_ASYNC_IMAGE_STRATEGY,
+    )
 
 
 def _normalize_haodeya_base_model(model_name: str) -> str:
@@ -576,6 +765,10 @@ def _should_use_chat_modalities_plan_for_2k(
 
 def _upstream_request_excerpt(body: dict[str, object]) -> dict[str, object]:
     excerpt: dict[str, object] = {"model": body.get("model")}
+    if body.get("size"):
+        excerpt["size"] = body.get("size")
+    if body.get("resolution"):
+        excerpt["resolution"] = body.get("resolution")
     if body.get("modalities"):
         excerpt["modalities"] = body.get("modalities")
     if body.get("max_tokens") is not None:
@@ -604,6 +797,8 @@ def _uses_cpa_2k_model_suffix(profile: ImageProviderProfile) -> bool:
 def _resolve_image_model_name(profile: ImageProviderProfile, payload: dict) -> str:
     base_model = _strip_image_model_2k_suffix(profile.model_name)
     resolution = _normalize_image_resolution(payload)
+    if _uses_haodeya_async_image_gateway(profile):
+        return _resolve_haodeya_async_upstream_model(profile, resolution)
     if _uses_haodeya_gateway(profile):
         return _resolve_haodeya_upstream_model(base_model, resolution, profile)
     if resolution == "2k" and _uses_cpa_2k_model_suffix(profile):
@@ -1437,6 +1632,81 @@ def _poll_modelscope_image_result(profile: ImageProviderProfile, submit_payload:
     raise ValueError(f"ModelScope async task timed out before completion: {last_payload}")
 
 
+def _extract_toapis_poll_image_data(payload: dict) -> list[dict]:
+    result = payload.get("result")
+    if isinstance(result, dict):
+        data = result.get("data")
+        if isinstance(data, list) and data:
+            normalized = _normalize_image_candidates(data)
+            if normalized:
+                return normalized
+        if isinstance(data, dict) and data.get("url"):
+            return [{"url": str(data["url"])}]
+
+    normalized = _extract_image_data(payload)
+    if normalized:
+        return normalized
+
+    top_level_url = str(payload.get("url") or "").strip()
+    if top_level_url:
+        return [{"url": top_level_url}]
+
+    return []
+
+
+def _poll_haodeya_async_image_result(profile: ImageProviderProfile, submit_payload: dict) -> list[dict]:
+    task_id = _extract_toapis_task_id(submit_payload)
+    if not task_id:
+        raise ValueError(f"{profile.provider_name} did not return a task id for Haodeya async image generation")
+
+    poll_url = _haodeya_async_poll_url(profile, task_id=task_id, submit_payload=submit_payload)
+
+    deadline = perf_counter() + max(profile.timeout_seconds, 180.0)
+    last_payload: dict[str, object] = submit_payload
+    sleep(2)
+
+    while perf_counter() < deadline:
+        poll_request = Request(
+            url=poll_url,
+            headers={"Authorization": f"Bearer {profile.api_key}"},
+            method="GET",
+        )
+
+        try:
+            with urlopen(poll_request, timeout=profile.timeout_seconds) as response:
+                last_payload = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="ignore")
+            raise ValueError(
+                f"Haodeya async image poll failed for {poll_url} with HTTP {exc.code}: {detail}"
+            ) from exc
+        except URLError as exc:
+            raise ValueError(f"Haodeya async image poll request failed for {poll_url}: {exc.reason}") from exc
+
+        next_polling_url = _extract_toapis_polling_url(last_payload)
+        if next_polling_url:
+            poll_url = next_polling_url
+
+        task_status = str(last_payload.get("status") or last_payload.get("task_status") or "").lower()
+        if task_status in {"completed", "succeed", "succeeded", "success"}:
+            normalized = _extract_toapis_poll_image_data(last_payload)
+            if normalized:
+                return normalized
+            raise ValueError(f"Haodeya async image task completed but returned no image outputs: {last_payload}")
+
+        if task_status in {"failed", "error"}:
+            error = last_payload.get("error")
+            if isinstance(error, dict):
+                message = str(error.get("message") or error).strip()
+            else:
+                message = str(error or last_payload).strip()
+            raise ValueError(f"Haodeya async image task failed: {message or last_payload}")
+
+        sleep(3)
+
+    raise ValueError(f"Haodeya async image task timed out before completion (last poll {poll_url}): {last_payload}")
+
+
 def _asset_type_for_capability(capability: str) -> AssetType | None:
     mapping = {
         "image.generate": AssetType.image,
@@ -1464,6 +1734,7 @@ def _stage_metadata(raw_stage: str) -> tuple[str, str]:
         ("generated image download", ("generated_image_download", "下载生成结果")),
         ("reference image caption", ("reference_image_caption", "分析参考图")),
         ("modelscope async poll", ("async_result_poll", "轮询异步结果")),
+        ("haodeya async image poll", ("async_result_poll", "轮询异步结果")),
     )
     for marker, payload in mapping:
         if marker in normalized:

@@ -44,6 +44,7 @@ from app.services.provider_strategy import (
     OPENAI_CHAT_STRATEGY,
     OPENAI_IMAGE_EDITS_STRATEGY,
     OPENAI_IMAGES_STRATEGY,
+    HAODEYA_ASYNC_IMAGE_STRATEGY,
     VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
     VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
     normalize_provider_base_url,
@@ -194,6 +195,25 @@ def _build_probe_request(profile: ProviderProfile, api_key: str) -> tuple[str, s
                 },
             },
             "Chat 接口可用，当前模型已通过最小请求校验。",
+        )
+
+    if strategy == HAODEYA_ASYNC_IMAGE_STRATEGY:
+        return (
+            "POST",
+            f"{base_url}/images/generations",
+            {
+                "headers": headers,
+                "json": {
+                    "model": profile.model_name,
+                    "prompt": "ping",
+                    "size": "1:1",
+                    "resolution": "1k",
+                    "quality": profile.quality or "high",
+                    "response_format": "url",
+                    "n": 1,
+                },
+            },
+            "Haodeya 异步生图接口可用，当前模型已通过最小请求校验。",
         )
 
     if strategy == OPENAI_IMAGES_STRATEGY:

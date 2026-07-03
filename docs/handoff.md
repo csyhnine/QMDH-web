@@ -11,6 +11,23 @@
 
 ## Latest Handoffs
 
+### [2026-07-03] Haodeya GPT-Image-2-VIP 异步生图 — **WIP，未部署**
+- Role: Haodeya 网关 VIP 异步生图（`gpt-image-2-vip`）对接
+- Branch: 本地 working tree，**改动未 commit**
+- Production: **未部署**；生产仍为此前基线（定价回填等已部署项与本次无关）
+- Completed:
+  - 策略 `haodeya_async_image`：`POST /images/generations` + GET 轮询 + `result.data[0].url`
+  - 仅对接 **`https://newapi.haodeya.xyz/v1`**（不对接 ToAPI 直连）
+  - 2K 临时规则：`gpt-image-2-vip` + `resolution: 2k`（`-2k` SKU 待 Haodeya 修复）
+  - 单测 `test_task_executor_toapis_image.py`：6 passed
+- Blocked / 待验收:
+  - Studio 本地真实联调（1K/2K）需接班人跑通
+  - Admin Provider + Key 配置
+- Archive: **`docs/archive/haodeya-gpt-image-vip-async-2026-07.md`**
+- Handoff: **`docs/archive/handoff-2026-07-03-haodeya-gpt-image-vip-wip.md`**
+- Next step: 本地 Studio 验收 → 独立 commit → 部署 backend/worker
+- Safe to hand off: **Yes**（文档 + 代码齐全；部署与联调未完成）
+
 ### [2026-06-26] v1.1.0 — push GitHub，**生产仍为 v1.0.0，勿部署**
 - Role: v1.1.0 功能合入、版本号管理、反馈多轮对话、上传限制、2K 生图与历史 meta
 - Branch: `main` @ **本 commit**
@@ -45,15 +62,4 @@
 - Commit `cecab36` 内容已包含在 v1.1.0；生产仍未部署。
 - Archive: `docs/archive/handoff-2026-06-22-studio-gemini-composer.md`
 
-### [2026-06-22] Gemini CPA 生产热更新（后端）
-- Role: Gemini CPA 适配、局部生产部署
-- Branch: `main` @ `51aba1b` → 后续改动已合入 v1.1.0
-- Production URL: **`https://cityusbdisk.cn`**
-- Completed (production):
-  - CPA `gemini-3.1-flash-image` → `chat_completions_image`（commit `51aba1b`）
-  - `git pull` + hotpatch backend/worker（Docker Hub 拉 `python:3.12-slim` 失败时的兜底）
-- Deploy log: `docs/archive/deploy-2026-06-22-gemini-hotpatch.log`
-- Next step: 见 v1.1.0 部署项（待负责人确认）
-- Safe to hand off: **Yes**
-
-<!-- Older entries: docs/archive/handoff-2026-06-15-server-git-pull.md, handoff-2026-06-12-ops-share-usage-logs-deploy.md -->
+<!-- 2026-06-22 Gemini CPA 热更新条目已移入 archive，见 docs/archive/haodeya-image-model-routing-2026-07.md -->

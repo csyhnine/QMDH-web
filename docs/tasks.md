@@ -135,6 +135,19 @@
 
 ## Priority Queue
 
+### Task: [image-vip-001] Haodeya GPT-Image-2-VIP 异步生图
+- 状态：**IN_PROGRESS**（代码完成，Studio 联调与部署未完成）
+- 留档：`docs/archive/haodeya-gpt-image-vip-async-2026-07.md`
+- Handoff：`docs/archive/handoff-2026-07-03-haodeya-gpt-image-vip-wip.md`
+- 边界：
+  - `backend/app/services/task_executor.py`（`haodeya_async_image`）
+  - `backend/app/services/provider_strategy.py`
+  - `backend/tests/test_task_executor_toapis_image.py`
+- 验收：
+  1. Admin Provider @ `https://newapi.haodeya.xyz/v1`
+  2. Studio 1K/2K 出图成功
+  3. 单测 6 passed；独立 commit，不与 Agent WIP 混提
+
 ### Task: [task-001] 收口当前生图工作台并清理遗留逻辑
 - 状态：DONE
 - 目标：

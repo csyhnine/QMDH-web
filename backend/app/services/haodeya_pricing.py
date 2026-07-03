@@ -41,6 +41,11 @@ IMAGE_MODEL_PRICES: dict[str, dict[str, Any]] = {
         "unit_price_2k": 2.67,
         "pricing_unit": "per_image",
     },
+    "gpt-image-2-vip": {
+        "unit_price_1k": 1.62,
+        "unit_price_2k": 2.67,
+        "pricing_unit": "per_image",
+    },
 }
 
 CHAT_MODEL_PRICES: dict[str, dict[str, float]] = {

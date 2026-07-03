@@ -1,2 +1,5 @@
-/** Feature toggles for gradual rollout. Defaults keep integrations off in production UI. */
-export const isStudioAgentEnabled = import.meta.env.VITE_STUDIO_AGENT_ENABLED === "true";
+/** Feature toggles for gradual rollout. */
+
+/** Default Chat 助手模式；可通过 `VITE_CHAT_AGENT_MODE_DEFAULT=false` 关闭。 */
+export const chatAgentModeDefault =
+  import.meta.env.VITE_CHAT_AGENT_MODE_DEFAULT !== "false";

@@ -1,6 +1,6 @@
 # Server Operations Runbook
 
-Last updated: `2026-06-12`
+Last updated: `2026-06-29`
 
 ## Current Production-Like Server Snapshot
 
@@ -94,30 +94,59 @@ Always update in this order:
 5. Back up media files from `backend_media`.
 6. Pull latest code as `admin`:
    - `sudo -u admin git -C /www/wwwroot/qmdh-web pull origin main`
-7. If this update includes Alembic migrations, run:
+7. Rebuild images when backend code or migrations changed:
+   - `docker compose build frontend backend worker`
+   - If **only** frontend/static/nginx changed, `docker compose build frontend` is enough.
+8. If this update includes **new** Alembic migration files, run **after rebuild**:
    - `docker compose run --rm backend alembic upgrade head`
-8. Confirm Alembic state:
+9. Confirm Alembic state:
    - `docker compose run --rm backend alembic current`
    - expected result: current revision matches repo `head`
-9. Rebuild and restart:
-   - `docker compose up -d --build`
-10. Validate:
+10. Restart services:
+   - `docker compose up -d frontend backend worker`
+11. Validate:
    - `docker compose ps`
    - `docker compose logs --tail=100 backend`
    - `docker compose logs --tail=100 worker`
-   - `curl http://127.0.0.1:8080/api/v1/health`
+   - `curl http://127.0.0.1:8080/api/v1/health?detail=full`
    - manual smoke test for login / chat / generation / admin models
+
+**Deploy lessons archive:** `docs/archive/deploy-2026-06-29-v1.1.0-production.md` (build-before-alembic, pip cache, no parallel builds).
+
+**Recommended scripted deploy** (review locally first; run on ECS only after approval):
+
+```bash
+cd /www/wwwroot/qmdh-web
+chmod +x scripts/deploy-production.sh
+
+# UI-only release
+./scripts/deploy-production.sh frontend
+
+# Backend/worker code, no new migrations
+./scripts/deploy-production.sh backend
+
+# All services, no alembic
+./scripts/deploy-production.sh full
+
+# Release with new Alembic files (build BEFORE alembic)
+./scripts/deploy-production.sh full-migrate
+```
+
+The script acquires `/tmp/qmdh-docker-build.lock`, pulls as `admin`, backs up `.env`, runs health check at the end.
+Override with `QMDH_SKIP_PULL=1` or `QMDH_SKIP_BACKUP=1` when rehearsing.
 
 ### Update Rule Of Thumb
 
-- No migration in this release:
+- **Frontend-only release:**
   - `sudo -u admin git -C /www/wwwroot/qmdh-web pull origin main`
-  - `docker compose up -d --build`
-- Has migration in this release:
-  - `sudo -u admin git -C /www/wwwroot/qmdh-web pull origin main`
-  - `docker compose run --rm backend alembic upgrade head`
-  - `docker compose run --rm backend alembic current`
-  - `docker compose up -d --build`
+  - `docker compose build frontend && docker compose up -d frontend`
+- **Backend release, no new migration files:**
+  - pull → `docker compose build backend worker` → `docker compose up -d backend worker`
+- **Backend release with new migration files:**
+  - pull → **build backend first** → `alembic upgrade head` → `alembic current` → `up -d`
+  - Do **not** run Alembic on the old backend image; new `migrations/versions/*.py` files are copied into the image at build time.
+- **Never** run two `docker compose build backend` jobs in parallel on the same host.
+- Full backend rebuild on ECS may take **~45–50 minutes** when Docker pip layer cache is cold, even if `requirements.txt` unchanged.
 - Current repo status note:
   - the `usage_ledgers` rollout for `task-016` includes Alembic migration `e4f5a6b7c8d9_add_usage_ledgers.py`
   - the chat token metering rollout includes Alembic migration `f6a7b8c9d0e1_add_chat_token_columns_to_usage_ledgers.py`

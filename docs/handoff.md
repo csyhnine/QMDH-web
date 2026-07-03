@@ -11,49 +11,38 @@
 
 ## Latest Handoffs
 
-### [2026-06-26] v1.1.0 — push GitHub，**生产仍为 v1.0.0，勿部署**
-- Role: v1.1.0 功能合入、版本号管理、反馈多轮对话、上传限制、2K 生图与历史 meta
-- Branch: `main` @ **本 commit**
-- Version:
-  - **生产 `https://cityusbdisk.cn`：v1.0.0**（Git `51aba1b`，未 pull 本次改动）
-  - **GitHub `main`：v1.1.0**（`VERSION` / `CHANGELOG.md` / `README.md`）
-- Repo status:
-  - Local + GitHub `main`: v1.1.0 全量改动已 commit / push
-  - Production server git: `51aba1b5`（**负责人要求：先不部署**）
-- Completed (v1.1.0):
-  - Studio **2K 生图**（Haodeya；Gemini 2K + 16:9 → 2752×1536，本地已验收）
-  - 历史卡片：分辨率 + 像素尺寸 + **Asia/Shanghai** 时间
-  - **反馈多轮对话**（`user_feedback_messages` + 用户/管理员线程 UI）
-  - 上传限制：**图片 20MB / 文档 10MB**（前后端 + nginx `35m`；兼容上游图像编辑网关限制）
-  - 版本管理：`VERSION`、`backend/app/version.py`、健康检查返回版本号
-  - 文档：`README.md`、`CHANGELOG.md`、`docs/cpa-gemini-image-integration.md`
-  - 含此前 `cecab36`：Studio 创作区 UX、运营看板日期/CSV、使用日志修复
-- Local verification:
-  - Gemini @ Haodeya：1K ✅、2K ✅
-  - `test_feedback_api.py`：6 passed
-  - **GPT `gpt-image-2`：401** — Provider Key 配置问题，非代码问题
-- **勿 commit**: `assets/` 本地截图
-- 未来部署 v1.1.0（**非本次**）:
-  1. `sudo -u admin git -C /www/wwwroot/qmdh-web pull origin main`
-  2. **`alembic upgrade head`**（`user_feedback_messages`）
-  3. `docker compose up -d --build frontend backend worker`
-  4. 验收：2K 2752×1536、反馈多轮、health `version=1.1.0`
-- Next step: 负责人确认后再部署生产
+### [2026-07-03] Agent/Chat 多 Agent 留档 + 本地 WIP 索引 — **开新对话读这个**
+
+- **完整留档**：**`docs/archive/handoff-2026-07-03-agent-multi-chat-wip.md`**（架构、文件表、migration、测试、未做项）
+- **范围**：chat-004 B1、gov-001、B2、agent-multi-001/002/003、crawl C1/C2、ref-intent MVP — **全部本地 WIP，未 commit / 未部署**
+- **生产**：仍为 v1.1.0 @ `0090a2a`；Agent 能力不在生产
+- **生产热补丁三件套（2026-07-01，已上服务器，容器内 cp）**：
+  1. `task_executor.py` — Haodeya **模型映射** + 2K `image_config` + 分档计价
+  2. `bigjpg_upscale.py` — **放大图片**（CDN octet-stream → 按文件头存 png/jpg）
+  3. `schemas.py` — 建号/重置密码最短 **4** 位（第三个容易忘）
+  - 详 **`docs/archive/haodeya-image-model-routing-2026-07.md` §5**
+  - **另**：`frontend/src/api.ts` 422 可读化也热补丁过，待分轨 commit
+- **本地近期修复**：Chat 500（缺 `conversations.agent_thread_id`）；Meili 未跑不阻断 uvicorn；定价 `haodeya_pricing.py` 2026-07-03 合同（未部署）
+- Safe to hand off: **Yes**（读留档即可；代码未提交）
+
+### [2026-07-02] crawl-001 C2 + 后端启动修复 — 本地 DONE
+
+- **C2**：`crawl_ingest_service`（域名 allowlist、`source_url` 去重）；`import_reference_page` tool；`POST /crawl/import` + Admin `import-batch`。
+- **启动修复**：Meilisearch 未运行时不再阻断 uvicorn（`ensure_agent_memory_index` 降级为 warning）。
+- **排查**：登录页 `Failed to fetch` = 前端 18080 正常但后端 18010 未监听；常见原因是后端窗口启动失败后退出。
 - Safe to hand off: **Yes**
 
-### [2026-06-26] Studio 创作区与运营看板 UX — 已并入 v1.1.0
-- Commit `cecab36` 内容已包含在 v1.1.0；生产仍未部署。
-- Archive: `docs/archive/handoff-2026-06-22-studio-gemini-composer.md`
+### [2026-07-01] agent-multi-003 HITL + checkpoint + Meili 记忆 — 本地 DONE，未部署
 
-### [2026-06-22] Gemini CPA 生产热更新（后端）
-- Role: Gemini CPA 适配、局部生产部署
-- Branch: `main` @ `51aba1b` → 后续改动已合入 v1.1.0
-- Production URL: **`https://cityusbdisk.cn`**
-- Completed (production):
-  - CPA `gemini-3.1-flash-image` → `chat_completions_image`（commit `51aba1b`）
-  - `git pull` + hotpatch backend/worker（Docker Hub 拉 `python:3.12-slim` 失败时的兜底）
-- Deploy log: `docs/archive/deploy-2026-06-22-gemini-hotpatch.log`
-- Next step: 见 v1.1.0 部署项（待负责人确认）
-- Safe to hand off: **Yes**
+- **HITL**：graph `write_memory → await_hitl → post_hitl`；有 task_proposals 时 interrupt；`confirm-agent-task` → `resume_multi_agent_graph_after_task_confirm`。
+- **Checkpoint**：Postgres `PostgresSaver`；SQLite 回退 `MemorySaver`。
+- **Meilisearch**：`qmdh_agent_memory` 索引。
+- Safe to hand off: **Yes**（细节见 `docs/archive/handoff-2026-07-03-agent-multi-chat-wip.md`）
 
-<!-- Older entries: docs/archive/handoff-2026-06-15-server-git-pull.md, handoff-2026-06-12-ops-share-usage-logs-deploy.md -->
+---
+
+<!-- 更早条目已归档：
+  - crawl-001 C1 + ref-intent + gov-001c → handoff-2026-07-03-agent-multi-chat-wip.md
+  - v1.1.0 生产 deploy → docs/archive/deploy-2026-06-29-v1.1.0-production.md
+  - 图像 1K/2K → docs/archive/haodeya-image-model-routing-2026-07.md
+-->

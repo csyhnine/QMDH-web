@@ -49,6 +49,12 @@ echo   Backend:  http://127.0.0.1:%QMDH_BACKEND_PORT%/api/v1/health
 echo   Frontend: http://127.0.0.1:%QMDH_FRONTEND_PORT%
 echo   Canonical local dev chain: http://127.0.0.1:%QMDH_FRONTEND_PORT% -> http://127.0.0.1:%QMDH_BACKEND_PORT%
 echo.
+echo If login shows "Failed to fetch", check the Backend window for errors.
+echo Common fix: set QMDH_MEILISEARCH_ENABLED=false when Meilisearch is not running.
+echo If Chat shows 500 errors, run database migrations:
+echo   cd /d "%BACKEND_DIR%"
+echo   .venv\Scripts\python.exe -m alembic upgrade head
+echo.
 echo Close those two windows to stop the dev servers.
 exit /b 0
 

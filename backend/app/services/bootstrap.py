@@ -68,6 +68,7 @@ def ensure_schema(engine: Engine) -> None:
     prompt_template_columns = existing_columns("prompt_templates")
     provider_profile_columns = existing_columns("provider_profiles")
     inspiration_post_columns = existing_columns("inspiration_posts")
+    agent_skill_release_columns = existing_columns("agent_skill_releases")
     with engine.begin() as connection:
         if project_columns and "owner_user_id" not in project_columns:
             connection.execute(text("ALTER TABLE projects ADD COLUMN owner_user_id INTEGER"))
@@ -151,6 +152,14 @@ def ensure_schema(engine: Engine) -> None:
             connection.execute(text("ALTER TABLE usage_ledgers ADD COLUMN uncached_input_tokens INTEGER NOT NULL DEFAULT 0"))
         if usage_ledger_columns and "usage_payload" not in usage_ledger_columns:
             connection.execute(text("ALTER TABLE usage_ledgers ADD COLUMN usage_payload JSON NOT NULL DEFAULT '{}'"))
+        if agent_skill_release_columns and "system_prompt_template" not in agent_skill_release_columns:
+            connection.execute(
+                text("ALTER TABLE agent_skill_releases ADD COLUMN system_prompt_template TEXT NOT NULL DEFAULT ''")
+            )
+        if agent_skill_release_columns and "chat_tool_allowlist" not in agent_skill_release_columns:
+            connection.execute(
+                text("ALTER TABLE agent_skill_releases ADD COLUMN chat_tool_allowlist JSON NOT NULL DEFAULT '[]'")
+            )
 
 
 def _seed_shared_prompt_templates(db: Session) -> None:
@@ -321,10 +330,65 @@ def seed_initial_data(db: Session) -> None:
                     "qmdh-save-project-asset",
                     "qmdh-save-research-summary",
                 ],
+                system_prompt_template="",
+                chat_tool_allowlist=[
+                    "search_inspiration_posts",
+                    "search_shared_templates",
+                    "fetch_reference_page",
+                    "import_reference_page",
+                    "match_reference_intent",
+                    "list_enabled_image_providers",
+                    "list_active_workflows",
+                    "summarize_generation_stack",
+                ],
                 notes="默认测试环境技能集，用于 OpenClaw 与 QMDH 联调。",
                 is_active=True,
             )
         )
+
+    chat_prod_release = db.scalar(select(AgentSkillRelease).where(AgentSkillRelease.key == "qmdh-chat-prod"))
+    if not chat_prod_release:
+        db.add(
+            AgentSkillRelease(
+                key="qmdh-chat-prod",
+                display_name="QMDH Chat 助手（生产）",
+                environment="prod",
+                openclaw_version="latest",
+                skill_keys=[],
+                system_prompt_template=(
+                    "与用户寒暄时简短友好回复，不要主动罗列全部能力清单。"
+                    "仅在用户提出检索或配置相关需求时再介绍可用工具。"
+                ),
+                chat_tool_allowlist=[
+                    "search_inspiration_posts",
+                    "search_shared_templates",
+                    "fetch_reference_page",
+                    "import_reference_page",
+                    "match_reference_intent",
+                    "list_enabled_image_providers",
+                    "list_active_workflows",
+                    "summarize_generation_stack",
+                ],
+                notes="Web Chat 助手模式默认生产策略；Release key 即 policy_version。",
+                is_active=True,
+            )
+        )
+    elif not (chat_prod_release.system_prompt_template or "").strip():
+        chat_prod_release.system_prompt_template = (
+            "与用户寒暄时简短友好回复，不要主动罗列全部能力清单。"
+            "仅在用户提出检索或配置相关需求时再介绍可用工具。"
+        )
+        if not list(chat_prod_release.chat_tool_allowlist or []):
+            chat_prod_release.chat_tool_allowlist = [
+                "search_inspiration_posts",
+                "search_shared_templates",
+                "fetch_reference_page",
+                "import_reference_page",
+                "match_reference_intent",
+                "list_enabled_image_providers",
+                "list_active_workflows",
+                "summarize_generation_stack",
+            ]
 
     projects = [
         ("QMDH 示范项目", "QMDH-001", DataClassification.b),
@@ -653,5 +717,9 @@ def seed_initial_data(db: Session) -> None:
                 source_url=source_url,
             )
         )
+
+    from app.services.agent_persona_service import ensure_default_rosters_for_designers
+
+    ensure_default_rosters_for_designers(db)
 
     db.commit()

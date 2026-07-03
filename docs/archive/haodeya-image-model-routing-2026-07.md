@@ -112,7 +112,7 @@ Provider `adapter_config`：
 | --- | --- |
 | `task_executor.py` | Haodeya 映射、2K `image_config`、分档计价 |
 | `bigjpg_upscale.py` | CDN `octet-stream` 时按文件头存 png/jpg |
-| `schemas.py` | 建号/重置密码最短 **4** 位 |
+| `schemas.py` | 建号/重置密码最短 **4** 位（第三个补丁，易忘） |
 
 操作：`docker cp` → backend + worker → `docker compose restart backend worker`。
 
@@ -125,7 +125,7 @@ Provider `adapter_config`：
 - `backend/app/services/task_executor.py`
 - `backend/tests/test_task_executor_openai.py`（`-k haodeya`）
 - `backend/tests/test_task_executor_bigjpg_upscale.py`
-- `frontend/src/api.ts`（422 校验错误可读化，建号失败不再显示 `[object Object]`）
+- `frontend/src/api.ts`（422 校验错误可读化 — **生产已热补丁**，待与 Chat 分轨 commit）
 
 ```bash
 cd backend

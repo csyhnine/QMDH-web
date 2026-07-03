@@ -131,7 +131,25 @@
   - 2.0 相关讨论与规则应以 `docs/roadmap-2.0-prep.md` 为准
 - 禁止事项：
   - 未经单独立项，直接把 1.0 扩展成通用 Agent 平台
-  - 在没有明确产品边界的情况下，一次性引入低代码编排器、多智能体协作框架或全自动后台自治能力
+  - 在没有明确产品边界的情况下，一次性引入低代码编排器、CrewAI/Mastra 执行内核或全自动后台自治能力
+
+### Decision: Chat 多 Agent 采用 LangGraph 编排（agent-multi-001）
+- 状态：Accepted
+- 日期：2026-07-01
+- 背景：
+  - 单 PydanticAI Agent + 滑动窗口无法支撑长期协作、跨会话记忆与角色分工
+  - 产品确认按账号分配多 Agent（默认协调/检索/生图 trio），Admin 可调整编制
+- 决策内容：
+  - Web Chat `agent_mode` 使用 **LangGraph** 编排；specialist 仍用 **PydanticAI + 现有 tool registry**
+  - 新增 `AgentPersona` / `UserAgentAssignment` / `AgentMemoryEntry`；外置记忆 + 规则路由
+  - 治理仍沿用 `AgentSkillRelease` + override；effective tools = release ∩ persona
+  - OpenClaw `/agent/*` 线不变；计费后续按账号/agent 维度扩展 `usage_ledgers`
+- 影响：
+  - Migration `j0k1l2m3n4o5`；Bootstrap 为 designer 默认 trio
+  - Admin AgentOps 增加角色目录与账号编制 UI
+- 禁止事项：
+  - 不引入 CrewAI / Mastra 作为 Chat 执行内核
+  - 不允许设计师自行安装 skill 或修改 Agent 编制
 
 ### Decision: 开发环境允许 SQLite，生产目标仍指向更稳定的数据库方案
 - 状态：Accepted

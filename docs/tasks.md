@@ -60,8 +60,8 @@
 |------|------|------|
 | 0.1 | 对齐本地 / GitHub `main` / 服务器 HEAD 与健康检查 | DONE（2026-06-12：GitHub `eb1057f`；生产 `c41778e`；health OK） |
 | 0.2 | 本地 smoke：`npm run smoke:studio` 8/8 | DONE |
-| 0.3 | 若仍复现：`gpt-image-2` 参考图真实上传修复 | TODO |
-| 0.4 | 若需要：灵感库 seed bundle 导入 | TODO |
+| 0.3 | 若仍复现：`gpt-image-2` 参考图真实上传修复 | DONE（2026-07-01：用户复测通过） |
+| 0.4 | 若需要：灵感库 seed bundle 导入 | DEFERRED（线上依赖不强；图裂时再跑 bundle） |
 | 0.5 | urgent 小补丁直接进 `main`，不与 Studio / Video 大 PR 捆绑 | — |
 
 ### 阶段 1：合并 Studio 重构 PR #1（P1）
@@ -472,14 +472,192 @@
   - Typical latency: 2–6+ minutes per task (upstream async)
 - Archive: `docs/archive/handoff-2026-06-12-grok-video-production.md`
 
+### Task: [deploy-001] 统一部署脚本
+- Status: IN_PROGRESS
+- Goal:
+  - 在 ECS 上强制执行 pull → build →（可选 alembic）→ up → health 顺序
+  - 禁止并行 `docker compose build backend`（flock 锁）
+  - 区分 `frontend` / `backend` / `full` / `full-migrate` 四种模式
+- Boundary:
+  - `scripts/deploy-production.sh`
+  - `docs/server-operations.md` 引用
+- Acceptance criteria:
+  1. 脚本在仓库内可 review，默认路径 `/www/wwwroot/qmdh-web`
+  2. `full-migrate` 在 build 之后才跑 alembic
+  3. 未经用户批准不在生产执行
+
+### Task: [chat-003] Chat 页面体验迭代（2026-07）
+- Status: **PARTIAL**（Markdown / smoke / 模型 fallback 已落地；助手 tools 见 `chat-004`）
+- Goal:
+  - 提升 `/studio/chat` 作为高频入口的可用性与可测性
+  - 助手回复 Markdown 渲染；首屏自动选中首个 chat 模型；补充 chat smoke
+- Boundary:
+  - `frontend/src/pages/chat/*`
+  - `scripts/smoke-chat.mjs`
+  - 不替换现有 `workflow + task` 生图链路
+- Current progress:
+  - `react-markdown` 渲染 assistant 消息（流式期间仍 plain text）
+  - `npm run smoke:chat` 覆盖路由 + models + conversations API
+  - 模型列表加载后自动 fallback 到首个可用模型
+- Next:
+  - 代码块复制、引用跳转
+- Notes:
+  - **助手模式 / Agent tools 见 `chat-004`**
+
+### Task: [chat-004] Chat 统一 Agent — Phase B1
+- Status: DONE（本地 WIP，**未部署生产**）
+- Goal:
+  - `/studio/chat` 成为 Web 唯一带只读 tools 的对话入口
+  - 下线 Studio 浮动 `StudioAssistantPanel`；保留 `/studio-agent/assist` 供 OpenClaw/skills
+- Boundary:
+  - Backend: `agent_mode` on `POST .../messages` → PydanticAI + SSE `tool_calls` + `status: thinking`
+  - Frontend: 助手 toggle、`ChatToolCallList`、思考中 UX、composer 链到对话助手
+  - Schema 预留 `policy_version`（`agent-gov-001` 灰度用，B1 仅审计透传）
+  - **不做**：生图 task、ref-intent、crawl、新 migration
+- Acceptance criteria:
+  1. 助手模式问「找商业综合体模板」可见 tool 卡片 + Markdown 回复
+  2. Studio 生成页无浮动助手；composer 有「对话助手」弱提示
+  3. `agent_mode: false` 与 v1.1.0 纯 Chat 一致
+  4. `npm run build`、`npm run smoke:chat`、相关 pytest 通过
+- Tests:
+  - `test_chat_agent_service.py`, `test_chat_agent_mode.py`
+
+### Task: [crawl-001] 外网建筑/意向图抓取与入库
+- Status: **C1+C2 DONE（本地 WIP）**；C3 TODO
+- Goal:
+  - 补齐院内灵感 + 共享模板之外的 **可控外网数据源**，支撑 Chat 检索与 `ref-intent-001`
+- Layers:
+  - **C1**（DONE）：Chat tool `fetch_reference_page(url)` → `reference_page_service` + SSRF
+  - **C2**（DONE）：allowlist 域名 + `import_reference_page` + `POST /crawl/import|import-batch` + `source_url` 去重 + Meili 索引
+  - **C3**（P2）：embedding / vision caption → 参考建筑轮廓 → 意向图混合检索
+- Compliance:
+  - SSRF（`url_safety`）、robots/版权、`source_url` 可追溯、Admin 可下架
+- Depends on: B1 Chat harness；ref-intent 依赖 C2+
+
+### Task: [agent-multi-001] LangGraph 多 Agent + 分层记忆
+- Status: **DONE（本地 WIP，未部署）** — 合并原 `agent-memory-001` MVP
+- Goal:
+  - LangGraph 编排：load_memory → dispatch_route → research|studio|direct → synthesize → write_memory → await_hitl → post_hitl
+  - 默认 trio：`qmdh-coordinator` / `qmdh-research` / `qmdh-studio`
+  - 账号编制：`UserAgentAssignment`；Admin 可 per-user 调整
+  - 外置记忆：`agent_memory_entries`（summary/preference/delegation）；MVP PG 检索，后续 Meilisearch
+  - Chat 仍 fallback 单 Agent（roster < 2）
+- Migration: `j0k1l2m3n4o5`
+- Depends on: B1、gov-001a tool allowlist
+- 不做: CrewAI/Mastra 内核、用户自装 Agent、跨用户记忆
+
+### Task: [agent-multi-002] Codex/Claw 对齐（Harness + 路由 + 记忆 compaction）
+- Status: **DONE（本地 WIP，未部署）**
+- Goal:
+  - 统一 Harness 入口 `run_chat_agent_harness`（thread_id、policy、orchestration、audit trace）
+  - 打分路由 `resolve_route` + `research_then_studio` 复合链
+  - Compacted memory（会话摘要 upsert + 长期记忆检索 + tool evidence）
+  - Allowlist 内 tool 相关性排序（Codex tool_search 思路）
+- Depends on: agent-multi-001
+- 未做: LangGraph interrupt resume、PG checkpoint、Meilisearch 记忆索引（→ agent-multi-003）
+
+### Task: [agent-multi-003] LangGraph HITL + PG checkpoint + Meilisearch 记忆
+- Status: **DONE（本地 WIP，未部署）**
+- Goal:
+  - LangGraph `await_hitl` interrupt + `confirm-agent-task` resume（post_hitl 写入确认记忆）
+  - Postgres checkpointer（SQLite/dev 回退 MemorySaver；生产 `checkpointer.setup()`）
+  - Meilisearch agent memory 索引（`qmdh_agent_memory`）+ 检索优先 Meili
+- Depends on: agent-multi-002
+
+### Task: [ref-intent-001] 参考建筑体量 → 意向图检索（Phase B3）
+- Status: **MVP DONE（本地 WIP）** — embedding/vision 后续
+- Goal:
+  - Chat tool `match_reference_intent` + `POST /ref-intent/match`；文本/路径检索灵感+模板
+- Depends on: B2、agent-multi research 路由
+- 未做: vision caption 相似度、Studio 一键带入 composer UI
+
+### Task: [agent-gov-001] Agent 治理与能力发布
+- Status: **gov-001a + gov-001b + gov-001c MVP DONE（本地 WIP）**
+  - Goal:
+  - **管理员在 Admin 统一为用户侧配置** Chat tools、OpenClaw skills、助手行为说明（`AgentSkillRelease` 生产版本）
+  - 设计师只读查看「我的助手能力」，不能自行改 skill/tool
+  - 可选：用户组/个人差异化（禁用部分 tool），不是主路径
+- MVP 分期（建议）:
+  - **gov-001a（DONE 本地 WIP）**:
+    - 扩展 `AgentSkillRelease`：`system_prompt_template`、`chat_tool_allowlist`（release key = `policy_version`）
+    - Admin UI：AgentOps 编辑 Chat prompt overlay + 勾选 Chat tools
+    - `run_studio_agent` 读取 active prod release 合并 prompt + 动态注册 allowlist tools
+    - 审计：`policy_version` 写入 `STUDIO_AGENT_ASSIST`
+    - Migration: `h9i0j1k2l3m4_add_agent_chat_policy_fields`
+    - Bootstrap 默认 `qmdh-chat-prod` release
+  - **gov-001b（DONE 本地 WIP）**:
+    - 表 `agent_policy_overrides`（group/user scope）
+    - effective policy = global release + 组 override + 个人 override
+    - Admin：Override CRUD + 禁用工具 + prompt 追加
+    - Chat：`GET /chat/agent-policy` 返回分层策略；「我的助手能力」抽屉
+    - Migration: `i0j1k2l3m4n5`
+  - **gov-001c（MVP DONE 本地 WIP）**:
+    - Admin 只读：`GET /agent/admin/chat-conversations`、messages、agent-traces（audit_logs）
+    - AgentOps「Chat 可观测」面板
+    - Langfuse 仍 TODO（当前用 audit trace 替代）
+- 不在本任务:
+  - Chat 触发生图 task（→ `chat-b2-001`）
+  - 参考建筑检索（→ `ref-intent-001` / B3）
+- External references:
+  - **LangGraph**：checkpoint + interrupt/resume → **B2** 生图 HITL 确认
+  - **Langfuse**（自托管）：trace tool 链， complement `audit_logs`
+- Depends on: B1、`AgentSkillRelease` 现有表
+- Acceptance criteria（gov-001a）:
+  1. Admin 改 system 模板后，无需改代码 redeploy prompt 常量即可生效（仍要 deploy 若只改 DB 则热生效）
+  2. 取消勾选某 tool 后，Chat 助手无法再调用该 tool
+  3. `policy_version` 出现在 audit 与（可选）Chat 响应头/metadata
+
+### Task: [chat-b2-001] Chat 写 tools → 内部 task（Phase B2）
+- Status: **DONE（本地 WIP，未部署生产）**
+- Goal:
+  - Chat 助手可提交生图/改图 **persisted async task**（走现有 `workflow + task + worker`）
+  - 写操作受 **effective policy** 约束（tool allowlist + 配额）
+  - 生图前 **HITL 确认**（参考 LangGraph interrupt 模式，UI 确认卡片）
+- Depends on: B1、agent-gov-001 基线（至少 gov-001a tool allowlist）
+- 不做:  arbitrary code execution、绕过 worker 直连上游
+
+### Agent 外部参考项目（Roadmap 读什么）
+
+> 原则：**借模式，不替换** `workflow + task + worker` 执行平面（见 `docs/infrastructure-integrations.md`）。  
+> 完整调研见 Chat B1 计划附录；以下为采纳摘要。
+
+| 分级 | 含义 |
+| --- | --- |
+| **A** | 已接入 / 继续加深 |
+| **B** | 强烈建议借鉴 pattern |
+| **C** | 场景可选 |
+| **D** | 暂不采纳 |
+
+| 项目 | 分级 | QMDH 用法 |
+| --- | --- | --- |
+| PydanticAI | A | B1 Chat `agent_mode` tools |
+| Vercel AI SDK | A | `useChat` + SSE |
+| MCP | A | `app.integrations.mcp`；与 Chat tools 共用 registry |
+| SWE-agent ACI | B | tool 返回 JSON/错误格式对齐 |
+| LangGraph | A | Chat 多 Agent 编排 + MemorySaver checkpoint |
+| Mem0 / Letta | B | `agent-memory-001` 分层 + search/add |
+| Langfuse | B | `agent-gov-001` 后可观测 trace |
+| LlamaIndex | B | crawl-001 ingest 管道分层 |
+| Aider | C | L1 会话 summary 压缩 |
+| GraphRAG / Cognee / Zep | C | ref-intent 宏观/图谱检索 |
+| OpenHands / smolagents / Browser-use / E2B / Composio / CrewAI / Mastra 内核 | D | 与生产边界不符 |
+
+**明确不引入**：OpenHands、smolagents、Browser-use、E2B、Composio、CrewAI、Mastra 执行内核。
+
+**产品确认顺序（2026-07）**：**agent-gov-001 → chat-b2-001 → agent-multi-001 → ref-intent-001（B3）**  
+并行可选：`agent-memory-001`（与 gov 交叉少）、`crawl-001` C1（B3 前置，可在 B2 期间启动 C1）
+
 ---
 
 ## Next Suggested Step
 
-> **以 `Development Sequence (2026-06)` 为准；Grok 生产验证已完成。**
+> **以 `Development Sequence (2026-06)` 为准；生产 v1.1.0 @ `0090a2a` 已对齐。**
 
-1. 继续 Production Readiness backlog（`prod-002`、`prod-004` 等）。
-2. 可选：清理本地 worktree `E:\projects\QMDH-web-pr1-review`。
+1. **部署 Chat B1**（`chat-004`）：backend + frontend，无 migration
+2. **agent-gov-001**（gov-001a MVP）：Admin 管 system prompt + Chat tool allowlist
+3. **chat-b2-001**：Chat 写 task + 生图确认
+4. **ref-intent-001（B3）**：参考建筑 → 意向图（建议 B2 期间并行 crawl-001 C1/C2）
+5. 可选并行：`agent-multi-001` L1/L2 深化（Meilisearch 记忆索引、LangGraph PG checkpoint）
 
 ---
 

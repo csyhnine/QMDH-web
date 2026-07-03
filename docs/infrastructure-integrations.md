@@ -129,8 +129,8 @@ Mastra is stronger when the product itself is an agent runtime. QMDH is a design
 ## Completed Product Wiring
 
 - Inspiration and shared-template browsers call `GET /api/v1/search` with PostgreSQL fallback.
-- Studio assistant panel calls `POST /api/v1/studio-agent/assist`.
-- Chat page uses `@ai-sdk/react` `useChat` with `QmdhChatTransport`.
+- Chat page uses `@ai-sdk/react` `useChat` with `QmdhChatTransport`; optional **助手模式** (`agent_mode`) streams PydanticAI tool calls via SSE.
+- Studio assistant panel is **deprecated in UI** (B1); use `/studio/chat` with 助手模式 instead. Legacy `POST /api/v1/studio-agent/assist` remains for OpenClaw/skills clients.
 - MCP stdio tool calls write `mcp.tool_call` audit events.
 - Admin inspiration page exposes **同步搜索索引** for full Meilisearch rebuild.
 
@@ -141,7 +141,7 @@ Status below means **code-level integration is complete**. Product rollout and p
 | Project | Backend / package | Frontend / tooling | Tests | Status |
 | --- | --- | --- | --- | --- |
 | AI SDK | — | `useChat`, `QmdhChatTransport`, shared `qmdhSseParser`, `src/lib/index.ts` | build + `lint:integrations` | DONE |
-| PydanticAI | `app/integrations/studio_agent`, `/studio-agent/assist`, audit | `StudioAssistantPanel` | `test_studio_agent_tools.py` | DONE |
+| PydanticAI | `app/integrations/studio_agent`, `/studio-agent/assist`, Chat `agent_mode` + SSE `tool_calls`, audit | Chat 助手模式 toggle + `ChatToolCallList`（Studio 面板已下线） | `test_studio_agent_tools.py`, `test_chat_agent_*` | DONE |
 | MCP | `app/integrations/mcp`, `requirements-mcp.txt`, `run_mcp_tool`, audit | — | `test_mcp_audit.py` | DONE |
 | Meilisearch | search service/sync/index_hooks/status API, CRUD hooks | `useServerSearch`, `searchSync`, `searchStatus` | `test_search_*`, `test_meilisearch_integration.py` | DONE |
 | Biome | — | `biome.json`, `lint`, `lint:integrations`, `format` (`src/lib`) | `npm run lint:integrations` | DONE |

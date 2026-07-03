@@ -16,9 +16,10 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Current Baseline
 
-- **Active development sequence**: `docs/tasks.md` → **`Development Sequence (2026-06)`** + **Chat Agent B1**（`chat-004`，本地 WIP）
-- Current branch: `main` @ **`0090a2a`（v1.1.0，与生产对齐）** + **本地 WIP 未提交**（Chat B1、deploy 脚本等）
-- Production: **`https://cityusbdisk.cn`** — **v1.1.0** @ `0090a2a`（2026-06-29 full rebuild + migrate）
+- **Agent/Chat 冷启动留档（2026-07-03）**：**`docs/archive/handoff-2026-07-03-agent-multi-chat-wip.md`** ← 新对话优先
+- **Active development sequence**: `docs/tasks.md` → Agent 块（B1/gov/B2/multi/crawl/ref-intent 均 **本地 WIP 未提交**）
+- Current branch: `main` @ **`0090a2a`（v1.1.0，与生产对齐）** + **大量本地 WIP 未 commit**
+- Production: **`https://cityusbdisk.cn`** — **v1.1.0** @ `0090a2a` + **2026-07-01 图像热补丁三件套**（容器内，见 `docs/archive/haodeya-image-model-routing-2026-07.md` §5）
 - Chat Agent direction: **Web `/studio/chat` = 唯一带 tools 入口**；Studio 浮动助手已下线；OpenClaw/skills 仍走 `/agent/*` + deprecated `/studio-agent/assist`
 - Agent roadmap（详见 `docs/tasks.md`）:
   - **B1 DONE（本地）**: `agent_mode` + 院内只读 tools
@@ -239,9 +240,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## If A New Agent Takes Over
 
 1. Run `git status --short` first.
-2. Expect current local residuals to be:
-   - `storage/`
-   - `tmp/`
+2. **Read `docs/archive/handoff-2026-07-03-agent-multi-chat-wip.md`** if the task touches Chat / Agent / crawl / ref-intent.
 3. Read the latest entry in `docs/handoff.md`.
 4. Reconfirm:
    - local head

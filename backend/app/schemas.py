@@ -277,7 +277,7 @@ class AuthLoginOut(BaseModel):
 
 class UserCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$")
-    password: str = Field(min_length=6, max_length=200)
+    password: str = Field(min_length=4, max_length=200)
     display_name: str = Field(default="", max_length=150)
     group_name: str = Field(default="", max_length=120)
     role: str = "designer"
@@ -302,7 +302,7 @@ class UserUpdate(BaseModel):
 
 
 class UserPasswordReset(BaseModel):
-    password: str = Field(min_length=6, max_length=200)
+    password: str = Field(min_length=4, max_length=200)
 
 
 class UserOut(BaseModel):
@@ -751,6 +751,12 @@ class ConversationOut(BaseModel):
 class ChatMessageCreate(BaseModel):
     content: str = ""
     attachments: list[ChatAttachmentIn] = Field(default_factory=list, max_length=4)
+    agent_mode: bool = False
+    policy_version: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Reserved for agent-gov-001 effective policy pin; ignored in B1.",
+    )
 
     @model_validator(mode="after")
     def validate_has_payload(self) -> ChatMessageCreate:
@@ -765,6 +771,95 @@ class ChatMessageOut(BaseModel):
     content: str
     attachments: list[ChatAttachmentOut] = Field(default_factory=list)
     created_at: datetime
+    agent_tool_calls: list["ChatAgentToolCallOut"] = Field(default_factory=list)
+    agent_task_proposals: list["ChatAgentTaskProposalOut"] = Field(default_factory=list)
+    agent_thinking_steps: list["ChatAgentThinkingStepOut"] = Field(default_factory=list)
+    policy_version: str | None = None
+
+
+class RefIntentMatchIn(BaseModel):
+    description: str = ""
+    reference_image: str = ""
+    limit: int = Field(default=12, ge=1, le=24)
+
+
+class RefIntentHitOut(BaseModel):
+    domain: str
+    id: int
+    title: str
+    snippet: str
+    category: str = ""
+    tags: list[str] = Field(default_factory=list)
+    score: float = 0.0
+    match_reason: str = ""
+
+
+class RefIntentMatchOut(BaseModel):
+    query_used: str
+    reference_image: str
+    hits: list[RefIntentHitOut] = Field(default_factory=list)
+    empty_reason: str = ""
+
+
+class AdminChatConversationOut(BaseModel):
+    id: int
+    title: str
+    user_id: int
+    user_name: str
+    user_display_name: str
+    model_provider_id: int | None = None
+    agent_thread_id: str = ""
+    message_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminAgentTraceOut(BaseModel):
+    id: int
+    created_at: datetime
+    actor_id: int | None = None
+    actor_name: str
+    conversation_id: int | None = None
+    provider_name: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class ChatAgentToolCallOut(BaseModel):
+    name: str
+    summary: str
+
+
+class ChatAgentTaskProposalOut(BaseModel):
+    proposal_id: str
+    workflow_key: str
+    title: str
+    project_code: str
+    requested_provider: str
+    provider_display_name: str
+    classification: str = DataClassification.b.value
+    payload: dict[str, Any] = Field(default_factory=dict)
+    summary: str
+    status: str = "pending_confirmation"
+
+
+class ChatAgentThinkingStepOut(BaseModel):
+    key: str
+    label: str
+    detail: str = ""
+    status: str = "done"
+
+
+class ChatAgentTaskConfirmIn(BaseModel):
+    proposal_id: str = Field(min_length=8, max_length=64)
+    workflow_key: str
+    title: str = Field(min_length=3, max_length=150)
+    project_code: str
+    requested_provider: str
+    provider_display_name: str = ""
+    classification: DataClassification = DataClassification.b
+    payload: dict[str, Any] = Field(default_factory=dict)
+    summary: str = ""
+    policy_version: str | None = None
 
 
 class ChatWordExportIn(BaseModel):
@@ -913,6 +1008,8 @@ class AgentSkillReleaseCreate(BaseModel):
     environment: str = Field(default="test", pattern=r"^(test|prod)$")
     openclaw_version: str = Field(default="latest", min_length=1, max_length=50)
     skill_keys: list[str] = Field(default_factory=list)
+    system_prompt_template: str = ""
+    chat_tool_allowlist: list[str] = Field(default_factory=list)
     notes: str = ""
     is_active: bool = True
 
@@ -922,8 +1019,23 @@ class AgentSkillReleaseUpdate(BaseModel):
     environment: str | None = Field(default=None, pattern=r"^(test|prod)$")
     openclaw_version: str | None = Field(default=None, min_length=1, max_length=50)
     skill_keys: list[str] | None = None
+    system_prompt_template: str | None = None
+    chat_tool_allowlist: list[str] | None = None
     notes: str | None = None
     is_active: bool | None = None
+
+
+class AgentChatToolOut(BaseModel):
+    key: str
+    label: str
+    description: str
+
+
+class AssignedAgentOut(BaseModel):
+    key: str
+    display_name: str
+    role: str
+    is_primary: bool
 
 
 class AgentSkillReleaseOut(BaseModel):
@@ -933,8 +1045,124 @@ class AgentSkillReleaseOut(BaseModel):
     environment: str
     openclaw_version: str
     skill_keys: list[str]
+    system_prompt_template: str
+    chat_tool_allowlist: list[str]
     notes: str
     is_active: bool
     created_by_user_name: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class ChatAgentPolicyOut(BaseModel):
+    policy_version: str
+    release_display_name: str | None = None
+    environment: str
+    enabled_tools: list[AgentChatToolOut] = Field(default_factory=list)
+    disabled_tools: list[AgentChatToolOut] = Field(default_factory=list)
+    policy_layers: list["ChatAgentPolicyLayerOut"] = Field(default_factory=list)
+    data_scope_note: str
+    capabilities_summary: str
+    baseline_prompt: str
+    personalization_summary: str | None = None
+    user_group_name: str | None = None
+    assigned_agents: list[AssignedAgentOut] = Field(default_factory=list)
+
+
+class ChatAgentPolicyLayerOut(BaseModel):
+    layer: str
+    label: str
+    detail: str | None = None
+    disabled_tool_keys: list[str] = Field(default_factory=list)
+    prompt_overlay: str = ""
+
+
+class AgentPolicyOverrideOut(BaseModel):
+    id: int
+    scope: str
+    scope_key: str
+    scope_display_name: str | None = None
+    disabled_tool_keys: list[str] = Field(default_factory=list)
+    system_prompt_overlay: str = ""
+    notes: str = ""
+    is_active: bool
+    updated_at: datetime
+
+
+class AgentPolicyOverrideCreate(BaseModel):
+    scope: str = Field(pattern=r"^(group|user)$")
+    scope_key: str = Field(min_length=1, max_length=120)
+    disabled_tool_keys: list[str] = Field(default_factory=list)
+    system_prompt_overlay: str = ""
+    notes: str = ""
+    is_active: bool = True
+
+
+class AgentPolicyOverrideUpdate(BaseModel):
+    disabled_tool_keys: list[str] | None = None
+    system_prompt_overlay: str | None = None
+    notes: str | None = None
+    is_active: bool | None = None
+
+
+class ChatAgentPolicyDefaultsOut(BaseModel):
+    baseline_prompt: str
+    data_scope_note: str
+    default_tool_allowlist: list[str]
+    tools: list[AgentChatToolOut] = Field(default_factory=list)
+
+
+class AgentPersonaCreate(BaseModel):
+    key: str = Field(min_length=2, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$")
+    display_name: str = Field(min_length=1, max_length=150)
+    role: str = Field(default="custom", pattern=r"^(coordinator|research|studio|custom)$")
+    system_prompt_template: str = ""
+    chat_tool_allowlist: list[str] = Field(default_factory=list)
+    memory_scope: str = Field(default="both", pattern=r"^(user|persona|both)$")
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class AgentPersonaUpdate(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=150)
+    role: str | None = Field(default=None, pattern=r"^(coordinator|research|studio|custom)$")
+    system_prompt_template: str | None = None
+    chat_tool_allowlist: list[str] | None = None
+    memory_scope: str | None = Field(default=None, pattern=r"^(user|persona|both)$")
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
+class AgentPersonaOut(BaseModel):
+    id: int
+    key: str
+    display_name: str
+    role: str
+    system_prompt_template: str
+    chat_tool_allowlist: list[str]
+    memory_scope: str
+    sort_order: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserAgentRosterItemOut(BaseModel):
+    persona_id: int
+    key: str
+    display_name: str
+    role: str
+    is_primary: bool
+    is_active: bool
+
+
+class UserAgentRosterOut(BaseModel):
+    user_id: int
+    user_name: str
+    display_name: str
+    agents: list[UserAgentRosterItemOut] = Field(default_factory=list)
+
+
+class UserAgentRosterUpdate(BaseModel):
+    persona_ids: list[int] = Field(min_length=1)
+    primary_persona_id: int | None = None

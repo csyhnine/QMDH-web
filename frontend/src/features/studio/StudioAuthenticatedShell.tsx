@@ -1,5 +1,3 @@
-import { isStudioAgentEnabled } from "../../lib/featureFlags";
-import StudioAssistantPanel from "./StudioAssistantPanel";
 import StudioDesignerView from "./StudioDesignerView";
 import StudioGlobalRail from "./StudioGlobalRail";
 import StudioMediaLightboxes from "./StudioMediaLightboxes";
@@ -22,7 +20,6 @@ export default function StudioAuthenticatedShell({
       <StudioGlobalRail {...railProps} />
       <StudioDesignerView {...designerProps} />
       <StudioMediaLightboxes {...lightboxProps} />
-      {isStudioAgentEnabled ? <StudioAssistantPanel /> : null}
     </div>
   );
 }

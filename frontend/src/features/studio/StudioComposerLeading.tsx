@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 import type { StudioComposerLeadingProps } from "./studioComposerExpandedContentTypes";
 
 export default function StudioComposerLeading({
@@ -20,6 +22,9 @@ export default function StudioComposerLeading({
           {studioForm.aspectRatio} / {selectedResolutionLabel ?? studioForm.resolution}
         </span>
         <span>{studioForm.imageCount} 张</span>
+        <Link className="composer-agent-hint" to="/studio/chat">
+          搜模板或灵感？对话助手
+        </Link>
       </div>
     </div>
   );

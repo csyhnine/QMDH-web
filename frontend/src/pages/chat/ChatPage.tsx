@@ -3,11 +3,20 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../../api";
 import { useAuth } from "../../context/AuthContext";
-import { getPersistedMessageId, getUiMessageAttachments, getUiMessageText, toUiMessages } from "../../lib/chat/qmdhChatMessageUtils";
+import { getPersistedMessageId, getUiMessageAgentTaskProposals, getUiMessageAgentThinkingSteps, getUiMessageAgentToolCalls, getUiMessageAttachments, getUiMessagePolicyVersion, getUiMessageText, toUiMessages } from "../../lib/chat/qmdhChatMessageUtils";
 import { QmdhChatTransport } from "../../lib/chat/qmdhChatTransport";
+import type { ChatTaskProposal, ChatThinkingStep, ChatToolCall } from "../../lib/chat/qmdhSseParser";
+import { chatAgentModeDefault } from "../../lib/featureFlags";
 import { useChatAttachments } from "../../lib/chat/useChatAttachments";
+import ChatAgentCapabilitiesDrawer from "./ChatAgentCapabilitiesDrawer";
+import ChatAgentThinkingPanel, { mergeThinkingSteps } from "./ChatAgentThinkingPanel";
+import type { ChatAgentPolicy } from "./chatAgentConstants";
+import ChatMessageContent from "./ChatMessageContent";
+import ChatTaskProposalCard, { type ProposalDecision } from "./ChatTaskProposalCard";
+import ChatToolCallList from "./ChatToolCallList";
 
 const ACTIVE_CHAT_STORAGE_KEY = "qmdh.active.chat";
+const AGENT_MODE_STORAGE_KEY = "qmdh.chat.agent_mode";
 
 type ChatConversation = {
   id: number;
@@ -53,6 +62,21 @@ export default function ChatPage() {
   });
   const [chatError, setChatError] = useState("");
   const [exportingMessageId, setExportingMessageId] = useState<string | null>(null);
+  const [agentMode, setAgentMode] = useState(() => {
+    const saved = localStorage.getItem(AGENT_MODE_STORAGE_KEY);
+    if (saved === null) {
+      return chatAgentModeDefault;
+    }
+    return saved !== "false";
+  });
+  const [activeToolCalls, setActiveToolCalls] = useState<ChatToolCall[]>([]);
+  const [activeTaskProposals, setActiveTaskProposals] = useState<ChatTaskProposal[]>([]);
+  const [activeThinkingSteps, setActiveThinkingSteps] = useState<ChatThinkingStep[]>([]);
+  const [proposalDecisions, setProposalDecisions] = useState<Record<string, ProposalDecision>>({});
+  const [activePolicyVersion, setActivePolicyVersion] = useState<string | null>(null);
+  const [agentThinking, setAgentThinking] = useState(false);
+  const [agentPolicy, setAgentPolicy] = useState<ChatAgentPolicy | null>(null);
+  const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
 
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const messagesBottomRef = useRef<HTMLDivElement | null>(null);
@@ -63,7 +87,30 @@ export default function ChatPage() {
   const activeChatIdRef = useRef<number | null>(activeChatId);
   activeChatIdRef.current = activeChatId;
 
-  const transport = useMemo(() => new QmdhChatTransport(() => activeChatIdRef.current), []);
+  const agentModeRef = useRef(agentMode);
+  agentModeRef.current = agentMode;
+
+  const transport = useMemo(
+    () =>
+      new QmdhChatTransport({
+        getConversationId: () => activeChatIdRef.current,
+        getAgentMode: () => agentModeRef.current,
+        onToolCalls: (toolCalls) => {
+          setActiveToolCalls(toolCalls);
+        },
+        onTaskProposals: (proposals) => {
+          setActiveTaskProposals(proposals);
+        },
+        onThinkingStep: (step) => {
+          setAgentThinking(true);
+          setActiveThinkingSteps((current) => mergeThinkingSteps(current, step));
+        },
+        onPolicyVersion: (policyVersion) => setActivePolicyVersion(policyVersion),
+        onAgentThinking: () => setAgentThinking(true),
+        onAgentProgress: () => setAgentThinking(false),
+      }),
+    [],
+  );
 
   const {
     messages: chatMessages,
@@ -75,6 +122,8 @@ export default function ChatPage() {
     id: activeChatId ? String(activeChatId) : "chat-disabled",
     transport,
     onFinish: () => {
+      setAgentThinking(false);
+      setActiveThinkingSteps([]);
       const conversationId = activeChatIdRef.current;
       if (conversationId != null) {
         void refreshConversations(conversationId);
@@ -139,10 +188,44 @@ export default function ChatPage() {
   }
 
   useEffect(() => {
+    localStorage.setItem(AGENT_MODE_STORAGE_KEY, agentMode ? "true" : "false");
+  }, [agentMode]);
+
+  useEffect(() => {
+    if (!agentMode) {
+      return;
+    }
+    let cancelled = false;
+    void api
+      .getChatAgentPolicy()
+      .then((policy) => {
+        if (!cancelled) {
+          setAgentPolicy(policy);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAgentPolicy(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agentMode]);
+
+  useEffect(() => {
     async function bootstrap() {
       try {
         const [models, nextConversations] = await Promise.all([api.getChatModels(), refreshConversations(null)]);
         setChatModels(models);
+        if (models.length > 0) {
+          const savedModelValid = selectedModel != null && models.some((model) => model.provider_id === selectedModel);
+          if (!savedModelValid) {
+            const defaultModelId = models[0].provider_id;
+            setSelectedModel(defaultModelId);
+            localStorage.setItem("qmdh_chat_model", String(defaultModelId));
+          }
+        }
         setChatError("");
 
         const initialConversationId = nextConversations[0]?.id ?? null;
@@ -267,6 +350,10 @@ export default function ChatPage() {
     }
   }
 
+  function updateProposalDecision(proposalId: string, decision: ProposalDecision) {
+    setProposalDecisions((current) => ({ ...current, [proposalId]: decision }));
+  }
+
   async function handleSendMessage() {
     const hasText = Boolean(chatInput.trim());
     const hasAttachments = attachmentState.attachments.length > 0;
@@ -287,9 +374,16 @@ export default function ChatPage() {
     setChatError("");
     attachmentState.setError("");
     shouldAutoScrollRef.current = true;
+    setActiveToolCalls([]);
+    setActiveTaskProposals([]);
+    setActiveThinkingSteps([]);
+    setActivePolicyVersion(null);
+    if (agentMode) {
+      setAgentThinking(true);
+    }
 
     try {
-      await sendMessage({ text: content }, { body: { attachments } });
+      await sendMessage({ text: content }, { body: { attachments, agent_mode: agentMode } });
       setChatMessages((current) => {
         const next = [...current];
         for (let index = next.length - 1; index >= 0; index -= 1) {
@@ -308,6 +402,7 @@ export default function ChatPage() {
       });
       attachmentState.clearAttachments();
     } catch (error: unknown) {
+      setAgentThinking(false);
       const message = error instanceof Error ? error.message : "未知错误";
       setChatError(message);
     }
@@ -392,8 +487,29 @@ export default function ChatPage() {
                 {conversations.find((conversation) => conversation.id === activeChatId)?.title || ""}
               </span>
             ) : null}
+            <label className="chat-agent-toggle" title="开启后可检索院内灵感、模板与生成栈配置">
+              <input
+                type="checkbox"
+                checked={agentMode}
+                onChange={(event) => setAgentMode(event.target.checked)}
+                disabled={streaming}
+              />
+              <span>设计助手</span>
+              {agentPolicy ? <em className="chat-agent-toggle-meta">{agentPolicy.enabled_tools.length} 工具</em> : null}
+            </label>
+            {agentMode ? (
+              <button type="button" className="chat-agent-capabilities-btn" onClick={() => setCapabilitiesOpen(true)}>
+                我的助手能力
+              </button>
+            ) : null}
           </div>
         </header>
+
+        <ChatAgentCapabilitiesDrawer
+          open={capabilitiesOpen && agentMode}
+          policy={agentPolicy}
+          onClose={() => setCapabilitiesOpen(false)}
+        />
 
         {activeChatId ? (
           <div
@@ -410,7 +526,35 @@ export default function ChatPage() {
               </div>
             ) : null}
             <div className="chat-messages" ref={messagesRef} onScroll={updateAutoScrollState}>
-              {chatMessages.map((message, index) => (
+              {chatError ? <p className="chat-compose-error">{chatError}</p> : null}
+              {activeToolCalls.length > 0 ? (
+                <div className="chat-tool-call-panel">
+                  <ChatToolCallList
+                    toolCalls={activeToolCalls}
+                    policyVersion={activePolicyVersion ?? agentPolicy?.policy_version}
+                  />
+                </div>
+              ) : null}
+              {activeTaskProposals.length > 0 ? (
+                <div className="chat-task-proposal-panel">
+                  {activeTaskProposals.map((proposal) => (
+                    <ChatTaskProposalCard
+                      key={proposal.proposal_id}
+                      proposal={proposal}
+                      conversationId={activeChatId}
+                      policyVersion={activePolicyVersion ?? agentPolicy?.policy_version}
+                      decision={proposalDecisions[proposal.proposal_id]}
+                      onDecisionChange={updateProposalDecision}
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {chatMessages.map((message, index) => {
+                const messageToolCalls = getUiMessageAgentToolCalls(message);
+                const messageTaskProposals = getUiMessageAgentTaskProposals(message);
+                const messageThinkingSteps = getUiMessageAgentThinkingSteps(message);
+                const messagePolicyVersion = getUiMessagePolicyVersion(message);
+                return (
                 <div key={message.id || `${message.role}-${index}`} className={`chat-msg ${message.role}`}>
                   {message.role === "assistant" ? <div className="chat-msg-avatar">AI</div> : null}
                   <div className="chat-msg-bubble">
@@ -442,9 +586,36 @@ export default function ChatPage() {
                         )}
                       </div>
                     ) : null}
-                    <div className="chat-msg-content">
-                      {getUiMessageText(message) || (streaming && index === chatMessages.length - 1 ? "..." : "")}
-                    </div>
+                    {message.role === "assistant" && messageThinkingSteps.length > 0 ? (
+                      <ChatAgentThinkingPanel steps={messageThinkingSteps} compact />
+                    ) : null}
+                    {message.role === "assistant" && messageToolCalls.length > 0 ? (
+                      <ChatToolCallList
+                        toolCalls={messageToolCalls}
+                        compact
+                        policyVersion={messagePolicyVersion}
+                      />
+                    ) : null}
+                    {message.role === "assistant" && messageTaskProposals.length > 0 ? (
+                      <div className="chat-task-proposal-list">
+                        {messageTaskProposals.map((proposal) => (
+                          <ChatTaskProposalCard
+                            key={proposal.proposal_id}
+                            proposal={proposal}
+                            conversationId={activeChatId}
+                            policyVersion={messagePolicyVersion ?? agentPolicy?.policy_version}
+                            decision={proposalDecisions[proposal.proposal_id]}
+                            onDecisionChange={updateProposalDecision}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                    <ChatMessageContent
+                      text={getUiMessageText(message)}
+                      role={message.role === "user" ? "user" : "assistant"}
+                      streaming={streaming && index === chatMessages.length - 1 && message.role === "assistant"}
+                      emptyStreamingText={agentMode ? "助手思考中…" : "..."}
+                    />
                     {message.role === "assistant" && getUiMessageText(message).trim() ? (
                       <div className="chat-msg-actions">
                         <button
@@ -468,11 +639,24 @@ export default function ChatPage() {
                     </div>
                   ) : null}
                 </div>
-              ))}
+              );
+              })}
               <div ref={messagesBottomRef} aria-hidden="true" />
             </div>
 
             <div className="chat-input-area">
+              {agentMode && (agentThinking || activeThinkingSteps.length > 0) ? (
+                <div className="chat-agent-thinking-dock">
+                  {activeThinkingSteps.length > 0 ? (
+                    <ChatAgentThinkingPanel steps={activeThinkingSteps} live compact />
+                  ) : (
+                    <div className="chat-agent-thinking" role="status" aria-live="polite">
+                      <span className="chat-agent-thinking-dot" aria-hidden="true" />
+                      正在启动助手…
+                    </div>
+                  )}
+                </div>
+              ) : null}
               {attachmentState.attachments.length > 0 || attachmentState.error ? (
                 <div className="chat-attachment-bar">
                   {attachmentState.attachments.length > 0 ? (

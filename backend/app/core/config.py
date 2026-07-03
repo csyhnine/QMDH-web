@@ -148,6 +148,8 @@ class Settings(BaseSettings):
     meilisearch_api_key: str = ""
     meilisearch_inspiration_index: str = "qmdh_inspiration"
     meilisearch_templates_index: str = "qmdh_templates"
+    meilisearch_agent_memory_index: str = "qmdh_agent_memory"
+    crawl_allowed_domains: str = ""
     studio_agent_enabled: bool = False
 
     model_config = SettingsConfigDict(

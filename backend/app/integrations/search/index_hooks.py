@@ -15,6 +15,7 @@ def build_inspiration_document(post: InspirationPost) -> dict:
         "category": post.category or "",
         "tags": post.tags or [],
         "source_name": post.source_name or "",
+        "source_url": post.source_url or "",
         "prompt_text": post.prompt_text or "",
         "snippet": (post.description or post.prompt_text or post.source_name or "")[:240],
     }

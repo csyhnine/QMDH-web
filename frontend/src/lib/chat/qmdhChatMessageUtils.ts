@@ -1,5 +1,7 @@
 import type { UIMessage } from "ai";
 
+import type { ChatTaskProposal, ChatThinkingStep, ChatToolCall } from "../../lib/chat/qmdhSseParser";
+
 export type QmdhChatAttachment = {
   file_name: string;
   mime_type: string;
@@ -13,7 +15,19 @@ export type QmdhChatRecord = {
   role: string;
   content: string;
   attachments?: QmdhChatAttachment[];
+  agent_tool_calls?: ChatToolCall[];
+  agent_task_proposals?: ChatTaskProposal[];
+  agent_thinking_steps?: ChatThinkingStep[];
+  policy_version?: string | null;
   created_at?: string;
+};
+
+export type QmdhChatMessageMeta = {
+  attachments: QmdhChatAttachment[];
+  agentToolCalls: ChatToolCall[];
+  agentTaskProposals: ChatTaskProposal[];
+  agentThinkingSteps: ChatThinkingStep[];
+  policyVersion: string | null;
 };
 
 export function toUiMessages(records: QmdhChatRecord[]): UIMessage[] {
@@ -23,16 +37,50 @@ export function toUiMessages(records: QmdhChatRecord[]): UIMessage[] {
     parts: [{ type: "text" as const, text: record.content }],
     metadata: {
       attachments: record.attachments ?? [],
-    },
+      agentToolCalls: record.agent_tool_calls ?? [],
+      agentTaskProposals: record.agent_task_proposals ?? [],
+      agentThinkingSteps: record.agent_thinking_steps ?? [],
+      policyVersion: record.policy_version ?? null,
+    } satisfies QmdhChatMessageMeta,
   }));
 }
 
-export function getUiMessageAttachments(message: UIMessage): QmdhChatAttachment[] {
+export function getUiMessageMetadata(message: UIMessage): QmdhChatMessageMeta {
   const metadata = message.metadata;
-  if (!metadata || !Array.isArray(metadata.attachments)) {
-    return [];
+  if (!metadata || typeof metadata !== "object") {
+    return { attachments: [], agentToolCalls: [], agentTaskProposals: [], agentThinkingSteps: [], policyVersion: null };
   }
-  return metadata.attachments as QmdhChatAttachment[];
+  return {
+    attachments: Array.isArray(metadata.attachments) ? (metadata.attachments as QmdhChatAttachment[]) : [],
+    agentToolCalls: Array.isArray(metadata.agentToolCalls) ? (metadata.agentToolCalls as ChatToolCall[]) : [],
+    agentTaskProposals: Array.isArray(metadata.agentTaskProposals)
+      ? (metadata.agentTaskProposals as ChatTaskProposal[])
+      : [],
+    agentThinkingSteps: Array.isArray(metadata.agentThinkingSteps)
+      ? (metadata.agentThinkingSteps as ChatThinkingStep[])
+      : [],
+    policyVersion: typeof metadata.policyVersion === "string" ? metadata.policyVersion : null,
+  };
+}
+
+export function getUiMessageAttachments(message: UIMessage): QmdhChatAttachment[] {
+  return getUiMessageMetadata(message).attachments;
+}
+
+export function getUiMessageAgentToolCalls(message: UIMessage): ChatToolCall[] {
+  return getUiMessageMetadata(message).agentToolCalls;
+}
+
+export function getUiMessageAgentTaskProposals(message: UIMessage): ChatTaskProposal[] {
+  return getUiMessageMetadata(message).agentTaskProposals;
+}
+
+export function getUiMessageAgentThinkingSteps(message: UIMessage): ChatThinkingStep[] {
+  return getUiMessageMetadata(message).agentThinkingSteps;
+}
+
+export function getUiMessagePolicyVersion(message: UIMessage): string | null {
+  return getUiMessageMetadata(message).policyVersion;
 }
 
 export function getUiMessageText(message: UIMessage): string {

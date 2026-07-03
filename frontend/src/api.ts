@@ -603,6 +603,64 @@ export type AgentOfficialSkill = {
   outputs: string[];
 };
 
+export type AgentPersonaRecord = {
+  id: number;
+  key: string;
+  display_name: string;
+  role: "coordinator" | "research" | "studio" | "custom";
+  system_prompt_template: string;
+  chat_tool_allowlist: string[];
+  memory_scope: "user" | "persona" | "both";
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UserAgentRosterItemRecord = {
+  persona_id: number;
+  key: string;
+  display_name: string;
+  role: string;
+  is_primary: boolean;
+  is_active: boolean;
+};
+
+export type UserAgentRosterRecord = {
+  user_id: number;
+  user_name: string;
+  display_name: string;
+  agents: UserAgentRosterItemRecord[];
+};
+
+export type UserAgentRosterUpdatePayload = {
+  persona_ids: number[];
+  primary_persona_id?: number | null;
+};
+
+export type AdminChatConversationRecord = {
+  id: number;
+  title: string;
+  user_id: number;
+  user_name: string;
+  user_display_name: string;
+  model_provider_id: number | null;
+  agent_thread_id: string;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdminAgentTraceRecord = {
+  id: number;
+  created_at: string;
+  actor_id: number | null;
+  actor_name: string;
+  conversation_id: number | null;
+  provider_name: string | null;
+  details: Record<string, unknown>;
+};
+
 export type AgentSkillReleaseRecord = {
   id: number;
   key: string;
@@ -610,11 +668,84 @@ export type AgentSkillReleaseRecord = {
   environment: "test" | "prod";
   openclaw_version: string;
   skill_keys: string[];
+  system_prompt_template: string;
+  chat_tool_allowlist: string[];
   notes: string;
   is_active: boolean;
   created_by_user_name: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type AgentChatToolRecord = {
+  key: string;
+  label: string;
+  description: string;
+};
+
+export type AssignedAgentRecord = {
+  key: string;
+  display_name: string;
+  role: string;
+  is_primary: boolean;
+};
+
+export type ChatAgentPolicyRecord = {
+  policy_version: string;
+  release_display_name: string | null;
+  environment: string;
+  enabled_tools: AgentChatToolRecord[];
+  disabled_tools: AgentChatToolRecord[];
+  policy_layers: ChatAgentPolicyLayerRecord[];
+  data_scope_note: string;
+  capabilities_summary: string;
+  baseline_prompt: string;
+  personalization_summary: string | null;
+  user_group_name: string | null;
+  assigned_agents: AssignedAgentRecord[];
+};
+
+export type ChatAgentPolicyLayerRecord = {
+  layer: string;
+  label: string;
+  detail: string | null;
+  disabled_tool_keys: string[];
+  prompt_overlay: string;
+};
+
+export type AgentPolicyOverrideRecord = {
+  id: number;
+  scope: "group" | "user";
+  scope_key: string;
+  scope_display_name: string | null;
+  disabled_tool_keys: string[];
+  system_prompt_overlay: string;
+  notes: string;
+  is_active: boolean;
+  updated_at: string;
+};
+
+export type AgentPolicyOverrideCreatePayload = {
+  scope: "group" | "user";
+  scope_key: string;
+  disabled_tool_keys?: string[];
+  system_prompt_overlay?: string;
+  notes?: string;
+  is_active?: boolean;
+};
+
+export type AgentPolicyOverrideUpdatePayload = {
+  disabled_tool_keys?: string[];
+  system_prompt_overlay?: string;
+  notes?: string;
+  is_active?: boolean;
+};
+
+export type ChatAgentPolicyDefaultsRecord = {
+  baseline_prompt: string;
+  data_scope_note: string;
+  default_tool_allowlist: string[];
+  tools: AgentChatToolRecord[];
 };
 
 export type AgentSkillReleaseCreatePayload = {
@@ -623,6 +754,8 @@ export type AgentSkillReleaseCreatePayload = {
   environment: "test" | "prod";
   openclaw_version: string;
   skill_keys: string[];
+  system_prompt_template: string;
+  chat_tool_allowlist: string[];
   notes: string;
   is_active: boolean;
 };
@@ -719,8 +852,20 @@ async function buildError(response: Response): Promise<Error> {
 
   if (contentType.includes("application/json")) {
     try {
-      const payload = (await response.json()) as { detail?: string };
-      detail = payload.detail ?? "";
+      const payload = (await response.json()) as {
+        detail?: string | Array<{ msg?: string; loc?: Array<string | number> }>;
+      };
+      if (typeof payload.detail === "string") {
+        detail = payload.detail;
+      } else if (Array.isArray(payload.detail)) {
+        detail = payload.detail
+          .map((item) => {
+            const field = Array.isArray(item.loc) ? item.loc.filter((part) => part !== "body").join(".") : "";
+            const message = item.msg ?? "校验失败";
+            return field ? `${field}: ${message}` : message;
+          })
+          .join("；");
+      }
     } catch {
       detail = "";
     }
@@ -780,6 +925,16 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
 async function patchJson<T>(path: string, body?: unknown): Promise<T> {
   return request<T>(path, {
     method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+}
+
+async function putJson<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "PUT",
     headers: {
       "Content-Type": "application/json"
     },
@@ -849,6 +1004,53 @@ export const api = {
   agentClients: () => request<AgentClientRecord[]>("/agent/admin/clients"),
   officialSkills: () => request<AgentOfficialSkill[]>("/agent/admin/skills"),
   agentSkillReleases: () => request<AgentSkillReleaseRecord[]>("/agent/admin/releases"),
+  agentChatTools: () => request<AgentChatToolRecord[]>("/agent/admin/chat-tools"),
+  agentChatPolicyDefaults: () => request<ChatAgentPolicyDefaultsRecord>("/agent/admin/chat-policy-defaults"),
+  agentPolicyOverrides: () => request<AgentPolicyOverrideRecord[]>("/agent/admin/policy-overrides"),
+  createAgentPolicyOverride: (payload: AgentPolicyOverrideCreatePayload) =>
+    postJson<AgentPolicyOverrideRecord>("/agent/admin/policy-overrides", payload),
+  updateAgentPolicyOverride: (overrideId: number, payload: AgentPolicyOverrideUpdatePayload) =>
+    patchJson<AgentPolicyOverrideRecord>(`/agent/admin/policy-overrides/${overrideId}`, payload),
+  deleteAgentPolicyOverride: (overrideId: number) => deleteRequest(`/agent/admin/policy-overrides/${overrideId}`),
+  agentPersonas: () => request<AgentPersonaRecord[]>("/agent/admin/personas"),
+  getUserAgentRoster: (userId: number) => request<UserAgentRosterRecord>(`/agent/admin/users/${userId}/agent-roster`),
+  updateUserAgentRoster: (userId: number, payload: UserAgentRosterUpdatePayload) =>
+    putJson<UserAgentRosterRecord>(`/agent/admin/users/${userId}/agent-roster`, payload),
+  resetUserAgentRoster: (userId: number) =>
+    postJson<UserAgentRosterRecord>(`/agent/admin/users/${userId}/agent-roster/reset-default`, {}),
+  adminChatConversations: (params?: { userId?: number; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.userId != null) query.set("user_id", String(params.userId));
+    if (params?.limit != null) query.set("limit", String(params.limit));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<AdminChatConversationRecord[]>(`/agent/admin/chat-conversations${suffix}`);
+  },
+  adminChatConversationMessages: (conversationId: number) =>
+    request<
+      {
+        id: number;
+        role: string;
+        content: string;
+        created_at: string;
+        agent_tool_calls?: { name: string; summary: string }[];
+        agent_task_proposals?: { proposal_id: string; summary: string; workflow_key: string }[];
+        agent_thinking_steps?: { key: string; label: string; detail: string; status: string; agent_label?: string }[];
+        policy_version?: string | null;
+      }[]
+    >(`/agent/admin/chat-conversations/${conversationId}/messages`),
+  adminAgentTraces: (params?: { conversationId?: number; actorId?: number; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.conversationId != null) query.set("conversation_id", String(params.conversationId));
+    if (params?.actorId != null) query.set("actor_id", String(params.actorId));
+    if (params?.limit != null) query.set("limit", String(params.limit));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<AdminAgentTraceRecord[]>(`/agent/admin/agent-traces${suffix}`);
+  },
+  matchRefIntent: (payload: { description?: string; reference_image?: string; limit?: number }) =>
+    postJson<{ query_used: string; reference_image: string; hits: Array<{ domain: string; id: number; title: string; snippet: string; category: string; tags: string[]; score: number; match_reason: string }>; empty_reason: string }>(
+      "/ref-intent/match",
+      payload,
+    ),
   createAgentSkillRelease: (payload: AgentSkillReleaseCreatePayload) =>
     postJson<AgentSkillReleaseRecord>("/agent/admin/releases", payload),
   updateAgentSkillRelease: (releaseId: number, payload: AgentSkillReleaseUpdatePayload) =>
@@ -964,9 +1166,45 @@ export const api = {
         role: string;
         content: string;
         attachments: { file_name: string; mime_type: string; url: string; storage_path: string; kind: "image" | "file" }[];
+        agent_tool_calls?: { name: string; summary: string }[];
+        agent_task_proposals?: {
+          proposal_id: string;
+          workflow_key: string;
+          title: string;
+          project_code: string;
+          requested_provider: string;
+          provider_display_name: string;
+          classification: string;
+          payload: Record<string, unknown>;
+          summary: string;
+          status: string;
+        }[];
+        agent_thinking_steps?: {
+          key: string;
+          label: string;
+          detail: string;
+          status: string;
+        }[];
+        policy_version?: string | null;
         created_at: string;
       }[]
     >(`/chat/conversations/${convId}/messages`),
+  getChatAgentPolicy: () => request<ChatAgentPolicyRecord>("/chat/agent-policy"),
+  confirmChatAgentTask: (
+    convId: number,
+    payload: {
+      proposal_id: string;
+      workflow_key: string;
+      title: string;
+      project_code: string;
+      requested_provider: string;
+      provider_display_name?: string;
+      classification?: string;
+      payload: Record<string, unknown>;
+      summary?: string;
+      policy_version?: string;
+    },
+  ) => postJson<Task>(`/chat/conversations/${convId}/confirm-agent-task`, payload),
   deleteChatConversation: (convId: number) => deleteRequest(`/chat/conversations/${convId}`),
   exportChatMessageWord: async (
     convId: number,

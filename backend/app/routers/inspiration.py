@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from urllib.parse import urljoin
-
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -10,22 +7,14 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_auth_user, has_content_ops_access, require_content_ops_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
+from app.integrations.search.index_hooks import delete_inspiration_post, upsert_inspiration_post
 from app.models import InspirationPost
 from app.schemas import ExtractImagesIn, ExtractImagesOut, InspirationPostCreate, InspirationPostOut, InspirationPostUpdate
 from app.services.inspiration_media import prepare_inspiration_image
-from app.integrations.search.index_hooks import delete_inspiration_post, upsert_inspiration_post
 from app.services.media_storage import resolve_storage_path
-from app.services.url_safety import UnsafeUrlError, assert_public_http_url
+from app.services.reference_page_service import ReferencePageError, extract_reference_page
 
 router = APIRouter(prefix="/inspiration", tags=["inspiration"])
-
-_BROWSER_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-)
-_MAX_EXTRACT_HTML_BYTES = 2 * 1024 * 1024
-_MAX_EXTRACT_REDIRECTS = 5
-
 
 def _can_edit_post(auth_user: AuthUserProfile, post: InspirationPost) -> bool:
     if has_content_ops_access(auth_user.role):
@@ -197,84 +186,11 @@ async def extract_images_from_url(
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> ExtractImagesOut:
     """Fetch a URL and extract candidate images for inspiration import."""
-
+    del auth_user
     try:
-        url = assert_public_http_url(payload.url)
-    except UnsafeUrlError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    try:
-        from bs4 import BeautifulSoup
-    except ImportError:
-        raise HTTPException(status_code=500, detail="beautifulsoup4 not installed")
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
-            for _ in range(_MAX_EXTRACT_REDIRECTS + 1):
-                resp = await client.get(url, headers={"User-Agent": _BROWSER_UA})
-                if not resp.is_redirect:
-                    break
-                location = resp.headers.get("location")
-                if not location:
-                    raise HTTPException(status_code=422, detail="页面跳转缺少目标地址")
-                try:
-                    url = assert_public_http_url(urljoin(url, location))
-                except UnsafeUrlError as exc:
-                    raise HTTPException(status_code=400, detail=str(exc)) from exc
-            else:
-                raise HTTPException(status_code=422, detail="页面跳转次数过多")
-            resp.raise_for_status()
-            content_length = int(resp.headers.get("content-length") or 0)
-            if content_length > _MAX_EXTRACT_HTML_BYTES or len(resp.content) > _MAX_EXTRACT_HTML_BYTES:
-                raise HTTPException(status_code=413, detail="页面内容过大，无法提取图片")
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=422, detail="请求超时，无法访问该链接")
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=422, detail=f"页面返回错误: {exc.response.status_code}")
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=422, detail="无法访问该链接")
-
-    html = resp.text
-    soup = BeautifulSoup(html, "html.parser")
-
-    # Extract page title
-    title_tag = soup.find("title")
-    page_title = title_tag.get_text(strip=True) if title_tag else ""
-
-    # Collect image URLs
-    images: list[str] = []
-    seen: set[str] = set()
-
-    # og:image first (usually the best cover)
-    for meta in soup.find_all("meta", attrs={"property": "og:image"}):
-        content = (meta.get("content") or "").strip()
-        if content and content not in seen:
-            images.append(urljoin(url, content))
-            seen.add(content)
-
-    # img tags
-    for img in soup.find_all("img"):
-        # Skip small icons
-        width = img.get("width", "")
-        height = img.get("height", "")
-        try:
-            if width and int(str(width).replace("px", "")) < 100:
-                continue
-            if height and int(str(height).replace("px", "")) < 100:
-                continue
-        except (ValueError, TypeError):
-            pass
-
-        # Try data-src first (lazy loading), then src
-        src = (img.get("data-src") or img.get("data-original") or img.get("src") or "").strip()
-        if not src or src.startswith("data:"):
-            continue
-
-        abs_url = urljoin(url, src)
-        if abs_url not in seen:
-            images.append(abs_url)
-            seen.add(abs_url)
-
-    return ExtractImagesOut(images=images[:50], title=page_title)
+        extracted = extract_reference_page(payload.url)
+    except ReferencePageError as exc:
+        detail = str(exc)
+        status_code = 400 if "http" in detail.lower() or "url" in detail.lower() else 422
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    return ExtractImagesOut(images=list(extracted.images), title=extracted.title)

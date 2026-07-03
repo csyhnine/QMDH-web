@@ -24,7 +24,16 @@ class StudioAgentAssistOut(BaseModel):
     model_name: str
 
 
-@router.post("/assist", response_model=StudioAgentAssistOut)
+@router.post(
+    "/assist",
+    response_model=StudioAgentAssistOut,
+    deprecated=True,
+    summary="Studio 浮动助手（已废弃）",
+    description=(
+        "Deprecated since Chat B1: use `POST /api/v1/chat/conversations/{id}/messages` with "
+        "`agent_mode: true` instead. Kept for OpenClaw/skills and legacy MCP clients."
+    ),
+)
 def assist(
     payload: StudioAgentAssistIn,
     db: Session = Depends(get_db),

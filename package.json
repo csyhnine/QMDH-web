@@ -11,6 +11,7 @@
     "format:frontend": "npm --prefix frontend run format",
     "dev:frontend": "npm --prefix frontend run dev",
     "build:frontend": "npm --prefix frontend run build",
-    "smoke:studio": "node scripts/smoke-studio.mjs"
+    "smoke:studio": "node scripts/smoke-studio.mjs",
+    "smoke:chat": "node scripts/smoke-chat.mjs"
   }
 }

@@ -444,6 +444,76 @@ class AgentSkillRelease(Base):
     environment: Mapped[str] = mapped_column(String(30), default="test", index=True)
     openclaw_version: Mapped[str] = mapped_column(String(50), default="latest")
     skill_keys: Mapped[list[str]] = mapped_column(JSON, default=list)
+    system_prompt_template: Mapped[str] = mapped_column(Text, default="")
+    chat_tool_allowlist: Mapped[list[str]] = mapped_column(JSON, default=list)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    created_by: Mapped[User | None] = relationship()
+
+
+class AgentPersona(Base):
+    __tablename__ = "agent_personas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(150))
+    role: Mapped[str] = mapped_column(String(30), default="custom", index=True)
+    system_prompt_template: Mapped[str] = mapped_column(Text, default="")
+    chat_tool_allowlist: Mapped[list[str]] = mapped_column(JSON, default=list)
+    memory_scope: Mapped[str] = mapped_column(String(20), default="both")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    assignments: Mapped[list["UserAgentAssignment"]] = relationship(back_populates="persona")
+
+
+class UserAgentAssignment(Base):
+    __tablename__ = "user_agent_assignments"
+    __table_args__ = (UniqueConstraint("user_id", "persona_id", name="uq_user_agent_assignments_user_persona"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    persona_id: Mapped[int] = mapped_column(ForeignKey("agent_personas.id"), index=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user: Mapped[User] = relationship()
+    persona: Mapped[AgentPersona] = relationship(back_populates="assignments")
+
+
+class AgentMemoryEntry(Base):
+    __tablename__ = "agent_memory_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    persona_id: Mapped[int | None] = mapped_column(ForeignKey("agent_personas.id"), nullable=True, index=True)
+    conversation_id: Mapped[int | None] = mapped_column(ForeignKey("conversations.id"), nullable=True, index=True)
+    memory_type: Mapped[str] = mapped_column(String(30), default="summary", index=True)
+    content: Mapped[str] = mapped_column(Text, default="")
+    source_turn_ref: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    user: Mapped[User] = relationship()
+    persona: Mapped[AgentPersona | None] = relationship()
+    conversation: Mapped["Conversation | None"] = relationship()
+
+
+class AgentPolicyOverride(Base):
+    __tablename__ = "agent_policy_overrides"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scope: Mapped[str] = mapped_column(String(20), index=True)  # group | user
+    scope_key: Mapped[str] = mapped_column(String(120), index=True)
+    disabled_tool_keys: Mapped[list[str]] = mapped_column(JSON, default=list)
+    system_prompt_overlay: Mapped[str] = mapped_column(Text, default="")
     notes: Mapped[str] = mapped_column(Text, default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
@@ -551,6 +621,7 @@ class Conversation(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(200), default="新对话")
     model_provider_id: Mapped[int | None] = mapped_column(ForeignKey("provider_profiles.id"), nullable=True)
+    agent_thread_id: Mapped[str] = mapped_column(String(120), default="", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

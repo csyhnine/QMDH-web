@@ -1,0 +1,361 @@
+"""Resolve effective Chat agent policy from AgentSkillRelease records."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import AgentPolicyOverride, AgentSkillRelease, User
+
+CHAT_AGENT_BASELINE_PROMPT = (
+    "你是 QMDH 设计助手，在 Chat 对话区为设计师提供咨询式帮助。"
+    "你可以检索院内灵感库、共享 prompt 模板、已启用的图像/视频模型与工作流配置，"
+    "并用清晰的中文解释检索结果与下一步建议。"
+    "当用户希望直接生图或改图且 propose_image_* 工具可用时，"
+    "必须先调用 list_enabled_image_providers 获取 provider_name，"
+    "再调用 propose 工具生成待确认任务卡片，等待用户在界面确认后再执行；"
+    "不要未经确认假装已经完成生图。"
+    "用户仅寒暄、问候、感谢或未提出检索/生图/配置需求时，直接简短友好回复，不要调用任何工具。"
+    "若写工具未启用，则引导用户前往 Studio 生成页提交持久化异步任务。"
+    "回答应简洁、专业，优先给出可执行的检索结论。"
+)
+
+CHAT_AGENT_DATA_SCOPE_NOTE = (
+    "当前助手可检索院内灵感库、共享模板，并支持公开参考页抓取与参考体量→意向图匹配。"
+    "批量外网入库（crawl-001 C2）上线后将进一步扩展检索范围。"
+)
+
+DEFAULT_CHAT_TOOL_ALLOWLIST: tuple[str, ...] = (
+    "search_inspiration_posts",
+    "search_shared_templates",
+    "list_enabled_image_providers",
+    "list_active_workflows",
+    "summarize_generation_stack",
+)
+
+CHAT_TOOL_CATALOG: tuple[dict[str, str], ...] = (
+    {
+        "key": "search_inspiration_posts",
+        "label": "搜索灵感帖子",
+        "description": "检索已入库 inspiration_posts（Meilisearch / PostgreSQL）。",
+    },
+    {
+        "key": "search_shared_templates",
+        "label": "搜索共享模板",
+        "description": "检索院内共享 prompt 模板。",
+    },
+    {
+        "key": "list_enabled_image_providers",
+        "label": "列出可用模型",
+        "description": "列出已启用的图像/视频 ProviderProfile。",
+    },
+    {
+        "key": "list_active_workflows",
+        "label": "列出工作流",
+        "description": "列出当前可用 workflow keys。",
+    },
+    {
+        "key": "summarize_generation_stack",
+        "label": "汇总生成栈",
+        "description": "汇总模型与工作流配置摘要。",
+    },
+    {
+        "key": "fetch_reference_page",
+        "label": "抓取参考页",
+        "description": "抓取公开 URL 并提取候选参考图（SSRF 防护，crawl-001 C1）。",
+    },
+    {
+        "key": "import_reference_page",
+        "label": "外网参考入库",
+        "description": "抓取 allowlist 域名页面并写入灵感库（source_url 去重 + Meilisearch 索引，crawl-001 C2）。",
+    },
+    {
+        "key": "match_reference_intent",
+        "label": "参考体量匹配意向图",
+        "description": "根据参考建筑描述或 reference_image 路径检索灵感/模板（ref-intent-001 MVP）。",
+    },
+    {
+        "key": "propose_image_generate_task",
+        "label": "提议生图任务",
+        "description": "生成待用户确认的 image-generate 任务（HITL，确认后才入队）。",
+    },
+    {
+        "key": "propose_image_edit_task",
+        "label": "提议改图任务",
+        "description": "生成待用户确认的 image-edit 任务（需 reference_image 路径）。",
+    },
+)
+
+
+@dataclass(frozen=True)
+class ChatPolicyLayer:
+    layer: str
+    label: str
+    detail: str | None = None
+    disabled_tool_keys: tuple[str, ...] = ()
+    prompt_overlay: str = ""
+
+
+@dataclass(frozen=True)
+class EffectiveChatPolicy:
+    policy_version: str
+    release_id: int | None
+    release_key: str
+    environment: str
+    system_prompt: str
+    chat_tool_allowlist: tuple[str, ...]
+    layers: tuple[ChatPolicyLayer, ...] = ()
+    disabled_tool_keys: tuple[str, ...] = ()
+    user_group_name: str | None = None
+
+
+def normalize_chat_tool_allowlist(values: list[str] | None) -> tuple[str, ...]:
+    allowed = {item["key"] for item in CHAT_TOOL_CATALOG}
+    normalized: list[str] = []
+    for raw in values or []:
+        key = str(raw).strip()
+        if key and key in allowed and key not in normalized:
+            normalized.append(key)
+    if not normalized:
+        return DEFAULT_CHAT_TOOL_ALLOWLIST
+    return tuple(normalized)
+
+
+def normalize_disabled_tool_keys(values: list[str] | None) -> tuple[str, ...]:
+    allowed = {item["key"] for item in CHAT_TOOL_CATALOG}
+    normalized: list[str] = []
+    for raw in values or []:
+        key = str(raw).strip()
+        if key and key in allowed and key not in normalized:
+            normalized.append(key)
+    return tuple(normalized)
+
+
+def build_chat_system_prompt(*, baseline: str, template: str | None) -> str:
+    overlay = (template or "").strip()
+    if not overlay:
+        return baseline.strip()
+    return f"{baseline.strip()}\n\n{overlay}"
+
+
+def _load_scope_override(db: Session, *, scope: str, scope_key: str) -> AgentPolicyOverride | None:
+    if not scope_key.strip():
+        return None
+    return db.scalar(
+        select(AgentPolicyOverride).where(
+            AgentPolicyOverride.scope == scope,
+            AgentPolicyOverride.scope_key == scope_key,
+            AgentPolicyOverride.is_active == True,  # noqa: E712
+        )
+    )
+
+
+def _apply_override(
+    *,
+    prompt: str,
+    allowlist: tuple[str, ...],
+    override: AgentPolicyOverride | None,
+    layer: str,
+    label: str,
+    detail: str | None,
+) -> tuple[str, tuple[str, ...], ChatPolicyLayer | None, tuple[str, ...]]:
+    if override is None:
+        return prompt, allowlist, None, ()
+
+    disabled = normalize_disabled_tool_keys(list(override.disabled_tool_keys or []))
+    overlay = (override.system_prompt_overlay or "").strip()
+    next_prompt = f"{prompt}\n\n{overlay}" if overlay else prompt
+    next_allowlist = tuple(key for key in allowlist if key not in disabled)
+    layer_info = ChatPolicyLayer(
+        layer=layer,
+        label=label,
+        detail=detail,
+        disabled_tool_keys=disabled,
+        prompt_overlay=overlay,
+    )
+    return next_prompt, next_allowlist, layer_info, disabled
+
+
+def resolve_effective_chat_policy(
+    db: Session,
+    *,
+    environment: str = "prod",
+    policy_version: str | None = None,
+    user_id: int | None = None,
+) -> EffectiveChatPolicy:
+    release: AgentSkillRelease | None = None
+    pinned_key = (policy_version or "").strip()
+
+    if pinned_key:
+        release = db.scalar(
+            select(AgentSkillRelease).where(
+                AgentSkillRelease.key == pinned_key,
+                AgentSkillRelease.is_active == True,  # noqa: E712
+            )
+        )
+        if release is None:
+            release = db.scalar(select(AgentSkillRelease).where(AgentSkillRelease.key == pinned_key))
+
+    if release is None:
+        release = db.scalar(
+            select(AgentSkillRelease)
+            .where(
+                AgentSkillRelease.environment == environment,
+                AgentSkillRelease.is_active == True,  # noqa: E712
+            )
+            .order_by(AgentSkillRelease.updated_at.desc(), AgentSkillRelease.id.desc())
+        )
+
+    if release is None:
+        base_policy = EffectiveChatPolicy(
+            policy_version="code-default",
+            release_id=None,
+            release_key="code-default",
+            environment=environment,
+            system_prompt=CHAT_AGENT_BASELINE_PROMPT.strip(),
+            chat_tool_allowlist=DEFAULT_CHAT_TOOL_ALLOWLIST,
+        )
+    else:
+        allowlist = normalize_chat_tool_allowlist(list(release.chat_tool_allowlist or []))
+        base_policy = EffectiveChatPolicy(
+            policy_version=release.key,
+            release_id=release.id,
+            release_key=release.key,
+            environment=release.environment,
+            system_prompt=build_chat_system_prompt(
+                baseline=CHAT_AGENT_BASELINE_PROMPT,
+                template=release.system_prompt_template,
+            ),
+            chat_tool_allowlist=allowlist,
+        )
+
+    layers: list[ChatPolicyLayer] = [
+        ChatPolicyLayer(
+            layer="global",
+            label="全局发布",
+            detail=base_policy.release_key,
+        )
+    ]
+    prompt = base_policy.system_prompt
+    allowlist = base_policy.chat_tool_allowlist
+    disabled_all: list[str] = []
+    user_group_name: str | None = None
+
+    if user_id is not None:
+        user = db.get(User, user_id)
+        if user is not None:
+            user_group_name = (user.group_name or "").strip() or None
+            if user_group_name:
+                group_override = _load_scope_override(db, scope="group", scope_key=user_group_name)
+                prompt, allowlist, group_layer, group_disabled = _apply_override(
+                    prompt=prompt,
+                    allowlist=allowlist,
+                    override=group_override,
+                    layer="group",
+                    label="用户组策略",
+                    detail=user_group_name,
+                )
+                if group_layer is not None:
+                    layers.append(group_layer)
+                    disabled_all.extend(group_disabled)
+
+            user_override = _load_scope_override(db, scope="user", scope_key=str(user_id))
+            user_label = user.display_name or user.name
+            prompt, allowlist, user_layer, user_disabled = _apply_override(
+                prompt=prompt,
+                allowlist=allowlist,
+                override=user_override,
+                layer="user",
+                label="个人策略",
+                detail=user_label,
+            )
+            if user_layer is not None:
+                layers.append(user_layer)
+                disabled_all.extend(user_disabled)
+
+    return EffectiveChatPolicy(
+        policy_version=base_policy.policy_version,
+        release_id=base_policy.release_id,
+        release_key=base_policy.release_key,
+        environment=base_policy.environment,
+        system_prompt=prompt,
+        chat_tool_allowlist=allowlist,
+        layers=tuple(layers),
+        disabled_tool_keys=tuple(dict.fromkeys(disabled_all)),
+        user_group_name=user_group_name,
+    )
+
+
+def list_chat_tool_catalog() -> list[dict[str, str]]:
+    return [dict(item) for item in CHAT_TOOL_CATALOG]
+
+
+def chat_tool_catalog_map() -> dict[str, dict[str, str]]:
+    return {item["key"]: dict(item) for item in CHAT_TOOL_CATALOG}
+
+
+def build_enabled_tool_records(allowlist: tuple[str, ...]) -> list[dict[str, str]]:
+    catalog = chat_tool_catalog_map()
+    records: list[dict[str, str]] = []
+    for key in allowlist:
+        item = catalog.get(key)
+        if item:
+            records.append(dict(item))
+    return records
+
+
+def build_disabled_tool_records(disabled_keys: tuple[str, ...]) -> list[dict[str, str]]:
+    catalog = chat_tool_catalog_map()
+    records: list[dict[str, str]] = []
+    for key in disabled_keys:
+        item = catalog.get(key)
+        if item:
+            records.append(dict(item))
+    return records
+
+
+def build_personalization_summary(policy: EffectiveChatPolicy) -> str | None:
+    parts: list[str] = []
+    if policy.user_group_name:
+        parts.append(f"用户组「{policy.user_group_name}」")
+    for layer in policy.layers:
+        if layer.layer == "user":
+            parts.append("个人定制")
+            break
+    if policy.disabled_tool_keys:
+        parts.append(f"禁用 {len(policy.disabled_tool_keys)} 项工具")
+    if not parts:
+        return None
+    return " · ".join(parts)
+
+
+def build_chat_policy_summary(
+    policy: EffectiveChatPolicy,
+    *,
+    release_display_name: str | None = None,
+) -> dict[str, object]:
+    enabled_tools = build_enabled_tool_records(policy.chat_tool_allowlist)
+    disabled_tools = build_disabled_tool_records(policy.disabled_tool_keys)
+    return {
+        "policy_version": policy.policy_version,
+        "release_display_name": release_display_name,
+        "environment": policy.environment,
+        "enabled_tools": enabled_tools,
+        "disabled_tools": disabled_tools,
+        "policy_layers": [
+            {
+                "layer": layer.layer,
+                "label": layer.label,
+                "detail": layer.detail,
+                "disabled_tool_keys": list(layer.disabled_tool_keys),
+                "prompt_overlay": layer.prompt_overlay,
+            }
+            for layer in policy.layers
+        ],
+        "data_scope_note": CHAT_AGENT_DATA_SCOPE_NOTE,
+        "capabilities_summary": "、".join(item["label"] for item in enabled_tools) or "暂无可用工具",
+        "personalization_summary": build_personalization_summary(policy),
+        "user_group_name": policy.user_group_name,
+    }

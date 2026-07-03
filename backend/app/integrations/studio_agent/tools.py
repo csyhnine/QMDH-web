@@ -9,6 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.integrations.search.service import search_domain
 from app.models import ProviderProfile, Workflow
+from app.services.reference_page_service import ReferencePageError, extract_reference_page
+from app.services.crawl_ingest_service import CrawlDomainNotAllowedError, import_reference_page_to_inspiration
+from app.services.ref_intent_service import match_reference_intent as _match_reference_intent
 
 
 @dataclass(frozen=True)
@@ -89,3 +92,92 @@ def summarize_generation_stack(ctx: StudioToolContext) -> dict[str, object]:
             "Use workflow_key + provider_name when describing generation actions to humans or downstream tools.",
         ],
     }
+
+
+def fetch_reference_page(ctx: StudioToolContext, url: str, limit: int = 8) -> dict[str, object]:
+    try:
+        extracted = extract_reference_page(url, image_limit=max(1, min(limit, 20)))
+    except ReferencePageError as exc:
+        return {"ok": False, "error": str(exc), "tool": "fetch_reference_page"}
+    images = list(extracted.images[: max(1, min(limit, 20))])
+    return {
+        "ok": True,
+        "tool": "fetch_reference_page",
+        "source_url": extracted.source_url,
+        "title": extracted.title,
+        "images": images,
+        "image_count": len(images),
+    }
+
+
+def match_reference_intent(
+    ctx: StudioToolContext,
+    description: str = "",
+    reference_image: str = "",
+    limit: int = 12,
+) -> dict[str, object]:
+    result = _match_reference_intent(
+        ctx.db,
+        description=description,
+        reference_image=reference_image,
+        limit=limit,
+    )
+    if not result.hits:
+        return {
+            "ok": False,
+            "tool": "match_reference_intent",
+            "query_used": result.query_used,
+            "reference_image": result.reference_image,
+            "error": result.empty_reason or "未找到匹配结果",
+            "hits": [],
+        }
+    return {
+        "ok": True,
+        "tool": "match_reference_intent",
+        "query_used": result.query_used,
+        "reference_image": result.reference_image,
+        "hits": [
+            {
+                "domain": hit.domain,
+                "id": hit.id,
+                "title": hit.title,
+                "snippet": hit.snippet,
+                "category": hit.category,
+                "tags": list(hit.tags),
+                "score": hit.score,
+                "match_reason": hit.match_reason,
+            }
+            for hit in result.hits
+        ],
+    }
+
+
+def import_reference_page(
+    ctx: StudioToolContext,
+    url: str,
+    cover_image_url: str = "",
+    category: str = "建筑",
+) -> dict[str, object]:
+    try:
+        result = import_reference_page_to_inspiration(
+            ctx.db,
+            url=url,
+            user_id=ctx.user_id,
+            cover_image_url=cover_image_url,
+            category=category,
+        )
+    except CrawlDomainNotAllowedError as exc:
+        return {"ok": False, "tool": "import_reference_page", "error": str(exc)}
+    payload = {
+        "ok": result.status in {"created", "duplicate"},
+        "tool": "import_reference_page",
+        "status": result.status,
+        "source_url": result.source_url,
+        "inspiration_post_id": result.inspiration_post_id,
+        "title": result.title,
+        "message": result.message,
+    }
+    if result.status == "failed":
+        payload["error"] = result.message
+        payload["ok"] = False
+    return payload

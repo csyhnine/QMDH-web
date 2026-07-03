@@ -13,10 +13,11 @@
     "format": "biome format --write src/lib"
   },
   "dependencies": {
-    "ai": "^5.0.0",
     "@ai-sdk/react": "^2.0.0",
+    "ai": "^5.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^6.30.3"
   },
   "devDependencies": {

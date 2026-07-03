@@ -6,6 +6,7 @@ import {
   type AgentClientRecord,
   type AgentOfficialSkill,
   type AgentSkillReleaseRecord,
+  type AgentChatToolRecord,
   type DashboardStats,
   type FeedbackRecord,
   type InspirationPost,
@@ -294,21 +295,24 @@ function AgentsRoute() {
   const [clients, setClients] = useState<AgentClientRecord[]>([]);
   const [skills, setSkills] = useState<AgentOfficialSkill[]>([]);
   const [releases, setReleases] = useState<AgentSkillReleaseRecord[]>([]);
+  const [chatTools, setChatTools] = useState<AgentChatToolRecord[]>([]);
   const [error, setError] = useState("");
 
   async function refresh() {
     try {
-      const [nextClients, nextSkills, nextReleases] = await Promise.all([
+      const [nextClients, nextSkills, nextReleases, nextChatTools] = await Promise.all([
         api.agentClients(),
         api.officialSkills(),
         api.agentSkillReleases(),
+        api.agentChatTools(),
       ]);
       setClients(nextClients);
       setSkills(nextSkills);
       setReleases(nextReleases);
+      setChatTools(nextChatTools);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load agent operations data");
+      setError(err instanceof Error ? err.message : "加载 Agent 运维数据失败");
     }
   }
 
@@ -321,6 +325,7 @@ function AgentsRoute() {
       <AgentOpsPage
         clients={clients}
         skills={skills}
+        chatTools={chatTools}
         releases={releases}
         error={error}
         onRefresh={() => void refresh()}

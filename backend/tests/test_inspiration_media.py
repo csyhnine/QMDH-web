@@ -265,17 +265,18 @@ class InspirationRouterTests(unittest.TestCase):
             def raise_for_status(self) -> None:
                 return None
 
-        class _FakeAsyncClient:
-            async def __aenter__(self):
+        class _FakeSyncClient:
+            def __enter__(self):
                 return self
 
-            async def __aexit__(self, exc_type, exc, tb):
+            def __exit__(self, exc_type, exc, tb):
                 return False
 
-            async def get(self, url: str, headers: dict[str, str]):
+            def get(self, url: str, headers: dict[str, str] | None = None):
+                del url, headers
                 return _FakeHttpResponse(html)
 
-        with patch("app.routers.inspiration.httpx.AsyncClient", return_value=_FakeAsyncClient()):
+        with patch("app.services.reference_page_service.httpx.Client", return_value=_FakeSyncClient()):
             extracted = self.client.post(
                 "/inspiration/extract-images",
                 json={"url": "https://example.test/article"},
@@ -312,7 +313,7 @@ class InspirationRouterTests(unittest.TestCase):
             self.assertEqual(post.user_id, 1)
 
     def test_extract_images_rejects_private_url_before_fetch(self) -> None:
-        with patch("app.routers.inspiration.httpx.AsyncClient") as client_factory:
+        with patch("app.services.reference_page_service.httpx.Client") as client_factory:
             response = self.client.post(
                 "/inspiration/extract-images",
                 json={"url": "http://127.0.0.1/internal"},
@@ -336,17 +337,18 @@ class InspirationRouterTests(unittest.TestCase):
             def raise_for_status(self) -> None:
                 return None
 
-        class _FakeAsyncClient:
-            async def __aenter__(self):
+        class _FakeSyncClient:
+            def __enter__(self):
                 return self
 
-            async def __aexit__(self, exc_type, exc, tb):
+            def __exit__(self, exc_type, exc, tb):
                 return False
 
-            async def get(self, url: str, headers: dict[str, str]):
+            def get(self, url: str, headers: dict[str, str] | None = None):
+                del url, headers
                 return _FakeHttpResponse(302, {"location": "http://127.0.0.1/internal"})
 
-        with patch("app.routers.inspiration.httpx.AsyncClient", return_value=_FakeAsyncClient()):
+        with patch("app.services.reference_page_service.httpx.Client", return_value=_FakeSyncClient()):
             response = self.client.post(
                 "/inspiration/extract-images",
                 json={"url": "https://example.test/article"},

@@ -1,10 +1,11 @@
 # Haodeya GPT-Image-2-VIP 异步生图对接（留档）
 
-Last updated: `2026-07-03`  
+Last updated: `2026-07-16`  
 网关（我们唯一对接的上游）：`https://newapi.haodeya.xyz/v1`  
-状态：**代码已实现，本地单测通过；生产未部署；Studio 真实联调待接班人完成**
+状态：**代码已在生产镜像（`186b127`）；Admin Provider 未建 → 可立即配置接入；Studio 真实联调待做**
 
-> **换设备接手**：先读本文 → [`haodeya-image-model-routing-2026-07.md`](haodeya-image-model-routing-2026-07.md)（Gemini/GPT 同步线路）→ 代码 `backend/app/services/task_executor.py`（`haodeya_async_image` 相关函数）。
+> **换设备接手**：先读本文 → [`haodeya-image-model-routing-2026-07.md`](haodeya-image-model-routing-2026-07.md)（Gemini/GPT 同步线路）→ 代码 `backend/app/services/task_executor.py`（`haodeya_async_image` 相关函数）。  
+> **2026-07-16**：异步默认判定已收紧，仅 `gpt-image-*-vip` / 显式 async 走 VIP；**可以接 GPT-VIP Provider，不会再误路由 Gemini。**
 
 ---
 
@@ -208,18 +209,18 @@ python -m pytest tests/test_task_executor_toapis_image.py -q
 
 ## 8. 部署说明
 
-- **当前未上生产**；改动在未 commit 的 working tree（见 handoff）
-- 部署步骤与常规 backend/worker 发布相同；**无新 migration**
-- 部署后 smoke：1K VIP 生图 + 看板成本 1.62
+- **代码已随 2026-07-16 部署进生产**（Git `186b127`，含 VIP 异步 + 误路由热修）
+- **无新 migration**；开通方式 = Admin 新建 Provider，无需再发版（除非改协议）
+- 开通后 smoke：1K VIP 生图 + 看板成本 1.62；再测 2K；确认 Gemini / 普通 gpt-image-2 仍非异步
 
 ---
 
 ## 9. 待办（接班人）
 
-- [ ] 本地 Studio 真实联调通过（1K + 2K）
-- [ ] commit + push（建议独立 PR，勿与 Agent multi-chat WIP 混提交）
-- [ ] 生产部署 + smoke
-- [ ] Haodeya 通知 `-2k` SKU 修好后：恢复 2K → `gpt-image-2-vip-2k` + `resolution: 2k`
+- [ ] Admin 建 Provider（见 §2）+ 有效 Key
+- [ ] Studio 真实联调：1K + 2K（有参考图再测 `image_urls`）
+- [ ] 确认 Gemini / 普通 gpt-image-2 路由未回归
+- [ ] Haodeya 通知 `-2k` SKU 修好后：恢复 2K → `gpt-image-2-vip-2k` + `resolution: 2k`（见正文注意）
 - [ ] 4K：上游价确认 + Studio UI 档位 + `unit_price_4k`
 
 ---

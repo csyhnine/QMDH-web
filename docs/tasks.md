@@ -165,10 +165,17 @@
   3. `/admin/*` 仍须登录
   4. 登录后全功能恢复
 
+### Task: [chat-nav-001] Chat 对话轮次导航
+- 状态：**DONE（本地）**；未 commit / 未部署
+- 留档：`docs/archive/chat-round-nav-2026-07-16.md`
+- 行为：单轮不显示；多轮默认横刻度；悬停展开摘要；点击跳转
+- 文件：`ChatConversationNav.tsx`、`chatRoundUtils.ts`、`ChatPage.tsx`、`styles.css`
+
 ### Task: [image-vip-001] Haodeya GPT-Image-2-VIP 异步生图
-- 状态：**IN_PROGRESS**（代码已随 2026-07-16 进生产镜像；**Admin Provider 未建，未对设计师开通**）
+- 状态：**READY_TO_CONFIGURE**（代码已在生产 `186b127`；**Admin Provider 未建** → 对设计师未开通）
 - 留档：`docs/archive/haodeya-gpt-image-vip-async-2026-07.md`
 - 部署记录：`docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
+- **可以接**：异步出图链路已在镜像；下一步只需 Admin 建 `gpt-image-2-vip` + Key + Studio 联调
 - 边界：
   - `backend/app/services/task_executor.py`（`haodeya_async_image`）
   - `backend/app/services/provider_strategy.py`（**186b127**：勿把全部 Haodeya 当 VIP 异步）

@@ -28,15 +28,14 @@
 - Next step: rebase 到 `main` 后按 B1→gov→B2 拆 PR（勿整包上）
 - Safe to hand off: **Yes**
 
-### [2026-07-16] VIP 异步出图 — **代码在生产；下载 UA 热修本地已修，待部署**
+### [2026-07-16] VIP 异步出图 — **下载 UA 热修已部署 `f0497b3`**
 - Role: `gpt-image-2-vip` 异步生图
-- Production: 镜像含 `haodeya_async_image`（`186b127`）
+- Production: **`f0497b3`**（backend/worker 已 rebuild；UA=`Go-http-client/1.1`）
 - **事故**：创建/轮询成功、已扣费，但「下载生成结果失败」HTTP 403 / CF 1010  
-  根因：`_download_generated_image` 裸 `urlopen` → Python-urllib 默认 UA 被 `files.toapis.com` 拦截  
-  修复：下载带 `User-Agent: Go-http-client/1.1`（本地已改，**未部署**）
+  根因：裸 `urlopen` → Python-urllib 默认 UA 被 `files.toapis.com` 拦截  
+  修复：下载带 `User-Agent: Go-http-client/1.1` — **已上生产**
 - Archive: **`docs/archive/haodeya-gpt-image-vip-async-2026-07.md`** §3.2
-- 配置：`model_name=gpt-image-2-vip`，`base_url=https://newapi.haodeya.xyz/v1`，timeout≥600
-- Next step: commit + 部署 backend/worker → 用**已有 completed URL** 或新任务测下载（勿盲目重提扣费）
-- Safe to hand off: **Yes**（修复在工作区）
+- Next step: Studio 再测 VIP 1K/2K；已失败任务勿盲目重提（链接未过期可重下）
+- Safe to hand off: **Yes**
 
 <!-- 生产部署访客/worker：docs/archive/deploy-2026-07-16-guest-workers-hotfix.md -->

@@ -1,10 +1,10 @@
 # Studio 访客模式（留档）
 
-Last updated: **2026-07-13**  
-状态：**未开始实现**（仅需求与方案定稿）  
-优先级：**当前最高**（新对话开发入口）
+Last updated: **2026-07-16**  
+状态：**P0+P1 已部署生产**（Git `60caa22` / 热修 `186b127`）  
+优先级：P2（限流 / 清理 useStudioAuth / E2E）待做  
 
-> **换设备 / 新对话接手**：先读本文 → `docs/archive/handoff-2026-07-13-guest-mode-wip.md` → 再读 `docs/handoff.md`。
+> **换设备 / 新对话接手**：先读本文 → `docs/archive/deploy-2026-07-16-guest-workers-hotfix.md` → `docs/handoff.md`。
 
 ---
 
@@ -164,10 +164,10 @@ cd frontend && npm run build
 
 ## 8. 待办（接班人）
 
-- [ ] P0：AuthContext + LoginPage + AuthGuard + 生成页只读
-- [ ] P1：optional auth + 四 Tab 只读
+- [x] P0：AuthContext + LoginPage + AuthGuard + 生成页只读
+- [x] P1：optional auth + 四 Tab 只读
 - [ ] P2：限流、测试、清理 useStudioAuth
-- [ ] 更新 `docs/handoff.md` 状态为 DONE / 部署说明
+- [x] 更新 `docs/handoff.md` / 部署说明（见 `docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`）
 
 ---
 

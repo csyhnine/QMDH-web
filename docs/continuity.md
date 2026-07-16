@@ -16,9 +16,10 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Current Baseline
 
-- **Active development sequence**: `docs/tasks.md` → **`Development Sequence (2026-06)`** + **Chat Agent B1**（`chat-004`，本地 WIP）
-- Current branch: `main` @ **`0090a2a`（v1.1.0，与生产对齐）** + **本地 WIP 未提交**（Chat B1、deploy 脚本等）
-- Production: **`https://cityusbdisk.cn`** — **v1.1.0** @ `0090a2a`（2026-06-29 full rebuild + migrate）
+- **Active development sequence**: `docs/tasks.md` Priority Queue（访客 P2 / VIP Provider 接入 / OSS 图床）
+- Current branch: `main` @ **`186b127`**
+- Production: **`https://cityusbdisk.cn`** — Git **`186b127`**（2026-07-16 部署：访客模式 P0+P1、密码 4 位、worker×3、Gemini 异步误路由热修）
+- Deploy archive: `docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
 - Chat Agent direction: **Web `/studio/chat` = 唯一带 tools 入口**；Studio 浮动助手已下线；OpenClaw/skills 仍走 `/agent/*` + deprecated `/studio-agent/assist`
 - Agent roadmap（详见 `docs/tasks.md`）:
   - **B1 DONE（本地）**: `agent_mode` + 院内只读 tools
@@ -32,7 +33,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - build: `npm run build`
   - smoke: `npm run smoke:studio`, `npm run smoke:chat`（可选 `agent_mode` SSE；`QMDH_SMOKE_AGENT_MODE=0` 跳过）
   - backend slice: `backend\.venv\Scripts\python.exe -m pytest tests\test_database_auth.py -q`
-- Do not commit: `storage/`, `tmp/`, `.env`, `backend/app.db`, `frontend/dist/`, `node_modules/`
+- Do not commit: `storage/`, `tmp/`, `.env`, `backend/app.db`, `frontend/dist/`, `node_modules/`, `assets/` 本地截图
 
 ## Current Product Reality
 
@@ -192,35 +193,30 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Added auto-collapse / expand behavior for the studio composer while browsing history.
 - Compressed history-card chrome while preserving full generated image content through proportional preview scaling.
 - **`cecab36` (2026-06-26, on GitHub; not deployed):** unified history gallery layout; composer max-3 images, fixed toolbar, Ctrl+Enter submit, reference × remove; dashboard group-spend custom date range; usage-log KPI + double-billing fix with `test_usage_logs.py`.
-- **v1.1.0 (deployed 2026-06-29):** 2K 生图、历史 meta、反馈多轮、上传 20MB/10MB；生产 Git `0090a2a`，health `version=1.1.0`.
-- **Production is v1.1.0** @ `0090a2a` — deployed with full Docker rebuild; see deploy archive below.
+- **v1.1.0 (deployed 2026-06-29):** 2K 生图、历史 meta、反馈多轮、上传 20MB/10MB；当时 Git `0090a2a`。
+- **2026-07-16 production deploy:** 访客模式 P0+P1、密码 4 位、worker×3、VIP 代码进镜像但未建 Provider；Gemini 异步误路由热修 → Git **`186b127`**。详见 `docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`。
 
 ## Current Server Snapshot
 
 - Server IP: `120.79.227.11`
 - Domain: `cityusbdisk.cn`（京ICP备14011242号-4，已备案）
 - Deploy path: `/www/wwwroot/qmdh-web`
-- Deployment model: Docker Compose
-- **Production version: v1.1.0** — Git `0090a2a9`; images rebuilt 2026-06-29
-- **GitHub `main`:** aligned with production @ `0090a2a`
-- Latest session archive: `docs/handoff.md` → `[2026-06-29] v1.1.0 已部署生产`
-- **Deploy lessons archive:** `docs/archive/deploy-2026-06-29-v1.1.0-production.md`
+- Deployment model: Docker Compose（**worker ×3**）
+- **Production Git: `186b127`** — images rebuilt 2026-07-16
+- **GitHub `main`:** aligned with production @ `186b127`
+- Latest session archive: `docs/handoff.md` → `[2026-07-16] 生产部署`
+- **Deploy archive:** `docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
 - Gemini CPA doc: `docs/cpa-gemini-image-integration.md`（含 2K 验收表）
-- Server working tree: clean after `sudo -u admin git pull`
 - Verified runtime after latest deploy:
-  - `docker compose ps` healthy
-  - `https://cityusbdisk.cn/api/v1/health` returns `200`
-  - HTTP redirects to HTTPS on domain
+  - `docker compose ps`：backend healthy + worker-1/2/3
+  - `https://cityusbdisk.cn/api/v1/health` returns healthy
 - Production `.env` highlights:
   - `QMDH_FRONTEND_ORIGIN=https://cityusbdisk.cn`
   - `QMDH_PUBLIC_MEDIA_BASE_URL=https://cityusbdisk.cn`
+  - `QMDH_STORAGE_BACKEND` 仍为 **local**（OSS 试用已开，业务未切）
 - Current deployment note:
   - GitHub deploy key is healthy on server `admin` user
   - `git pull` fails only when run as `root`; use `sudo -u admin git -C /www/wwwroot/qmdh-web pull origin main`
-  - `tmp/deploy_prod.py` now pulls as `admin`; git bundle remains fallback
-- Server access practice:
-  - use `admin` for normal git operations when credentials cooperate
-  - use `root` for Docker / PostgreSQL / logs / fallback deployment work
 
 ## Known Risks And Follow-Up
 

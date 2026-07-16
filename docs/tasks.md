@@ -136,35 +136,33 @@
 ## Priority Queue
 
 ### Task: [guest-001] Studio 访客模式
-- 状态：**TODO**（当前最高优先级新功能）
+- 状态：**DONE（P0+P1 已部署生产 2026-07-16）**；P2 未做
 - 留档：`docs/archive/guest-mode-studio-2026-07-13.md`
-- Handoff：`docs/archive/handoff-2026-07-13-guest-mode-wip.md`
+- 部署记录：`docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
 - 产品：
   - 登录页「访客模式」入口
   - Studio 四 Tab（生成/灵感/反馈/对话）能看不能用
   - 不含 Admin；写操作前后端双重拦截
-- 分期：P0 路由+生成只读 → P1 四 Tab+optional auth → P2 限流/测试/清理 useStudioAuth
-- 边界：
-  - 前端：`AuthContext.tsx`, `AuthGuard.tsx`, `LoginPage.tsx`, `router.tsx`, Studio 各页
-  - 后端：`auth.py` optional auth + 只读 GET 改造
-- 验收：
+- 已交付：P0 路由+生成只读；P1 四 Tab + `get_optional_auth_user` 只读 GET
+- 待做 P2：匿名限流、清理 `useStudioAuth`、E2E smoke
+- 验收（P0+P1）：
   1. 未登录可访客进四 Tab
   2. 提交/上传/对话/反馈全部不可用
   3. `/admin/*` 仍须登录
   4. 登录后全功能恢复
 
 ### Task: [image-vip-001] Haodeya GPT-Image-2-VIP 异步生图
-- 状态：**IN_PROGRESS**（代码完成，Studio 联调与部署未完成）
+- 状态：**IN_PROGRESS**（代码已随 2026-07-16 进生产镜像；**Admin Provider 未建，未对设计师开通**）
 - 留档：`docs/archive/haodeya-gpt-image-vip-async-2026-07.md`
-- Handoff：`docs/archive/handoff-2026-07-03-haodeya-gpt-image-vip-wip.md`
+- 部署记录：`docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
 - 边界：
   - `backend/app/services/task_executor.py`（`haodeya_async_image`）
-  - `backend/app/services/provider_strategy.py`
+  - `backend/app/services/provider_strategy.py`（**186b127**：勿把全部 Haodeya 当 VIP 异步）
   - `backend/tests/test_task_executor_toapis_image.py`
 - 验收：
-  1. Admin Provider @ `https://newapi.haodeya.xyz/v1`
+  1. Admin 新建 Provider：`gpt-image-2-vip` @ `https://newapi.haodeya.xyz/v1`
   2. Studio 1K/2K 出图成功
-  3. 单测 6 passed；独立 commit，不与 Agent WIP 混提
+  3. 确认 Gemini / 普通 gpt-image-2 **仍非** `haodeya_async_image`
 
 ### Task: [task-001] 收口当前生图工作台并清理遗留逻辑
 - 状态：DONE

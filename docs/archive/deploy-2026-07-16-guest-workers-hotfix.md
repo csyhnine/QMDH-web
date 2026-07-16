@@ -87,6 +87,7 @@ docker compose up -d --build --scale worker=3 backend worker
 - [ ] 参考图 OSS/CDN 图床（Grok 视频上游拉 `cityusbdisk.cn/media` 不稳定）
 - [ ] 视频 `STALE_RUNNING` 15min 与 900s 超时贴边，必要时放宽
 - [ ] root 密码曾用于自动化部署：建议轮换并用密钥登录
+- [ ] **Chat Agent**：仍在 `wip/agent-multi-chat-2026-07`，未合入、未部署（见下「相关文档」）
 
 ---
 
@@ -96,3 +97,4 @@ docker compose up -d --build --scale worker=3 backend worker
 - `docs/archive/haodeya-gpt-image-vip-async-2026-07.md`
 - `docs/cpa-gemini-image-integration.md`
 - `docs/archive/haodeya-image-model-routing-2026-07.md`
+- Agent 现状：`docs/archive/handoff-2026-07-16-agent-wip-status.md`

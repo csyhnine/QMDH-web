@@ -16,22 +16,23 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Current Baseline
 
-- **Active development sequence**: `docs/tasks.md` Priority Queue（访客 P2 / VIP Provider 接入 / OSS 图床）
-- Current branch: `main` @ **`186b127`**
-- Production: **`https://cityusbdisk.cn`** — Git **`186b127`**（2026-07-16 部署：访客模式 P0+P1、密码 4 位、worker×3、Gemini 异步误路由热修）
+- **Active development sequence**: `docs/tasks.md` Priority Queue（VIP Provider / 访客 P2 / OSS；Agent 在独立 WIP 分支）
+- Current branch: `main` @ **`186b127`**（文档更新后可能略超前）
+- Production: **`https://cityusbdisk.cn`** — Git **`186b127`**（2026-07-16：访客 P0+P1、密码 4 位、worker×3、Gemini 异步热修）
 - Deploy archive: `docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
-- Chat Agent direction: **Web `/studio/chat` = 唯一带 tools 入口**；Studio 浮动助手已下线；OpenClaw/skills 仍走 `/agent/*` + deprecated `/studio-agent/assist`
-- Agent roadmap（详见 `docs/tasks.md`）:
-  - **B1 DONE（本地）**: `agent_mode` + 院内只读 tools
-  - **确认顺序**: **agent-gov-001 → chat-b2-001 → ref-intent-001（B3）**
-  - 并行可选: `agent-memory-001`、`crawl-001` C1（B3 前置）
+- **Chat Agent（重要）**：
+  - 生产 / 当前 `main`：`/studio/chat` = **纯 LLM**，**无** `agent_mode`
+  - 方向仍是：Web Chat = 未来唯一带 tools 入口；OpenClaw/skills 走 `/agent/*`；`/studio-agent/assist` deprecated
+  - 代码在 **`wip/agent-multi-chat-2026-07` @ `4b0a5b3`**（未合入、未部署）
+  - 现状交接：**`docs/archive/handoff-2026-07-16-agent-wip-status.md`**
+  - 建议合入切片：B1 → gov → B2 → multi/crawl/ref-intent（勿整包一次上）
 - Local dev URLs:
   - frontend: `http://127.0.0.1:18080`
   - backend: `http://127.0.0.1:18010`
 - Local helper commands:
   - startup: `cmd /c start-dev.cmd`
   - build: `npm run build`
-  - smoke: `npm run smoke:studio`, `npm run smoke:chat`（可选 `agent_mode` SSE；`QMDH_SMOKE_AGENT_MODE=0` 跳过）
+  - smoke: `npm run smoke:studio`, `npm run smoke:chat`（`agent_mode` SSE **仅 WIP 分支**；当前 `main` 勿假定有）
   - backend slice: `backend\.venv\Scripts\python.exe -m pytest tests\test_database_auth.py -q`
 - Do not commit: `storage/`, `tmp/`, `.env`, `backend/app.db`, `frontend/dist/`, `node_modules/`, `assets/` 本地截图
 

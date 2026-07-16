@@ -135,6 +135,20 @@
 
 ## Priority Queue
 
+### Task: [agent-wip-001] Chat Agent / 多 Agent 合入（索引）
+- 状态：**BLOCKED / WIP 分支**（代码在 `wip/agent-multi-chat-2026-07` @ `4b0a5b3`；**未合 `main`、未上生产**）
+- 现状交接：`docs/archive/handoff-2026-07-16-agent-wip-status.md`
+- 架构留档：`docs/archive/handoff-2026-07-03-agent-multi-chat-wip.md`
+- WIP 内已完成（均未上生产）：`chat-004` B1、`agent-gov-001` MVP、`chat-b2-001`、`agent-multi-001/002/003`、`crawl-001` C1+C2、`ref-intent-001` MVP
+- 未做：crawl C3；与当前 `main`（`186b127`+）rebase；按切片拆 PR
+- 拆 PR 原因：范围约 92 文件 / +1.2 万行；**不是**又堆成单个 App.tsx（局部偏肥：`routers/agent.py`、`studio_agent/agent.py`）
+- 建议切片：B1 → gov → B2 → multi/crawl/ref-intent
+- 约束：勿与 VIP / 生图路由 / 访客热修混 PR；部署需 migration；Meili 可选降级
+- 验收（合入后）：
+  1. 生产或预发 `/studio/chat` 可开 `agent_mode` 且只读 tools 出卡片
+  2. 未开 Agent 的对话路径不回归
+  3. Gemini / 普通生图路由不受影响
+
 ### Task: [guest-001] Studio 访客模式
 - 状态：**DONE（P0+P1 已部署生产 2026-07-16）**；P2 未做
 - 留档：`docs/archive/guest-mode-studio-2026-07-13.md`

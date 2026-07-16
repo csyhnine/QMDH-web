@@ -28,13 +28,15 @@
 - Next step: rebase 到 `main` 后按 B1→gov→B2 拆 PR（勿整包上）
 - Safe to hand off: **Yes**
 
-### [2026-07-16] VIP 异步出图 — **代码已在生产，可接 Provider**
+### [2026-07-16] VIP 异步出图 — **代码在生产；下载 UA 热修本地已修，待部署**
 - Role: `gpt-image-2-vip` 异步生图
-- Production: 镜像含 `haodeya_async_image`（`186b127`）；异步默认**仅** VIP SKU，不误伤 Gemini
-- **阻塞点只剩运维配置**：Admin 新建 Provider + Key + Studio 1K/2K smoke
-- Archive: **`docs/archive/haodeya-gpt-image-vip-async-2026-07.md`**
-- 配置摘要：`model_name=gpt-image-2-vip`，`base_url=https://newapi.haodeya.xyz/v1`，timeout≥600
-- Next step: Admin 建号 → 1K/2K 各测一张 → 确认普通 gpt-image-2 / Gemini 仍走同步策略
-- Safe to hand off: **Yes**
+- Production: 镜像含 `haodeya_async_image`（`186b127`）
+- **事故**：创建/轮询成功、已扣费，但「下载生成结果失败」HTTP 403 / CF 1010  
+  根因：`_download_generated_image` 裸 `urlopen` → Python-urllib 默认 UA 被 `files.toapis.com` 拦截  
+  修复：下载带 `User-Agent: Go-http-client/1.1`（本地已改，**未部署**）
+- Archive: **`docs/archive/haodeya-gpt-image-vip-async-2026-07.md`** §3.2
+- 配置：`model_name=gpt-image-2-vip`，`base_url=https://newapi.haodeya.xyz/v1`，timeout≥600
+- Next step: commit + 部署 backend/worker → 用**已有 completed URL** 或新任务测下载（勿盲目重提扣费）
+- Safe to hand off: **Yes**（修复在工作区）
 
 <!-- 生产部署访客/worker：docs/archive/deploy-2026-07-16-guest-workers-hotfix.md -->

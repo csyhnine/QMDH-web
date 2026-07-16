@@ -1436,6 +1436,9 @@ def _submit_image_generation_request(
         raise ValueError(f"Image generation request failed: {exc.reason}") from exc
 
 
+_DOWNLOAD_USER_AGENT = "Go-http-client/1.1"
+
+
 def _extension_for_downloaded_image(image_url: str, content_type: str | None, fallback: str) -> str:
     if content_type:
         guessed = mimetypes.guess_extension(content_type.split(";", 1)[0].strip().lower(), strict=False)
@@ -1452,8 +1455,14 @@ def _extension_for_downloaded_image(image_url: str, content_type: str | None, fa
 
 
 def _download_generated_image(image_url: str, *, timeout_seconds: float) -> tuple[bytes, str | None]:
+    # files.toapis.com rejects Python-urllib default / empty UA (Cloudflare 1010).
+    # Haodeya confirmed: use Go-http-client/1.1 or Mozilla/5.0; do not re-submit on download 403.
+    request = Request(
+        image_url,
+        headers={"User-Agent": _DOWNLOAD_USER_AGENT},
+    )
     try:
-        with urlopen(image_url, timeout=timeout_seconds) as response:
+        with urlopen(request, timeout=timeout_seconds) as response:
             payload = response.read()
             content_type = None
             if hasattr(response, "headers") and response.headers is not None:

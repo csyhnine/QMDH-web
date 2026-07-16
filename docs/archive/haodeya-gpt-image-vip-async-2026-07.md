@@ -68,7 +68,23 @@ GET https://newapi.haodeya.xyz/v1/images/generations/{task_id}
 
 **禁止**走 `/v1/tasks/{task_id}` 等其他路径（2026-07-03 上游明确要求；代码已去掉 404 回退）。
 
-### 3.2 请求体
+### 3.2 下载结果图（必做）
+
+`result.data[0].url` 常指向 `https://files.toapis.com/...`。下载时必须带非空 UA：
+
+```
+User-Agent: Go-http-client/1.1
+```
+
+（`Mozilla/5.0` 亦可。）**禁止** Python-urllib 默认 UA / 空 UA，否则 Cloudflare **1010 → HTTP 403**，表现为「下载生成结果失败：上游拒绝了当前凭证或权限」。
+
+注意：创建任务与轮询成功、余额已扣时，若仅下载 403，**改 UA 重下同一 url**，勿盲目重提任务重复扣费。结果链接有 `expires_at`，尽快下载。
+
+代码：`task_executor._download_generated_image`（`_DOWNLOAD_USER_AGENT`）。
+
+---
+
+### 3.3 请求体
 
 **1K 文生图：**
 
@@ -120,12 +136,12 @@ GET https://newapi.haodeya.xyz/v1/images/generations/{task_id}
 - 必须 **HTTPS 公网 URL**；不支持 base64
 - 本地路径会通过 `resolve_public_media_url` 转成公网 URL（依赖 `public_media_base_url` 配置）
 
-### 3.3 画幅 `size`
+### 3.4 画幅 `size`
 
 - 传 **比例字符串**（如 `16:9`、`1:1`），**不是**像素 `1024x1024`
 - 来自 Studio `aspect_ratio`，经 `resolve_image_aspect_ratio` 解析
 
-### 3.4 model 与 resolution 必须一致
+### 3.5 model 与 resolution 必须一致
 
 | Studio 档位 | 当前实际上游 `model` | body `resolution` |
 | --- | --- | --- |

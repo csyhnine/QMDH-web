@@ -11,7 +11,7 @@ os.environ.setdefault("QMDH_OPENAI_IMAGE_API_KEY", "test-key")
 
 from app.core.config import ImageProviderProfile
 from app.services.model_registry import ProviderDefinition
-from app.services.task_executor import OpenAIImageProviderAdapter
+from app.services.task_executor import OpenAIImageProviderAdapter, _download_generated_image, _DOWNLOAD_USER_AGENT
 
 
 class _FakeResponse:
@@ -286,6 +286,21 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
         self.assertTrue(submit_request.full_url.endswith("/images/generations"))
         submit_body = json.loads(submit_request.data.decode("utf-8"))
         self.assertIn("image_urls", submit_body)
+
+    def test_download_generated_image_sends_non_python_user_agent(self) -> None:
+        image_url = "https://files.toapis.com/generated/demo.png"
+        with patch(
+            "app.services.task_executor.urlopen",
+            return_value=_FakeBinaryResponse(b"\x89PNG\r\n\x1a\n", "image/png"),
+        ) as mocked_urlopen:
+            payload, content_type = _download_generated_image(image_url, timeout_seconds=30)
+
+        self.assertEqual(payload[:4], b"\x89PNG")
+        self.assertEqual(content_type, "image/png")
+        request = mocked_urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, image_url)
+        self.assertEqual(request.get_header("User-agent"), _DOWNLOAD_USER_AGENT)
+        self.assertNotIn("Python-urllib", request.get_header("User-agent") or "")
 
 
 if __name__ == "__main__":

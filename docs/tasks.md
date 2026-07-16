@@ -172,10 +172,11 @@
 - 文件：`ChatConversationNav.tsx`、`chatRoundUtils.ts`、`ChatPage.tsx`、`styles.css`
 
 ### Task: [image-vip-001] Haodeya GPT-Image-2-VIP 异步生图
-- 状态：**READY_TO_CONFIGURE**（代码已在生产 `186b127`；**Admin Provider 未建** → 对设计师未开通）
-- 留档：`docs/archive/haodeya-gpt-image-vip-async-2026-07.md`
+- 状态：**READY_TO_CONFIGURE / 下载 UA 热修待部署**（异步链路可用；下载 `files.toapis.com` 须带 UA，见 `task_executor._DOWNLOAD_USER_AGENT`）
+- 留档：`docs/archive/haodeya-gpt-image-vip-async-2026-07.md`（§3.2 下载 UA）
 - 部署记录：`docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
-- **可以接**：异步出图链路已在镜像；下一步只需 Admin 建 `gpt-image-2-vip` + Key + Studio 联调
+- **已知坑（2026-07-16）**：创建+轮询成功但预览失败 → Cloudflare 1010，因裸 `urlopen(url)` 默认 UA；已改为 `Go-http-client/1.1`，**需部署 backend/worker**
+- **可以接**：Admin 建 `gpt-image-2-vip` + Key；部署 UA 热修后再测，勿对已 completed 任务盲目重提重复扣费
 - 边界：
   - `backend/app/services/task_executor.py`（`haodeya_async_image`）
   - `backend/app/services/provider_strategy.py`（**186b127**：勿把全部 Haodeya 当 VIP 异步）

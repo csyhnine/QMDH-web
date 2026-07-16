@@ -44,5 +44,6 @@ export function buildStudioTaskActionsOptions({
     studioForm: controllerState.studioForm,
     studioTemplates,
     submissionInFlightRef: controllerState.submissionInFlightRef,
+    pushLoadError: controllerState.pushLoadError,
   };
 }

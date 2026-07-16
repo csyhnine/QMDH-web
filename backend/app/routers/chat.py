@@ -9,7 +9,7 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_auth_user
+from app.core.auth import get_current_auth_user, get_optional_auth_user
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import ChatMessage, Conversation, ProviderProfile, User
@@ -70,7 +70,7 @@ def _verify_owner(db: Session, conversation_id: int, user_id: int) -> Conversati
 @router.get("/models", response_model=list[ChatModelOut])
 def list_chat_models(
     db: Session = Depends(get_db),
-    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    auth_user: AuthUserProfile | None = Depends(get_optional_auth_user),
 ) -> list[ChatModelOut]:
     del auth_user
     models = get_chat_models(db)
@@ -141,8 +141,10 @@ def create_conversation(
 @router.get("/conversations", response_model=list[ConversationOut])
 def list_conversations(
     db: Session = Depends(get_db),
-    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    auth_user: AuthUserProfile | None = Depends(get_optional_auth_user),
 ) -> list[ConversationOut]:
+    if auth_user is None:
+        return []
     conversations = db.scalars(
         select(Conversation)
         .where(Conversation.user_id == auth_user.user_id)

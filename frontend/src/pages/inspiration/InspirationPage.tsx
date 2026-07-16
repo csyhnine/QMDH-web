@@ -1,6 +1,7 @@
 import { type ChangeEvent, type DragEvent, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type InspirationPost } from "../../api";
+import { useAuth } from "../../context/AuthContext";
 import { useServerSearch } from "../../lib/search/useServerSearch";
 import { validateReferenceImageSize } from "../../utils/uploads";
 import {
@@ -52,6 +53,7 @@ export default function InspirationPage({
   mode = "studio",
 }: InspirationPageProps) {
   const navigate = useNavigate();
+  const { isGuest } = useAuth();
   const [category, setCategory] = useState("全部");
   const [sourceFilter, setSourceFilter] = useState<(typeof SOURCE_FILTERS)[number]["key"]>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -627,7 +629,12 @@ export default function InspirationPage({
                   <button
                     type="button"
                     className="ghost-button"
+                    disabled={isGuest}
                     onClick={async () => {
+                      if (isGuest) {
+                        setActionError("访客模式无法点赞，请先登录。");
+                        return;
+                      }
                       setActionError("");
                       try {
                         await api.likeInspiration(post.id);

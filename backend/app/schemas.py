@@ -277,7 +277,7 @@ class AuthLoginOut(BaseModel):
 
 class UserCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$")
-    password: str = Field(min_length=6, max_length=200)
+    password: str = Field(min_length=4, max_length=200)
     display_name: str = Field(default="", max_length=150)
     group_name: str = Field(default="", max_length=120)
     role: str = "designer"
@@ -302,7 +302,7 @@ class UserUpdate(BaseModel):
 
 
 class UserPasswordReset(BaseModel):
-    password: str = Field(min_length=6, max_length=200)
+    password: str = Field(min_length=4, max_length=200)
 
 
 class UserOut(BaseModel):

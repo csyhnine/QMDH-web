@@ -127,6 +127,55 @@ button {
   font-size: 1.8rem;
 }
 
+.auth-guest-divider {
+  text-align: center;
+  color: var(--text-secondary, #5f6b7a);
+  font-size: 0.88rem;
+}
+
+.auth-guest-button {
+  width: 100%;
+}
+
+.auth-guest-hint {
+  margin: 0;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-secondary, #5f6b7a);
+  line-height: 1.45;
+}
+
+.studio-guest-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.studio-guest-layout .studio-shell {
+  flex: 1;
+  min-height: 0;
+}
+
+.guest-login-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 20px;
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.12), rgba(37, 99, 235, 0.04));
+  border-bottom: 1px solid rgba(37, 99, 235, 0.18);
+  color: #1e3a8a;
+  font-size: 0.9rem;
+}
+
+.guest-login-banner-action {
+  flex-shrink: 0;
+}
+
+.rail-guest-card span {
+  color: var(--text-secondary, #5f6b7a);
+}
+
 .studio-shell {
   min-height: 100vh;
   display: grid;

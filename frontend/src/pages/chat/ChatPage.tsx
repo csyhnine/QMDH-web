@@ -39,7 +39,7 @@ function formatConversationTime(value: string) {
 }
 
 export default function ChatPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, isGuest } = useAuth();
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [activeChatId, setActiveChatId] = useState<number | null>(() => {
     const saved = localStorage.getItem(ACTIVE_CHAT_STORAGE_KEY);
@@ -84,7 +84,9 @@ export default function ChatPage() {
   });
 
   const streaming = status === "streaming" || status === "submitted";
-  const attachmentState = useChatAttachments({ disabled: streaming || activeChatId == null });
+  const attachmentState = useChatAttachments({
+    disabled: isGuest || streaming || activeChatId == null,
+  });
 
   function updateAutoScrollState() {
     const element = messagesRef.current;
@@ -209,6 +211,10 @@ export default function ChatPage() {
   }, [activeChatId, chatMessages.length, lastMessageContent]);
 
   async function handleCreateConversation() {
+    if (isGuest) {
+      setChatError("访客模式无法新建对话，请先登录。");
+      return;
+    }
     if (!selectedModel) {
       setChatError("请先选择模型。");
       return;
@@ -224,6 +230,10 @@ export default function ChatPage() {
   }
 
   async function handleDeleteConversation(conversationId: number) {
+    if (isGuest) {
+      setChatError("访客模式无法删除对话，请先登录。");
+      return;
+    }
     try {
       await api.deleteChatConversation(conversationId);
       const deletingActiveConversation = activeChatId === conversationId;
@@ -268,6 +278,10 @@ export default function ChatPage() {
   }
 
   async function handleSendMessage() {
+    if (isGuest) {
+      setChatError("访客模式无法发送消息，请先登录。");
+      return;
+    }
     const hasText = Boolean(chatInput.trim());
     const hasAttachments = attachmentState.attachments.length > 0;
     if ((!hasText && !hasAttachments) || !activeChatId || streaming || attachmentState.uploading) {
@@ -314,6 +328,7 @@ export default function ChatPage() {
   }
 
   const canSendMessage =
+    !isGuest &&
     Boolean(activeChatId) &&
     !streaming &&
     !attachmentState.uploading &&
@@ -323,9 +338,14 @@ export default function ChatPage() {
     <section className="chat-page">
       <aside className="chat-sidebar">
         <div className="chat-sidebar-head">
-          <button type="button" className="chat-new-btn" onClick={() => void handleCreateConversation()}>
+          <button
+            type="button"
+            className="chat-new-btn"
+            disabled={isGuest}
+            onClick={() => void handleCreateConversation()}
+          >
             <span>+</span>
-            新对话
+            {isGuest ? "登录后新建" : "新对话"}
           </button>
           {chatError ? <p className="chat-sidebar-error">{chatError}</p> : null}
         </div>
@@ -359,8 +379,8 @@ export default function ChatPage() {
             ))
           ) : (
             <div className="chat-conv-empty">
-              <strong>还没有对话</strong>
-              <span>选择模型后，新建一个会话开始聊天。</span>
+              <strong>{isGuest ? "登录后开始对话" : "还没有对话"}</strong>
+              <span>{isGuest ? "访客模式可浏览对话界面与模型列表，登录后可新建会话。" : "选择模型后，新建一个会话开始聊天。"}</span>
             </div>
           )}
         </div>
@@ -540,9 +560,9 @@ export default function ChatPage() {
                       void handleSendMessage();
                     }
                   }}
-                  placeholder="和我聊聊吧，可附带图片或文档"
+                  placeholder={isGuest ? "登录后可发送消息" : "和我聊聊吧，可附带图片或文档"}
                   rows={1}
-                  disabled={streaming || attachmentState.uploading}
+                  disabled={isGuest || streaming || attachmentState.uploading}
                 />
                 <button
                   type="button"
@@ -567,8 +587,8 @@ export default function ChatPage() {
               </div>
             ) : (
               <div className="chat-empty-inner">
-                <h2>QMDH Chat</h2>
-                <p>选择模型并创建新对话后，就可以开始聊天了。</p>
+                <h2>{isGuest ? "访客模式" : "QMDH Chat"}</h2>
+                <p>{isGuest ? "登录后可选择模型并新建会话，与 AI 对话。" : "选择模型并创建新对话后，就可以开始聊天了。"}</p>
               </div>
             )}
           </div>

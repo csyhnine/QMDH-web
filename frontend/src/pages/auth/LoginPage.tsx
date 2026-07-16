@@ -12,12 +12,17 @@ import {
 export default function LoginPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, enterGuestMode } = useAuth();
   const remembered = loadRememberedLoginCredentials();
   const [loginName, setLoginName] = useState(remembered.name);
   const [loginPassword, setLoginPassword] = useState(remembered.password);
   const [rememberLogin, setRememberLogin] = useState(remembered.remember);
   const [loginError, setLoginError] = useState("");
+
+  function handleGuestMode() {
+    enterGuestMode();
+    navigate("/studio/generate", { replace: true });
+  }
 
   async function handleLogin(event: FormEvent) {
     event.preventDefault();
@@ -71,6 +76,11 @@ export default function LoginPage() {
         <button type="submit" className="submit-button">
           登录
         </button>
+        <div className="auth-guest-divider">或</div>
+        <button type="button" className="ghost-button auth-guest-button" onClick={handleGuestMode}>
+          访客模式
+        </button>
+        <p className="auth-guest-hint">无需登录，可浏览 Studio 界面（无法提交生成）</p>
       </form>
     </main>
   );

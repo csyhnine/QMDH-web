@@ -6,7 +6,7 @@ from sqlalchemy import and_, case, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditEventType, write_audit_log
-from app.core.auth import get_current_auth_user, has_content_ops_access, require_content_ops_access
+from app.core.auth import get_current_auth_user, get_optional_auth_user, has_content_ops_access, require_content_ops_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import PromptTemplate, PromptTemplateEvent, User
@@ -174,8 +174,21 @@ def _get_visible_template(db: Session, template_id: int, auth_user: AuthUserProf
 @router.get("", response_model=list[PromptTemplateOut])
 def list_prompt_templates(
     db: Session = Depends(get_db),
-    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    auth_user: AuthUserProfile | None = Depends(get_optional_auth_user),
 ) -> list[PromptTemplateOut]:
+    if auth_user is None:
+        templates = db.scalars(
+            select(PromptTemplate)
+            .join(PromptTemplate.user)
+            .where(PromptTemplate.scope == "shared")
+            .order_by(PromptTemplate.updated_at.desc(), PromptTemplate.id.desc())
+        ).all()
+        stats_map = _template_stats_map(db, [template.id for template in templates])
+        return [
+            _to_prompt_template_out(template, stats_map.get(template.id))
+            for template in templates
+        ]
+
     templates = db.scalars(
         select(PromptTemplate)
         .join(PromptTemplate.user)

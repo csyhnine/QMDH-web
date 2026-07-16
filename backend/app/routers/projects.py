@@ -6,7 +6,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditEventType, write_audit_log
-from app.core.auth import get_current_auth_user, has_admin_access
+from app.core.auth import get_current_auth_user, get_optional_auth_user, has_admin_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import Asset, DataClassification, Project, Task, User
@@ -114,8 +114,10 @@ def _to_project_out(project: Project, auth_user: AuthUserProfile, status_map: di
 @router.get("", response_model=list[ProjectOut])
 def list_projects(
     db: Session = Depends(get_db),
-    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    auth_user: AuthUserProfile | None = Depends(get_optional_auth_user),
 ) -> list[dict]:
+    if auth_user is None:
+        return []
     query = _apply_project_scope(
         select(Project).where(Project.archived_at.is_(None)).order_by(Project.code),
         auth_user,

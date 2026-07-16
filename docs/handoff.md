@@ -11,10 +11,22 @@
 
 ## Latest Handoffs
 
+### [2026-07-13] Studio 访客模式 — **待开发（当前最高优先级）**
+- Role: 登录页「访客模式」→ Studio 四 Tab 能看不能用
+- Branch: 建议 `main` 或 `feat/guest-mode-studio`；**代码未开始**
+- 产品已定：
+  - 入口：登录页按钮（非独立 /guest 路由）
+  - 范围：生成 / 灵感 / 反馈 / 对话 — 设计师可见即访客可见，**全部只读**
+  - 不含 Admin
+- Archive: **`docs/archive/guest-mode-studio-2026-07-13.md`**
+- Handoff: **`docs/archive/handoff-2026-07-13-guest-mode-wip.md`**
+- Next step: P0 — `AuthContext` + `AuthGuard` + `LoginPage` + 生成页只读
+- Safe to hand off: **Yes**
+
 ### [2026-07-03] Haodeya GPT-Image-2-VIP 异步生图 — **WIP，未部署**
 - Role: Haodeya 网关 VIP 异步生图（`gpt-image-2-vip`）对接
-- Branch: 本地 working tree，**改动未 commit**
-- Production: **未部署**；生产仍为此前基线（定价回填等已部署项与本次无关）
+- Branch: `main` @ **`1ed503d`**（已 push GitHub）
+- Production: **未部署** VIP 异步适配
 - Completed:
   - 策略 `haodeya_async_image`：`POST /images/generations` + GET 轮询 + `result.data[0].url`
   - 仅对接 **`https://newapi.haodeya.xyz/v1`**（不对接 ToAPI 直连）
@@ -25,8 +37,8 @@
   - Admin Provider + Key 配置
 - Archive: **`docs/archive/haodeya-gpt-image-vip-async-2026-07.md`**
 - Handoff: **`docs/archive/handoff-2026-07-03-haodeya-gpt-image-vip-wip.md`**
-- Next step: 本地 Studio 验收 → 独立 commit → 部署 backend/worker
-- Safe to hand off: **Yes**（文档 + 代码齐全；部署与联调未完成）
+- Next step: 本地 Studio 验收 → 部署 backend/worker
+- Safe to hand off: **Yes**
 
 ### [2026-06-26] v1.1.0 — push GitHub，**生产仍为 v1.0.0，勿部署**
 - Role: v1.1.0 功能合入、版本号管理、反馈多轮对话、上传限制、2K 生图与历史 meta

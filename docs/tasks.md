@@ -135,6 +135,24 @@
 
 ## Priority Queue
 
+### Task: [guest-001] Studio 访客模式
+- 状态：**TODO**（当前最高优先级新功能）
+- 留档：`docs/archive/guest-mode-studio-2026-07-13.md`
+- Handoff：`docs/archive/handoff-2026-07-13-guest-mode-wip.md`
+- 产品：
+  - 登录页「访客模式」入口
+  - Studio 四 Tab（生成/灵感/反馈/对话）能看不能用
+  - 不含 Admin；写操作前后端双重拦截
+- 分期：P0 路由+生成只读 → P1 四 Tab+optional auth → P2 限流/测试/清理 useStudioAuth
+- 边界：
+  - 前端：`AuthContext.tsx`, `AuthGuard.tsx`, `LoginPage.tsx`, `router.tsx`, Studio 各页
+  - 后端：`auth.py` optional auth + 只读 GET 改造
+- 验收：
+  1. 未登录可访客进四 Tab
+  2. 提交/上传/对话/反馈全部不可用
+  3. `/admin/*` 仍须登录
+  4. 登录后全功能恢复
+
 ### Task: [image-vip-001] Haodeya GPT-Image-2-VIP 异步生图
 - 状态：**IN_PROGRESS**（代码完成，Studio 联调与部署未完成）
 - 留档：`docs/archive/haodeya-gpt-image-vip-async-2026-07.md`

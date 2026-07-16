@@ -1,17 +1,21 @@
 import StudioAuthenticatedShell from "./StudioAuthenticatedShell";
 import StudioLoginView from "./StudioLoginView";
+import GuestLoginBanner from "./GuestLoginBanner";
+import { useAuth } from "../../context/AuthContext";
+import { GUEST_USER } from "../access/guestMode";
 import { useGenerateStudioController } from "./useGenerateStudioController";
 
 export default function GenerateStudioShell() {
+  const { isGuest, authReady: contextAuthReady } = useAuth();
   const studio = useGenerateStudioController();
   const { studioAuth } = studio;
   const { authReady, currentUser } = studioAuth;
 
-  if (!authReady) {
+  if (!authReady || !contextAuthReady) {
     return <div className="auth-shell">正在确认登录状态...</div>;
   }
 
-  if (!currentUser) {
+  if (!currentUser && !isGuest) {
     return (
       <StudioLoginView
         loginName={studioAuth.loginName}
@@ -26,5 +30,12 @@ export default function GenerateStudioShell() {
     );
   }
 
-  return <StudioAuthenticatedShell currentUser={currentUser} studio={studio} />;
+  const shellUser = currentUser ?? GUEST_USER;
+
+  return (
+    <div className={isGuest ? "studio-guest-layout" : undefined}>
+      {isGuest ? <GuestLoginBanner /> : null}
+      <StudioAuthenticatedShell currentUser={shellUser} studio={studio} />
+    </div>
+  );
 }

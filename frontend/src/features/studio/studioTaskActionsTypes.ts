@@ -30,4 +30,5 @@ export type UseStudioTaskActionsOptions = {
   studioForm: StudioFormState;
   studioTemplates: StudioTemplatesApi;
   submissionInFlightRef: MutableRef<boolean>;
+  pushLoadError: (message: string) => void;
 };

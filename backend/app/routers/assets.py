@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import can_access_project, get_current_auth_user
+from app.core.auth import can_access_project, get_current_auth_user, get_optional_auth_user
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import Asset, AssetBookmark, AssetType, InspirationPost, Project, ProviderCall, Task
@@ -184,9 +184,11 @@ def _decode_reference_upload(data_url: str) -> bytes:
 @router.get("", response_model=list[AssetOut])
 def list_assets(
     db: Session = Depends(get_db),
-    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    auth_user: AuthUserProfile | None = Depends(get_optional_auth_user),
     bookmarked: bool | None = None,
 ) -> list[AssetOut]:
+    if auth_user is None:
+        return []
     assets = db.scalars(select(Asset).order_by(Asset.created_at.desc())).all()
     owned_task_ids = _owned_task_ids(db, auth_user)
     accessible = [

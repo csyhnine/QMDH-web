@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
+import GuestLoginBanner from "../../features/studio/GuestLoginBanner";
 import { BrandIcon } from "./Brand";
 import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from "../../features/access/roleAccess";
 
@@ -41,7 +42,7 @@ const studioNavItems: Array<{ key: Exclude<StudioTab, "generate"> | "generate"; 
 
 export default function AppShell(props: AppShellProps) {
   const navigate = useNavigate();
-  const { currentUser, canUseOpsViews, logout } = useAuth();
+  const { currentUser, canUseOpsViews, isGuest, logout } = useAuth();
   const backofficeHome = defaultAdminHomePath(currentUser?.role);
 
   const className =
@@ -64,7 +65,9 @@ export default function AppShell(props: AppShellProps) {
   }
 
   return (
-    <div className={className}>
+    <div className={isGuest && props.kind === "studio" ? "studio-guest-layout" : undefined}>
+      {isGuest && props.kind === "studio" ? <GuestLoginBanner /> : null}
+      <div className={className}>
       <aside className="global-rail">
         <div className="rail-logo">
           <BrandIcon className="rail-logo-image" />
@@ -111,35 +114,54 @@ export default function AppShell(props: AppShellProps) {
               ))}
         </nav>
         <div className="rail-footer">
-          {currentUser ? (
-            <div className="rail-user-card">
-              <div className="rail-user-avatar">
-                {(currentUser.display_name || currentUser.name).slice(0, 1).toUpperCase()}
+          {isGuest && props.kind === "studio" ? (
+            <>
+              <div className="rail-user-card rail-guest-card">
+                <div className="rail-user-avatar">访</div>
+                <div>
+                  <small>当前模式</small>
+                  <strong>访客</strong>
+                  <span>登录后使用完整功能</span>
+                </div>
               </div>
-              <div>
-                <small>当前账号</small>
-                <strong>{currentUser.display_name || currentUser.name}</strong>
-                <span>@{currentUser.name}</span>
-              </div>
-            </div>
-          ) : null}
-          {props.kind === "admin" && canUseOpsViews ? (
-            <button type="button" className="rail-logout" onClick={() => navigate("/studio/generate")}>
-              创作台
-            </button>
-          ) : null}
-          {props.kind === "studio" && canUseOpsViews ? (
-            <button type="button" className="rail-logout" onClick={() => navigate(backofficeHome)}>
-              后台
-            </button>
-          ) : null}
-          <button type="button" className="rail-logout" onClick={() => void handleLogout()}>
-            退出
-          </button>
+              <button type="button" className="rail-logout" onClick={() => navigate("/login")}>
+                登录
+              </button>
+            </>
+          ) : (
+            <>
+              {currentUser ? (
+                <div className="rail-user-card">
+                  <div className="rail-user-avatar">
+                    {(currentUser.display_name || currentUser.name).slice(0, 1).toUpperCase()}
+                  </div>
+                  <div>
+                    <small>当前账号</small>
+                    <strong>{currentUser.display_name || currentUser.name}</strong>
+                    <span>@{currentUser.name}</span>
+                  </div>
+                </div>
+              ) : null}
+              {props.kind === "admin" && canUseOpsViews ? (
+                <button type="button" className="rail-logout" onClick={() => navigate("/studio/generate")}>
+                  创作台
+                </button>
+              ) : null}
+              {props.kind === "studio" && canUseOpsViews ? (
+                <button type="button" className="rail-logout" onClick={() => navigate(backofficeHome)}>
+                  后台
+                </button>
+              ) : null}
+              <button type="button" className="rail-logout" onClick={() => void handleLogout()}>
+                退出
+              </button>
+            </>
+          )}
         </div>
       </aside>
 
       <main className={mainClassName}>{props.children}</main>
+      </div>
     </div>
   );
 }

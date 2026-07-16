@@ -2,8 +2,10 @@ import StudioCanvasView from "./StudioCanvasView";
 import StudioWorkspacePane from "./StudioWorkspacePane";
 import { buildStudioCanvasProps } from "./studioCanvasProps";
 import type { StudioDesignerViewProps } from "./studioDesignerViewTypes";
+import { useAuth } from "../../context/AuthContext";
 
 export default function StudioDesignerView(props: StudioDesignerViewProps) {
+  const { isGuest } = useAuth();
   const {
     activeViewIsStudio,
     derivedState,
@@ -20,7 +22,7 @@ export default function StudioDesignerView(props: StudioDesignerViewProps) {
       {activeViewIsStudio ? (
         <StudioWorkspacePane
           activeProject={activeProject}
-          canCreateProjects
+          canCreateProjects={!isGuest}
           newProjectName={studioProjects.newProjectName}
           projects={state.projects}
           renameValue={studioProjects.renameValue}

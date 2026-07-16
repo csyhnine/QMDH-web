@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react";
 
 import { api, type Asset, type Task } from "../../api";
+import { useAuth } from "../../context/AuthContext";
 import type { StudioFormState } from "./studioTypes";
 import {
   applyTaskToComposerState,
@@ -34,7 +35,9 @@ export function useStudioTaskActions({
   studioForm,
   studioTemplates,
   submissionInFlightRef,
+  pushLoadError,
 }: UseStudioTaskActionsOptions) {
+  const { isGuest } = useAuth();
   const [regeneratingTaskId, setRegeneratingTaskId] = useState<number | null>(null);
   const [upscalingAssetKey, setUpscalingAssetKey] = useState<string | null>(null);
   const { submitStudioTask } = useStudioTaskSubmission({
@@ -67,6 +70,10 @@ export function useStudioTaskActions({
   }
 
   async function regenerateTask(task: Task, asset?: Asset) {
+    if (isGuest) {
+      pushLoadError("访客模式无法提交生成任务，请先登录。");
+      return;
+    }
     if (submissionInFlightRef.current) {
       historyFeedback.pushFeedback(task.id, "reuse", "info", "当前已有任务在提交，请稍候。");
       return;
@@ -91,6 +98,10 @@ export function useStudioTaskActions({
   }
 
   async function upscaleAsset(task: Task, asset: Asset, options: UpscaleOptions) {
+    if (isGuest) {
+      pushLoadError("访客模式无法提交生成任务，请先登录。");
+      return;
+    }
     if (!canUpscaleAsset(asset)) {
       historyFeedback.pushFeedback(task.id, "upscale", "error", "当前素材无法放大，请换一张图片重试。");
       return;
@@ -138,6 +149,10 @@ export function useStudioTaskActions({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isGuest) {
+      pushLoadError("访客模式无法提交生成任务，请先登录。");
+      return;
+    }
     await submitStudioTask(studioForm);
   }
 

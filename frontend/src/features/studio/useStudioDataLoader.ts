@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
 
 import { api, type AuthUser, type PromptTemplateRecord, type Task } from "../../api";
+import { useAuth } from "../../context/AuthContext";
 import type { LoadState } from "./studioTypes";
 
 type LoadDataOptions = {
@@ -22,9 +23,44 @@ export function useStudioDataLoader({
   setState,
   tasks,
 }: UseStudioDataLoaderOptions) {
+  const { isGuest } = useAuth();
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const isFetchingRef = useRef(false);
   const loadRequestIdRef = useRef(0);
+
+  async function loadGuestData(requestId: number) {
+    try {
+      const [health, providers, workflows, templates] = await Promise.all([
+        api.health(),
+        api.providers(),
+        api.workflows(),
+        api.promptTemplates().catch(() => []),
+      ]);
+
+      if (requestId !== loadRequestIdRef.current) return;
+
+      setState({
+        health: health.status,
+        projects: [],
+        providers,
+        workflows,
+        tasks: [],
+        assets: [],
+        error: "",
+        ready: true,
+      });
+      setPromptTemplates(templates);
+      setLastSyncedAt(new Date().toISOString());
+    } catch (error) {
+      if (requestId !== loadRequestIdRef.current) return;
+
+      setState((current) => ({
+        ...current,
+        health: "error",
+        error: error instanceof Error ? error.message : "加载失败",
+      }));
+    }
+  }
 
   async function loadData(options: LoadDataOptions = {}) {
     if (isFetchingRef.current && !options.force) return;
@@ -77,12 +113,18 @@ export function useStudioDataLoader({
   }
 
   useEffect(() => {
+    if (isGuest) {
+      const requestId = loadRequestIdRef.current + 1;
+      loadRequestIdRef.current = requestId;
+      void loadGuestData(requestId);
+      return;
+    }
     if (!currentUser) return;
     void loadData({ force: true });
-  }, [currentUser?.name]);
+  }, [isGuest, currentUser?.name]);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (isGuest || !currentUser) return;
     const hasRunningTask = tasks.some((task) => task.status === "pending" || task.status === "running");
     const intervalMs = hasRunningTask ? 2500 : 8000;
     const timer = window.setInterval(() => {
@@ -90,7 +132,7 @@ export function useStudioDataLoader({
     }, intervalMs);
 
     return () => window.clearInterval(timer);
-  }, [currentUser?.name, tasks]);
+  }, [currentUser?.name, isGuest, tasks]);
 
   return {
     lastSyncedAt,

@@ -1,6 +1,8 @@
 import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { api, type FeedbackMessage, type FeedbackRecord } from "../../api";
+import { useAuth } from "../../context/AuthContext";
 import { formatChinaMonthDayTime } from "../../lib/datetime";
 import { formatUploadSize, MAX_REFERENCE_UPLOAD_BYTES, validateReferenceImageSize } from "../../utils/uploads";
 
@@ -65,6 +67,8 @@ function FeedbackMessageList({ messages }: { messages: FeedbackMessage[] }) {
 }
 
 export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetError }: FeedbackPageProps) {
+  const navigate = useNavigate();
+  const { isGuest } = useAuth();
   const [draft, setDraft] = useState<Draft>(defaultDraft);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -77,6 +81,10 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isGuest) {
+      onSetError("访客模式无法提交反馈，请先登录。");
+      return;
+    }
     const title = draft.title.trim();
     const message = draft.message.trim();
     if (!title || !message) {
@@ -110,6 +118,10 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
 
   async function handleFollowUpSubmit(event: FormEvent<HTMLFormElement>, feedbackId: number) {
     event.preventDefault();
+    if (isGuest) {
+      onSetError("访客模式无法回复反馈，请先登录。");
+      return;
+    }
     const message = (followUpDrafts[feedbackId] || "").trim();
     if (!message) {
       onSetError("请先填写补充说明。");
@@ -130,6 +142,10 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
   }
 
   async function handleUploadFiles(files: File[]) {
+    if (isGuest) {
+      onSetError("访客模式无法上传截图，请先登录。");
+      return;
+    }
     if (files.length === 0) return;
     const remainingSlots = 4 - draft.attachments.length;
     if (remainingSlots <= 0) {
@@ -281,12 +297,22 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
             </div>
             {error ? <div className="floating-error">{error}</div> : null}
             <div className="template-editor-actions">
-              <button type="submit" className="submit-button" disabled={saving || uploading}>
-                {saving ? "提交中..." : uploading ? "上传截图中..." : "发送反馈"}
+              <button
+                type="submit"
+                className="submit-button"
+                disabled={isGuest || saving || uploading}
+              >
+                {isGuest ? "登录后发送反馈" : saving ? "提交中..." : uploading ? "上传截图中..." : "发送反馈"}
               </button>
-              <button type="button" className="ghost-button" onClick={onRefresh}>
-                刷新记录
-              </button>
+              {!isGuest ? (
+                <button type="button" className="ghost-button" onClick={onRefresh}>
+                  刷新记录
+                </button>
+              ) : (
+                <button type="button" className="ghost-button" onClick={() => navigate("/login")}>
+                  登录
+                </button>
+              )}
             </div>
           </form>
         </section>
@@ -301,8 +327,8 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
           <div className="feedback-thread-list">
             {feedbackItems.length === 0 ? (
               <div className="history-digest-empty">
-                <strong>还没有反馈记录</strong>
-                <p>提交第一条反馈后，后续讨论会显示在这里。</p>
+                <strong>{isGuest ? "登录后参与反馈" : "还没有反馈记录"}</strong>
+                <p>{isGuest ? "访客模式可浏览反馈界面，登录后可提交问题并与管理员对话。" : "提交第一条反馈后，后续讨论会显示在这里。"}</p>
               </div>
             ) : (
               feedbackItems.map((item) => (

@@ -40,12 +40,12 @@ def has_content_ops_access(role: str) -> bool:
     return has_backoffice_access(role)
 
 
-def get_current_auth_user(
-    authorization: str | None = Header(default=None),
-    x_qmdh_auth: str | None = Header(default=None),
-    x_qmdh_user: str | None = Header(default=None),
-    db: Session = Depends(get_db),
-) -> AuthUserProfile:
+def _resolve_auth_user(
+    authorization: str | None,
+    x_qmdh_auth: str | None,
+    x_qmdh_user: str | None,
+    db: Session,
+) -> AuthUserProfile | None:
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
         session = db.scalar(
@@ -59,7 +59,7 @@ def get_current_auth_user(
             )
         )
         if not session:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session")
+            return None
         return AuthUserProfile(
             name=session.user.name,
             token=token,
@@ -70,14 +70,14 @@ def get_current_auth_user(
         )
 
     if not x_qmdh_auth:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authentication token")
+        return None
 
     profile = settings.get_auth_user_profiles().get(x_qmdh_auth.strip())
     if not profile:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication token")
+        return None
 
     if x_qmdh_user and x_qmdh_user.strip() != profile.name:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Authenticated user does not match token")
+        return None
 
     return AuthUserProfile(
         name=profile.name,
@@ -87,6 +87,45 @@ def get_current_auth_user(
         user_id=profile.user_id,
         display_name=profile.display_name or profile.name,
     )
+
+
+def get_optional_auth_user(
+    authorization: str | None = Header(default=None),
+    x_qmdh_auth: str | None = Header(default=None),
+    x_qmdh_user: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> AuthUserProfile | None:
+    if x_qmdh_auth:
+        profile = settings.get_auth_user_profiles().get(x_qmdh_auth.strip())
+        if profile and x_qmdh_user and x_qmdh_user.strip() != profile.name:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Authenticated user does not match token",
+            )
+    return _resolve_auth_user(authorization, x_qmdh_auth, x_qmdh_user, db)
+
+
+def get_current_auth_user(
+    authorization: str | None = Header(default=None),
+    x_qmdh_auth: str | None = Header(default=None),
+    x_qmdh_user: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> AuthUserProfile:
+    auth_user = _resolve_auth_user(authorization, x_qmdh_auth, x_qmdh_user, db)
+    if auth_user is not None:
+        return auth_user
+
+    if authorization and authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session")
+
+    if x_qmdh_auth:
+        profile = settings.get_auth_user_profiles().get(x_qmdh_auth.strip())
+        if not profile:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication token")
+        if x_qmdh_user and x_qmdh_user.strip() != profile.name:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Authenticated user does not match token")
+
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authentication token")
 
 
 def get_current_agent_auth(

@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, st
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_auth_user
+from app.core.auth import get_current_auth_user, get_optional_auth_user
 from app.core.audit import write_audit_log
 from app.core.config import AuthUserProfile
 from app.core.config import settings
@@ -121,8 +121,10 @@ def _to_task_out(task: Task) -> TaskOut:
 @router.get("", response_model=list[TaskOut])
 def list_tasks(
     db: Session = Depends(get_db),
-    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    auth_user: AuthUserProfile | None = Depends(get_optional_auth_user),
 ) -> list[TaskOut]:
+    if auth_user is None:
+        return []
     recover_stale_tasks(db)
     query = (
         select(Task)

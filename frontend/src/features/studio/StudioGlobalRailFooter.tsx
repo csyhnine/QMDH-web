@@ -1,3 +1,6 @@
+import { useNavigate } from "react-router-dom";
+
+import { useAuth } from "../../context/AuthContext";
 import type { StudioGlobalRailFooterProps } from "./studioGlobalRailTypes";
 import { adminHomePath } from "./studioAccessUtils";
 import { formatDate, formatStatus } from "./studioUtils";
@@ -15,6 +18,29 @@ export default function StudioGlobalRailFooter({
   lastSyncedAt,
   onLogout,
 }: StudioGlobalRailFooterProps) {
+  const navigate = useNavigate();
+  const { isGuest } = useAuth();
+
+  if (isGuest) {
+    return (
+      <div className="rail-footer">
+        <div className="rail-user-card rail-guest-card">
+          <div className="rail-user-avatar">访</div>
+          <div>
+            <small>当前模式</small>
+            <strong>访客</strong>
+            <span>登录后使用完整功能</span>
+          </div>
+        </div>
+        <button type="button" className="rail-logout" onClick={() => navigate("/login")}>
+          登录
+        </button>
+        <div className={`rail-health rail-health-${health}`}>{formatStatus(health)}</div>
+        <span className="rail-sync">{lastSyncedAt ? formatDate(lastSyncedAt) : "等待同步"}</span>
+      </div>
+    );
+  }
+
   const displayName = currentUser.display_name || currentUser.name;
 
   return (

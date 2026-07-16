@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import { api } from "../../api";
+import { useAuth } from "../../context/AuthContext";
 import {
   buildReferenceUploadTracker,
   prepareReferenceUploadFiles,
@@ -42,6 +43,7 @@ export function useStudioReferenceUploads({
   setSubmissionTracker,
   studioForm,
 }: UseStudioReferenceUploadsOptions) {
+  const { isGuest } = useAuth();
   const [uploadingReference, setUploadingReference] = useState(false);
   const referenceUploadState = useStudioReferenceUploadState({ setStudioForm });
   const { referenceUploads, syncReferenceUploads } = referenceUploadState;
@@ -59,6 +61,11 @@ export function useStudioReferenceUploads({
   }
 
   async function handleReferenceFiles(files: File[]) {
+    if (isGuest) {
+      onError("访客模式无法上传参考图，请先登录。");
+      resetReferenceFileInput();
+      return;
+    }
     if (files.length === 0) {
       resetReferenceFileInput();
       return;
@@ -106,6 +113,10 @@ export function useStudioReferenceUploads({
   }
 
   function openReferencePicker() {
+    if (isGuest) {
+      onError("访客模式无法上传参考图，请先登录。");
+      return;
+    }
     fileInputRef.current?.click();
   }
 

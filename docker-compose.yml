@@ -97,6 +97,8 @@ services:
     build:
       context: ./backend
     command: ["python", "-m", "app.worker"]
+    deploy:
+      replicas: 3
     env_file:
       - ./.env
     environment:

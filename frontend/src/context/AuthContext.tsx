@@ -7,15 +7,26 @@ import {
   clearStoredAuthToken,
 } from "../api";
 import { canManageUsers as canManageUsersByRole, canUseBackoffice } from "../features/access/roleAccess";
+import { readGuestModeSession, writeGuestModeSession } from "../features/access/guestMode";
 
 // Re-export for convenience
 export type { AuthUser };
+
+export type AuthMode = "guest" | "authenticated";
 
 interface AuthContextValue {
   /** Current authenticated user, null if not logged in */
   currentUser: AuthUser | null;
   /** Whether auth state has been resolved (token checked) */
   authReady: boolean;
+  /** Guest vs normal session; guest is not authenticated */
+  authMode: AuthMode;
+  /** Shorthand for authMode === "guest" */
+  isGuest: boolean;
+  /** Enter guest mode without credentials */
+  enterGuestMode: () => void;
+  /** Leave guest mode without logging in */
+  exitGuestMode: () => void;
   /** Login with username/password. Throws on failure. */
   login: (username: string, password: string) => Promise<void>;
   /** Logout and clear session */
@@ -31,6 +42,19 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [isGuest, setIsGuest] = useState(() => readGuestModeSession());
+
+  const exitGuestMode = useCallback(() => {
+    writeGuestModeSession(false);
+    setIsGuest(false);
+  }, []);
+
+  const enterGuestMode = useCallback(() => {
+    clearStoredAuthToken();
+    setCurrentUser(null);
+    writeGuestModeSession(true);
+    setIsGuest(true);
+  }, []);
 
   // Check existing token on mount
   useEffect(() => {
@@ -39,6 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthReady(true);
       return;
     }
+
+    writeGuestModeSession(false);
+    setIsGuest(false);
 
     api.me()
       .then((user) => setCurrentUser(user))
@@ -51,6 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (username: string, password: string) => {
     const response = await api.login(username, password);
+    writeGuestModeSession(false);
+    setIsGuest(false);
     setStoredAuthToken(response.token);
     setCurrentUser(response.user);
   }, []);
@@ -63,13 +92,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     clearStoredAuthToken();
     setCurrentUser(null);
+    writeGuestModeSession(false);
+    setIsGuest(false);
   }, []);
 
   const canManageUsers = canManageUsersByRole(currentUser?.role);
   const canUseOpsViews = canUseBackoffice(currentUser?.role);
+  const authMode: AuthMode = isGuest ? "guest" : "authenticated";
 
   return (
-    <AuthContext.Provider value={{ currentUser, authReady, login, logout, canManageUsers, canUseOpsViews }}>
+    <AuthContext.Provider
+      value={{
+        currentUser,
+        authReady,
+        authMode,
+        isGuest,
+        enterGuestMode,
+        exitGuestMode,
+        login,
+        logout,
+        canManageUsers,
+        canUseOpsViews,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -411,6 +411,43 @@ class DatabaseAuthTests(unittest.TestCase):
         )
         self.assertEqual(reset.status_code, 200)
 
+    def test_user_password_allows_four_characters(self) -> None:
+        admin_token = self.login("admin", "admin-pass")
+
+        too_short = self.client.post(
+            "/users",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={
+                "name": "short.pwd",
+                "password": "123",
+                "display_name": "Too Short",
+                "role": "designer",
+            },
+        )
+        self.assertEqual(too_short.status_code, 422, too_short.text)
+
+        created = self.client.post(
+            "/users",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={
+                "name": "four.digit",
+                "password": "1234",
+                "display_name": "Four Digit",
+                "role": "designer",
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+
+        reset = self.client.post(
+            f"/users/{created.json()['id']}/reset-password",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"password": "5678"},
+        )
+        self.assertEqual(reset.status_code, 200, reset.text)
+
+        login = self.client.post("/auth/login", json={"username": "four.digit", "password": "5678"})
+        self.assertEqual(login.status_code, 200, login.text)
+
     def test_legacy_gpt_image_cny_history_is_excluded_from_operational_spend_views(self) -> None:
         admin_token = self.login("admin", "admin-pass")
         designer_group_name = ""

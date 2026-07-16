@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.audit import write_audit_log
-from app.core.auth import get_current_auth_user, require_content_ops_access
+from app.core.auth import get_current_auth_user, get_optional_auth_user, require_content_ops_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import User, UserFeedback, UserFeedbackMessage
@@ -160,8 +160,10 @@ def _append_feedback_message(
 @router.get("", response_model=list[UserFeedbackOut])
 def list_my_feedback(
     db: Session = Depends(get_db),
-    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    auth_user: AuthUserProfile | None = Depends(get_optional_auth_user),
 ) -> list[UserFeedbackOut]:
+    if auth_user is None:
+        return []
     user = _resolve_db_user(db, auth_user)
     feedback_items = db.scalars(
         _feedback_query()

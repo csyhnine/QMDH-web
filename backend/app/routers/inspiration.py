@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_auth_user, has_content_ops_access, require_content_ops_access
+from app.core.auth import get_current_auth_user, get_optional_auth_user, has_content_ops_access, require_content_ops_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import InspirationPost
@@ -61,8 +61,9 @@ def _to_out(post: InspirationPost) -> InspirationPostOut:
 def list_inspiration(
     category: str | None = None,
     db: Session = Depends(get_db),
-    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    auth_user: AuthUserProfile | None = Depends(get_optional_auth_user),
 ) -> list[InspirationPostOut]:
+    del auth_user
     query = select(InspirationPost).order_by(InspirationPost.created_at.desc())
     if category and category != "全部":
         query = query.where(InspirationPost.category == category)

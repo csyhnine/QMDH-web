@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_auth_user, require_backoffice_access
+from app.core.auth import get_current_auth_user, get_optional_auth_user, require_backoffice_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.integrations.search.service import check_meilisearch_health, get_search_engine_name, search_domain
@@ -69,7 +69,7 @@ def search(
     domain: str = Query(default="inspiration", pattern="^(inspiration|templates)$"),
     limit: int = Query(default=20, ge=1, le=50),
     db: Session = Depends(get_db),
-    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    auth_user: AuthUserProfile | None = Depends(get_optional_auth_user),
 ) -> SearchResponseOut:
     del auth_user
     hits = search_domain(db, domain=domain, query=q, limit=limit)

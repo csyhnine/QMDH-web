@@ -20,7 +20,7 @@ The server runs the repo with Docker Compose:
 
 - `frontend`: static app + `/api` reverse proxy
 - `backend`: FastAPI
-- `worker`: async task worker
+- `worker`: async task worker（默认 **3** 个副本，并行消费 Redis 队列；可用 `docker compose up -d --scale worker=N` 临时调整）
 - `postgres`: main business database
 - `redis`: queue / lock runtime
 

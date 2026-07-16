@@ -551,7 +551,8 @@ def _uses_haodeya_async_image_gateway(profile: ImageProviderProfile) -> bool:
     if flavor in {"haodeya_async_image", "toapis"}:
         return True
     identity = f"{profile.provider_name} {profile.model_name} {profile.base_url}".lower()
-    return "newapi.haodeya.xyz" in identity or "gpt-image-2-vip" in identity
+    # Do not treat every Haodeya base_url as async image (Gemini CPA shares the gateway).
+    return "gpt-image-2-vip" in identity or "gpt-image-vip" in identity or "haodeya_async_image" in identity
 
 
 def _uses_toapis_gateway(profile: ImageProviderProfile) -> bool:

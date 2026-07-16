@@ -184,8 +184,17 @@ def profile_prefers_bigjpg_upscale(*, provider_name: str, model_name: str, base_
 
 
 def profile_prefers_haodeya_async_image(*, provider_name: str, model_name: str, base_url: str) -> bool:
+    """Only VIP / async OpenAI-image SKUs — not every Haodeya gateway profile.
+
+    Gemini CPA (`gemini-3.1-flash-image`) also uses `newapi.haodeya.xyz` but must stay on
+    `chat_completions_image` / `chat_modalities_image`, not `/images/generations` async.
+    """
     identity = f"{provider_name} {model_name} {base_url}".lower()
-    return "newapi.haodeya.xyz" in identity or "gpt-image-2-vip" in identity
+    return (
+        "gpt-image-2-vip" in identity
+        or "gpt-image-vip" in identity
+        or "haodeya_async_image" in identity
+    )
 
 
 def profile_prefers_toapis_image(*, provider_name: str, model_name: str, base_url: str) -> bool:

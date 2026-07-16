@@ -203,14 +203,43 @@ class HaodeyaGrokVideoAdapterTests(unittest.TestCase):
         self.assertEqual(len(submit_body["input_references"]), 2)
         self.assertNotIn("frame_images", submit_body)
 
-    def test_rejects_mixed_duration(self) -> None:
+    def test_resolved_sku_duration_wins_over_payload_duration(self) -> None:
+        """After Admin remap / SKU resolve, request duration follows SKU, not stale payload duration."""
         profile = self._profile()
         adapter = HaodeyaGrokVideoProviderAdapter(
             ProviderDefinition("grok_i2v_5s", profile.model_name, ["video.generate"], adapter_kind="haodeya_grok"),
             profile,
         )
-        with self.assertRaisesRegex(Exception, "duration=5"):
-            adapter.execute("video.generate", {"prompt": "test", "duration": 10})
+        submit_body: dict | None = None
+
+        def fake_urlopen(request, timeout):
+            nonlocal submit_body
+            url = request.full_url
+            if url.endswith("/videos") and request.method == "POST":
+                submit_body = json.loads(request.data.decode("utf-8"))
+                return _FakeJsonResponse({"id": "job-dur", "status": "pending"})
+            if url.endswith("/videos/job-dur"):
+                return _FakeJsonResponse({"id": "job-dur", "status": "completed"})
+            if url.endswith("/videos/job-dur/content"):
+                return _FakeBinaryResponse(b"fake-video-bytes")
+            raise AssertionError(f"Unexpected request: {url}")
+
+        with patch.dict(os.environ, {"QMDH_MEDIA_ROOT": self.tempdir}, clear=False):
+            with patch("app.services.provider_adapters.haodeya_grok_video.urlopen", side_effect=fake_urlopen):
+                with patch("app.services.provider_adapters.haodeya_grok_video.sleep"):
+                    adapter.execute(
+                        "video.generate",
+                        {
+                            "prompt": "test",
+                            "video_sku": "x-ai/grok-imagine-video-i2v",
+                            "duration": 10,  # stale / mismatched; SKU is 5s
+                            "resolution": "720p",
+                        },
+                    )
+
+        assert submit_body is not None
+        self.assertEqual(submit_body["model"], "x-ai/grok-imagine-video-i2v")
+        self.assertEqual(submit_body["duration"], 5)
 
     def test_rejects_placeholder_profile_model_without_video_sku(self) -> None:
         profile = ImageProviderProfile(
@@ -277,6 +306,49 @@ class HaodeyaGrokVideoAdapterTests(unittest.TestCase):
         assert submit_body is not None
         self.assertEqual(submit_body["model"], "x-ai/grok-imagine-video-i2v")
         self.assertNotIn("haodeya_grok", json.dumps(submit_body))
+
+    def test_admin_sku_override_remaps_selected_tier(self) -> None:
+        profile = replace(
+            self._profile(),
+            adapter_config={
+                "upstream_sku_i2v_5s": "x-ai/grok-imagine-video-i2v-10s",
+            },
+        )
+        adapter = HaodeyaGrokVideoProviderAdapter(
+            ProviderDefinition("grok_i2v_5s", profile.model_name, ["video.generate"], adapter_kind="haodeya_grok"),
+            profile,
+        )
+        submit_body: dict | None = None
+
+        def fake_urlopen(request, timeout):
+            nonlocal submit_body
+            url = request.full_url
+            if url.endswith("/videos") and request.method == "POST":
+                submit_body = json.loads(request.data.decode("utf-8"))
+                return _FakeJsonResponse({"id": "job-override", "status": "pending"})
+            if url.endswith("/videos/job-override"):
+                return _FakeJsonResponse({"id": "job-override", "status": "completed"})
+            if url.endswith("/videos/job-override/content"):
+                return _FakeBinaryResponse(b"fake-video-bytes")
+            raise AssertionError(f"Unexpected request: {url}")
+
+        with patch.dict(os.environ, {"QMDH_MEDIA_ROOT": self.tempdir}, clear=False):
+            with patch("app.services.provider_adapters.haodeya_grok_video.urlopen", side_effect=fake_urlopen):
+                with patch("app.services.provider_adapters.haodeya_grok_video.sleep"):
+                    outcome = adapter.execute(
+                        "video.generate",
+                        {
+                            "prompt": "remapped sku",
+                            "video_sku": "x-ai/grok-imagine-video-i2v",
+                            "duration": 5,
+                            "resolution": "720p",
+                        },
+                    )
+
+        assert submit_body is not None
+        self.assertEqual(submit_body["model"], "x-ai/grok-imagine-video-i2v-10s")
+        self.assertEqual(submit_body["duration"], 10)
+        self.assertEqual(outcome.result["video_sku"], "x-ai/grok-imagine-video-i2v-10s")
 
     def test_rejects_deprecated_model(self) -> None:
         profile = ImageProviderProfile(

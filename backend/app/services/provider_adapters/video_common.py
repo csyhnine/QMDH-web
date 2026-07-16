@@ -42,13 +42,19 @@ def video_prompt(payload: dict) -> str:
 
 def resolve_profile_tier_unit_price(profile: ImageProviderProfile, tier: str) -> float:
     normalized_tier = str(tier or "1k").strip().lower()
-    if normalized_tier not in {"1k", "2k"}:
+    if normalized_tier not in {"1k", "2k", "4k"}:
         normalized_tier = "1k"
     adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
     tier_key = f"unit_price_{normalized_tier}"
     tier_value = adapter_config.get(tier_key)
     if tier_value is not None:
         return round(float(tier_value), 6)
+    # 4K may be configured for mapping before a dedicated price exists; fall back to 2K then base.
+    if normalized_tier == "4k":
+        for fallback_key in ("unit_price_2k", "unit_price_1k"):
+            fallback = adapter_config.get(fallback_key)
+            if fallback is not None:
+                return round(float(fallback), 6)
     return round(float(profile.unit_price or 0.0), 6)
 
 
@@ -62,7 +68,7 @@ def calculate_tiered_media_billing(
 ) -> dict:
     unit_price = resolve_profile_tier_unit_price(profile, tier)
     normalized_tier = str(tier or "1k").strip().lower()
-    if normalized_tier not in {"1k", "2k"}:
+    if normalized_tier not in {"1k", "2k", "4k"}:
         normalized_tier = "1k"
     resolved_pricing_unit = (pricing_unit or profile.pricing_unit or "per_image").strip() or "per_image"
     currency = (profile.pricing_currency or "CNY").strip().upper() or "CNY"

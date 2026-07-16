@@ -31,6 +31,14 @@ type ProviderProfileDraft = {
   pricingUnit: string;
   unitPrice1k: string;
   unitPrice2k: string;
+  unitPrice4k: string;
+  upstreamModel1k: string;
+  upstreamModel2k: string;
+  upstreamModel4k: string;
+  upstreamSkuI2v5s: string;
+  upstreamSkuI2v10s: string;
+  upstreamSkuRef5s: string;
+  upstreamSkuRef10s: string;
   enabled: boolean;
   referenceMode: string;
   referenceCaptionModel: string;
@@ -96,6 +104,14 @@ const defaultProviderProfileDraft: ProviderProfileDraft = {
   pricingUnit: "per_image",
   unitPrice1k: "",
   unitPrice2k: "",
+  unitPrice4k: "",
+  upstreamModel1k: "",
+  upstreamModel2k: "",
+  upstreamModel4k: "",
+  upstreamSkuI2v5s: "",
+  upstreamSkuI2v10s: "",
+  upstreamSkuRef5s: "",
+  upstreamSkuRef10s: "",
   enabled: true,
   referenceMode: "disabled",
   referenceCaptionModel: "",
@@ -111,7 +127,25 @@ const defaultPricingRuleDraft: ProviderPricingRuleDraft = {
   isActive: true,
 };
 
-const PRICING_TIER_ADAPTER_KEYS = ["unit_price_1k", "unit_price_2k", "unit_price_5s", "unit_price_10s"] as const;
+const PRICING_TIER_ADAPTER_KEYS = [
+  "unit_price_1k",
+  "unit_price_2k",
+  "unit_price_4k",
+  "unit_price_5s",
+  "unit_price_10s",
+] as const;
+const UPSTREAM_MODEL_ADAPTER_KEYS = ["upstream_model_1k", "upstream_model_2k", "upstream_model_4k"] as const;
+const UPSTREAM_VIDEO_SKU_ADAPTER_KEYS = [
+  "upstream_sku_i2v_5s",
+  "upstream_sku_i2v_10s",
+  "upstream_sku_ref_5s",
+  "upstream_sku_ref_10s",
+] as const;
+const MANAGED_ADAPTER_CONFIG_KEYS = [
+  ...PRICING_TIER_ADAPTER_KEYS,
+  ...UPSTREAM_MODEL_ADAPTER_KEYS,
+  ...UPSTREAM_VIDEO_SKU_ADAPTER_KEYS,
+] as const;
 
 const capabilityDefinitions: CapabilityDefinition[] = [
   { key: "chat.completions", label: "Chat", description: "分配到 Chat 页面", support: "ready" },
@@ -203,7 +237,7 @@ function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfile
     adapterKind: profile.adapter_kind,
     capabilities: profile.capabilities.join(", "),
     strategies: JSON.stringify(profile.strategies ?? {}, null, 2),
-    adapterConfig: JSON.stringify(stripPricingTierKeys(adapterConfig), null, 2),
+    adapterConfig: JSON.stringify(stripManagedAdapterConfigKeys(adapterConfig), null, 2),
     quality: profile.quality ?? "medium",
     outputFormat: profile.output_format ?? "png",
     timeoutSeconds: profile.timeout_seconds ?? 300,
@@ -213,6 +247,14 @@ function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfile
     unitPrice2k:
       readAdapterConfigPrice(adapterConfig, "unit_price_2k") ||
       readAdapterConfigPrice(adapterConfig, "unit_price_10s"),
+    unitPrice4k: readAdapterConfigPrice(adapterConfig, "unit_price_4k"),
+    upstreamModel1k: readAdapterConfigText(adapterConfig, "upstream_model_1k"),
+    upstreamModel2k: readAdapterConfigText(adapterConfig, "upstream_model_2k"),
+    upstreamModel4k: readAdapterConfigText(adapterConfig, "upstream_model_4k"),
+    upstreamSkuI2v5s: readAdapterConfigText(adapterConfig, "upstream_sku_i2v_5s"),
+    upstreamSkuI2v10s: readAdapterConfigText(adapterConfig, "upstream_sku_i2v_10s"),
+    upstreamSkuRef5s: readAdapterConfigText(adapterConfig, "upstream_sku_ref_5s"),
+    upstreamSkuRef10s: readAdapterConfigText(adapterConfig, "upstream_sku_ref_10s"),
     enabled: profile.enabled,
     referenceMode: profile.reference_mode ?? "disabled",
     referenceCaptionModel: profile.reference_caption_model ?? "",
@@ -325,12 +367,33 @@ function readAdapterConfigPrice(config: Record<string, unknown>, key: string): s
   return String(value);
 }
 
-function stripPricingTierKeys(config: Record<string, unknown>): Record<string, unknown> {
+function stripManagedAdapterConfigKeys(config: Record<string, unknown>): Record<string, unknown> {
   const next = { ...config };
-  for (const key of PRICING_TIER_ADAPTER_KEYS) {
+  for (const key of MANAGED_ADAPTER_CONFIG_KEYS) {
     delete next[key];
   }
   return next;
+}
+
+function stripPricingTierKeys(config: Record<string, unknown>): Record<string, unknown> {
+  return stripManagedAdapterConfigKeys(config);
+}
+
+function readAdapterConfigText(config: Record<string, unknown>, key: string): string {
+  const value = config[key];
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  return "";
+}
+
+function assignAdapterConfigText(config: Record<string, unknown>, key: string, raw: string): void {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    delete config[key];
+    return;
+  }
+  config[key] = trimmed;
 }
 
 function assignAdapterConfigPrice(config: Record<string, unknown>, key: string, raw: string): void {
@@ -343,10 +406,31 @@ function assignAdapterConfigPrice(config: Record<string, unknown>, key: string, 
 }
 
 function buildAdapterConfigFromDraft(draft: ProviderProfileDraft): Record<string, unknown> {
-  const config = stripPricingTierKeys(parseAdapterConfigObject(draft.adapterConfig));
+  const config = stripManagedAdapterConfigKeys(parseAdapterConfigObject(draft.adapterConfig));
   assignAdapterConfigPrice(config, "unit_price_1k", draft.unitPrice1k);
   assignAdapterConfigPrice(config, "unit_price_2k", draft.unitPrice2k);
+  assignAdapterConfigPrice(config, "unit_price_4k", draft.unitPrice4k);
+  assignAdapterConfigText(config, "upstream_model_1k", draft.upstreamModel1k);
+  assignAdapterConfigText(config, "upstream_model_2k", draft.upstreamModel2k);
+  assignAdapterConfigText(config, "upstream_model_4k", draft.upstreamModel4k);
+  assignAdapterConfigText(config, "upstream_sku_i2v_5s", draft.upstreamSkuI2v5s);
+  assignAdapterConfigText(config, "upstream_sku_i2v_10s", draft.upstreamSkuI2v10s);
+  assignAdapterConfigText(config, "upstream_sku_ref_5s", draft.upstreamSkuRef5s);
+  assignAdapterConfigText(config, "upstream_sku_ref_10s", draft.upstreamSkuRef10s);
   return config;
+}
+
+function adapterConfigHelpText(hasImageBilling: boolean, hasVideoBilling: boolean): string {
+  if (hasImageBilling && hasVideoBilling) {
+    return "分档单价、生图 1K/2K/4K 上游模型、视频四档 SKU 映射请在下方填写；此处仅保留 flavor / 轮询路径等其它字段。";
+  }
+  if (hasImageBilling) {
+    return "分档单价、生图 1K/2K/4K 上游模型映射请在下方填写；此处仅保留 flavor / 轮询路径等其它字段。";
+  }
+  if (hasVideoBilling) {
+    return "分档单价（5s/10s）、视频四档 SKU 映射请在下方填写；此处仅保留 flavor / 轮询路径等其它字段。";
+  }
+  return "此处填写 adapter 扩展 JSON（如 flavor、轮询路径）。Chat 渠道通常无需上游模型映射。";
 }
 
 function profileUsesVideoTierPricing(capabilities: string[], adapterKind: string): boolean {
@@ -845,7 +929,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
             <div className="model-form-grid model-form-grid-tight">
               <label className="composer-menu-field"><span>Provider</span><input value={providerDraft.providerName} disabled={editingProviderProfileId !== null} onChange={(e) => setProviderDraft((c) => ({ ...c, providerName: e.target.value }))} placeholder="modelscope_arch" autoComplete="off" /></label>
               <label className="composer-menu-field"><span>显示名</span><input value={providerDraft.displayName} onChange={(e) => setProviderDraft((c) => ({ ...c, displayName: e.target.value }))} placeholder="例如：Gemini 快速生图" autoComplete="off" /></label>
-              <label className="composer-menu-field"><span>Model</span><input value={providerDraft.modelName} onChange={(e) => setProviderDraft((c) => ({ ...c, modelName: e.target.value }))} placeholder="Qwen/Qwen-Image" autoComplete="off" /></label>
+              <label className="composer-menu-field"><span>Model</span><input value={providerDraft.modelName} onChange={(e) => setProviderDraft((c) => ({ ...c, modelName: e.target.value }))} placeholder="gpt-image-2-vip" autoComplete="off" /></label>
               <label className="composer-menu-field composer-menu-field-full"><span>Adapter</span><select value={providerDraft.adapterKind} onChange={(e) => setProviderDraft((c) => ({ ...c, adapterKind: e.target.value }))}>{adapterOptions.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select></label>
               <label className="composer-menu-field composer-menu-field-full"><span>Base URL</span><input name="provider-base-url" value={providerDraft.baseUrl} onChange={(e) => setProviderDraft((c) => ({ ...c, baseUrl: e.target.value }))} placeholder="https://api-inference.modelscope.cn/v1" autoComplete="off" /></label>
               <label className="composer-menu-field composer-menu-field-full"><span>API Key</span><input name="provider-api-key" type="password" value={providerDraft.apiKey} autoComplete="new-password" onChange={(e) => setProviderDraft((c) => ({ ...c, apiKey: e.target.value }))} placeholder={editingProviderProfileId === null ? "新增时必填" : "留空则保留已保存 key"} /></label>
@@ -859,7 +943,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                 <input value={providerDraft.capabilities} onChange={(e) => setProviderDraft((c) => ({ ...c, capabilities: e.target.value }))} placeholder="image.generate, chat.completions" />
               </label>
               <label className="composer-menu-field composer-menu-field-full"><span>Strategies</span><textarea rows={5} value={providerDraft.strategies} onChange={(e) => setProviderDraft((c) => ({ ...c, strategies: e.target.value }))} placeholder={'{\n  "chat": "openai_chat",\n  "image.generate": "chat_modalities_image",\n  "image.edit": "chat_modalities_image_edit",\n  "video.generate": "haodeya_grok_video"\n}'} /></label>
-              <label className="composer-menu-field composer-menu-field-full"><span>Adapter Config</span><textarea rows={5} value={providerDraft.adapterConfig} onChange={(e) => setProviderDraft((c) => ({ ...c, adapterConfig: e.target.value }))} placeholder={'{\n  "service": "cv",\n  "region": "cn-north-1",\n  "version": "2022-08-31",\n  "submit_action": "CVSync2AsyncSubmitTask",\n  "result_action": "CVSync2AsyncGetResult",\n  "req_key": "jimeng_t2v_v30"\n}'} /><small>分档单价请在下方填写；此处仅保留路由、区域等非计价字段。</small></label>
+              <label className="composer-menu-field composer-menu-field-full"><span>Adapter Config</span><textarea rows={5} value={providerDraft.adapterConfig} onChange={(e) => setProviderDraft((c) => ({ ...c, adapterConfig: e.target.value }))} placeholder={'{\n  "provider_flavor": "haodeya_async_image"\n}'} /><small>{adapterConfigHelpText(draftHasImageBilling, draftHasVideoBilling)}</small></label>
               <label className="composer-menu-field"><span>Quality</span><input value={providerDraft.quality} onChange={(e) => setProviderDraft((c) => ({ ...c, quality: e.target.value }))} placeholder="medium" /></label>
               <label className="composer-menu-field"><span>Format</span><select value={providerDraft.outputFormat} onChange={(e) => setProviderDraft((c) => ({ ...c, outputFormat: e.target.value }))}><option value="png">png</option><option value="jpeg">jpeg</option><option value="webp">webp</option><option value="mp4">mp4</option></select></label>
               <label className="composer-menu-field"><span>Timeout</span><input type="number" min="30" value={providerDraft.timeoutSeconds} onChange={(e) => setProviderDraft((c) => ({ ...c, timeoutSeconds: Number(e.target.value) || 300 }))} /></label>
@@ -870,7 +954,35 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                   <label className="composer-menu-field"><span>计费单位</span><select value={providerDraft.pricingUnit} onChange={(e) => setProviderDraft((c) => ({ ...c, pricingUnit: e.target.value }))}><option value="per_image">按张图片</option><option value="per_video">按条视频</option><option value="per_request">按次请求</option></select></label>
                   <label className="composer-menu-field"><span>{tierPriceLabels.first}</span><input type="number" min="0" step="0.0001" value={providerDraft.unitPrice1k} onChange={(e) => setProviderDraft((c) => ({ ...c, unitPrice1k: e.target.value }))} placeholder="0" /></label>
                   <label className="composer-menu-field"><span>{tierPriceLabels.second}</span><input type="number" min="0" step="0.0001" value={providerDraft.unitPrice2k} onChange={(e) => setProviderDraft((c) => ({ ...c, unitPrice2k: e.target.value }))} placeholder="0" /></label>
+                  {draftHasImageBilling ? (
+                    <label className="composer-menu-field"><span>4K 单价</span><input type="number" min="0" step="0.0001" value={providerDraft.unitPrice4k} onChange={(e) => setProviderDraft((c) => ({ ...c, unitPrice4k: e.target.value }))} placeholder="预留，可留空" /></label>
+                  ) : null}
                   <p className="admin-form-help composer-menu-field-full">{tierPriceLabels.help}</p>
+                  {draftHasImageBilling ? (
+                    <>
+                      <label className="composer-menu-field"><span>1K 上游模型</span><input value={providerDraft.upstreamModel1k} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamModel1k: e.target.value }))} placeholder="留空=用上方 Model" autoComplete="off" /></label>
+                      <label className="composer-menu-field"><span>2K 上游模型</span><input value={providerDraft.upstreamModel2k} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamModel2k: e.target.value }))} placeholder="例如 gpt-image-2-vip-2k" autoComplete="off" /></label>
+                      <label className="composer-menu-field"><span>4K 上游模型</span><input value={providerDraft.upstreamModel4k} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamModel4k: e.target.value }))} placeholder="例如 gpt-image-2-vip-4k（Studio 暂未开 4K）" autoComplete="off" /></label>
+                      <p className="admin-form-help composer-menu-field-full">
+                        生图专用：Studio 选分辨率档位后，实际发给上游的 model 名。
+                        VIP 示例：1K=`gpt-image-2-vip`，2K=`gpt-image-2-vip-2k`，4K=`gpt-image-2-vip-4k`。
+                        留空时：1K 用上方 Model；2K/4K 默认拼 `-2k` / `-4k`。当前 Studio 仅开放 1K/2K，4K 仅预留配置。
+                      </p>
+                    </>
+                  ) : null}
+                  {draftHasVideoBilling ? (
+                    <>
+                      <label className="composer-menu-field"><span>起始图 5s SKU</span><input value={providerDraft.upstreamSkuI2v5s} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamSkuI2v5s: e.target.value }))} placeholder="留空=Studio 默认 SKU" autoComplete="off" /></label>
+                      <label className="composer-menu-field"><span>起始图 10s SKU</span><input value={providerDraft.upstreamSkuI2v10s} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamSkuI2v10s: e.target.value }))} placeholder="留空=Studio 默认 SKU" autoComplete="off" /></label>
+                      <label className="composer-menu-field"><span>多图参考 5s SKU</span><input value={providerDraft.upstreamSkuRef5s} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamSkuRef5s: e.target.value }))} placeholder="留空=Studio 默认 SKU" autoComplete="off" /></label>
+                      <label className="composer-menu-field"><span>多图参考 10s SKU</span><input value={providerDraft.upstreamSkuRef10s} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamSkuRef10s: e.target.value }))} placeholder="留空=Studio 默认 SKU" autoComplete="off" /></label>
+                      <p className="admin-form-help composer-menu-field-full">
+                        视频专用（与生图 1K/2K 无关）：Studio 选档位后可在此覆盖实际上游 SKU。
+                        默认分别为 `x-ai/grok-imagine-video-i2v`、`…-i2v-10s`、`…-ref`、`…-ref-10s`。
+                        留空则用 Studio 所选 SKU，不影响现有视频渠道。
+                      </p>
+                    </>
+                  ) : null}
                 </>
               ) : null}
               <label className="composer-menu-field"><span>Reference</span><select value={providerDraft.referenceMode} onChange={(e) => setProviderDraft((c) => ({ ...c, referenceMode: e.target.value }))}><option value="disabled">disabled</option><option value="caption_prompt">caption_prompt</option></select></label>

@@ -4,8 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import { getPersistedMessageId, getUiMessageAttachments, getUiMessageText, toUiMessages } from "../../lib/chat/qmdhChatMessageUtils";
+import { chatRoundElementId, extractChatRounds } from "../../lib/chat/chatRoundUtils";
 import { QmdhChatTransport } from "../../lib/chat/qmdhChatTransport";
 import { useChatAttachments } from "../../lib/chat/useChatAttachments";
+import ChatConversationNav from "./ChatConversationNav";
 
 const ACTIVE_CHAT_STORAGE_KEY = "qmdh.active.chat";
 
@@ -334,6 +336,8 @@ export default function ChatPage() {
     !attachmentState.uploading &&
     (Boolean(chatInput.trim()) || attachmentState.attachments.length > 0);
 
+  const chatRounds = useMemo(() => extractChatRounds(chatMessages), [chatMessages]);
+
   return (
     <section className="chat-page">
       <aside className="chat-sidebar">
@@ -429,9 +433,14 @@ export default function ChatPage() {
                 <span>支持图片，或 PDF / TXT / MD / JSON / CSV / DOCX / XLSX</span>
               </div>
             ) : null}
-            <div className="chat-messages" ref={messagesRef} onScroll={updateAutoScrollState}>
-              {chatMessages.map((message, index) => (
-                <div key={message.id || `${message.role}-${index}`} className={`chat-msg ${message.role}`}>
+            <div className="chat-messages-wrap">
+              <div className="chat-messages" ref={messagesRef} onScroll={updateAutoScrollState}>
+                {chatMessages.map((message, index) => (
+                  <div
+                    key={message.id || `${message.role}-${index}`}
+                    id={message.role === "user" ? chatRoundElementId(message.id || `user-${index}`) : undefined}
+                    className={`chat-msg ${message.role}`}
+                  >
                   {message.role === "assistant" ? <div className="chat-msg-avatar">AI</div> : null}
                   <div className="chat-msg-bubble">
                     {getUiMessageAttachments(message).length > 0 ? (
@@ -488,8 +497,10 @@ export default function ChatPage() {
                     </div>
                   ) : null}
                 </div>
-              ))}
-              <div ref={messagesBottomRef} aria-hidden="true" />
+                ))}
+                <div ref={messagesBottomRef} aria-hidden="true" />
+              </div>
+              <ChatConversationNav rounds={chatRounds} scrollContainerRef={messagesRef} />
             </div>
 
             <div className="chat-input-area">

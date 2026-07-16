@@ -52,6 +52,8 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
         shutil.rmtree(self.tempdir, ignore_errors=True)
 
     def _profile(self, **overrides) -> ImageProviderProfile:
+        from dataclasses import replace
+
         base = ImageProviderProfile(
             provider_name="toapi_gpt_image_vip",
             api_key="test-key",
@@ -61,9 +63,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
             quality="high",
             adapter_config={"unit_price_1k": 1.62, "unit_price_2k": 2.67},
         )
-        for key, value in overrides.items():
-            setattr(base, key, value)
-        return base
+        return replace(base, **overrides) if overrides else base
 
     def _adapter(self, profile: ImageProviderProfile) -> OpenAIImageProviderAdapter:
         return OpenAIImageProviderAdapter(
@@ -186,7 +186,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
 
         self.assertIn("/images/generations/tsk_img_poll", str(ctx.exception))
 
-    def test_toapis_2k_uses_base_model_with_resolution_field(self) -> None:
+    def test_toapis_2k_uses_tiered_model_name(self) -> None:
         profile = self._profile()
         adapter = self._adapter(profile)
         submit_payload = {"id": "task_img_2k", "status": "queued"}
@@ -217,10 +217,89 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
                         )
 
         submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
-        self.assertEqual(submit_body["model"], "gpt-image-2-vip")
+        self.assertEqual(submit_body["model"], "gpt-image-2-vip-2k")
         self.assertEqual(submit_body["resolution"], "2k")
-        self.assertEqual(outcome.model_name, "gpt-image-2-vip")
+        self.assertEqual(outcome.model_name, "gpt-image-2-vip-2k")
         self.assertEqual(outcome.result["billing"]["resolution_tier"], "2k")
+        self.assertEqual(outcome.cost, 2.67)
+
+    def test_toapis_2k_respects_admin_upstream_model_override(self) -> None:
+        profile = self._profile(
+            adapter_config={
+                "unit_price_1k": 1.62,
+                "unit_price_2k": 2.67,
+                "upstream_model_2k": "custom-vip-2k-sku",
+            }
+        )
+        adapter = self._adapter(profile)
+        submit_payload = {"id": "task_img_2k_override", "status": "queued"}
+        poll_payload = {
+            "id": "task_img_2k_override",
+            "status": "completed",
+            "result": {"data": [{"url": "https://cdn.example.test/output-2k.png"}]},
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[
+                _FakeResponse(submit_payload),
+                _FakeResponse(poll_payload),
+                _FakeBinaryResponse(b"png-2k"),
+            ],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    with patch("app.services.task_executor.sleep"):
+                        outcome = adapter.execute(
+                            "image.generate",
+                            {
+                                "prompt": "Override mapping",
+                                "aspect_ratio": "16:9",
+                                "resolution": "2k",
+                            },
+                        )
+
+        submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        self.assertEqual(submit_body["model"], "custom-vip-2k-sku")
+        self.assertEqual(outcome.model_name, "custom-vip-2k-sku")
+        self.assertEqual(outcome.result["billing"]["resolution_tier"], "2k")
+
+    def test_toapis_4k_uses_tiered_model_name(self) -> None:
+        profile = self._profile()
+        adapter = self._adapter(profile)
+        submit_payload = {"id": "task_img_4k", "status": "queued"}
+        poll_payload = {
+            "id": "task_img_4k",
+            "status": "completed",
+            "result": {"data": [{"url": "https://cdn.example.test/output-4k.png"}]},
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[
+                _FakeResponse(submit_payload),
+                _FakeResponse(poll_payload),
+                _FakeBinaryResponse(b"png-4k"),
+            ],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    with patch("app.services.task_executor.sleep"):
+                        outcome = adapter.execute(
+                            "image.generate",
+                            {
+                                "prompt": "4k reserved mapping",
+                                "aspect_ratio": "16:9",
+                                "resolution": "4k",
+                            },
+                        )
+
+        submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        self.assertEqual(submit_body["model"], "gpt-image-2-vip-4k")
+        self.assertEqual(submit_body["resolution"], "4k")
+        self.assertEqual(outcome.model_name, "gpt-image-2-vip-4k")
+        self.assertEqual(outcome.result["billing"]["resolution_tier"], "4k")
+        # No unit_price_4k configured → falls back to 2K then 1K price.
         self.assertEqual(outcome.cost, 2.67)
 
     def test_toapis_reference_images_use_public_https_urls(self) -> None:

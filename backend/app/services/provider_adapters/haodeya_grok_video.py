@@ -178,7 +178,30 @@ def _resolve_grok_sku(profile: ImageProviderProfile, payload: dict) -> str:
         raise ValueError(
             f"Unsupported Grok video SKU {sku!r}; expected one of: {', '.join(GROK_VIDEO_SKUS)}"
         )
+
+    # Optional Admin remap: Studio still picks a tier; adapter_config can redirect to another known SKU.
+    sku = _apply_grok_sku_admin_override(profile, sku)
     return sku
+
+
+def _apply_grok_sku_admin_override(profile: ImageProviderProfile, sku: str) -> str:
+    meta = GROK_VIDEO_SKUS.get(sku)
+    if not isinstance(meta, dict):
+        return sku
+    mode = str(meta.get("mode") or "").strip()
+    duration = int(meta.get("duration") or 5)
+    override_key = f"upstream_sku_{mode}_{duration}s"
+    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    override = adapter_config.get(override_key)
+    if not isinstance(override, str) or not override.strip():
+        return sku
+    remapped = override.strip()
+    if remapped not in GROK_VIDEO_SKUS:
+        raise ValueError(
+            f"Admin adapter_config.{override_key}={remapped!r} is not a supported Grok SKU; "
+            f"expected one of: {', '.join(GROK_VIDEO_SKUS)}"
+        )
+    return remapped
 
 
 def _collect_reference_paths(payload: dict) -> list[str]:
@@ -200,11 +223,8 @@ def _collect_reference_paths(payload: dict) -> list[str]:
 def _build_haodeya_grok_request_body(sku: str, prompt: str, payload: dict) -> dict[str, object]:
     cfg = GROK_VIDEO_SKUS[sku]
     mode = str(cfg["mode"])
+    # Duration always follows the resolved SKU (Studio selection or Admin remap).
     duration = int(cfg["duration"])
-
-    payload_duration = payload.get("duration")
-    if payload_duration not in {None, "", duration}:
-        raise ValueError(f"SKU {sku} requires duration={duration}, got {payload_duration!r}")
 
     resolution = str(payload.get("resolution") or "720p").strip().lower()
     if resolution != "720p":

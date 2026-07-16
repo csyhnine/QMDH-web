@@ -644,8 +644,8 @@ def _resolve_haodeya_async_upstream_model(profile: ImageProviderProfile, resolut
         return override.strip()
 
     base_model = _normalize_haodeya_async_base_model(profile.model_name) or "gpt-image-2-vip"
-    # Haodeya gateway -2k SKU is still rolling out (2026-07): use base model + resolution field for 2K.
-    if tier in {"1k", "2k"}:
+    # 1K keeps the base SKU; 2K/4K use Haodeya tiered model names (e.g. gpt-image-2-vip-2k).
+    if tier == "1k":
         return base_model
     return f"{base_model}-{tier}"
 

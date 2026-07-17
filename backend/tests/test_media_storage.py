@@ -1,6 +1,7 @@
 import os
 import shutil
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -129,7 +130,7 @@ class MediaStorageTests(unittest.TestCase):
             "https://cdn.example.test/assets/generated/demo/retry.png",
         )
 
-    def test_oss_write_mirrors_to_local_and_url_is_public(self) -> None:
+    def test_oss_write_keeps_local_urls_and_mirrors_async(self) -> None:
         bucket = _FakeBucket()
         with patch("app.services.media_storage.settings.storage_backend", "oss"):
             with patch("app.services.media_storage.settings.media_root", self.tempdir):
@@ -144,15 +145,25 @@ class MediaStorageTests(unittest.TestCase):
                                     ):
                                         path = write_binary_asset("chat/uploads/a.png", b"img")
                                         self.assertEqual(path, "chat/uploads/a.png")
-                                        self.assertEqual(
-                                            resolve_storage_path(path),
-                                            "https://qmdh-media.oss-cn-shenzhen.aliyuncs.com/chat/uploads/a.png",
-                                        )
+                                        self.assertEqual(resolve_storage_path(path), "/media/chat/uploads/a.png")
                                         self.assertTrue(
                                             os.path.exists(os.path.join(self.tempdir, "chat", "uploads", "a.png"))
                                         )
                                         self.assertEqual(read_binary_asset(path), b"img")
-                                        self.assertEqual(bucket.objects[path], b"img")
+                                        # Background mirror should land on OSS shortly
+                                        for _ in range(50):
+                                            if path in bucket.objects:
+                                                break
+                                            time.sleep(0.02)
+                                        self.assertEqual(bucket.objects.get(path), b"img")
+
+                                        from app.services.media_storage import ensure_public_object_url
+
+                                        public = ensure_public_object_url(path)
+                                        self.assertEqual(
+                                            public,
+                                            "https://qmdh-media.oss-cn-shenzhen.aliyuncs.com/chat/uploads/a.png",
+                                        )
 
     def test_read_falls_back_to_oss_when_local_missing(self) -> None:
         bucket = _FakeBucket(objects={"legacy/only-oss.png": b"from-oss"})

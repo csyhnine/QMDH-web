@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import threading
 from base64 import b64decode
 from html import escape
 from mimetypes import guess_type
@@ -9,6 +11,8 @@ from typing import Any, Protocol
 from urllib.parse import urlparse
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class StorageBackend(Protocol):
@@ -249,6 +253,10 @@ def get_local_storage() -> LocalStorage:
     return LocalStorage(settings.media_root, settings.media_url_prefix)
 
 
+def _oss_enabled() -> bool:
+    return (settings.storage_backend or "local").strip().lower() == "oss"
+
+
 def validate_storage_backend_configuration() -> None:
     get_storage_backend()
 
@@ -258,7 +266,10 @@ def media_root_path() -> Path:
 
 
 def media_url_for(relative_path: str) -> str:
-    return get_storage_backend().url_for(relative_path)
+    """Browser-facing URL. Prefer same-origin /media for fast page loads."""
+    if is_legacy_absolute_path(relative_path):
+        return str(relative_path)
+    return get_local_storage().url_for(relative_path)
 
 
 def resolve_storage_path(path: str) -> str:
@@ -281,12 +292,24 @@ def resolve_storage_payload(payload: Any) -> Any:
     return payload
 
 
+def _mirror_to_oss(relative_path: str, content: bytes, *, overwrite: bool) -> None:
+    try:
+        get_storage_backend().write(relative_path, content, overwrite=overwrite)
+    except Exception:
+        logger.exception("Background OSS mirror failed for %s", relative_path)
+
+
 def write_binary_asset(relative_path: str, content: bytes, *, overwrite: bool = True) -> str:
-    """Write to the active backend. When OSS is active, also mirror to local disk."""
-    backend = get_storage_backend()
-    normalized = backend.write(relative_path, content, overwrite=overwrite)
-    if (settings.storage_backend or "local").strip().lower() == "oss":
-        get_local_storage().write(normalized, content, overwrite=overwrite)
+    """Write local first (fast API/UI). When OSS is on, mirror asynchronously."""
+    normalized = get_local_storage().write(relative_path, content, overwrite=overwrite)
+    if _oss_enabled():
+        threading.Thread(
+            target=_mirror_to_oss,
+            args=(normalized, content),
+            kwargs={"overwrite": overwrite},
+            daemon=True,
+            name=f"oss-mirror:{normalized[:48]}",
+        ).start()
     return normalized
 
 
@@ -297,12 +320,33 @@ def read_binary_asset(relative_path: str) -> bytes:
     if local.exists(normalized):
         return local.read(normalized)
 
-    backend = get_storage_backend()
-    if (settings.storage_backend or "local").strip().lower() == "oss":
-        return backend.read(normalized)
+    if _oss_enabled():
+        return get_storage_backend().read(normalized)
 
     raise FileNotFoundError(f"Media not found: {normalized}")
 
+
+def ensure_public_object_url(path: str) -> str:
+    """Absolute URL for upstream providers. Uses OSS when configured; uploads on demand."""
+    normalized = str(path or "").strip()
+    if not normalized:
+        return ""
+    if normalized.startswith(("http://", "https://")):
+        return normalized
+
+    relative = coerce_relative_media_path(normalized)
+    if not _oss_enabled():
+        public_base = settings.public_media_base_url.strip().rstrip("/")
+        local_url = get_local_storage().url_for(relative)
+        if local_url.startswith("/"):
+            base = public_base or settings.frontend_origin.strip().rstrip("/")
+            return f"{base}{local_url}"
+        return local_url
+
+    oss = get_storage_backend()
+    if not oss.exists(relative):
+        oss.write(relative, read_binary_asset(relative), overwrite=True)
+    return oss.url_for(relative)
 
 def write_base64_asset(relative_path: str, data: str, *, overwrite: bool = True) -> str:
     return write_binary_asset(relative_path, b64decode(data), overwrite=overwrite)

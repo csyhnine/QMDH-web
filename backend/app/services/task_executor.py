@@ -636,6 +636,11 @@ def _normalize_toapis_base_model(model_name: str) -> str:
 
 
 def _resolve_haodeya_async_upstream_model(profile: ImageProviderProfile, resolution: str) -> str:
+    """Map VIP async image profile + resolution to upstream model IDs.
+
+    Haodeya/ToAPI temporary 2K scheme (2026-07): keep base SKU `gpt-image-2-vip` and differentiate
+    via request body `resolution` ("1k"/"2k"). Do NOT send `gpt-image-2-vip-2k` (503 ChannelCapability).
+    """
     tier = _normalize_image_resolution({"resolution": resolution})
     adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
     override_key = f"upstream_model_{tier}"
@@ -643,11 +648,8 @@ def _resolve_haodeya_async_upstream_model(profile: ImageProviderProfile, resolut
     if isinstance(override, str) and override.strip():
         return override.strip()
 
-    base_model = _normalize_haodeya_async_base_model(profile.model_name) or "gpt-image-2-vip"
-    # 1K keeps the base SKU; 2K/4K use Haodeya tiered model names (e.g. gpt-image-2-vip-2k).
-    if tier == "1k":
-        return base_model
-    return f"{base_model}-{tier}"
+    # 1K/2K/4K share the base VIP model name; resolution is sent separately on the request body.
+    return _normalize_haodeya_async_base_model(profile.model_name) or "gpt-image-2-vip"
 
 
 def _resolve_toapis_upstream_model(profile: ImageProviderProfile, resolution: str) -> str:
@@ -725,8 +727,11 @@ def _resolve_haodeya_upstream_model(base_model: str, resolution: str, profile: I
     """Map Provider profile model + resolution to Haodeya upstream model IDs.
 
     Respect admin-configured profiles: CPA SKU (`gemini-3.1-flash-image` → channel 9) must not be
-    rewritten to OR preview (channel 3). Studio 1K/2K on the same profile share one upstream model;
+    rewritten to OR preview (channel 3). Studio 1K/2K on CPA/Gemini share one upstream model;
     2K is differentiated via `image_config.image_size: "2K"` (+ modalities), never `-2k` suffix.
+
+    OpenRouter GPT image (channel 3, 2026-07): 2K MUST use `openai/gpt-5.4-image-2-2k` plus
+    `image_config.image_size: "2K"`.
     """
     tier = _normalize_image_resolution({"resolution": resolution})
     adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
@@ -744,6 +749,8 @@ def _resolve_haodeya_upstream_model(base_model: str, resolution: str, profile: I
         return "google/gemini-3.1-flash-image-preview"
 
     if normalized in HAODEYA_GPT_BASE_MODELS:
+        if tier == "2k":
+            return "openai/gpt-5.4-image-2-2k"
         return "openai/gpt-5.4-image-2"
 
     return _normalize_haodeya_base_model(base_model)

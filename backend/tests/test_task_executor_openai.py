@@ -869,7 +869,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         self.assertEqual(generation_body["image_config"]["image_size"], "2K")
         self.assertEqual(outcome.result["upstream_request"]["model"], "google/gemini-3.1-flash-image-preview")
 
-    def test_chat_completions_image_2k_on_haodeya_gpt_keeps_base_model_without_2k_suffix(self) -> None:
+    def test_chat_completions_image_2k_on_haodeya_gpt_uses_2k_model_suffix(self) -> None:
         profile = ImageProviderProfile(
             provider_name="openai_gpt-5.4-image-2",
             api_key="test-key",
@@ -910,11 +910,10 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
                     )
 
         generation_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
-        self.assertEqual(generation_body["model"], "openai/gpt-5.4-image-2")
+        self.assertEqual(generation_body["model"], "openai/gpt-5.4-image-2-2k")
         self.assertEqual(generation_body["modalities"], ["text", "image"])
         self.assertEqual(generation_body["image_config"]["image_size"], "2K")
-        self.assertNotIn("-2k", generation_body["model"].lower())
-        self.assertEqual(outcome.result["upstream_request"]["model"], "openai/gpt-5.4-image-2")
+        self.assertEqual(outcome.result["upstream_request"]["model"], "openai/gpt-5.4-image-2-2k")
 
     def test_chat_completions_image_1k_on_haodeya_cpa_keeps_channel9_model(self) -> None:
         profile = ImageProviderProfile(

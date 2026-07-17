@@ -186,7 +186,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
 
         self.assertIn("/images/generations/tsk_img_poll", str(ctx.exception))
 
-    def test_toapis_2k_uses_tiered_model_name(self) -> None:
+    def test_toapis_2k_keeps_base_model_and_resolution(self) -> None:
         profile = self._profile()
         adapter = self._adapter(profile)
         submit_payload = {"id": "task_img_2k", "status": "queued"}
@@ -217,9 +217,9 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
                         )
 
         submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
-        self.assertEqual(submit_body["model"], "gpt-image-2-vip-2k")
+        self.assertEqual(submit_body["model"], "gpt-image-2-vip")
         self.assertEqual(submit_body["resolution"], "2k")
-        self.assertEqual(outcome.model_name, "gpt-image-2-vip-2k")
+        self.assertEqual(outcome.model_name, "gpt-image-2-vip")
         self.assertEqual(outcome.result["billing"]["resolution_tier"], "2k")
         self.assertEqual(outcome.cost, 2.67)
 
@@ -264,7 +264,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
         self.assertEqual(outcome.model_name, "custom-vip-2k-sku")
         self.assertEqual(outcome.result["billing"]["resolution_tier"], "2k")
 
-    def test_toapis_4k_uses_tiered_model_name(self) -> None:
+    def test_toapis_4k_keeps_base_model_and_resolution(self) -> None:
         profile = self._profile()
         adapter = self._adapter(profile)
         submit_payload = {"id": "task_img_4k", "status": "queued"}
@@ -295,9 +295,9 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
                         )
 
         submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
-        self.assertEqual(submit_body["model"], "gpt-image-2-vip-4k")
+        self.assertEqual(submit_body["model"], "gpt-image-2-vip")
         self.assertEqual(submit_body["resolution"], "4k")
-        self.assertEqual(outcome.model_name, "gpt-image-2-vip-4k")
+        self.assertEqual(outcome.model_name, "gpt-image-2-vip")
         self.assertEqual(outcome.result["billing"]["resolution_tier"], "4k")
         # No unit_price_4k configured → falls back to 2K then 1K price.
         self.assertEqual(outcome.cost, 2.67)

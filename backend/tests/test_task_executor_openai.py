@@ -814,7 +814,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
                     )
 
         generation_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
-        self.assertEqual(generation_body["model"], "gemini-3.1-flash-image")
+        self.assertEqual(generation_body["model"], "gemini-3.1-flash-image-2k")
         self.assertEqual(generation_body["modalities"], ["text", "image"])
         self.assertEqual(generation_body["max_tokens"], 8192)
         self.assertEqual(generation_body["image_config"]["aspect_ratio"], "16:9")
@@ -822,9 +822,9 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         self.assertNotIn("aspectRatio", generation_body["image_config"])
         self.assertNotIn("imageSize", generation_body["image_config"])
         self.assertNotIn("preview", generation_body["model"].lower())
-        self.assertEqual(outcome.result["upstream_request"]["model"], "gemini-3.1-flash-image")
+        self.assertEqual(outcome.result["upstream_request"]["model"], "gemini-3.1-flash-image-2k")
 
-    def test_chat_completions_image_2k_on_haodeya_preview_profile_keeps_preview_model(self) -> None:
+    def test_chat_completions_image_2k_on_haodeya_preview_profile_uses_2k_suffix(self) -> None:
         profile = ImageProviderProfile(
             provider_name="nano_banana_2",
             api_key="test-key",
@@ -865,9 +865,9 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
                     )
 
         generation_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
-        self.assertEqual(generation_body["model"], "google/gemini-3.1-flash-image-preview")
+        self.assertEqual(generation_body["model"], "google/gemini-3.1-flash-image-preview-2k")
         self.assertEqual(generation_body["image_config"]["image_size"], "2K")
-        self.assertEqual(outcome.result["upstream_request"]["model"], "google/gemini-3.1-flash-image-preview")
+        self.assertEqual(outcome.result["upstream_request"]["model"], "google/gemini-3.1-flash-image-preview-2k")
 
     def test_chat_completions_image_2k_on_haodeya_gpt_uses_2k_model_suffix(self) -> None:
         profile = ImageProviderProfile(

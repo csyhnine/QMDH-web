@@ -76,8 +76,8 @@ Last updated: `2026-07-01`
   - 1K：无 `modalities` / `image_config`，`max_tokens: 4096`
   - 2K：同上 model + `modalities` + `image_config: { aspect_ratio, image_size: "2K" }`（仅 snake_case），`max_tokens: 8192`
 - **Nano Banana 2**（`google/gemini-3.1-flash-image-preview` · 渠道 **3**）：preview 线路，2K 同样靠 `image_config`
-- **GPT**（`openai/gpt-5.4-image-2`）：1K 用基名；**2K 必须** `openai/gpt-5.4-image-2-2k` + `image_config.image_size: "2K"`
-- **勿**对 Gemini 发 `gemini-3.1-flash-image-2k`：网关可能 200 但仍 1K 像素
+- **GPT**（`openai/gpt-5.4-image-2`）：1K 用基名；**2K 必须** `openai/gpt-5.4-image-2-2k`
+- **CPA Gemini**：2K 用 `gemini-3.1-flash-image-2k`（勿只靠 image_size 当 2K 计费）
 - 16:9 2K 验收：**2752×1536**
 - 可选 `adapter_config`：`unit_price_1k` / `unit_price_2k` / `upstream_model_{1k|2k}`
 

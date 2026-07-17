@@ -27,7 +27,9 @@ Last updated: `2026-07-01`
 
 - **CPA / PRO**（`gemini-3.1-flash-image`）：1K 与 2K **同一**上游名 `gemini-3.1-flash-image`，**不**加 `-2k`，**不**改写成 `preview`。
 - **Preview / Nano Banana 2**：保持 `google/gemini-3.1-flash-image-preview`。
-- **GPT**（`openai/gpt-5.4-image-2`）：1K 用基名；**2K 必须** `openai/gpt-5.4-image-2-2k`，并带 `image_config.image_size: "2K"` + modalities（渠道 3，2026-07 上游说明）。
+- **GPT**（`openai/gpt-5.4-image-2`）：1K 用基名；**2K 必须** `openai/gpt-5.4-image-2-2k`（计费按 model 名）。
+- **OR Gemini**：2K 用 `google/gemini-3.1-flash-image-preview-2k`。
+- **CPA Gemini**：2K 用 `gemini-3.1-flash-image-2k`，并继续带 modalities。
 - 可选覆盖：Provider `adapter_config` 的 `upstream_model_1k` / `upstream_model_2k`。
 
 ### 2.2 请求体（`POST /v1/chat/completions`）
@@ -85,8 +87,8 @@ Provider `adapter_config`：
 | --- | --- | --- |
 | 2K 发 `gemini-3.1-flash-image-2k` | 200 但 16:9 仍 **1376×768** | 不要靠 `-2k` 后缀 |
 | 2K 发 `google/gemini-3.1-flash-image-preview-2k` | **400** invalid model | 租户未开通 |
-| 2K 发 `openai/gpt-5.4-image-2` 且无 `-2k` | 可能空图 / 不计 2K 价 | **必须** `openai/gpt-5.4-image-2-2k` + `image_size:2K` |
-| 2K 发 `gpt-image-2-vip-2k` | **503** ChannelCapability | VIP 用 `gpt-image-2-vip` + `resolution:2k` |
+| 2K 仅改 `image_size`/`resolution`、model 仍用 1K 名 | 可能出 2K 图但按 **1K 价** | 必须换 `*-2k` model 名 |
+| 2K VIP 发 `gpt-image-2-vip` + resolution | 按 1K 价 | 发 `gpt-image-2-vip-2k` |
 | PRO 1K/2K **强行**改发 `preview` | 渠道 **3**，与后台 PRO 配置冲突 | **尊重 Profile model** |
 | PRO 2K 渠道 9 + 正确 `image_config`（任务 #947，18:34） | 当时 **1408×768** | 当时上游渠道 9 未就绪；**2026-07 上游称已支持** |
 | PRO 2K 走 preview（任务 #943，18:15） | **2752×1536** | preview 线路一直能 2K，但不是 PRO 渠道 |

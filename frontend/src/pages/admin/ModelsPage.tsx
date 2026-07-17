@@ -961,12 +961,12 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                   {draftHasImageBilling ? (
                     <>
                       <label className="composer-menu-field"><span>1K 上游模型</span><input value={providerDraft.upstreamModel1k} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamModel1k: e.target.value }))} placeholder="留空=用上方 Model" autoComplete="off" /></label>
-                      <label className="composer-menu-field"><span>2K 上游模型</span><input value={providerDraft.upstreamModel2k} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamModel2k: e.target.value }))} placeholder="例如 gpt-image-2-vip-2k" autoComplete="off" /></label>
+                      <label className="composer-menu-field"><span>2K 上游模型</span><input value={providerDraft.upstreamModel2k} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamModel2k: e.target.value }))} placeholder="例如 gpt-image-2-vip 或 openai/gpt-5.4-image-2-2k" autoComplete="off" /></label>
                       <label className="composer-menu-field"><span>4K 上游模型</span><input value={providerDraft.upstreamModel4k} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamModel4k: e.target.value }))} placeholder="例如 gpt-image-2-vip-4k（Studio 暂未开 4K）" autoComplete="off" /></label>
                       <p className="admin-form-help composer-menu-field-full">
                         生图专用：Studio 选分辨率档位后，实际发给上游的 model 名。
-                        VIP 示例：1K=`gpt-image-2-vip`，2K=`gpt-image-2-vip-2k`，4K=`gpt-image-2-vip-4k`。
-                        留空时：1K 用上方 Model；2K/4K 默认拼 `-2k` / `-4k`。当前 Studio 仅开放 1K/2K，4K 仅预留配置。
+                        VIP（ToAPI）：1K/2K/4K 均用 `gpt-image-2-vip`，靠 body `resolution` 区分（勿填 `-2k` SKU）。
+                        OR GPT：2K 填 `openai/gpt-5.4-image-2-2k`。留空时走代码默认规则。当前 Studio 仅开放 1K/2K。
                       </p>
                     </>
                   ) : null}

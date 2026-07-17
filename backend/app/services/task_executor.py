@@ -23,7 +23,7 @@ from app.database import SessionLocal
 from app.models import Asset, AssetType, Project, ProviderCall, Task, TaskStatus, Workflow
 from app.services.image_aspect_ratio import read_image_dimensions, resolve_image_aspect_ratio
 from app.services.media_storage import (
-    media_root_path,
+    read_binary_asset,
     write_base64_asset,
     write_binary_asset,
     write_preview_svg,
@@ -1344,21 +1344,18 @@ def _reference_image_to_model_url(reference_image: str) -> str:
     if normalized.startswith(("http://", "https://", "data:image/")):
         return normalized
 
+    try:
+        image_bytes = read_binary_asset(normalized)
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(f"Reference image file not found: {reference_image}") from exc
+
     media_prefix = settings.media_url_prefix.rstrip("/")
     if normalized.startswith(f"{media_prefix}/"):
         relative_path = normalized.removeprefix(f"{media_prefix}/")
     else:
         relative_path = normalized.lstrip("/")
-
-    media_root = media_root_path().resolve()
-    file_path = (media_root / Path(relative_path)).resolve()
-    if media_root not in file_path.parents and file_path != media_root:
-        raise ValueError("Reference image path is outside media storage")
-    if not file_path.exists() or not file_path.is_file():
-        raise ValueError(f"Reference image file not found: {reference_image}")
-
-    mime_type = mimetypes.guess_type(file_path.name)[0] or "image/png"
-    encoded = b64encode(file_path.read_bytes()).decode("ascii")
+    mime_type = mimetypes.guess_type(Path(relative_path).name)[0] or "image/png"
+    encoded = b64encode(image_bytes).decode("ascii")
     return f"data:{mime_type};base64,{encoded}"
 
 

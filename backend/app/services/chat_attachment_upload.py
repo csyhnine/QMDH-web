@@ -10,7 +10,11 @@ from random import randint
 from fastapi import HTTPException, status
 
 from app.core.config import settings
-from app.services.media_storage import _normalize_relative_path, is_legacy_absolute_path, media_root_path
+from app.services.media_storage import (
+    _normalize_relative_path,
+    is_legacy_absolute_path,
+    read_binary_asset,
+)
 
 MAX_CHAT_IMAGE_BYTES = 20 * 1024 * 1024
 MAX_CHAT_FILE_BYTES = 10 * 1024 * 1024
@@ -133,7 +137,7 @@ def read_chat_attachment_bytes(storage_path: str, *, allow_documents: bool = Fal
     if suffix not in allowed_suffixes:
         raise HTTPException(status_code=400, detail="Unsupported chat attachment type.")
 
-    target = media_root_path() / Path(normalized)
-    if not target.is_file():
-        raise HTTPException(status_code=400, detail="Chat attachment file was not found.")
-    return target.read_bytes()
+    try:
+        return read_binary_asset(normalized)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail="Chat attachment file was not found.") from exc

@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 import struct
-from pathlib import Path
 
-from app.core.config import settings
-from app.services.media_storage import media_root_path
+from app.services.media_storage import read_binary_asset
 
 SMART_RATIO_LABELS = frozenset({"智能", "auto", "automatic", "smart"})
 
@@ -102,32 +100,22 @@ def read_image_dimensions(data: bytes) -> tuple[int, int] | None:
     return _png_dimensions(data) or _jpeg_dimensions(data)
 
 
-def _reference_image_local_path(reference_image: str) -> Path | None:
+def _reference_image_bytes(reference_image: str) -> bytes | None:
     normalized = reference_image.strip()
     if not normalized or normalized.startswith(("http://", "https://", "data:image/")):
         return None
-
-    media_prefix = settings.media_url_prefix.rstrip("/")
-    if normalized.startswith(f"{media_prefix}/"):
-        relative_path = normalized.removeprefix(f"{media_prefix}/")
-    else:
-        relative_path = normalized.lstrip("/")
-
-    media_root = media_root_path().resolve()
-    file_path = (media_root / Path(relative_path)).resolve()
-    if media_root not in file_path.parents and file_path != media_root:
+    try:
+        return read_binary_asset(normalized)
+    except (FileNotFoundError, ValueError):
         return None
-    if not file_path.exists() or not file_path.is_file():
-        return None
-    return file_path
 
 
 def dimensions_from_reference_images(reference_images: list[str]) -> tuple[int, int] | None:
     for reference_image in reference_images:
-        file_path = _reference_image_local_path(reference_image)
-        if file_path is None:
+        image_bytes = _reference_image_bytes(reference_image)
+        if image_bytes is None:
             continue
-        dimensions = read_image_dimensions(file_path.read_bytes())
+        dimensions = read_image_dimensions(image_bytes)
         if dimensions is not None:
             return dimensions
     return None

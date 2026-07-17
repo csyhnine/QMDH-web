@@ -7,6 +7,7 @@ from unittest.mock import patch
 from app.services.media_storage import (
     LocalStorage,
     OSSStorage,
+    read_binary_asset,
     resolve_storage_path,
     write_binary_asset,
 )
@@ -19,8 +20,9 @@ class _TransientOssError(Exception):
 
 
 class _FakeBucket:
-    def __init__(self, failures: list[Exception] | None = None):
+    def __init__(self, failures: list[Exception] | None = None, objects: dict[str, bytes] | None = None):
         self.failures = list(failures or [])
+        self.objects = dict(objects or {})
         self.put_calls: list[tuple[str, bytes]] = []
 
     def put_object(self, key, data, headers=None, progress_callback=None):
@@ -28,7 +30,26 @@ class _FakeBucket:
         self.put_calls.append((key, data))
         if self.failures:
             raise self.failures.pop(0)
+        self.objects[key] = data
         return object()
+
+    def get_object(self, key):
+        if key not in self.objects:
+            exc = Exception("NoSuchKey")
+            exc.status = 404  # type: ignore[attr-defined]
+            raise exc
+
+        class _Result:
+            def __init__(self, payload: bytes):
+                self._payload = payload
+
+            def read(self):
+                return self._payload
+
+        return _Result(self.objects[key])
+
+    def object_exists(self, key):
+        return key in self.objects
 
 
 class MediaStorageTests(unittest.TestCase):
@@ -57,6 +78,7 @@ class MediaStorageTests(unittest.TestCase):
                         "https://legacy.example.test/path.png",
                     )
                     self.assertEqual(resolve_storage_path("/media/already-absolute.png"), "/media/already-absolute.png")
+                    self.assertEqual(read_binary_asset(relative_path), b"png-bytes")
 
     def test_storage_backend_contract_preserves_relative_path_suffix(self) -> None:
         local_backend = LocalStorage(self.tempdir, "/media")
@@ -81,6 +103,8 @@ class MediaStorageTests(unittest.TestCase):
                     stored_path = backend.write(relative_path, b"payload")
                     self.assertEqual(stored_path, relative_path)
                     self.assertTrue(backend.url_for(relative_path).endswith(relative_path))
+                    self.assertEqual(backend.read(relative_path), b"payload")
+                    self.assertTrue(backend.exists(relative_path))
 
     def test_oss_storage_retries_transient_errors_and_uses_cdn_urls(self) -> None:
         sleep_calls: list[int] = []
@@ -104,6 +128,46 @@ class MediaStorageTests(unittest.TestCase):
             backend.url_for(stored_path),
             "https://cdn.example.test/assets/generated/demo/retry.png",
         )
+
+    def test_oss_write_mirrors_to_local_and_url_is_public(self) -> None:
+        bucket = _FakeBucket()
+        with patch("app.services.media_storage.settings.storage_backend", "oss"):
+            with patch("app.services.media_storage.settings.media_root", self.tempdir):
+                with patch("app.services.media_storage.settings.media_url_prefix", "/media"):
+                    with patch("app.services.media_storage.settings.oss_endpoint", "https://oss-cn-shenzhen.aliyuncs.com"):
+                        with patch("app.services.media_storage.settings.oss_bucket_name", "qmdh-media"):
+                            with patch("app.services.media_storage.settings.oss_access_key_id", "ak"):
+                                with patch("app.services.media_storage.settings.oss_access_key_secret", "sk"):
+                                    with patch(
+                                        "app.services.media_storage.OSSStorage._build_bucket",
+                                        return_value=bucket,
+                                    ):
+                                        path = write_binary_asset("chat/uploads/a.png", b"img")
+                                        self.assertEqual(path, "chat/uploads/a.png")
+                                        self.assertEqual(
+                                            resolve_storage_path(path),
+                                            "https://qmdh-media.oss-cn-shenzhen.aliyuncs.com/chat/uploads/a.png",
+                                        )
+                                        self.assertTrue(
+                                            os.path.exists(os.path.join(self.tempdir, "chat", "uploads", "a.png"))
+                                        )
+                                        self.assertEqual(read_binary_asset(path), b"img")
+                                        self.assertEqual(bucket.objects[path], b"img")
+
+    def test_read_falls_back_to_oss_when_local_missing(self) -> None:
+        bucket = _FakeBucket(objects={"legacy/only-oss.png": b"from-oss"})
+        with patch("app.services.media_storage.settings.storage_backend", "oss"):
+            with patch("app.services.media_storage.settings.media_root", self.tempdir):
+                with patch("app.services.media_storage.settings.media_url_prefix", "/media"):
+                    with patch("app.services.media_storage.settings.oss_endpoint", "https://oss-cn-shenzhen.aliyuncs.com"):
+                        with patch("app.services.media_storage.settings.oss_bucket_name", "qmdh-media"):
+                            with patch("app.services.media_storage.settings.oss_access_key_id", "ak"):
+                                with patch("app.services.media_storage.settings.oss_access_key_secret", "sk"):
+                                    with patch(
+                                        "app.services.media_storage.OSSStorage._build_bucket",
+                                        return_value=bucket,
+                                    ):
+                                        self.assertEqual(read_binary_asset("legacy/only-oss.png"), b"from-oss")
 
 
 if __name__ == "__main__":

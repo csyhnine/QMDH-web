@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from base64 import b64decode
 from html import escape
+from mimetypes import guess_type
 from pathlib import Path
 from time import sleep
 from typing import Any, Protocol
@@ -12,6 +13,12 @@ from app.core.config import settings
 
 class StorageBackend(Protocol):
     def write(self, relative_path: str, data: bytes, *, overwrite: bool = True) -> str:
+        ...
+
+    def read(self, relative_path: str) -> bytes:
+        ...
+
+    def exists(self, relative_path: str) -> bool:
         ...
 
     def url_for(self, relative_path: str) -> str:
@@ -33,6 +40,19 @@ def is_legacy_absolute_path(path: str) -> bool:
     return bool(parsed.scheme and "://" in value)
 
 
+def coerce_relative_media_path(path: str) -> str:
+    """Strip /media prefix from stored paths; reject http(s)/data URLs."""
+    normalized = str(path or "").strip().replace("\\", "/")
+    if not normalized:
+        raise ValueError("Empty media path")
+    if normalized.startswith(("http://", "https://", "data:")):
+        raise ValueError(f"Not a relative media path: {normalized[:48]}")
+    media_prefix = settings.media_url_prefix.rstrip("/")
+    if normalized.startswith(media_prefix + "/"):
+        normalized = normalized[len(media_prefix) + 1 :]
+    return _normalize_relative_path(normalized)
+
+
 class LocalStorage:
     def __init__(self, root: str, url_prefix: str) -> None:
         self._root = root
@@ -45,13 +65,33 @@ class LocalStorage:
         root.mkdir(parents=True, exist_ok=True)
         return root
 
+    def _resolved_file(self, relative_path: str) -> Path:
+        normalized = _normalize_relative_path(relative_path)
+        media_root = self.root_path().resolve()
+        target = (media_root / Path(normalized)).resolve()
+        if media_root not in target.parents and target != media_root:
+            raise ValueError(f"Media path escapes storage root: {normalized}")
+        return target
+
     def write(self, relative_path: str, data: bytes, *, overwrite: bool = True) -> str:
         normalized = _normalize_relative_path(relative_path)
-        target = self.root_path() / Path(normalized)
+        target = self._resolved_file(normalized)
         target.parent.mkdir(parents=True, exist_ok=True)
         if overwrite or not target.exists():
             target.write_bytes(data)
         return normalized
+
+    def read(self, relative_path: str) -> bytes:
+        target = self._resolved_file(relative_path)
+        if not target.is_file():
+            raise FileNotFoundError(f"Local media not found: {relative_path}")
+        return target.read_bytes()
+
+    def exists(self, relative_path: str) -> bool:
+        try:
+            return self._resolved_file(relative_path).is_file()
+        except ValueError:
+            return False
 
     def url_for(self, relative_path: str) -> str:
         if is_legacy_absolute_path(relative_path):
@@ -140,11 +180,15 @@ class OSSStorage:
 
         return exc.__class__.__name__ in {"RequestError", "ServerError", "OpenApiServerError"}
 
+    def _content_type_for(self, relative_path: str) -> str:
+        guessed, _ = guess_type(relative_path)
+        return guessed or "application/octet-stream"
+
     def write(self, relative_path: str, data: bytes, *, overwrite: bool = True) -> str:
         del overwrite  # OSS objects are overwritten by key; callers retain a uniform interface.
         normalized = _normalize_relative_path(relative_path)
         bucket = self._get_bucket()
-        headers = {"Content-Type": "application/octet-stream"}
+        headers = {"Content-Type": self._content_type_for(normalized)}
         backoffs = (1, 2, 4)
 
         for attempt in range(len(backoffs) + 1):
@@ -157,6 +201,26 @@ class OSSStorage:
                 self._sleep(backoffs[attempt])
 
         raise RuntimeError(f"OSS upload failed for {normalized}")
+
+    def read(self, relative_path: str) -> bytes:
+        normalized = _normalize_relative_path(relative_path)
+        bucket = self._get_bucket()
+        try:
+            result = bucket.get_object(normalized)
+            return result.read()
+        except Exception as exc:
+            status = getattr(exc, "status", None)
+            if status == 404 or exc.__class__.__name__ == "NoSuchKey":
+                raise FileNotFoundError(f"OSS media not found: {normalized}") from exc
+            raise RuntimeError(f"OSS download failed for {normalized}: {exc}") from exc
+
+    def exists(self, relative_path: str) -> bool:
+        normalized = _normalize_relative_path(relative_path)
+        bucket = self._get_bucket()
+        try:
+            return bool(bucket.object_exists(normalized))
+        except Exception as exc:
+            raise RuntimeError(f"OSS exists check failed for {normalized}: {exc}") from exc
 
     def url_for(self, relative_path: str) -> str:
         if is_legacy_absolute_path(relative_path):
@@ -181,12 +245,16 @@ def get_storage_backend() -> StorageBackend:
     raise ValueError(f"Invalid QMDH_STORAGE_BACKEND value: {settings.storage_backend}")
 
 
+def get_local_storage() -> LocalStorage:
+    return LocalStorage(settings.media_root, settings.media_url_prefix)
+
+
 def validate_storage_backend_configuration() -> None:
     get_storage_backend()
 
 
 def media_root_path() -> Path:
-    return LocalStorage(settings.media_root, settings.media_url_prefix).root_path()
+    return get_local_storage().root_path()
 
 
 def media_url_for(relative_path: str) -> str:
@@ -214,7 +282,26 @@ def resolve_storage_payload(payload: Any) -> Any:
 
 
 def write_binary_asset(relative_path: str, content: bytes, *, overwrite: bool = True) -> str:
-    return get_storage_backend().write(relative_path, content, overwrite=overwrite)
+    """Write to the active backend. When OSS is active, also mirror to local disk."""
+    backend = get_storage_backend()
+    normalized = backend.write(relative_path, content, overwrite=overwrite)
+    if (settings.storage_backend or "local").strip().lower() == "oss":
+        get_local_storage().write(normalized, content, overwrite=overwrite)
+    return normalized
+
+
+def read_binary_asset(relative_path: str) -> bytes:
+    """Read media bytes. Prefer local mirror, then active backend (OSS)."""
+    normalized = coerce_relative_media_path(relative_path)
+    local = get_local_storage()
+    if local.exists(normalized):
+        return local.read(normalized)
+
+    backend = get_storage_backend()
+    if (settings.storage_backend or "local").strip().lower() == "oss":
+        return backend.read(normalized)
+
+    raise FileNotFoundError(f"Media not found: {normalized}")
 
 
 def write_base64_asset(relative_path: str, data: str, *, overwrite: bool = True) -> str:

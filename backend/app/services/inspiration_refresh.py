@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import InspirationPost
 from app.services.inspiration_media import prepare_inspiration_image
-from app.services.media_storage import media_root_path
+from app.services.media_storage import media_root_path, write_binary_asset
 
 
 @dataclass(frozen=True)
@@ -336,10 +336,8 @@ def import_seed_inspiration_bundle(
         for member in members:
             if member == "manifest.json":
                 continue
-            target = (media_root / Path(member)).resolve()
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with bundle.open(member) as source, target.open("wb") as sink:
-                shutil.copyfileobj(source, sink)
+            with bundle.open(member) as source:
+                write_binary_asset(member, source.read(), overwrite=True)
             result.extracted_files += 1
 
         with bundle.open("manifest.json") as source:

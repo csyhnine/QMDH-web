@@ -1,5 +1,7 @@
 import type { UIMessage } from "ai";
 
+import type { ChatThinkingStep, ChatToolCall } from "./qmdhSseParser";
+
 export type QmdhChatAttachment = {
   file_name: string;
   mime_type: string;
@@ -13,7 +15,17 @@ export type QmdhChatRecord = {
   role: string;
   content: string;
   attachments?: QmdhChatAttachment[];
+  agent_tool_calls?: ChatToolCall[];
+  agent_thinking_steps?: ChatThinkingStep[];
+  policy_version?: string | null;
   created_at?: string;
+};
+
+export type QmdhChatMessageMeta = {
+  attachments: QmdhChatAttachment[];
+  agentToolCalls: ChatToolCall[];
+  agentThinkingSteps: ChatThinkingStep[];
+  policyVersion: string | null;
 };
 
 export function toUiMessages(records: QmdhChatRecord[]): UIMessage[] {
@@ -23,16 +35,40 @@ export function toUiMessages(records: QmdhChatRecord[]): UIMessage[] {
     parts: [{ type: "text" as const, text: record.content }],
     metadata: {
       attachments: record.attachments ?? [],
-    },
+      agentToolCalls: record.agent_tool_calls ?? [],
+      agentThinkingSteps: record.agent_thinking_steps ?? [],
+      policyVersion: record.policy_version ?? null,
+    } satisfies QmdhChatMessageMeta,
   }));
 }
 
-export function getUiMessageAttachments(message: UIMessage): QmdhChatAttachment[] {
-  const metadata = message.metadata;
-  if (!metadata || !Array.isArray(metadata.attachments)) {
-    return [];
+export function getUiMessageMetadata(message: UIMessage): QmdhChatMessageMeta {
+  const metadata = message.metadata as Partial<QmdhChatMessageMeta> | undefined;
+  if (!metadata || typeof metadata !== "object") {
+    return { attachments: [], agentToolCalls: [], agentThinkingSteps: [], policyVersion: null };
   }
-  return metadata.attachments as QmdhChatAttachment[];
+  return {
+    attachments: Array.isArray(metadata.attachments) ? metadata.attachments : [],
+    agentToolCalls: Array.isArray(metadata.agentToolCalls) ? metadata.agentToolCalls : [],
+    agentThinkingSteps: Array.isArray(metadata.agentThinkingSteps) ? metadata.agentThinkingSteps : [],
+    policyVersion: typeof metadata.policyVersion === "string" ? metadata.policyVersion : null,
+  };
+}
+
+export function getUiMessageAttachments(message: UIMessage): QmdhChatAttachment[] {
+  return getUiMessageMetadata(message).attachments;
+}
+
+export function getUiMessageAgentToolCalls(message: UIMessage): ChatToolCall[] {
+  return getUiMessageMetadata(message).agentToolCalls;
+}
+
+export function getUiMessageAgentThinkingSteps(message: UIMessage): ChatThinkingStep[] {
+  return getUiMessageMetadata(message).agentThinkingSteps;
+}
+
+export function getUiMessagePolicyVersion(message: UIMessage): string | null {
+  return getUiMessageMetadata(message).policyVersion;
 }
 
 export function getUiMessageText(message: UIMessage): string {

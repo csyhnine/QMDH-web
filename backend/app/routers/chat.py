@@ -1,7 +1,9 @@
 """Chat API router: conversations, messages, streaming."""
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -9,11 +11,24 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.audit import AuditEventType, write_audit_log
 from app.core.auth import get_current_auth_user, get_optional_auth_user
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import ChatMessage, Conversation, ProviderProfile, User
+from app.integrations.studio_agent.agent import (
+    ChatAgentThinkingStep,
+    StudioAgentReply,
+    StudioAgentUnavailableError,
+    run_studio_agent_isolated,
+)
+from app.models import AgentSkillRelease, ChatMessage, Conversation, ProviderProfile, User
 from app.schemas import (
+    AgentChatToolOut,
+    ChatAgentPolicyLayerOut,
+    ChatAgentPolicyOut,
+    ChatAgentTaskProposalOut,
+    ChatAgentThinkingStepOut,
+    ChatAgentToolCallOut,
     ChatAttachmentOut,
     ChatAttachmentUploadIn,
     ChatAttachmentUploadOut,
@@ -38,7 +53,21 @@ from app.services.chat_message_content import (
 from app.services.chat_word_export import build_chat_word_document, default_chat_word_file_name
 from app.services.media_storage import resolve_storage_path, write_binary_asset
 from app.services.chat_context import estimate_conversation_context, pack_chat_context
+from app.services.chat_agent_service import (
+    build_chat_agent_message,
+    embed_agent_message_meta,
+    format_agent_thinking_sse,
+    format_agent_thinking_step_sse,
+    parse_agent_message_meta,
+    stream_chat_agent_sse,
+)
+from app.services.agent_policy_service import (
+    CHAT_AGENT_BASELINE_PROMPT,
+    build_chat_policy_summary,
+    resolve_effective_chat_policy,
+)
 from app.services.chat_service import (
+    chat_error_payload,
     format_chat_error_message,
     get_chat_models,
     provider_profile_has_usable_api_key,
@@ -49,6 +78,80 @@ from app.services.billing import enforce_user_quota, normalize_chat_usage
 from app.services.usage_ledger import record_chat_usage_ledger
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+logger = logging.getLogger(__name__)
+
+
+def _format_agent_run_error(exc: Exception) -> tuple[str, str]:
+    detail = str(exc).strip()
+    lowered = detail.lower()
+    if "max retries" in lowered:
+        return (
+            "助手工具调用失败，常见原因是模型名称或生图参数不正确。"
+            "请先让它「列出可用模型」，或前往 Studio 生图。",
+            detail[:320],
+        )
+    if "provider not found" in lowered:
+        return ("未找到指定的生图模型，请先列出可用模型后再试。", detail[:320])
+    return ("助手调用失败，请稍后重试。", detail[:320])
+
+
+def _persist_agent_assistant_message(
+    db: Session,
+    conversation: Conversation,
+    conversation_id: int,
+    content: str,
+    *,
+    tool_calls: tuple | list | None = None,
+    task_proposals: tuple | list | None = None,
+    thinking_steps: tuple | list | None = None,
+    policy_version: str = "code-default",
+) -> None:
+    stored_content = embed_agent_message_meta(
+        content,
+        tool_calls=tool_calls or (),
+        task_proposals=task_proposals or (),
+        thinking_steps=thinking_steps or (),
+        policy_version=policy_version,
+    )
+    assistant_message = ChatMessage(
+        conversation_id=conversation_id,
+        role="assistant",
+        content=stored_content,
+        token_count=0,
+    )
+    db.add(assistant_message)
+    conversation.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+
+def _serialize_chat_message_out(message: ChatMessage) -> ChatMessageOut:
+    parsed = parse_agent_message_meta(message.content or "")
+    return ChatMessageOut(
+        id=message.id,
+        role=message.role,
+        content=parsed.visible_content,
+        attachments=[
+            ChatAttachmentOut(**chat_attachment_out(item))
+            for item in (message.attachments_json or [])
+            if isinstance(item, dict)
+        ],
+        created_at=message.created_at,
+        agent_tool_calls=[
+            ChatAgentToolCallOut(name=call.name, summary=call.summary)
+            for call in parsed.tool_calls
+        ],
+        agent_task_proposals=[
+            ChatAgentTaskProposalOut(**proposal)
+            for proposal in parsed.task_proposals
+            if isinstance(proposal, dict)
+        ],
+        agent_thinking_steps=[
+            ChatAgentThinkingStepOut(**step)
+            for step in parsed.thinking_steps
+            if isinstance(step, dict)
+        ],
+        policy_version=parsed.policy_version,
+    )
 
 
 def _conversation_out(db: Session, conversation: Conversation) -> ConversationOut:
@@ -183,19 +286,45 @@ def get_messages(
         .order_by(ChatMessage.created_at.asc())
     ).all()
     return [
-        ChatMessageOut(
-            id=message.id,
-            role=message.role,
-            content=message.content,
-            attachments=[
-                ChatAttachmentOut(**chat_attachment_out(item))
-                for item in (message.attachments_json or [])
-                if isinstance(item, dict)
-            ],
-            created_at=message.created_at,
-        )
+        _serialize_chat_message_out(message)
         for message in messages
     ]
+
+
+@router.get("/agent-policy", response_model=ChatAgentPolicyOut)
+def get_chat_agent_policy(
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> ChatAgentPolicyOut:
+    if auth_user.user_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    policy = resolve_effective_chat_policy(db, environment="prod", user_id=auth_user.user_id)
+    release_display_name: str | None = None
+    if policy.release_id is not None:
+        release = db.get(AgentSkillRelease, policy.release_id)
+        if release is not None:
+            release_display_name = release.display_name
+    summary = build_chat_policy_summary(policy, release_display_name=release_display_name)
+    enabled_tools = summary["enabled_tools"]
+    disabled_tools = summary["disabled_tools"]
+    policy_layers = summary["policy_layers"]
+    assert isinstance(enabled_tools, list)
+    assert isinstance(disabled_tools, list)
+    assert isinstance(policy_layers, list)
+    return ChatAgentPolicyOut(
+        policy_version=str(summary["policy_version"]),
+        release_display_name=release_display_name,
+        environment=str(summary["environment"]),
+        enabled_tools=[AgentChatToolOut(**item) for item in enabled_tools if isinstance(item, dict)],
+        disabled_tools=[AgentChatToolOut(**item) for item in disabled_tools if isinstance(item, dict)],
+        policy_layers=[ChatAgentPolicyLayerOut(**item) for item in policy_layers if isinstance(item, dict)],
+        data_scope_note=str(summary["data_scope_note"]),
+        capabilities_summary=str(summary["capabilities_summary"]),
+        baseline_prompt=CHAT_AGENT_BASELINE_PROMPT.strip(),
+        personalization_summary=summary.get("personalization_summary") if isinstance(summary.get("personalization_summary"), str) else None,
+        user_group_name=summary.get("user_group_name") if isinstance(summary.get("user_group_name"), str) else None,
+        assigned_agents=[],
+    )
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)
@@ -316,6 +445,151 @@ async def send_message(
             .order_by(ChatMessage.created_at.asc())
         )
     )
+    recent = all_messages[-50:] if len(all_messages) > 50 else all_messages
+
+    if payload.agent_mode:
+        policy_version = (payload.policy_version or "").strip() or None
+        agent_message = build_chat_agent_message(
+            recent,
+            content,
+            attachment_names=[item["file_name"] for item in attachments if item.get("file_name")],
+        )
+
+        async def generate_agent():
+            loop = asyncio.get_running_loop()
+            thinking_queue: asyncio.Queue[dict[str, str] | None] = asyncio.Queue()
+            collected_thinking_steps: list[dict[str, object]] = []
+
+            def thinking_callback(step: ChatAgentThinkingStep) -> None:
+                payload_dict = step.to_dict()
+                loop.call_soon_threadsafe(thinking_queue.put_nowait, payload_dict)
+
+            async def run_agent() -> StudioAgentReply:
+                try:
+                    return await asyncio.to_thread(
+                        run_studio_agent_isolated,
+                        message=agent_message,
+                        user_name=auth_user.name,
+                        user_id=auth_user.user_id,
+                        provider_id=provider_profile_id,
+                        policy_version=policy_version,
+                        thinking_callback=thinking_callback,
+                    )
+                finally:
+                    loop.call_soon_threadsafe(thinking_queue.put_nowait, None)
+
+            yield format_agent_thinking_sse()
+            agent_task = asyncio.create_task(run_agent())
+            agent_reply: StudioAgentReply | None = None
+            agent_error: BaseException | None = None
+
+            while True:
+                try:
+                    step = await asyncio.wait_for(thinking_queue.get(), timeout=0.05)
+                except asyncio.TimeoutError:
+                    if agent_task.done():
+                        break
+                    continue
+                if step is None:
+                    break
+                collected_thinking_steps.append(step)
+                yield format_agent_thinking_step_sse(step)
+
+            while not thinking_queue.empty():
+                step = thinking_queue.get_nowait()
+                if step is not None:
+                    collected_thinking_steps.append(step)
+                    yield format_agent_thinking_step_sse(step)
+
+            try:
+                agent_reply = await agent_task
+            except StudioAgentUnavailableError as exc:
+                agent_error = exc
+            except Exception as exc:
+                agent_error = exc
+
+            if isinstance(agent_error, StudioAgentUnavailableError):
+                exc = agent_error
+                summary, detail = _format_agent_run_error(exc)
+                error_text = format_chat_error_message(
+                    chat_error_payload(
+                        code="chat_agent_unavailable",
+                        summary=summary,
+                        detail=detail,
+                    )
+                )
+                yield f"data: {json.dumps({'error': {'summary': error_text, 'detail': detail, 'code': 'chat_agent_unavailable'}}, ensure_ascii=False)}\n\n"
+                _persist_agent_assistant_message(db, conversation, conversation_id, error_text)
+                yield "data: [DONE]\n\n"
+                return
+            if agent_error is not None:
+                exc = agent_error
+                logger.exception("Chat agent failed for conversation %s", conversation_id)
+                summary, detail = _format_agent_run_error(exc)
+                error_text = format_chat_error_message(
+                    chat_error_payload(
+                        code="chat_agent_error",
+                        summary=summary,
+                        detail=detail,
+                    )
+                )
+                yield f"data: {json.dumps({'error': {'summary': error_text, 'detail': detail, 'code': 'chat_agent_error'}}, ensure_ascii=False)}\n\n"
+                _persist_agent_assistant_message(db, conversation, conversation_id, error_text)
+                yield "data: [DONE]\n\n"
+                return
+
+            assert agent_reply is not None
+            compose_done = ChatAgentThinkingStep(
+                key="agent_compose",
+                label="整理回复",
+                detail="回复已生成",
+                status="done",
+            ).to_dict()
+            collected_thinking_steps.append(compose_done)
+            yield format_agent_thinking_step_sse(compose_done)
+
+            write_audit_log(
+                db,
+                event_type=AuditEventType.STUDIO_AGENT_ASSIST,
+                actor_name=auth_user.name,
+                actor_id=auth_user.user_id,
+                target_type="chat_agent",
+                provider_name=agent_reply.provider_name,
+                details={
+                    "model_name": agent_reply.model_name,
+                    "conversation_id": conversation_id,
+                    "message_preview": content[:120],
+                    "reply_preview": agent_reply.text[:240],
+                    "tool_calls": [call.name for call in agent_reply.tool_calls],
+                    "thinking_steps": [step.get("key") for step in collected_thinking_steps],
+                    "policy_version": agent_reply.policy_version,
+                },
+            )
+
+            full_content = agent_reply.text.strip() or "助手未返回内容，请重试。"
+            _persist_agent_assistant_message(
+                db,
+                conversation,
+                conversation_id,
+                full_content,
+                tool_calls=agent_reply.tool_calls,
+                task_proposals=agent_reply.task_proposals,
+                thinking_steps=collected_thinking_steps,
+                policy_version=agent_reply.policy_version,
+            )
+
+            async for chunk in stream_chat_agent_sse(agent_reply):
+                yield chunk
+
+        return StreamingResponse(
+            generate_agent(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     full_content_parts: list[str] = []
     last_error_payload: dict[str, object] | None = None

@@ -444,6 +444,8 @@ class AgentSkillRelease(Base):
     environment: Mapped[str] = mapped_column(String(30), default="test", index=True)
     openclaw_version: Mapped[str] = mapped_column(String(50), default="latest")
     skill_keys: Mapped[list[str]] = mapped_column(JSON, default=list)
+    system_prompt_template: Mapped[str] = mapped_column(Text, default="")
+    chat_tool_allowlist: Mapped[list[str]] = mapped_column(JSON, default=list)
     notes: Mapped[str] = mapped_column(Text, default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)

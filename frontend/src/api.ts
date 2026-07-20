@@ -673,6 +673,42 @@ export type AgentSkillReleaseCreatePayload = {
 
 export type AgentSkillReleaseUpdatePayload = Partial<AgentSkillReleaseCreatePayload>;
 
+export type AgentChatToolRecord = {
+  key: string;
+  label: string;
+  description: string;
+};
+
+export type AssignedAgentRecord = {
+  key: string;
+  display_name: string;
+  role: string;
+  is_primary: boolean;
+};
+
+export type ChatAgentPolicyLayerRecord = {
+  layer: string;
+  label: string;
+  detail: string | null;
+  disabled_tool_keys: string[];
+  prompt_overlay: string;
+};
+
+export type ChatAgentPolicyRecord = {
+  policy_version: string;
+  release_display_name: string | null;
+  environment: string;
+  enabled_tools: AgentChatToolRecord[];
+  disabled_tools: AgentChatToolRecord[];
+  policy_layers: ChatAgentPolicyLayerRecord[];
+  data_scope_note: string;
+  capabilities_summary: string;
+  baseline_prompt: string;
+  personalization_summary: string | null;
+  user_group_name: string | null;
+  assigned_agents: AssignedAgentRecord[];
+};
+
 export type FeedbackMessage = {
   id: number;
   feedback_id: number;
@@ -1051,9 +1087,20 @@ export const api = {
         role: string;
         content: string;
         attachments: { file_name: string; mime_type: string; url: string; storage_path: string; kind: "image" | "file" }[];
+        agent_tool_calls?: { name: string; summary: string }[];
+        agent_thinking_steps?: {
+          key: string;
+          label: string;
+          detail: string;
+          status: string;
+          agent_key?: string;
+          agent_label?: string;
+        }[];
+        policy_version?: string | null;
         created_at: string;
       }[]
     >(`/chat/conversations/${convId}/messages`),
+  getChatAgentPolicy: () => request<ChatAgentPolicyRecord>("/chat/agent-policy"),
   deleteChatConversation: (convId: number) => deleteRequest(`/chat/conversations/${convId}`),
   exportChatMessageWord: async (
     convId: number,

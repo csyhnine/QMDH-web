@@ -16,9 +16,11 @@ type CanvasModelSelectProps = {
 };
 
 function isOptionDisabled(groupKey: CanvasProviderGroupKey, nodeKind: GenerateNodeData["nodeKind"]): boolean {
-  if (groupKey === "llm") return true;
   if (nodeKind === "upscale") return groupKey !== "upscale";
   if (nodeKind === "video") return groupKey !== "video" && groupKey !== "image";
+  if (nodeKind === "text2img" || nodeKind === "img2img") {
+    return groupKey !== "image" && groupKey !== "video";
+  }
   return false;
 }
 

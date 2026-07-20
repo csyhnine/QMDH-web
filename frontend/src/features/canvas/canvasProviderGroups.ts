@@ -1,6 +1,5 @@
 import type { Provider } from "../../api";
 import {
-  isRuntimeImageProvider,
   isRuntimeUpscaleProvider,
   publicProviderDisplayName,
 } from "../studio/modelAdminUtils";
@@ -27,24 +26,24 @@ export const CANVAS_PROVIDER_GROUP_LABEL: Record<CanvasProviderGroupKey, string>
   llm: "LLM",
 };
 
+/** True image/video providers for canvas — never classify chat-only LLMs as image. */
 export function canvasProviderGroupKey(provider: Provider): CanvasProviderGroupKey | null {
   if (!provider.outbound) return null;
-  if (isRuntimeUpscaleProvider(provider) || provider.capabilities.includes("image.upscale")) {
-    // Pure upscale adapters (e.g. BigJPG) — not mixed into image generate list.
-    if (!provider.capabilities.includes("image.generate") && !provider.capabilities.includes("image.edit")) {
-      return "upscale";
-    }
+
+  const caps = provider.capabilities ?? [];
+  const hasImageGenerate = caps.includes("image.generate") || caps.includes("image.edit");
+  const hasVideo = caps.includes("video.generate");
+  const hasUpscale = caps.includes("image.upscale") || isRuntimeUpscaleProvider(provider);
+  const hasChat = caps.includes("chat.completions");
+
+  // Pure upscale adapters (e.g. BigJPG).
+  if (hasUpscale && !hasImageGenerate && !hasVideo) {
+    return "upscale";
   }
-  if (provider.capabilities.includes("video.generate")) return "video";
-  if (
-    provider.capabilities.includes("image.generate") ||
-    provider.capabilities.includes("image.edit") ||
-    isRuntimeImageProvider(provider)
-  ) {
-    return "image";
-  }
-  if (provider.capabilities.includes("chat.completions")) return "llm";
-  if (provider.capabilities.includes("image.upscale")) return "upscale";
+  if (hasVideo) return "video";
+  if (hasImageGenerate) return "image";
+  if (hasChat) return "llm";
+  if (hasUpscale) return "upscale";
   return null;
 }
 
@@ -64,13 +63,14 @@ export function groupProvidersForCanvas(
     buckets[key].push(provider);
   }
 
-  let order = CANVAS_PROVIDER_GROUP_ORDER;
+  // LLM 不进入生图/视频节点下拉，避免与图片模型混排。
+  let order: CanvasProviderGroupKey[] = CANVAS_PROVIDER_GROUP_ORDER;
   if (nodeKind === "upscale") {
     order = ["upscale"];
   } else if (nodeKind === "video") {
-    order = ["video", "image", "llm"];
+    order = ["video", "image"];
   } else if (nodeKind === "text2img" || nodeKind === "img2img") {
-    order = ["image", "video", "llm"];
+    order = ["image", "video"];
   } else if (nodeKind === "upload" || nodeKind === "annotate") {
     order = [];
   }
@@ -114,4 +114,11 @@ export function patchFromProviderSelection(
 
 export function providerOptionLabel(provider: Provider): string {
   return publicProviderDisplayName(provider);
+}
+
+export function firstCanvasProviderName(
+  providers: Provider[],
+  group: CanvasProviderGroupKey
+): string {
+  return providers.find((provider) => canvasProviderGroupKey(provider) === group)?.provider_name || "";
 }

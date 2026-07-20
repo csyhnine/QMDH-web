@@ -12,11 +12,8 @@ import {
 
 import { api, type CanvasTemplateSummary, type Provider } from "../../api";
 import { useAuth } from "../../context/AuthContext";
-import {
-  isRuntimeStudioProvider,
-  isRuntimeUpscaleProvider,
-  publicProviderDisplayName,
-} from "../studio/modelAdminUtils";
+import { isRuntimeUpscaleProvider, publicProviderDisplayName } from "../studio/modelAdminUtils";
+import { firstCanvasProviderName } from "./canvasProviderGroups";
 import { prepareReferenceUploadFiles, uploadReferenceFiles } from "../studio/studioReferenceUtils";
 import { exportAnnotatedDataUrl } from "./annotateDraw";
 import CanvasBoard from "./CanvasBoard";
@@ -108,11 +105,12 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   const nodeDefaults = useMemo<CanvasNodeDefaults>(
     () => ({
       projectCode,
-      imageProvider:
-        providers.find((provider) => isRuntimeStudioProvider(provider, "generate"))?.provider_name || "",
-      videoProvider:
-        providers.find((provider) => isRuntimeStudioProvider(provider, "video"))?.provider_name || "",
-      upscaleProvider: providers.find((provider) => isRuntimeUpscaleProvider(provider))?.provider_name || "",
+      imageProvider: firstCanvasProviderName(providers, "image"),
+      videoProvider: firstCanvasProviderName(providers, "video"),
+      upscaleProvider:
+        firstCanvasProviderName(providers, "upscale") ||
+        providers.find((provider) => isRuntimeUpscaleProvider(provider))?.provider_name ||
+        "",
     }),
     [projectCode, providers]
   );

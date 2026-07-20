@@ -16,29 +16,27 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Current Baseline
 
-- **Active development sequence**: ① **整理并 commit 07-20 本地工作区**（画布模板 / Chat 上下文 / 真流式）→ ② **Agent WIP 合入**（rebase + B1 切片）→ ③ VIP Admin 配置 / 访客 P2
-- Current branch: `main` @ **`4a3e5ad`**（工作区有大量 **未提交** 改动，见下）
+- **Active development sequence**: ① 07-20 画布/上下文/流式 **已 commit 到 main（未 push）** → ② **B1 切片分支已建** → ③ 用户同意后 push/PR → ④ gov → B2 → multi → ⑤ VIP Admin / 访客 P2
+- Current branch for Agent B1: **`feat/chat-004-agent-b1`**（基于 `main` @ **`29d7841`**；worktree：`E:/projects/QMDH-web-b1`）
+- `main` @ **`29d7841`**：领先 `origin/main` **4** commit（canvas / context / streaming / docs）；**未 push**
 - Production: **`https://cityusbdisk.cn`** — 以服务器实际 HEAD 为准（此前交接曾记 `186b127` / VIP UA `f0497b3`）
-- **本地未提交总留档（换对话必读）**：`docs/archive/handoff-2026-07-20-canvas-chat-streaming-wip.md`
-  - 画布模板库 + Chat 上下文摘要落库 + Chat 真流式（用户已确认流式成功）
-  - **未 commit / 未 push / 未部署**；`assets/` 截图勿入库
+- **07-20 留档**：`docs/archive/handoff-2026-07-20-canvas-chat-streaming-wip.md`（内容已入库 main，勿再当未提交工作区）
 - Deploy archive: `docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
 - **VIP**：异步 + 下载 UA 热修已有代码路径；Admin 建 `gpt-image-2-vip` 即可测（见 VIP archive）
-- **Chat 轮次导航**：本地 DONE，见 `docs/archive/chat-round-nav-2026-07-16.md`（可能与 07-20 工作区重叠）
 - **Chat Agent（重要）**：
-  - 生产 / 当前 `main`：`/studio/chat` = **纯 LLM**，**无** `agent_mode`
-  - 代码在 **`wip/agent-multi-chat-2026-07` @ `4b0a5b3`**（未合入、未部署）
-  - 现状交接：**`docs/archive/handoff-2026-07-16-agent-wip-status.md`**
-  - 建议合入切片：B1 → gov → B2 → multi/crawl/ref-intent（勿整包一次上）
-  - 合入前先把 07-20 本地改动入库，再 rebase，冲突更可控
+  - 生产 / `main`：仍无 `agent_mode`（B1 尚未合入）
+  - **B1 切片**：`feat/chat-004-agent-b1` — 只读 tools + thinking/tool_calls SSE；无 harness/LangGraph
+  - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**（gov/B2/multi/crawl/ref；**未**整包 rebase）
+  - 现状交接：**`docs/archive/handoff-2026-07-16-agent-wip-status.md`** + 本文件
+  - 建议后续切片：gov → B2 → multi/crawl/ref-intent（勿整包一次上）
 - Local dev URLs:
   - frontend: `http://127.0.0.1:18080`
   - backend: `http://127.0.0.1:18010`
 - Local helper commands:
   - startup: `cmd /c start-dev.cmd`
   - build: `npm run build`
-  - smoke: `npm run smoke:studio`, `npm run smoke:chat`（`agent_mode` SSE **仅 WIP 分支**）
-  - backend slice: `backend\.venv\Scripts\python.exe -m pytest tests\test_chat_context.py tests\test_canvas_templates.py tests\test_canvas_projects.py -q`
+  - smoke: `npm run smoke:studio`, `npm run smoke:chat`（`agent_mode`：**B1 分支**或旧 WIP）
+  - backend B1 slice: `backend\.venv\Scripts\python.exe -m pytest tests\test_chat_agent_service.py tests\test_chat_agent_mode.py tests\test_chat_context.py -q`
 - Do not commit: `storage/`, `tmp/`, `.env`, `backend/app.db`, `frontend/dist/`, `node_modules/`, `assets/` 本地截图
 - Hard rule: **未经用户明确同意，禁止 git push / 生产部署**
 

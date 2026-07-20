@@ -16,20 +16,19 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Current Baseline
 
-- **Active development sequence**: ① GitHub `main` 已含画布/上下文/流式/**Agent B1** → ② **等用户下令再部署生产** → ③ gov → B2 → multi 切片 → ④ VIP Admin / 访客 P2
-- Current branch: **`main` @ `234dd8b`**（与 `origin/main` 同步；含 PR #2）
-- **Deploy-ready checklist**：`docs/archive/deploy-ready-2026-07-20-main-canvas-chat-b1.md`（**未部署**）
-- Production: **`https://cityusbdisk.cn`** — 仍为旧 HEAD（约 `186b127`）；**勿擅自部署**
+- **Active development sequence**: ① **生产已部署 `3ff220b`** → ② 人工冒烟 → ③ gov → B2 切片 → ④ VIP Admin / 访客 P2
+- Current branch: **`main` @ `3ff220b`**（与生产 / `origin/main` 对齐）
+- **Deploy archive**：`docs/archive/deploy-2026-07-20-main-canvas-chat-b1.md`
+- Production: **`https://cityusbdisk.cn`** — Git **`3ff220b`**；Alembic **`k2l3m4n5o6p7`**
 - 07-20 功能留档：`docs/archive/handoff-2026-07-20-canvas-chat-streaming-wip.md`
-- Deploy archive（上次生产）：`docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
+- 上次部署：`docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
 - **VIP**：代码路径已有；Admin 建 `gpt-image-2-vip` 即可测
 - **Chat Agent（重要）**：
-  - **B1 代码已在 GitHub `main`**；**UI 默认隐藏**（`VITE_CHAT_AGENT_UI_ENABLED` 未开则无「设计助手」开关）
-  - **产品方向不变**：普通 Chat 继续落库对话，服务后续个性化助手；tools/agent_mode 等助手能力择机再开
-  - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**（gov/B2/multi/crawl/ref；未 rebase、未合入）
-  - 现状：`docs/archive/handoff-2026-07-16-agent-wip-status.md` + 本文件
+  - **B1 已部署**：后端在生产；**UI 默认隐藏**（`VITE_CHAT_AGENT_UI_ENABLED`）
+  - **产品方向**：普通 Chat 继续落库，服务后续个性化助手
+  - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**
   - 后续切片：gov → B2 → multi/crawl/ref-intent
-- Alembic head：**`k2l3m4n5o6p7`**（部署必须 `upgrade head`；先 build backend 再迁移）
+- Alembic head：**`k2l3m4n5o6p7`**
 - Local dev URLs:
   - frontend: `http://127.0.0.1:18080`
   - backend: `http://127.0.0.1:18010`
@@ -37,9 +36,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - startup: `cmd /c start-dev.cmd`
   - build: `npm run build`
   - smoke: `npm run smoke:studio`, `npm run smoke:chat`
-  - backend B1: `backend\.venv\Scripts\python.exe -m pytest tests\test_chat_agent_service.py tests\test_chat_agent_mode.py tests\test_chat_context.py -q`
 - Do not commit: `storage/`, `tmp/`, `.env`, `backend/app.db`, `frontend/dist/`, `node_modules/`, `assets/` 本地截图
-- Hard rule: **未经用户明确同意，禁止 git push / 生产部署**（本次文档同步除外，用户已要求准备就绪）
+- Hard rule: **未经用户明确同意，禁止 git push / 生产部署**
 
 ## Current Product Reality
 
@@ -208,13 +206,14 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Domain: `cityusbdisk.cn`（京ICP备14011242号-4，已备案）
 - Deploy path: `/www/wwwroot/qmdh-web`
 - Deployment model: Docker Compose（**worker ×3**）
-- **Production Git: `186b127`** — images rebuilt 2026-07-16
-- **GitHub `main`:** aligned with production @ `186b127`
-- Latest session archive: `docs/handoff.md` → `[2026-07-16] 生产部署`
-- **Deploy archive:** `docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
+- **Production Git: `3ff220b`** — images rebuilt 2026-07-20
+- **GitHub `main`:** aligned with production @ `3ff220b`
+- Alembic: **`k2l3m4n5o6p7` (head)**
+- Latest session archive: `docs/handoff.md` → `[2026-07-20] 生产部署`
+- **Deploy archive:** `docs/archive/deploy-2026-07-20-main-canvas-chat-b1.md`
 - Gemini CPA doc: `docs/cpa-gemini-image-integration.md`（含 2K 验收表）
 - Verified runtime after latest deploy:
-  - `docker compose ps`：backend healthy + worker-1/2/3
+  - `docker compose ps`：backend healthy + worker-1/2/3 + frontend
   - `https://cityusbdisk.cn/api/v1/health` returns healthy
 - Production `.env` highlights:
   - `QMDH_FRONTEND_ORIGIN=https://cityusbdisk.cn`

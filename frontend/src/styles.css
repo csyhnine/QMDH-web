@@ -7860,6 +7860,18 @@ textarea:focus-visible {
   color: #b45309;
 }
 
+.chat-stream-status {
+  margin: 0;
+  padding: 6px 16px 2px;
+  color: #2563eb;
+  font-size: 12px;
+}
+
+.chat-msg-content.is-pending {
+  color: #2563eb;
+  font-size: 13px;
+}
+
 .chat-context-summary-hint {
   flex: 0 0 auto;
   padding: 2px 8px;

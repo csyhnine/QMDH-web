@@ -1,6 +1,7 @@
 """Chat service: OpenAI-compatible streaming client."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -270,12 +271,32 @@ async def stream_chat_completion(
                             yield f"data: {json.dumps({'usage': usage})}\n\n"
 
                         try:
-                            delta = chunk.get("choices", [{}])[0].get("delta", {})
-                            content = delta.get("content", "")
+                            choice = chunk.get("choices", [{}])[0] if isinstance(chunk.get("choices"), list) else {}
+                            if not isinstance(choice, dict):
+                                choice = {}
+                            delta = choice.get("delta") if isinstance(choice.get("delta"), dict) else {}
+                            content = delta.get("content") or ""
+                            # Some OpenAI-compatible gateways emit a single full message instead of deltas.
+                            if not content:
+                                message = choice.get("message") if isinstance(choice.get("message"), dict) else {}
+                                content = message.get("content") or ""
+                            if not content and isinstance(chunk.get("content"), str):
+                                content = chunk.get("content") or ""
                         except (IndexError, KeyError, TypeError):
                             content = ""
                         if content:
-                            yield f"data: {json.dumps({'delta': content})}\n\n"
+                            # Split oversized single-frame payloads so the UI can still paint incrementally.
+                            text = str(content)
+                            if len(text) > 24:
+                                step = max(8, len(text) // 24)
+                                for index in range(0, len(text), step):
+                                    piece = text[index : index + step]
+                                    if piece:
+                                        yield f"data: {json.dumps({'delta': piece}, ensure_ascii=False)}\n\n"
+                                        await asyncio.sleep(0)
+                            else:
+                                yield f"data: {json.dumps({'delta': text}, ensure_ascii=False)}\n\n"
+                                await asyncio.sleep(0)
                     break
 
     except httpx.TimeoutException:

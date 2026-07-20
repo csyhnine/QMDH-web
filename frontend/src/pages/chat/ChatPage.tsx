@@ -59,6 +59,7 @@ export default function ChatPage() {
   });
   const [chatError, setChatError] = useState("");
   const [exportingMessageId, setExportingMessageId] = useState<string | null>(null);
+  const [streamStatusLabel, setStreamStatusLabel] = useState("");
   const [contextUsagePercent, setContextUsagePercent] = useState<number | null>(null);
   const [contextTokens, setContextTokens] = useState<number | null>(null);
   const [contextWindowTokens, setContextWindowTokens] = useState<number | null>(null);
@@ -75,6 +76,9 @@ export default function ChatPage() {
   const transport = useMemo(
     () =>
       new QmdhChatTransport(() => activeChatIdRef.current, (meta) => {
+        if (meta.label) {
+          setStreamStatusLabel(meta.label);
+        }
         if (meta.context?.usage_percent != null) {
           setContextUsagePercent(meta.context.usage_percent);
         }
@@ -112,12 +116,26 @@ export default function ChatPage() {
   } = useChat({
     id: activeChatId ? String(activeChatId) : "chat-disabled",
     transport,
+    // Keep React paints responsive while tokens arrive.
+    experimental_throttle: 50,
     onFinish: () => {
+      setStreamStatusLabel("");
       const conversationId = activeChatIdRef.current;
-      if (conversationId != null) {
-        void refreshConversations(conversationId);
-        void loadConversation(conversationId);
+      if (conversationId == null) {
+        return;
       }
+      // Refresh sidebar metadata only. Avoid reloading the whole transcript here —
+      // that replaces streaming content with a one-shot DB snapshot and feels like
+      // "full dump after thinking". Soft-sync message ids in the background.
+      void refreshConversations(conversationId);
+      void (async () => {
+        try {
+          const nextMessages = await api.getChatMessages(conversationId);
+          setChatMessages(toUiMessages(nextMessages));
+        } catch {
+          // Keep the streamed transcript if sync fails.
+        }
+      })();
     },
   });
 
@@ -170,6 +188,7 @@ export default function ChatPage() {
 
   async function loadConversation(conversationId: number) {
     setChatError("");
+    setStreamStatusLabel("");
     setActiveChatId(conversationId);
     pendingInitialScrollRef.current = true;
     previousMessageCountRef.current = 0;
@@ -233,7 +252,8 @@ export default function ChatPage() {
     if (!streamError) {
       return;
     }
-    setChatError(streamError.message);
+    const message = streamError.message;
+    setChatError((current) => (current === message ? current : message));
   }, [streamError]);
 
   const lastMessage = chatMessages[chatMessages.length - 1];
@@ -347,31 +367,39 @@ export default function ChatPage() {
     const attachments = attachmentState.toSendPayload();
     setChatInput("");
     setChatError("");
+    setStreamStatusLabel("整理上下文…");
     attachmentState.setError("");
     shouldAutoScrollRef.current = true;
 
     try {
-      await sendMessage({ text: content }, { body: { attachments } });
-      setChatMessages((current) => {
-        const next = [...current];
-        for (let index = next.length - 1; index >= 0; index -= 1) {
-          if (next[index]?.role === "user") {
-            next[index] = {
-              ...next[index],
-              metadata: {
-                ...(next[index].metadata ?? {}),
-                attachments: uiAttachments,
-              },
-            };
-            break;
+      // Do not await the full stream before showing tokens; useChat updates messages live.
+      void sendMessage({ text: content }, { body: { attachments } }).then(() => {
+        setChatMessages((current) => {
+          const next = [...current];
+          for (let index = next.length - 1; index >= 0; index -= 1) {
+            if (next[index]?.role === "user") {
+              next[index] = {
+                ...next[index],
+                metadata: {
+                  ...(next[index].metadata ?? {}),
+                  attachments: uiAttachments,
+                },
+              };
+              break;
+            }
           }
-        }
-        return next;
+          return next;
+        });
+        attachmentState.clearAttachments();
+      }).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : "未知错误";
+        setChatError(message);
+        setStreamStatusLabel("");
       });
-      attachmentState.clearAttachments();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "未知错误";
       setChatError(message);
+      setStreamStatusLabel("");
     }
   }
 
@@ -533,8 +561,22 @@ export default function ChatPage() {
                         )}
                       </div>
                     ) : null}
-                    <div className="chat-msg-content">
-                      {getUiMessageText(message) || (streaming && index === chatMessages.length - 1 ? "..." : "")}
+                    <div
+                      className={`chat-msg-content${
+                        streaming &&
+                        message.role === "assistant" &&
+                        index === chatMessages.length - 1 &&
+                        !getUiMessageText(message)
+                          ? " is-pending"
+                          : ""
+                      }`}
+                    >
+                      {getUiMessageText(message) ||
+                        (streaming &&
+                        message.role === "assistant" &&
+                        index === chatMessages.length - 1
+                          ? streamStatusLabel || "正在回复…"
+                          : "")}
                     </div>
                     {message.role === "assistant" && getUiMessageText(message).trim() ? (
                       <div className="chat-msg-actions">
@@ -560,6 +602,16 @@ export default function ChatPage() {
                   ) : null}
                 </div>
                 ))}
+                {streaming && lastMessage?.role === "user" ? (
+                  <div className="chat-msg assistant" aria-live="polite">
+                    <div className="chat-msg-avatar">AI</div>
+                    <div className="chat-msg-bubble">
+                      <div className="chat-msg-content is-pending">
+                        {streamStatusLabel || "正在回复…"}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
                 <div ref={messagesBottomRef} aria-hidden="true" />
               </div>
               <ChatConversationNav rounds={chatRounds} scrollContainerRef={messagesRef} />

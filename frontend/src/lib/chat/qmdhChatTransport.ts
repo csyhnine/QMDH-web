@@ -8,6 +8,8 @@ import { type ChatStreamError, formatStreamError } from "./types";
 type SendMessagesOptions = Parameters<ChatTransport<UIMessage>["sendMessages"]>[0];
 
 const TEXT_PART_ID = "assistant-text";
+/** Coalesce tiny/fast deltas so React can paint between updates (AI SDK clones on every chunk). */
+const DELTA_FLUSH_MS = 40;
 
 export type ChatStreamMeta = {
   status?: string;
@@ -15,80 +17,163 @@ export type ChatStreamMeta = {
   context?: QmdhSsePayload["context"];
 };
 
+function yieldToRenderer(): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 0);
+  });
+}
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * Transform raw QMDH SSE bytes into AI SDK UIMessageChunk stream.
+ * Uses a push pump (start) so status-only frames never stall the stream,
+ * and coalesces text deltas so the UI can paint incrementally.
+ */
 function parseQmdhSseStream(
   stream: ReadableStream<Uint8Array>,
   onMeta?: (meta: ChatStreamMeta) => void,
 ): ReadableStream<UIMessageChunk> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
-  let buffer = "";
-  let started = false;
-  let finished = false;
 
   return new ReadableStream<UIMessageChunk>({
-    async pull(controller) {
-      const emitFinish = () => {
-        if (started && !finished) {
-          finished = true;
+    async start(controller) {
+      let buffer = "";
+      let started = false;
+      let finished = false;
+      let pendingDelta = "";
+      let lastFlushAt = 0;
+
+      const ensureStarted = async () => {
+        if (started) {
+          return;
+        }
+        started = true;
+        controller.enqueue({ type: "start" });
+        controller.enqueue({ type: "start-step" });
+        controller.enqueue({ type: "text-start", id: TEXT_PART_ID });
+        await yieldToRenderer();
+      };
+
+      const flushDelta = async (force = false) => {
+        if (!pendingDelta) {
+          return;
+        }
+        const now = Date.now();
+        if (!force && now - lastFlushAt < DELTA_FLUSH_MS) {
+          return;
+        }
+        const delta = pendingDelta;
+        pendingDelta = "";
+        lastFlushAt = now;
+        await ensureStarted();
+        controller.enqueue({ type: "text-delta", id: TEXT_PART_ID, delta });
+        await yieldToRenderer();
+      };
+
+      const emitFinish = async () => {
+        if (finished) {
+          return;
+        }
+        finished = true;
+        await flushDelta(true);
+        if (started) {
           controller.enqueue({ type: "text-end", id: TEXT_PART_ID });
           controller.enqueue({ type: "finish-step" });
           controller.enqueue({ type: "finish" });
         }
+        controller.close();
       };
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          emitFinish();
-          controller.close();
+      const ingestLine = async (line: string) => {
+        const parsed = parseQmdhSseLine(line);
+        if (parsed === "skip") {
+          return;
+        }
+        if (parsed === "done") {
+          await emitFinish();
           return;
         }
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const parsed = parseQmdhSseLine(line);
-          if (parsed === "skip") {
-            continue;
-          }
-          if (parsed === "done") {
-            emitFinish();
-            controller.close();
-            return;
-          }
-          if (parsed.status || parsed.context || parsed.label) {
-            onMeta?.({
-              status: parsed.status,
-              label: parsed.label,
-              context: parsed.context,
-            });
-            if (!started && (parsed.status === "generating" || parsed.status === "preparing")) {
-              controller.enqueue({ type: "start" });
-              controller.enqueue({ type: "start-step" });
-              controller.enqueue({ type: "text-start", id: TEXT_PART_ID });
-              started = true;
-            }
-          }
-          if (parsed.delta) {
-            if (!started) {
-              controller.enqueue({ type: "start" });
-              controller.enqueue({ type: "start-step" });
-              controller.enqueue({ type: "text-start", id: TEXT_PART_ID });
-              started = true;
-            }
-            controller.enqueue({ type: "text-delta", id: TEXT_PART_ID, delta: parsed.delta });
-          }
-          if (parsed.error) {
-            controller.enqueue({
-              type: "error",
-              errorText: formatStreamError(parsed.error as ChatStreamError | string),
-            });
+        if (parsed.status || parsed.context || parsed.label) {
+          onMeta?.({
+            status: parsed.status,
+            label: parsed.label,
+            context: parsed.context,
+          });
+          // Open the assistant bubble as soon as generation begins (before first token).
+          if (parsed.status === "generating" || parsed.status === "preparing") {
+            await ensureStarted();
           }
         }
+
+        if (parsed.delta) {
+          pendingDelta += parsed.delta;
+          const now = Date.now();
+          if (now - lastFlushAt >= DELTA_FLUSH_MS || pendingDelta.length >= 24) {
+            await flushDelta(true);
+          }
+        }
+
+        if (parsed.error) {
+          await flushDelta(true);
+          controller.enqueue({
+            type: "error",
+            errorText: formatStreamError(parsed.error as ChatStreamError | string),
+          });
+        }
+      };
+
+      try {
+        while (!finished) {
+          const { done, value } = await reader.read();
+          if (done) {
+            buffer += decoder.decode();
+            if (buffer.trim()) {
+              for (const line of `${buffer}\n`.split("\n")) {
+                if (finished) {
+                  break;
+                }
+                await ingestLine(line);
+              }
+            }
+            await emitFinish();
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+          for (const line of lines) {
+            if (finished) {
+              break;
+            }
+            await ingestLine(line);
+          }
+
+          // If tokens are arriving slower than the coalesce window, still flush periodically.
+          if (pendingDelta) {
+            await sleep(DELTA_FLUSH_MS);
+            await flushDelta(true);
+          }
+        }
+      } catch (error) {
+        try {
+          controller.error(error);
+        } catch {
+          // Stream may already be closed.
+        }
+      } finally {
+        reader.releaseLock();
       }
+    },
+    cancel(reason) {
+      void reader.cancel(reason);
     },
   });
 }
@@ -137,12 +222,14 @@ export class QmdhChatTransport extends HttpChatTransport<UIMessage> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Accept: "text/event-stream",
         ...getAuthHeaders(),
         ...(options.headers as Record<string, string> | undefined),
       },
       body: JSON.stringify({ content, attachments }),
       credentials: "same-origin",
       signal: options.abortSignal,
+      cache: "no-store",
     });
 
     if (!response.ok) {
@@ -156,6 +243,6 @@ export class QmdhChatTransport extends HttpChatTransport<UIMessage> {
   }
 
   protected processResponseStream(stream: ReadableStream<Uint8Array>): ReadableStream<UIMessageChunk> {
-    return parseQmdhSseStream(stream);
+    return parseQmdhSseStream(stream, this.onMeta);
   }
 }

@@ -10,10 +10,13 @@ type ChatConversationNavProps = {
 export default function ChatConversationNav({ rounds, scrollContainerRef }: ChatConversationNavProps) {
   const [activeRoundId, setActiveRoundId] = useState<string | null>(rounds[0]?.id ?? null);
   const [railHovered, setRailHovered] = useState(false);
+  const roundsSignature = rounds.map((round) => `${round.id}:${round.preview}`).join("|");
 
   useEffect(() => {
-    setActiveRoundId(rounds[0]?.id ?? null);
-  }, [rounds]);
+    const nextId = rounds[0]?.id ?? null;
+    setActiveRoundId((current) => (current === nextId ? current : nextId));
+    // roundsSignature captures id+preview; avoid depending on unstable rounds[] identity.
+  }, [roundsSignature]); // eslint-disable-line react-hooks/exhaustive-deps -- rounds mirrored by signature
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -35,7 +38,7 @@ export default function ChatConversationNav({ rounds, scrollContainerRef }: Chat
         }
       }
 
-      setActiveRoundId(nextActiveId);
+      setActiveRoundId((current) => (current === nextActiveId ? current : nextActiveId));
     };
 
     updateActiveRound();
@@ -46,7 +49,7 @@ export default function ChatConversationNav({ rounds, scrollContainerRef }: Chat
       container.removeEventListener("scroll", updateActiveRound);
       window.removeEventListener("resize", updateActiveRound);
     };
-  }, [rounds, scrollContainerRef]);
+  }, [roundsSignature, scrollContainerRef]); // eslint-disable-line react-hooks/exhaustive-deps -- rounds mirrored by signature
 
   if (rounds.length <= 1) {
     return null;

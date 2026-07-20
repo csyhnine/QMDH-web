@@ -1010,6 +1010,7 @@ export const api = {
     deleteRequest(`/providers/pricing-rules/${ruleId}`),
   workflows: () => request<Workflow[]>("/workflows"),
   tasks: () => request<Task[]>("/tasks"),
+  getTask: (taskId: number) => request<Task>(`/tasks/${taskId}`),
   assets: () => request<Asset[]>("/assets"),
   promptTemplates: () =>
     request<PromptTemplateRecord[]>("/prompt-templates"),

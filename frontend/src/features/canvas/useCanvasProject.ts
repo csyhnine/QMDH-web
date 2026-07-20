@@ -33,6 +33,8 @@ export function useCanvasProject(enabled = true): UseCanvasProjectResult {
   const [error, setError] = useState("");
   const saveTimerRef = useRef<number | null>(null);
   const activeIdRef = useRef<number | null>(null);
+  const pendingGraphRef = useRef<CanvasGraphState | null>(null);
+  const saveInFlightRef = useRef(false);
 
   useEffect(() => {
     activeIdRef.current = activeProject?.id ?? null;
@@ -89,33 +91,55 @@ export function useCanvasProject(enabled = true): UseCanvasProjectResult {
     await reloadList();
   }, [activeProject, reloadList]);
 
-  const queueSaveGraph = useCallback((graph: CanvasGraphState) => {
+  const flushSaveGraph = useCallback(async () => {
     if (!enabled) return;
     const projectId = activeIdRef.current;
-    if (!projectId) return;
-    if (saveTimerRef.current) {
-      window.clearTimeout(saveTimerRef.current);
+    const graph = pendingGraphRef.current;
+    if (!projectId || !graph || saveInFlightRef.current) return;
+
+    saveInFlightRef.current = true;
+    setSaving(true);
+    try {
+      const updated = await api.updateCanvasProject(projectId, { graph_json: graph as CanvasGraphJson });
+      // Ignore stale responses when a newer graph is already queued.
+      if (activeIdRef.current === projectId && pendingGraphRef.current === graph) {
+        pendingGraphRef.current = null;
+        setActiveProject((current) =>
+          current && current.id === projectId
+            ? { ...current, graph_json: updated.graph_json, updated_at: updated.updated_at }
+            : current
+        );
+        setError("");
+      }
+    } catch (err) {
+      if (pendingGraphRef.current === graph) {
+        setError(err instanceof Error ? err.message : "保存画布失败");
+      }
+    } finally {
+      saveInFlightRef.current = false;
+      setSaving(false);
+      // A newer graph may have been queued while this request was in flight.
+      if (pendingGraphRef.current && pendingGraphRef.current !== graph && activeIdRef.current === projectId) {
+        void flushSaveGraph();
+      }
     }
-    saveTimerRef.current = window.setTimeout(() => {
-      setSaving(true);
-      api
-        .updateCanvasProject(projectId, { graph_json: graph })
-        .then((updated) => {
-          if (activeIdRef.current === projectId) {
-            setActiveProject((current) =>
-              current && current.id === projectId
-                ? { ...current, graph_json: updated.graph_json, updated_at: updated.updated_at }
-                : current
-            );
-          }
-          setError("");
-        })
-        .catch((err) => {
-          setError(err instanceof Error ? err.message : "保存画布失败");
-        })
-        .finally(() => setSaving(false));
-    }, 700);
   }, [enabled]);
+
+  const queueSaveGraph = useCallback(
+    (graph: CanvasGraphState) => {
+      if (!enabled) return;
+      if (!activeIdRef.current) return;
+      pendingGraphRef.current = graph;
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+      saveTimerRef.current = window.setTimeout(() => {
+        saveTimerRef.current = null;
+        void flushSaveGraph();
+      }, 700);
+    },
+    [enabled, flushSaveGraph]
+  );
 
   useEffect(() => {
     if (!enabled) {
@@ -150,7 +174,19 @@ export function useCanvasProject(enabled = true): UseCanvasProjectResult {
     })();
     return () => {
       cancelled = true;
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      // Flush pending graph so navigating away does not drop the latest node status.
+      const projectId = activeIdRef.current;
+      const graph = pendingGraphRef.current;
+      if (projectId && graph) {
+        pendingGraphRef.current = null;
+        void api.updateCanvasProject(projectId, { graph_json: graph as CanvasGraphJson }).catch(() => {
+          /* best-effort flush on unmount */
+        });
+      }
     };
   }, [enabled]);
 

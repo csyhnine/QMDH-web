@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   applyEdgeChanges,
@@ -37,7 +37,7 @@ import type {
 import { isGenerateNode, isGroupNode } from "./canvasTypes";
 import { graphFromActiveProject, useCanvasProject } from "./useCanvasProject";
 import { graphFromTemplate, useCanvasTemplateEditor } from "./useCanvasTemplateEditor";
-import { useCanvasNodeGenerate } from "./useCanvasNodeGenerate";
+import { resumeCanvasNodeTaskPolls, useCanvasNodeGenerate } from "./useCanvasNodeGenerate";
 
 type CanvasWorkspaceProps = {
   editTemplateId?: number;
@@ -213,6 +213,17 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     },
     [edges, persistGraph, viewport]
   );
+
+  const patchNodeRef = useRef(patchNode);
+  useEffect(() => {
+    patchNodeRef.current = patchNode;
+  }, [patchNode]);
+
+  // Leaving canvas unmounts the page and kills in-flight pollers; resume any stuck tasks.
+  useEffect(() => {
+    if (sessionLoading) return;
+    resumeCanvasNodeTaskPolls(nodes, (nodeId, patch) => patchNodeRef.current(nodeId, patch));
+  }, [boardKey, sessionLoading, nodes]);
 
   const patchNoteNode = useCallback(
     (nodeId: string, patch: Partial<NoteNodeData>) => {

@@ -8,6 +8,7 @@ export default function StudioMediaLightboxes({
   shareConfirmState,
   onCloseGalleryPreview,
   onApplyPreviewToComposer,
+  onUsePreviewAsReference,
   onCloseShareConfirm,
   onConfirmShare,
 }: StudioMediaLightboxesProps) {
@@ -21,6 +22,7 @@ export default function StudioMediaLightboxes({
           previewUrl={previewUrl}
           onClose={onCloseGalleryPreview}
           onApplyToComposer={onApplyPreviewToComposer}
+          onUseAsReference={onUsePreviewAsReference}
         />
       ) : null}
       {shareConfirmState ? (

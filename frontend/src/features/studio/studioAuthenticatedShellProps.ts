@@ -72,6 +72,9 @@ export function buildStudioAuthenticatedShellProps({
         studio.taskActions.applyTaskToComposer(task, asset);
         studio.setGalleryPreview(null);
       },
+      onUsePreviewAsReference: (task, asset) => {
+        studio.taskActions.applyResultAsReference(task, asset);
+      },
       onCloseShareConfirm: studio.galleryActions.closeShareConfirm,
       onConfirmShare: () => void studio.galleryActions.confirmShare(),
     },

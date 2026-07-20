@@ -7,6 +7,7 @@ export default function StudioFeedCardResult({
   onAssetPreview,
   onReuse,
   onUpscaleAsset,
+  onUseAssetAsReference,
   showRunningState,
   task,
   upscaleDisabled,
@@ -21,6 +22,7 @@ export default function StudioFeedCardResult({
       onAssetPreview={onAssetPreview}
       onReuse={onReuse}
       onUpscaleAsset={onUpscaleAsset}
+      onUseAssetAsReference={onUseAssetAsReference}
       upscaleDisabled={upscaleDisabled}
       upscaleEnabled={upscaleEnabled}
       upscalingAssetKey={upscalingAssetKey}

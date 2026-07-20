@@ -52,7 +52,7 @@ export function useStudioFeedCardState({
     displayTitle,
     hasLongSummary,
     hasReferenceImage,
-    primaryReferenceImage,
+    referenceImages,
     referenceImageCount,
     referenceImageLabel,
     showRunningState,

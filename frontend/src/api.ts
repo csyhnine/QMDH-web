@@ -542,6 +542,50 @@ export type PromptTemplateRecord = {
   updated_at: string;
 };
 
+export type CanvasGraphJson = {
+  version: number;
+  nodes: unknown[];
+  edges: unknown[];
+  viewport: { x: number; y: number; zoom: number };
+};
+
+export type CanvasProjectSummary = {
+  id: number;
+  title: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CanvasProjectRecord = CanvasProjectSummary & {
+  graph_json: CanvasGraphJson;
+};
+
+export type CanvasTemplateSummary = {
+  id: number;
+  title: string;
+  description: string;
+  category: string;
+  is_featured: boolean;
+  preview_image_path: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CanvasTemplateRecord = CanvasTemplateSummary & {
+  graph_json: CanvasGraphJson;
+};
+
+export type CanvasTemplateCreatePayload = {
+  title: string;
+  description?: string;
+  category?: string;
+  is_featured?: boolean;
+  graph_json?: CanvasGraphJson;
+  preview_image_path?: string;
+};
+
+export type CanvasTemplateUpdatePayload = Partial<CanvasTemplateCreatePayload>;
+
 export type PromptTemplateCreatePayload = {
   category: string;
   subcategory: string;
@@ -888,6 +932,25 @@ export const api = {
   deleteProject: (projectCode: string) =>
     deleteRequest(`/projects/${projectCode}`),
   projectStatus: (projectCode: string) => request<ProjectStatus>(`/projects/${projectCode}/status`),
+  canvasProjects: () => request<CanvasProjectSummary[]>("/canvas-projects"),
+  createCanvasProject: (payload: { title?: string; graph_json?: CanvasGraphJson } = {}) =>
+    postJson<CanvasProjectRecord>("/canvas-projects", payload),
+  getCanvasProject: (projectId: number) => request<CanvasProjectRecord>(`/canvas-projects/${projectId}`),
+  updateCanvasProject: (
+    projectId: number,
+    payload: { title?: string; graph_json?: CanvasGraphJson }
+  ) => patchJson<CanvasProjectRecord>(`/canvas-projects/${projectId}`, payload),
+  deleteCanvasProject: (projectId: number) => deleteRequest(`/canvas-projects/${projectId}`),
+  canvasTemplates: () => request<CanvasTemplateSummary[]>("/canvas-templates"),
+  getCanvasTemplate: (templateId: number) =>
+    request<CanvasTemplateRecord>(`/canvas-templates/${templateId}`),
+  adminCanvasTemplates: () => request<CanvasTemplateRecord[]>("/canvas-templates/admin"),
+  createAdminCanvasTemplate: (payload: CanvasTemplateCreatePayload) =>
+    postJson<CanvasTemplateRecord>("/canvas-templates/admin", payload),
+  updateAdminCanvasTemplate: (templateId: number, payload: CanvasTemplateUpdatePayload) =>
+    patchJson<CanvasTemplateRecord>(`/canvas-templates/admin/${templateId}`, payload),
+  deleteAdminCanvasTemplate: (templateId: number) =>
+    deleteRequest(`/canvas-templates/admin/${templateId}`),
   providers: () => request<Provider[]>("/providers"),
   providerProfiles: () => request<ProviderProfileRecord[]>("/providers/profiles"),
   providerPricingRules: () => request<ProviderPricingRuleRecord[]>("/providers/pricing-rules"),

@@ -6,6 +6,7 @@ export type StudioMediaLightboxesProps = {
   shareConfirmState: ShareConfirmState | null;
   onCloseGalleryPreview: () => void;
   onApplyPreviewToComposer: (task: Task, asset: Asset) => void;
+  onUsePreviewAsReference?: (task: Task, asset: Asset) => void;
   onCloseShareConfirm: () => void;
   onConfirmShare: () => void;
 };
@@ -15,6 +16,7 @@ export type StudioGalleryPreviewLightboxProps = {
   previewUrl: string;
   onClose: () => void;
   onApplyToComposer: (task: Task, asset: Asset) => void;
+  onUseAsReference?: (task: Task, asset: Asset) => void;
 };
 
 export type StudioShareConfirmLightboxProps = {

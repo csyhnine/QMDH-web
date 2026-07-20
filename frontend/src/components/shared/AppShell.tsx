@@ -6,7 +6,7 @@ import GuestLoginBanner from "../../features/studio/GuestLoginBanner";
 import { BrandIcon } from "./Brand";
 import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from "../../features/access/roleAccess";
 
-type StudioTab = "generate" | "inspiration" | "feedback" | "chat";
+type StudioTab = "generate" | "inspiration" | "feedback" | "chat" | "canvas";
 type AdminTab = AdminModuleKey;
 
 type AppShellProps =
@@ -18,8 +18,11 @@ type AppShellProps =
   | {
       kind: "admin";
       active: AdminTab;
+      layout?: "default" | "canvas";
       children: ReactNode;
     };
+
+import { isStudioCanvasEnabled } from "../../lib/featureFlags";
 
 const adminNavItems: Array<{ key: AdminTab; label: string; path: string }> = [
   { key: "dashboard", label: "看板", path: "/admin/dashboard" },
@@ -28,6 +31,7 @@ const adminNavItems: Array<{ key: AdminTab; label: string; path: string }> = [
   { key: "feedback", label: "反馈", path: "/admin/feedback" },
   { key: "models", label: "模型", path: "/admin/models" },
   { key: "templates", label: "模板", path: "/admin/templates" },
+  { key: "canvas-templates", label: "画布模板", path: "/admin/canvas-templates" },
   { key: "agents", label: "代理", path: "/admin/agents" },
   { key: "users", label: "账号", path: "/admin/users" },
   { key: "settings", label: "设置", path: "/admin/settings" },
@@ -37,6 +41,9 @@ const studioNavItems: Array<{ key: Exclude<StudioTab, "generate"> | "generate"; 
   { key: "inspiration", label: "灵感", path: "/studio/inspiration" },
   { key: "feedback", label: "反馈", path: "/studio/feedback" },
   { key: "generate", label: "生成", path: "/studio/generate" },
+  ...(isStudioCanvasEnabled
+    ? ([{ key: "canvas" as const, label: "无限画布", path: "/studio/canvas" }] as const)
+    : []),
   { key: "chat", label: "对话", path: "/studio/chat" },
 ];
 
@@ -47,17 +54,25 @@ export default function AppShell(props: AppShellProps) {
 
   const className =
     props.kind === "admin"
-      ? "studio-shell admin-shell"
+      ? props.layout === "canvas"
+        ? "studio-shell admin-shell canvas-shell"
+        : "studio-shell admin-shell"
       : props.active === "chat"
         ? "studio-shell chat-shell"
-        : "studio-shell inspiration-shell";
+        : props.active === "canvas"
+          ? "studio-shell canvas-shell"
+          : "studio-shell inspiration-shell";
 
   const mainClassName =
     props.kind === "admin"
-      ? "canvas-area"
+      ? props.layout === "canvas"
+        ? "canvas-area canvas-infinite-layout"
+        : "canvas-area"
       : props.active === "chat"
         ? "canvas-area canvas-chat-layout"
-        : "canvas-area";
+        : props.active === "canvas"
+          ? "canvas-area canvas-infinite-layout"
+          : "canvas-area";
 
   async function handleLogout() {
     await logout();

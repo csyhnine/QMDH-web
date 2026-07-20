@@ -74,7 +74,7 @@ export type TemplateFeedback = {
   message: string;
 };
 
-export type HistoryActionKey = "reuse" | "bookmark" | "share" | "delete" | "upscale";
+export type HistoryActionKey = "reuse" | "bookmark" | "share" | "delete" | "upscale" | "use_reference";
 
 export type HistoryActionFeedback = {
   action: HistoryActionKey;

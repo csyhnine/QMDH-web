@@ -17,6 +17,7 @@ export type StudioFeedCardProps = {
   onDelete: () => void;
   onAssetPreview?: (asset: Asset) => void;
   onUpscaleAsset?: (asset: Asset, options: UpscaleOptions) => void;
+  onUseAssetAsReference?: (asset: Asset) => void;
   upscaleDisabled?: boolean;
   upscaleEnabled?: boolean;
   upscalingAssetKey?: string | null;
@@ -28,7 +29,7 @@ export type StudioFeedCardProps = {
 export type StudioFeedReferenceBadgeProps = {
   imageCount: number;
   imageLabel: string;
-  primaryImage: string;
+  images: string[];
 };
 
 export type StudioFeedCardHeaderProps = {
@@ -62,7 +63,15 @@ export type StudioFeedCardFooterProps = Pick<
 
 export type StudioFeedCardResultProps = Pick<
   StudioFeedCardProps,
-  "galleryAssets" | "onAssetPreview" | "onReuse" | "onUpscaleAsset" | "task" | "upscaleDisabled" | "upscaleEnabled" | "upscalingAssetKey"
+  | "galleryAssets"
+  | "onAssetPreview"
+  | "onReuse"
+  | "onUpscaleAsset"
+  | "onUseAssetAsReference"
+  | "task"
+  | "upscaleDisabled"
+  | "upscaleEnabled"
+  | "upscalingAssetKey"
 > & {
   showRunningState: boolean;
   virtualProgress: number;

@@ -571,3 +571,49 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
+
+
+
+def default_canvas_graph() -> dict:
+    return {
+        "version": 1,
+        "nodes": [],
+        "edges": [],
+        "viewport": {"x": 0, "y": 0, "zoom": 1},
+    }
+
+
+class CanvasProject(Base):
+    """Designer infinite-canvas board; graph_json stores xyflow nodes/edges/viewport."""
+
+    __tablename__ = "canvas_projects"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(150), default="未命名画布")
+    graph_json: Mapped[dict] = mapped_column(JSON, default=default_canvas_graph)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+    owner: Mapped[User] = relationship()
+
+
+class CanvasTemplate(Base):
+    """Shared canvas workflow template; designers copy graph_json into a private CanvasProject."""
+
+    __tablename__ = "canvas_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(150), default="未命名模板")
+    description: Mapped[str] = mapped_column(Text, default="")
+    category: Mapped[str] = mapped_column(String(80), default="", index=True)
+    is_featured: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    graph_json: Mapped[dict] = mapped_column(JSON, default=default_canvas_graph)
+    preview_image_path: Mapped[str] = mapped_column(String(255), default="")
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+    created_by: Mapped[User | None] = relationship()

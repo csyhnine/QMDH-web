@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 
 import {
   api,
@@ -11,6 +11,7 @@ import {
   type InspirationPost,
   type ManagedUser,
   type PromptTemplateRecord,
+  type CanvasTemplateRecord,
   type Project,
   type Provider,
   type ProviderPricingRuleRecord,
@@ -21,6 +22,7 @@ import {
 import { AppShell, AuthGuard, LoadingFallback } from "./components/shared";
 import { useAuth } from "./context/AuthContext";
 import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from "./features/access/roleAccess";
+import { isStudioCanvasEnabled } from "./lib/featureFlags";
 
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/admin/DashboardPage"));
@@ -28,6 +30,8 @@ const UsageLogsPage = lazy(() => import("./pages/admin/UsageLogsPage"));
 const UsersPage = lazy(() => import("./pages/admin/UsersPage"));
 const ModelsPage = lazy(() => import("./pages/admin/ModelsPage"));
 const PromptTemplatesPage = lazy(() => import("./pages/admin/PromptTemplatesPage"));
+const CanvasTemplatesPage = lazy(() => import("./pages/admin/CanvasTemplatesPage"));
+const CanvasWorkspace = lazy(() => import("./features/canvas/CanvasWorkspace"));
 const AgentOpsPage = lazy(() => import("./pages/admin/AgentOpsPage"));
 const FeedbackOpsPage = lazy(() => import("./pages/admin/FeedbackOpsPage"));
 const SettingsPage = lazy(() => import("./pages/admin/SettingsPage"));
@@ -35,7 +39,7 @@ const InspirationPage = lazy(() => import("./pages/inspiration/InspirationPage")
 const ChatPage = lazy(() => import("./pages/chat/ChatPage"));
 const FeedbackPage = lazy(() => import("./pages/studio/FeedbackPage"));
 const GeneratePage = lazy(() => import("./pages/studio/GeneratePage"));
-
+const CanvasPage = lazy(() => import("./pages/studio/CanvasPage"));
 function ProtectedRoute({ children }: { children: JSX.Element }) {
   return <AuthGuard>{children}</AuthGuard>;
 }
@@ -290,6 +294,48 @@ function PromptTemplatesRoute() {
   );
 }
 
+function CanvasTemplatesRoute() {
+  const [templates, setTemplates] = useState<CanvasTemplateRecord[]>([]);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    try {
+      setTemplates(await api.adminCanvasTemplates());
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "加载画布模板失败");
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  return (
+    <AppShell kind="admin" active="canvas-templates">
+      <CanvasTemplatesPage templates={templates} error={error} onRefresh={() => void refresh()} onSetError={setError} />
+    </AppShell>
+  );
+}
+
+function CanvasTemplateEditRoute() {
+  const navigate = useNavigate();
+  const params = useParams();
+  const templateId = Number(params.templateId);
+  if (!Number.isFinite(templateId) || templateId <= 0) {
+    return <Navigate to="/admin/canvas-templates" replace />;
+  }
+
+  return (
+    <AppShell kind="admin" active="canvas-templates" layout="canvas">
+      <CanvasWorkspace
+        editTemplateId={templateId}
+        onExit={() => navigate("/admin/canvas-templates")}
+      />
+    </AppShell>
+  );
+}
+
 function AgentsRoute() {
   const [clients, setClients] = useState<AgentClientRecord[]>([]);
   const [skills, setSkills] = useState<AgentOfficialSkill[]>([]);
@@ -409,6 +455,18 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
+          {isStudioCanvasEnabled ? (
+            <Route
+              path="/studio/canvas"
+              element={
+                <ProtectedRoute>
+                  <AppShell kind="studio" active="canvas">
+                    <CanvasPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+          ) : null}
           <Route path="/admin/dashboard" element={<ProtectedRoute><AdminOnlyRoute><DashboardRoute /></AdminOnlyRoute></ProtectedRoute>} />
           <Route
             path="/admin/usage-logs"
@@ -425,6 +483,8 @@ export default function AppRouter() {
           <Route path="/admin/users" element={<ProtectedRoute><AdminOnlyRoute><UsersRoute /></AdminOnlyRoute></ProtectedRoute>} />
           <Route path="/admin/models" element={<ProtectedRoute><AdminOnlyRoute><ModelsRoute /></AdminOnlyRoute></ProtectedRoute>} />
           <Route path="/admin/templates" element={<ProtectedRoute><AdminModuleRoute module="templates"><PromptTemplatesRoute /></AdminModuleRoute></ProtectedRoute>} />
+          <Route path="/admin/canvas-templates" element={<ProtectedRoute><AdminModuleRoute module="canvas-templates"><CanvasTemplatesRoute /></AdminModuleRoute></ProtectedRoute>} />
+          <Route path="/admin/canvas-templates/:templateId/edit" element={<ProtectedRoute><AdminModuleRoute module="canvas-templates"><CanvasTemplateEditRoute /></AdminModuleRoute></ProtectedRoute>} />
           <Route path="/admin/feedback" element={<ProtectedRoute><AdminModuleRoute module="feedback"><AdminFeedbackRoute /></AdminModuleRoute></ProtectedRoute>} />
           <Route path="/admin/agents" element={<ProtectedRoute><AdminOnlyRoute><AgentsRoute /></AdminOnlyRoute></ProtectedRoute>} />
           <Route path="/admin/inspiration" element={<ProtectedRoute><AdminModuleRoute module="inspiration"><AdminInspirationRoute /></AdminModuleRoute></ProtectedRoute>} />

@@ -120,7 +120,28 @@ export function useStudioReferenceUploads({
     fileInputRef.current?.click();
   }
 
+  function addReferenceFromStoragePath(storagePath: string): { ok: boolean; message: string } {
+    const path = storagePath.trim();
+    if (!path) {
+      return { ok: false, message: "当前图片没有可用路径，无法置入参考图。" };
+    }
+    if (referenceUploads.some((item) => item.storagePath === path)) {
+      return { ok: false, message: "这张图已经在参考图里了。" };
+    }
+    if (referenceUploads.length >= maxReferenceCount) {
+      return { ok: false, message: `最多只能保留 ${maxReferenceCount} 张参考图。` };
+    }
+    const [item] = referenceUploadState.buildUploadsFromPaths([path]);
+    if (!item) {
+      return { ok: false, message: "无法将当前图片置入参考图。" };
+    }
+    syncReferenceUploads([...referenceUploads, item]);
+    onClearError();
+    return { ok: true, message: "已置入创作区参考图。" };
+  }
+
   return {
+    addReferenceFromStoragePath,
     buildUploadsFromPaths: referenceUploadState.buildUploadsFromPaths,
     clearReferenceUpload,
     handleReferenceDrop,

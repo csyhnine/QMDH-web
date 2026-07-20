@@ -11,7 +11,7 @@ export function buildStudioFeedCardLayoutProps(
     referenceBadgeProps: {
       imageCount: cardState.referenceImageCount,
       imageLabel: cardState.referenceImageLabel,
-      primaryImage: cardState.primaryReferenceImage,
+      images: cardState.referenceImages,
     },
     headerProps: {
       displayTitle: cardState.displayTitle,
@@ -33,6 +33,7 @@ export function buildStudioFeedCardLayoutProps(
       onAssetPreview: props.onAssetPreview,
       onReuse: props.onReuse,
       onUpscaleAsset: props.onUpscaleAsset,
+      onUseAssetAsReference: props.onUseAssetAsReference,
       upscaleDisabled: props.upscaleDisabled,
       upscaleEnabled: props.upscaleEnabled,
       upscalingAssetKey: props.upscalingAssetKey,

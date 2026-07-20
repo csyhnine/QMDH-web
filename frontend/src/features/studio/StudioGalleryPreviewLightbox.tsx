@@ -5,9 +5,11 @@ export default function StudioGalleryPreviewLightbox({
   galleryPreview,
   previewUrl,
   onApplyToComposer,
+  onUseAsReference,
   onClose,
 }: StudioGalleryPreviewLightboxProps) {
   const videoAsset = isVideoAsset(galleryPreview.asset);
+  const canUseAsReference = !videoAsset && Boolean(onUseAsReference);
 
   return (
     <div
@@ -39,6 +41,18 @@ export default function StudioGalleryPreviewLightbox({
           >
             填入创作框
           </button>
+          {canUseAsReference ? (
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                onUseAsReference?.(galleryPreview.task, galleryPreview.asset);
+                onClose();
+              }}
+            >
+              置入参考图
+            </button>
+          ) : null}
           <button type="button" className="submit-button" onClick={onClose}>
             关闭
           </button>

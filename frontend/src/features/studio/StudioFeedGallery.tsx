@@ -13,6 +13,7 @@ type StudioFeedGalleryProps = {
   upscalingAssetKey?: string | null;
   onAssetPreview?: (asset: Asset) => void;
   onUpscaleAsset?: (asset: Asset, options: UpscaleOptions) => void;
+  onUseAssetAsReference?: (asset: Asset) => void;
   onReuse: () => void;
 };
 
@@ -24,6 +25,7 @@ export default function StudioFeedGallery({
   upscalingAssetKey = null,
   onAssetPreview,
   onUpscaleAsset,
+  onUseAssetAsReference,
   onReuse,
 }: StudioFeedGalleryProps) {
   if (assets.length === 0) return null;
@@ -32,6 +34,7 @@ export default function StudioFeedGallery({
     <div className="feed-gallery">
       {assets.map((asset, index) => {
         const showUpscale = upscaleEnabled && canUpscaleAsset(asset) && Boolean(onUpscaleAsset);
+        const showUseReference = canUpscaleAsset(asset) && Boolean(onUseAssetAsReference);
         const isUpscaling = upscalingAssetKey === `${task.id}:${asset.id}`;
 
         return (
@@ -55,13 +58,28 @@ export default function StudioFeedGallery({
                 preserveFullImage
               />
             </button>
-            {showUpscale ? (
-              <StudioFeedGalleryUpscaleMenu
-                asset={asset}
-                disabled={upscaleDisabled}
-                isUpscaling={isUpscaling}
-                onSubmit={(selectedAsset, options) => onUpscaleAsset?.(selectedAsset, options)}
-              />
+            {showUseReference || showUpscale ? (
+              <div className="feed-gallery-actions">
+                {showUseReference ? (
+                  <button
+                    type="button"
+                    className="feed-gallery-use-ref-button"
+                    disabled={upscaleDisabled}
+                    onClick={() => onUseAssetAsReference?.(asset)}
+                    aria-label="置入参考图"
+                  >
+                    置入
+                  </button>
+                ) : null}
+                {showUpscale ? (
+                  <StudioFeedGalleryUpscaleMenu
+                    asset={asset}
+                    disabled={upscaleDisabled}
+                    isUpscaling={isUpscaling}
+                    onSubmit={(selectedAsset, options) => onUpscaleAsset?.(selectedAsset, options)}
+                  />
+                ) : null}
+              </div>
             ) : null}
           </div>
         );

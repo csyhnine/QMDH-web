@@ -14,6 +14,7 @@ export default function StudioHistoryFeed({
   feedbackByTaskId,
   onRegenerateTask,
   onUpscaleAsset,
+  onUseAssetAsReference,
   upscaleEnabled,
   upscalingAssetKey,
   onBookmarkAsset,
@@ -39,6 +40,7 @@ export default function StudioHistoryFeed({
           feedbackByTaskId={feedbackByTaskId}
           onRegenerateTask={onRegenerateTask}
           onUpscaleAsset={onUpscaleAsset}
+          onUseAssetAsReference={onUseAssetAsReference}
           upscaleEnabled={upscaleEnabled}
           upscalingAssetKey={upscalingAssetKey}
           onBookmarkAsset={onBookmarkAsset}

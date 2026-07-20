@@ -15,6 +15,7 @@ export default function StudioHistoryFeedItem({
   feedbackByTaskId,
   onRegenerateTask,
   onUpscaleAsset,
+  onUseAssetAsReference,
   upscaleEnabled,
   upscalingAssetKey,
   onBookmarkAsset,
@@ -43,6 +44,7 @@ export default function StudioHistoryFeedItem({
       upscaleDisabled={upscaleDisabled}
       upscalingAssetKey={upscalingAssetKey}
       onUpscaleAsset={(asset, options) => onUpscaleAsset(task, asset, options)}
+      onUseAssetAsReference={(asset) => onUseAssetAsReference(task, asset)}
       onBookmark={() => (linkedAsset ? onBookmarkAsset(task.id, linkedAsset.id) : undefined)}
       onShare={() => (linkedAsset ? onShareAsset(task, linkedAsset) : undefined)}
       onDelete={() => onDeleteTask(task)}

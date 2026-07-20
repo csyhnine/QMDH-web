@@ -7,6 +7,7 @@ import {
   applyTaskToComposerState,
   buildStudioFormFromTask,
   regenerateTaskFeedback,
+  scrollComposerIntoView,
 } from "./studioTaskActionUtils";
 import type { UseStudioTaskActionsOptions } from "./studioTaskActionsTypes";
 import {
@@ -147,6 +148,26 @@ export function useStudioTaskActions({
     }
   }
 
+  function applyResultAsReference(task: Task, asset: Asset) {
+    if (!canUpscaleAsset(asset)) {
+      historyFeedback.pushFeedback(task.id, "use_reference", "error", "当前素材无法作为参考图。");
+      return;
+    }
+    const result = referenceUpload.addReferenceFromStoragePath(asset.storage_path);
+    historyFeedback.pushFeedback(
+      task.id,
+      "use_reference",
+      result.ok ? "success" : "error",
+      result.message
+    );
+    if (result.ok) {
+      setActiveComposerMenu(null);
+      window.requestAnimationFrame(() => {
+        scrollComposerIntoView(composerToolbarRef, setComposerCollapsed);
+      });
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isGuest) {
@@ -157,6 +178,7 @@ export function useStudioTaskActions({
   }
 
   return {
+    applyResultAsReference,
     applyTaskToComposer,
     handleSubmit,
     regeneratingTaskId,

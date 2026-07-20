@@ -17,6 +17,7 @@ export type StudioHistoryFeedProps = {
   feedbackByTaskId: Record<number, HistoryActionFeedback | undefined>;
   onRegenerateTask: (task: Task, asset?: Asset) => void;
   onUpscaleAsset: (task: Task, asset: Asset, options: UpscaleOptions) => void;
+  onUseAssetAsReference: (task: Task, asset: Asset) => void;
   upscaleEnabled: boolean;
   upscalingAssetKey: string | null;
   onBookmarkAsset: (taskId: number, assetId: number) => void;

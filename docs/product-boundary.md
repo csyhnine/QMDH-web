@@ -17,6 +17,7 @@ This document records the current active product boundary when older docs still 
 - Every account only sees assets generated from its own tasks in the studio history surface.
 - Shared access to the same project code does not imply shared history visibility.
 - Admins retain global visibility only through dedicated backend management surfaces, not through studio history cards.
+- Chat conversations remain account-owned and continue to be persisted for the user’s own history (and future personalization). The Chat「设计助手 / agent_mode」entry is **hidden by default** until the assistant product is ready (`VITE_CHAT_AGENT_UI_ENABLED=true` to show).
 
 ### Project Semantics
 

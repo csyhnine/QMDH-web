@@ -24,7 +24,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Deploy archive（上次生产）：`docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
 - **VIP**：代码路径已有；Admin 建 `gpt-image-2-vip` 即可测
 - **Chat Agent（重要）**：
-  - **B1 已在 GitHub `main`**：`agent_mode` + 5 只读 tools；**生产要部署后才可见**
+  - **B1 代码已在 GitHub `main`**；**UI 默认隐藏**（`VITE_CHAT_AGENT_UI_ENABLED` 未开则无「设计助手」开关）
+  - **产品方向不变**：普通 Chat 继续落库对话，服务后续个性化助手；tools/agent_mode 等助手能力择机再开
   - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**（gov/B2/multi/crawl/ref；未 rebase、未合入）
   - 现状：`docs/archive/handoff-2026-07-16-agent-wip-status.md` + 本文件
   - 后续切片：gov → B2 → multi/crawl/ref-intent

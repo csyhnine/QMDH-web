@@ -15,7 +15,7 @@ import {
 import { chatRoundElementId, extractChatRounds } from "../../lib/chat/chatRoundUtils";
 import { QmdhChatTransport } from "../../lib/chat/qmdhChatTransport";
 import type { ChatThinkingStep, ChatToolCall } from "../../lib/chat/qmdhSseParser";
-import { chatAgentModeDefault } from "../../lib/featureFlags";
+import { chatAgentModeDefault, isChatAgentUiEnabled } from "../../lib/featureFlags";
 import { useChatAttachments } from "../../lib/chat/useChatAttachments";
 import ChatAgentCapabilitiesDrawer from "./ChatAgentCapabilitiesDrawer";
 import ChatAgentThinkingPanel, { mergeThinkingSteps } from "./ChatAgentThinkingPanel";
@@ -80,6 +80,9 @@ export default function ChatPage() {
   const [contextTokens, setContextTokens] = useState<number | null>(null);
   const [contextWindowTokens, setContextWindowTokens] = useState<number | null>(null);
   const [agentMode, setAgentMode] = useState(() => {
+    if (!isChatAgentUiEnabled) {
+      return false;
+    }
     const saved = localStorage.getItem(AGENT_MODE_STORAGE_KEY);
     if (saved === null) {
       return chatAgentModeDefault;
@@ -102,8 +105,9 @@ export default function ChatPage() {
   const activeChatIdRef = useRef<number | null>(activeChatId);
   activeChatIdRef.current = activeChatId;
 
-  const agentModeRef = useRef(agentMode);
-  agentModeRef.current = agentMode;
+  const effectiveAgentMode = isChatAgentUiEnabled && agentMode;
+  const agentModeRef = useRef(effectiveAgentMode);
+  agentModeRef.current = effectiveAgentMode;
 
   const transport = useMemo(
     () =>
@@ -255,11 +259,14 @@ export default function ChatPage() {
   }
 
   useEffect(() => {
+    if (!isChatAgentUiEnabled) {
+      return;
+    }
     localStorage.setItem(AGENT_MODE_STORAGE_KEY, agentMode ? "true" : "false");
   }, [agentMode]);
 
   useEffect(() => {
-    if (!agentMode) {
+    if (!effectiveAgentMode) {
       setAgentPolicy(null);
       return;
     }
@@ -279,7 +286,7 @@ export default function ChatPage() {
     return () => {
       cancelled = true;
     };
-  }, [agentMode]);
+  }, [effectiveAgentMode]);
 
   useEffect(() => {
     async function bootstrap() {
@@ -447,12 +454,12 @@ export default function ChatPage() {
     setActiveToolCalls([]);
     setActiveThinkingSteps([]);
     setActivePolicyVersion(null);
-    if (agentMode) {
+    if (effectiveAgentMode) {
       setAgentThinking(true);
     }
 
     try {
-      void sendMessage({ text: content }, { body: { attachments, agent_mode: agentMode } })
+      void sendMessage({ text: content }, { body: { attachments, agent_mode: effectiveAgentMode } })
         .then(() => {
           setChatMessages((current) => {
             const next = [...current];
@@ -495,7 +502,7 @@ export default function ChatPage() {
 
   const chatRounds = useMemo(() => extractChatRounds(chatMessages), [chatMessages]);
   const emptyStreamingText =
-    streamStatusLabel || (agentMode ? "助手思考中…" : "正在回复…");
+    streamStatusLabel || (effectiveAgentMode ? "助手思考中…" : "正在回复…");
 
   return (
     <section className="chat-page">
@@ -598,35 +605,41 @@ export default function ChatPage() {
                 </div>
               </div>
             ) : null}
-            <label className="chat-agent-toggle" title="开启后可检索院内灵感、模板与生成栈配置">
-              <input
-                type="checkbox"
-                checked={agentMode}
-                onChange={(event) => setAgentMode(event.target.checked)}
-                disabled={streaming || isGuest}
-              />
-              <span>设计助手</span>
-              {agentPolicy ? (
-                <em className="chat-agent-toggle-meta">{agentPolicy.enabled_tools.length} 工具</em>
-              ) : null}
-            </label>
-            {agentMode ? (
-              <button
-                type="button"
-                className="chat-agent-capabilities-btn"
-                onClick={() => setCapabilitiesOpen(true)}
-              >
-                我的助手能力
-              </button>
+            {isChatAgentUiEnabled ? (
+              <>
+                <label className="chat-agent-toggle" title="开启后可检索院内灵感、模板与生成栈配置">
+                  <input
+                    type="checkbox"
+                    checked={agentMode}
+                    onChange={(event) => setAgentMode(event.target.checked)}
+                    disabled={streaming || isGuest}
+                  />
+                  <span>设计助手</span>
+                  {agentPolicy ? (
+                    <em className="chat-agent-toggle-meta">{agentPolicy.enabled_tools.length} 工具</em>
+                  ) : null}
+                </label>
+                {agentMode ? (
+                  <button
+                    type="button"
+                    className="chat-agent-capabilities-btn"
+                    onClick={() => setCapabilitiesOpen(true)}
+                  >
+                    我的助手能力
+                  </button>
+                ) : null}
+              </>
             ) : null}
           </div>
         </header>
 
-        <ChatAgentCapabilitiesDrawer
-          open={capabilitiesOpen && agentMode}
-          policy={agentPolicy}
-          onClose={() => setCapabilitiesOpen(false)}
-        />
+        {isChatAgentUiEnabled ? (
+          <ChatAgentCapabilitiesDrawer
+            open={capabilitiesOpen && agentMode}
+            policy={agentPolicy}
+            onClose={() => setCapabilitiesOpen(false)}
+          />
+        ) : null}
 
         {activeChatId ? (
           <div
@@ -740,7 +753,7 @@ export default function ChatPage() {
                   <div className="chat-msg assistant" aria-live="polite">
                     <div className="chat-msg-avatar">AI</div>
                     <div className="chat-msg-bubble">
-                      {agentMode && (agentThinking || activeThinkingSteps.length > 0) ? (
+                      {effectiveAgentMode && (agentThinking || activeThinkingSteps.length > 0) ? (
                         activeThinkingSteps.length > 0 ? (
                           <ChatAgentThinkingPanel steps={activeThinkingSteps} live compact />
                         ) : (
@@ -761,7 +774,7 @@ export default function ChatPage() {
             </div>
 
             <div className="chat-input-area">
-              {agentMode && streaming && (agentThinking || activeThinkingSteps.length > 0) ? (
+              {effectiveAgentMode && streaming && (agentThinking || activeThinkingSteps.length > 0) ? (
                 <div className="chat-agent-thinking-dock">
                   {activeThinkingSteps.length > 0 ? (
                     <ChatAgentThinkingPanel steps={activeThinkingSteps} live compact />

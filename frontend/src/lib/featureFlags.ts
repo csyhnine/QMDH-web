@@ -12,5 +12,8 @@ export const isChatAgentUiEnabled = import.meta.env.VITE_CHAT_AGENT_UI_ENABLED =
 export const chatAgentModeDefault =
   isChatAgentUiEnabled && import.meta.env.VITE_CHAT_AGENT_MODE_DEFAULT === "true";
 
-/** Designer infinite canvas. Enable locally with VITE_STUDIO_CANVAS_ENABLED=true. */
-export const isStudioCanvasEnabled = import.meta.env.VITE_STUDIO_CANVAS_ENABLED === "true";
+/**
+ * Designer infinite canvas（无限画布）。
+ * 默认开启；若需临时下线可设 `VITE_STUDIO_CANVAS_ENABLED=false`。
+ */
+export const isStudioCanvasEnabled = import.meta.env.VITE_STUDIO_CANVAS_ENABLED !== "false";

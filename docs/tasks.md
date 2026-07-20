@@ -135,12 +135,19 @@
 
 ## Priority Queue
 
+### Task: [local-wip-20260720] 画布模板 + Chat 上下文 + 真流式（工作区）
+- 状态：**DONE（本地验证）**；**未 commit / 未 push / 未部署**
+- 留档：`docs/archive/handoff-2026-07-20-canvas-chat-streaming-wip.md`
+- 含：Canvas 模板库；Conversation 上下文摘要落库；Chat SSE 真流式 UX
+- Next：拆 commit 入库 → 再开 Agent 合入
+- 约束：勿 push/部署除非用户明确同意；勿提交 `assets/` 截图
+
 ### Task: [agent-wip-001] Chat Agent / 多 Agent 合入（索引）
 - 状态：**BLOCKED / WIP 分支**（代码在 `wip/agent-multi-chat-2026-07` @ `4b0a5b3`；**未合 `main`、未上生产**）
 - 现状交接：`docs/archive/handoff-2026-07-16-agent-wip-status.md`
 - 架构留档：`docs/archive/handoff-2026-07-03-agent-multi-chat-wip.md`
 - WIP 内已完成（均未上生产）：`chat-004` B1、`agent-gov-001` MVP、`chat-b2-001`、`agent-multi-001/002/003`、`crawl-001` C1+C2、`ref-intent-001` MVP
-- 未做：crawl C3；与当前 `main`（`186b127`+）rebase；按切片拆 PR
+- 未做：crawl C3；与当前 `main`（含 07-20 本地改动入库后）rebase；按切片拆 PR
 - 拆 PR 原因：范围约 92 文件 / +1.2 万行；**不是**又堆成单个 App.tsx（局部偏肥：`routers/agent.py`、`studio_agent/agent.py`）
 - 建议切片：B1 → gov → B2 → multi/crawl/ref-intent
 - 约束：勿与 VIP / 生图路由 / 访客热修混 PR；部署需 migration；Meili 可选降级
@@ -166,7 +173,7 @@
   4. 登录后全功能恢复
 
 ### Task: [chat-nav-001] Chat 对话轮次导航
-- 状态：**DONE（本地）**；未 commit / 未部署
+- 状态：**DONE（本地）**；未 commit / 未部署（可能已并入 07-20 工作区）
 - 留档：`docs/archive/chat-round-nav-2026-07-16.md`
 - 行为：单轮不显示；多轮默认横刻度；悬停展开摘要；点击跳转
 - 文件：`ChatConversationNav.tsx`、`chatRoundUtils.ts`、`ChatPage.tsx`、`styles.css`

@@ -299,12 +299,13 @@ function CanvasBoardInner({
         defaultViewport={defaultViewport}
         minZoom={0.2}
         maxZoom={2}
-        deleteKeyCode={disabled ? null : ["Backspace", "Delete"]}
+        deleteKeyCode={disabled ? null : "Delete"}
         multiSelectionKeyCode={disabled ? null : ["Meta", "Control"]}
         selectionOnDrag={!disabled}
         selectionMode={SelectionMode.Partial}
         panOnDrag={disabled ? true : [1, 2]}
         panOnScroll
+        zoomOnDoubleClick={false}
         nodesDraggable={!disabled}
         nodesConnectable={!disabled}
         elementsSelectable={!disabled}

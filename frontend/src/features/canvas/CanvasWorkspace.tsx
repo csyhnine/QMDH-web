@@ -215,15 +215,36 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   );
 
   const patchNodeRef = useRef(patchNode);
+  const nodesRef = useRef(nodes);
   useEffect(() => {
     patchNodeRef.current = patchNode;
   }, [patchNode]);
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+
+  const pendingTaskFingerprint = useMemo(
+    () =>
+      nodes
+        .filter(isGenerateNode)
+        .filter(
+          (node) =>
+            typeof node.data.taskId === "number" &&
+            (node.data.status === "pending" ||
+              node.data.status === "running" ||
+              node.data.status === "submitting")
+        )
+        .map((node) => `${node.id}:${node.data.taskId}`)
+        .sort()
+        .join("|"),
+    [nodes]
+  );
 
   // Leaving canvas unmounts the page and kills in-flight pollers; resume any stuck tasks.
   useEffect(() => {
     if (sessionLoading) return;
-    resumeCanvasNodeTaskPolls(nodes, (nodeId, patch) => patchNodeRef.current(nodeId, patch));
-  }, [boardKey, sessionLoading, nodes]);
+    resumeCanvasNodeTaskPolls(nodesRef.current, (nodeId, patch) => patchNodeRef.current(nodeId, patch));
+  }, [boardKey, sessionLoading, pendingTaskFingerprint]);
 
   const patchNoteNode = useCallback(
     (nodeId: string, patch: Partial<NoteNodeData>) => {

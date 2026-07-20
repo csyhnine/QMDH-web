@@ -5,6 +5,7 @@ import {
   upscaleStyleOptions,
 } from "../studio/studioUpscaleOptions";
 import type { Provider } from "../../api";
+import { CanvasDraftInput, CanvasDraftTextarea } from "./CanvasDraftField";
 import CanvasModelSelect from "./CanvasModelSelect";
 import type { UpstreamDeliverables } from "./canvasNodeContext";
 import { NODE_KIND_LABEL, type CanvasGenerateNode, type GenerateNodeData } from "./canvasTypes";
@@ -103,10 +104,10 @@ export default function CanvasNodeInspector({
           {isUpload ? null : isAnnotate ? null : (
             <label className="qmdh-canvas-field">
               <span>节点名称</span>
-              <input
+              <CanvasDraftInput
                 value={data.label}
                 disabled={disabled || busy}
-                onChange={(event) => patch({ label: event.target.value })}
+                onCommit={(label) => patch({ label })}
               />
             </label>
           )}
@@ -125,12 +126,12 @@ export default function CanvasNodeInspector({
           {!isUpload && !isUpscale && !isAnnotate ? (
             <label className="qmdh-canvas-field qmdh-canvas-field-prompt">
               <span>提示词</span>
-              <textarea
+              <CanvasDraftTextarea
                 rows={12}
                 value={data.prompt}
                 disabled={disabled || busy}
                 placeholder="描述生成内容…"
-                onChange={(event) => patch({ prompt: event.target.value })}
+                onCommit={(prompt) => patch({ prompt })}
               />
             </label>
           ) : null}

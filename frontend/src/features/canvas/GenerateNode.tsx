@@ -8,6 +8,7 @@ import {
   upscaleStyleOptions,
 } from "../studio/studioUpscaleOptions";
 import AnnotateBoard from "./AnnotateBoard";
+import { CanvasDraftInput, CanvasDraftTextarea } from "./CanvasDraftField";
 import CanvasModelSelect from "./CanvasModelSelect";
 import { useCanvasNodeActions } from "./canvasNodeContext";
 import { NODE_KIND_LABEL, type GenerateNodeData } from "./canvasTypes";
@@ -178,17 +179,17 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
 
             <label className="qmdh-canvas-field">
               <span>节点名</span>
-              <input
+              <CanvasDraftInput
                 value={data.label}
                 disabled={disabled || busy}
-                onChange={(event) => patch({ label: event.target.value })}
+                onCommit={(label) => patch({ label })}
               />
             </label>
 
             {!isUpscale ? (
               <label className="qmdh-canvas-field">
                 <span>提示词</span>
-                <textarea
+                <CanvasDraftTextarea
                   rows={4}
                   value={data.prompt}
                   disabled={disabled || busy}
@@ -199,7 +200,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
                         ? "描述要生成的视频…"
                         : "描述想要生成的画面…"
                   }
-                  onChange={(event) => patch({ prompt: event.target.value })}
+                  onCommit={(prompt) => patch({ prompt })}
                 />
               </label>
             ) : null}

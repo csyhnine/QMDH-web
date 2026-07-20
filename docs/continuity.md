@@ -16,29 +16,29 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Current Baseline
 
-- **Active development sequence**: ① 07-20 画布/上下文/流式 **已 commit 到 main（未 push）** → ② **B1 切片分支已建** → ③ 用户同意后 push/PR → ④ gov → B2 → multi → ⑤ VIP Admin / 访客 P2
-- Current branch for Agent B1: **`feat/chat-004-agent-b1`**（基于 `main` @ **`29d7841`**；worktree：`E:/projects/QMDH-web-b1`）
-- `main` @ **`29d7841`**：领先 `origin/main` **4** commit（canvas / context / streaming / docs）；**未 push**
-- Production: **`https://cityusbdisk.cn`** — 以服务器实际 HEAD 为准（此前交接曾记 `186b127` / VIP UA `f0497b3`）
-- **07-20 留档**：`docs/archive/handoff-2026-07-20-canvas-chat-streaming-wip.md`（内容已入库 main，勿再当未提交工作区）
-- Deploy archive: `docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
-- **VIP**：异步 + 下载 UA 热修已有代码路径；Admin 建 `gpt-image-2-vip` 即可测（见 VIP archive）
+- **Active development sequence**: ① GitHub `main` 已含画布/上下文/流式/**Agent B1** → ② **等用户下令再部署生产** → ③ gov → B2 → multi 切片 → ④ VIP Admin / 访客 P2
+- Current branch: **`main` @ `234dd8b`**（与 `origin/main` 同步；含 PR #2）
+- **Deploy-ready checklist**：`docs/archive/deploy-ready-2026-07-20-main-canvas-chat-b1.md`（**未部署**）
+- Production: **`https://cityusbdisk.cn`** — 仍为旧 HEAD（约 `186b127`）；**勿擅自部署**
+- 07-20 功能留档：`docs/archive/handoff-2026-07-20-canvas-chat-streaming-wip.md`
+- Deploy archive（上次生产）：`docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
+- **VIP**：代码路径已有；Admin 建 `gpt-image-2-vip` 即可测
 - **Chat Agent（重要）**：
-  - 生产 / `main`：仍无 `agent_mode`（B1 尚未合入）
-  - **B1 切片**：`feat/chat-004-agent-b1` — 只读 tools + thinking/tool_calls SSE；无 harness/LangGraph
-  - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**（gov/B2/multi/crawl/ref；**未**整包 rebase）
-  - 现状交接：**`docs/archive/handoff-2026-07-16-agent-wip-status.md`** + 本文件
-  - 建议后续切片：gov → B2 → multi/crawl/ref-intent（勿整包一次上）
+  - **B1 已在 GitHub `main`**：`agent_mode` + 5 只读 tools；**生产要部署后才可见**
+  - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**（gov/B2/multi/crawl/ref；未 rebase、未合入）
+  - 现状：`docs/archive/handoff-2026-07-16-agent-wip-status.md` + 本文件
+  - 后续切片：gov → B2 → multi/crawl/ref-intent
+- Alembic head：**`k2l3m4n5o6p7`**（部署必须 `upgrade head`；先 build backend 再迁移）
 - Local dev URLs:
   - frontend: `http://127.0.0.1:18080`
   - backend: `http://127.0.0.1:18010`
 - Local helper commands:
   - startup: `cmd /c start-dev.cmd`
   - build: `npm run build`
-  - smoke: `npm run smoke:studio`, `npm run smoke:chat`（`agent_mode`：**B1 分支**或旧 WIP）
-  - backend B1 slice: `backend\.venv\Scripts\python.exe -m pytest tests\test_chat_agent_service.py tests\test_chat_agent_mode.py tests\test_chat_context.py -q`
+  - smoke: `npm run smoke:studio`, `npm run smoke:chat`
+  - backend B1: `backend\.venv\Scripts\python.exe -m pytest tests\test_chat_agent_service.py tests\test_chat_agent_mode.py tests\test_chat_context.py -q`
 - Do not commit: `storage/`, `tmp/`, `.env`, `backend/app.db`, `frontend/dist/`, `node_modules/`, `assets/` 本地截图
-- Hard rule: **未经用户明确同意，禁止 git push / 生产部署**
+- Hard rule: **未经用户明确同意，禁止 git push / 生产部署**（本次文档同步除外，用户已要求准备就绪）
 
 ## Current Product Reality
 

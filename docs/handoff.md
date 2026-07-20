@@ -12,30 +12,27 @@
 
 ## Latest Handoffs
 
-### [2026-07-20] Chat Agent B1 切片 — **本地分支 DONE，未 push / 未合 main**
-- Role: 从 WIP 整包抽出 `chat-004` B1：`agent_mode` + 5 只读 tools + SSE thinking/tool_calls
-- Branch: **`feat/chat-004-agent-b1`**（worktree 可选：`E:/projects/QMDH-web-b1`）；基于 `main` @ **`29d7841`**
-- 策略：**未**整包 rebase `wip/agent-multi-chat-2026-07`（迁移 ID 与 canvas/context 冲突）；按需移植
-- 调用链：`chat.py` → `run_studio_agent_isolated`（无 harness / LangGraph）
-- Migration：`k2l3m4n5o6p7`（`AgentSkillRelease` prompt/allowlist；`down_revision=i0j1k2l3m4n5`）
-- Tests：`test_chat_agent_*` + `test_chat_context` / canvas 回归已绿
-- 硬约束：勿 push / 勿部署，除非用户明确同意
-- Next step：用户同意后 push + PR；再切片 gov → B2（整包 WIP 仍保留）
+### [2026-07-20] 部署就绪 — **GitHub `main` 已齐，生产未部署**
+- Role: 画布 + Chat 上下文/流式 + **Agent B1** 均已在 GitHub `main`
+- HEAD: **`234dd8b`**（含 PR #2 merge）
+- Deploy checklist: **`docs/archive/deploy-ready-2026-07-20-main-canvas-chat-b1.md`**
+- 硬约束：**等用户确认服务器空闲后再部署**；勿改 `.env`
+- Agent：B1 已合 main；gov/B2/multi 仍在 `wip/agent-multi-chat-2026-07` @ `4b0a5b3`
+- Next step：用户下令 → 按 deploy-ready 清单 pull + build backend + `alembic upgrade head` + `up -d --build`
 - Safe to hand off: **Yes**
 
-### [2026-07-20] 画布模板 + Chat 上下文 + 真流式 — **已 commit 到 main，未 push**
-- Role: 三大块已拆 4 commit 入库 `main`（领先 origin 4）
-- Commits：`e75cb3d` canvas → `dd0f121` context → `0b76caa` streaming → `29d7841` docs
-- Archive: **`docs/archive/handoff-2026-07-20-canvas-chat-streaming-wip.md`**
-- Next step：用户同意后再 push；或继续 Agent 切片
+### [2026-07-20] Chat Agent B1 — **已合入 main（PR #2）**
+- Role: `agent_mode` + 5 只读 tools + thinking/tool_calls；无 harness/LangGraph
+- Branch 历史：`feat/chat-004-agent-b1`；已 merge → `main`
+- Migration：`k2l3m4n5o6p7`
+- Next step：随上述部署上生产后验收 Chat 助手开关
 - Safe to hand off: **Yes**
 
-### [2026-07-16] Chat Agent / 多 Agent — **WIP 整包仍在，未合 main**
-- Role: 完整 Agent 能力仍在独立 WIP（gov/B2/multi/crawl/ref）
-- Branch: **`wip/agent-multi-chat-2026-07`** @ **`4b0a5b3`**（保持不动）
-- 生产 / `main`：仍无完整 Agent；B1 仅在 `feat/chat-004-agent-b1`
+### [2026-07-16] Chat Agent / 多 Agent 整包 — **WIP 仍保留**
+- Branch: **`wip/agent-multi-chat-2026-07`** @ **`4b0a5b3`**
+- 含未切片：gov / B2 HITL / multi / crawl / ref-intent
 - Archive: **`docs/archive/handoff-2026-07-16-agent-wip-status.md`**
-- Next step：B1 合入后再从 WIP 抽 gov → B2；勿整包 merge
+- Next step：B1 上线稳定后再抽 gov → B2；勿整包 merge
 - Safe to hand off: **Yes**
 
-<!-- 更早：轮次导航 docs/archive/chat-round-nav-2026-07-16.md；VIP / 访客部署见对应 archive -->
+<!-- 更早：画布/流式手写留档 docs/archive/handoff-2026-07-20-canvas-chat-streaming-wip.md；访客部署 archive -->

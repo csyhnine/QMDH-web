@@ -136,18 +136,14 @@
 ## Priority Queue
 
 ### Task: [local-wip-20260720] 画布模板 + Chat 上下文 + 真流式
-- 状态：**DONE（已在 GitHub `main`）**；**生产未部署**
-- Commits：`e75cb3d` / `dd0f121` / `0b76caa` / `29d7841`（随后 B1 merge → `234dd8b`）
-- 留档：`docs/archive/handoff-2026-07-20-canvas-chat-streaming-wip.md`
-- Next：随 deploy-ready 清单一次上生产
-- 约束：勿擅自部署；勿提交 `assets/` 截图
+- 状态：**DONE（已部署生产 `3ff220b`）**
+- 留档：`docs/archive/deploy-2026-07-20-main-canvas-chat-b1.md`
+- Next：人工冒烟
 
 ### Task: [chat-004] Chat Agent B1 切片
-- 状态：**DONE（已合 GitHub `main`，PR #2）**；**生产未部署**
-- HEAD：`234dd8b`；Migration：`k2l3m4n5o6p7`
-- 范围：`agent_mode` + 5 只读 tools + SSE thinking/tool_calls
-- Deploy checklist：`docs/archive/deploy-ready-2026-07-20-main-canvas-chat-b1.md`
-- Next：用户确认服务器空闲后部署；再抽 gov
+- 状态：**DONE（已合 main 且已部署）**；**UI 默认隐藏**
+- HEAD：`3ff220b`；Migration：`k2l3m4n5o6p7`
+- Next：助手产品完整后再开 `VITE_CHAT_AGENT_UI_ENABLED`
 
 ### Task: [agent-wip-001] Chat Agent / 多 Agent 合入（索引）
 - 状态：**IN PROGRESS** — B1 已合 `main`；gov/B2/multi 仍在 WIP 整包

@@ -4,6 +4,16 @@ export type QmdhSsePayload = {
   delta?: string;
   error?: ChatStreamError | string;
   usage?: Record<string, number>;
+  status?: string;
+  label?: string;
+  context?: {
+    tokens?: number;
+    window_tokens?: number;
+    budget_tokens?: number;
+    usage_percent?: number;
+    compressed?: boolean;
+    just_compressed?: boolean;
+  };
 };
 
 export function parseQmdhSseLine(line: string): "skip" | "done" | QmdhSsePayload {

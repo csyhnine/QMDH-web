@@ -32,12 +32,12 @@ from app.services.chat_attachment_upload import (
 )
 from app.services.chat_message_content import (
     attachment_kind_for_path,
-    build_provider_messages,
     chat_attachment_out,
     serialize_chat_attachments,
 )
 from app.services.chat_word_export import build_chat_word_document, default_chat_word_file_name
 from app.services.media_storage import resolve_storage_path, write_binary_asset
+from app.services.chat_context import estimate_conversation_context, pack_chat_context
 from app.services.chat_service import (
     format_chat_error_message,
     get_chat_models,
@@ -49,6 +49,29 @@ from app.services.billing import enforce_user_quota, normalize_chat_usage
 from app.services.usage_ledger import record_chat_usage_ledger
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+def _conversation_out(db: Session, conversation: Conversation) -> ConversationOut:
+    provider = db.get(ProviderProfile, conversation.model_provider_id) if conversation.model_provider_id else None
+    messages = list(
+        db.scalars(
+            select(ChatMessage)
+            .where(ChatMessage.conversation_id == conversation.id)
+            .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
+        )
+    )
+    stats = estimate_conversation_context(conversation, messages, provider_profile=provider)
+    return ConversationOut(
+        id=conversation.id,
+        title=conversation.title,
+        model_provider_id=conversation.model_provider_id,
+        has_context_summary=bool((conversation.context_summary or "").strip()),
+        context_usage_percent=stats.usage_percent,
+        context_tokens=stats.tokens,
+        context_window_tokens=stats.window_tokens,
+        created_at=conversation.created_at,
+        updated_at=conversation.updated_at,
+    )
 
 
 async def parse_chat_message_payload(request: Request) -> ChatMessageCreate:
@@ -129,13 +152,7 @@ def create_conversation(
     db.add(conversation)
     db.commit()
     db.refresh(conversation)
-    return ConversationOut(
-        id=conversation.id,
-        title=conversation.title,
-        model_provider_id=conversation.model_provider_id,
-        created_at=conversation.created_at,
-        updated_at=conversation.updated_at,
-    )
+    return _conversation_out(db, conversation)
 
 
 @router.get("/conversations", response_model=list[ConversationOut])
@@ -150,16 +167,7 @@ def list_conversations(
         .where(Conversation.user_id == auth_user.user_id)
         .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
     ).all()
-    return [
-        ConversationOut(
-            id=conversation.id,
-            title=conversation.title,
-            model_provider_id=conversation.model_provider_id,
-            created_at=conversation.created_at,
-            updated_at=conversation.updated_at,
-        )
-        for conversation in conversations
-    ]
+    return [_conversation_out(db, conversation) for conversation in conversations]
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=list[ChatMessageOut])
@@ -301,13 +309,13 @@ async def send_message(
     conversation.updated_at = datetime.now(timezone.utc)
     db.commit()
 
-    all_messages = db.scalars(
-        select(ChatMessage)
-        .where(ChatMessage.conversation_id == conversation_id)
-        .order_by(ChatMessage.created_at.asc())
-    ).all()
-    recent = all_messages[-50:] if len(all_messages) > 50 else all_messages
-    api_messages = build_provider_messages(recent)
+    all_messages = list(
+        db.scalars(
+            select(ChatMessage)
+            .where(ChatMessage.conversation_id == conversation_id)
+            .order_by(ChatMessage.created_at.asc())
+        )
+    )
 
     full_content_parts: list[str] = []
     last_error_payload: dict[str, object] | None = None
@@ -324,7 +332,31 @@ async def send_message(
     async def generate():
         nonlocal last_error_payload, last_usage_payload
 
-        async for chunk in stream_chat_completion(provider_config, api_messages):
+        # Flush status immediately so the client sees progress before any slow packing/summary.
+        yield f"data: {json.dumps({'status': 'preparing', 'label': '整理上下文…'}, ensure_ascii=False)}\n\n"
+        if len(all_messages) >= 12:
+            yield f"data: {json.dumps({'status': 'compressing', 'label': '检查并压缩早期对话…'}, ensure_ascii=False)}\n\n"
+
+        # Re-bind ORM rows after earlier commits so attributes stay available in the stream.
+        conversation_row = db.get(Conversation, conversation_id)
+        provider_row = db.get(ProviderProfile, provider_profile_id)
+        if conversation_row is None:
+            yield f"data: {json.dumps({'error': {'summary': '会话不存在', 'detail': 'Conversation missing', 'code': 'chat_conversation_missing'}}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+
+        packed = await pack_chat_context(
+            db,
+            conversation_row,
+            all_messages,
+            provider_config,
+            provider_profile=provider_row,
+        )
+
+        yield f"data: {json.dumps({'context': packed.context_payload()}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'status': 'generating', 'label': '正在回复…'}, ensure_ascii=False)}\n\n"
+
+        async for chunk in stream_chat_completion(provider_config, packed.api_messages):
             if chunk.startswith("data: ") and "[DONE]" not in chunk:
                 try:
                     data = json.loads(chunk[6:])
@@ -357,6 +389,8 @@ async def send_message(
             yield chunk
 
         full_content = "".join(full_content_parts)
+        conversation_row = db.get(Conversation, conversation_id) or conversation_row
+        provider_for_ledger = db.get(ProviderProfile, provider_profile_id) or provider_row
         if full_content:
             assistant_message = ChatMessage(
                 conversation_id=conversation_id,
@@ -365,14 +399,14 @@ async def send_message(
                 token_count=last_usage_payload["total_tokens"],
             )
             db.add(assistant_message)
-            conversation.updated_at = datetime.now(timezone.utc)
+            conversation_row.updated_at = datetime.now(timezone.utc)
             db.commit()
             db.refresh(assistant_message)
             record_chat_usage_ledger(
                 db,
                 message=assistant_message,
-                conversation=conversation,
-                provider=provider,
+                conversation=conversation_row,
+                provider=provider_for_ledger,
                 provider_profile_id=provider_profile_id,
                 user_id=auth_user.user_id,
                 user_name=auth_user.name,
@@ -392,14 +426,14 @@ async def send_message(
                 token_count=last_usage_payload["total_tokens"],
             )
             db.add(assistant_message)
-            conversation.updated_at = datetime.now(timezone.utc)
+            conversation_row.updated_at = datetime.now(timezone.utc)
             db.commit()
             db.refresh(assistant_message)
             record_chat_usage_ledger(
                 db,
                 message=assistant_message,
-                conversation=conversation,
-                provider=provider,
+                conversation=conversation_row,
+                provider=provider_for_ledger,
                 provider_profile_id=provider_profile_id,
                 user_id=auth_user.user_id,
                 user_name=auth_user.name,

@@ -149,6 +149,12 @@ class Settings(BaseSettings):
     meilisearch_inspiration_index: str = "qmdh_inspiration"
     meilisearch_templates_index: str = "qmdh_templates"
     studio_agent_enabled: bool = False
+    chat_default_context_window_tokens: int = 128000
+    chat_completion_reserve_tokens: int = 4096
+    chat_summary_budget_tokens: int = 2048
+    chat_summary_trigger_ratio: float = 0.85
+    chat_image_token_estimate: int = 765
+    chat_min_recent_messages: int = 4
 
     model_config = SettingsConfigDict(
         env_file=(str(BACKEND_DIR / ".env"), str(REPO_ROOT_DIR / ".env")),

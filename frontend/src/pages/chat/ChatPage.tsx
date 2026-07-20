@@ -15,6 +15,10 @@ type ChatConversation = {
   id: number;
   title: string;
   model_provider_id: number | null;
+  has_context_summary?: boolean;
+  context_usage_percent?: number;
+  context_tokens?: number;
+  context_window_tokens?: number;
   created_at: string;
   updated_at: string;
 };
@@ -55,6 +59,9 @@ export default function ChatPage() {
   });
   const [chatError, setChatError] = useState("");
   const [exportingMessageId, setExportingMessageId] = useState<string | null>(null);
+  const [contextUsagePercent, setContextUsagePercent] = useState<number | null>(null);
+  const [contextTokens, setContextTokens] = useState<number | null>(null);
+  const [contextWindowTokens, setContextWindowTokens] = useState<number | null>(null);
 
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const messagesBottomRef = useRef<HTMLDivElement | null>(null);
@@ -65,7 +72,36 @@ export default function ChatPage() {
   const activeChatIdRef = useRef<number | null>(activeChatId);
   activeChatIdRef.current = activeChatId;
 
-  const transport = useMemo(() => new QmdhChatTransport(() => activeChatIdRef.current), []);
+  const transport = useMemo(
+    () =>
+      new QmdhChatTransport(() => activeChatIdRef.current, (meta) => {
+        if (meta.context?.usage_percent != null) {
+          setContextUsagePercent(meta.context.usage_percent);
+        }
+        if (meta.context?.tokens != null) {
+          setContextTokens(meta.context.tokens);
+        }
+        if (meta.context?.window_tokens != null) {
+          setContextWindowTokens(meta.context.window_tokens);
+        }
+        if (meta.context?.compressed) {
+          setConversations((current) =>
+            current.map((conversation) =>
+              conversation.id === activeChatIdRef.current
+                ? {
+                    ...conversation,
+                    has_context_summary: true,
+                    context_usage_percent: meta.context?.usage_percent ?? conversation.context_usage_percent,
+                    context_tokens: meta.context?.tokens ?? conversation.context_tokens,
+                    context_window_tokens: meta.context?.window_tokens ?? conversation.context_window_tokens,
+                  }
+                : conversation,
+            ),
+          );
+        }
+      }),
+    [],
+  );
 
   const {
     messages: chatMessages,
@@ -86,6 +122,10 @@ export default function ChatPage() {
   });
 
   const streaming = status === "streaming" || status === "submitted";
+  const activeConversation = conversations.find((conversation) => conversation.id === activeChatId) ?? null;
+  const displayUsagePercent = contextUsagePercent ?? activeConversation?.context_usage_percent ?? 0;
+  const displayContextTokens = contextTokens ?? activeConversation?.context_tokens ?? 0;
+  const displayContextWindow = contextWindowTokens ?? activeConversation?.context_window_tokens ?? 0;
   const attachmentState = useChatAttachments({
     disabled: isGuest || streaming || activeChatId == null,
   });
@@ -133,6 +173,12 @@ export default function ChatPage() {
     setActiveChatId(conversationId);
     pendingInitialScrollRef.current = true;
     previousMessageCountRef.current = 0;
+    const listed = conversations.find((item) => item.id === conversationId);
+    if (listed) {
+      setContextUsagePercent(listed.context_usage_percent ?? 0);
+      setContextTokens(listed.context_tokens ?? 0);
+      setContextWindowTokens(listed.context_window_tokens ?? 0);
+    }
     try {
       const nextMessages = await api.getChatMessages(conversationId);
       setChatMessages(toUiMessages(nextMessages));
@@ -412,9 +458,25 @@ export default function ChatPage() {
               ))}
             </select>
             {activeChatId ? (
-              <span className="chat-topbar-title">
-                {conversations.find((conversation) => conversation.id === activeChatId)?.title || ""}
-              </span>
+              <div className="chat-topbar-meta">
+                <span className="chat-topbar-title">
+                  {activeConversation?.title || ""}
+                  {activeConversation?.has_context_summary ? (
+                    <span className="chat-context-summary-hint" title="早期对话已压缩为摘要，近期消息仍完整保留">
+                      已压缩
+                    </span>
+                  ) : null}
+                </span>
+                <div
+                  className={`chat-context-meter${displayUsagePercent >= 85 ? " is-high" : ""}`}
+                  title={`上下文约 ${displayContextTokens} / ${displayContextWindow || "?"} tokens`}
+                >
+                  <span className="chat-context-meter-label">上下文 {displayUsagePercent}%</span>
+                  <span className="chat-context-meter-track" aria-hidden="true">
+                    <span className="chat-context-meter-fill" style={{ width: `${Math.min(100, displayUsagePercent)}%` }} />
+                  </span>
+                </div>
+              </div>
             ) : null}
           </div>
         </header>

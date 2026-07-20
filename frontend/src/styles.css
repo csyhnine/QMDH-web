@@ -7813,6 +7813,63 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
+.chat-topbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.chat-context-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 132px;
+}
+
+.chat-context-meter-label {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.chat-context-meter-track {
+  display: block;
+  width: 72px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.chat-context-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  transition: width 0.25s ease;
+}
+
+.chat-context-meter.is-high .chat-context-meter-fill {
+  background: #d97706;
+}
+
+.chat-context-meter.is-high .chat-context-meter-label {
+  color: #b45309;
+}
+
+.chat-context-summary-hint {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 500;
+}
+
 .chat-messages-wrap {
   position: relative;
   flex: 1;

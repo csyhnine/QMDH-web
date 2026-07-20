@@ -1018,8 +1018,32 @@ export const api = {
     request<{ provider_id: number; provider_name: string; display_name: string; model_name: string; base_url: string }[]>(
       "/chat/models"
     ),
-  getChatConversations: () => request<{ id: number; title: string; model_provider_id: number | null; created_at: string; updated_at: string }[]>("/chat/conversations"),
-  createChatConversation: (model_provider_id: number, title?: string) => postJson<{ id: number; title: string; model_provider_id: number | null; created_at: string; updated_at: string }>("/chat/conversations", { model_provider_id, title: title || "" }),
+  getChatConversations: () =>
+    request<
+      {
+        id: number;
+        title: string;
+        model_provider_id: number | null;
+        has_context_summary?: boolean;
+        context_usage_percent?: number;
+        context_tokens?: number;
+        context_window_tokens?: number;
+        created_at: string;
+        updated_at: string;
+      }[]
+    >("/chat/conversations"),
+  createChatConversation: (model_provider_id: number, title?: string) =>
+    postJson<{
+      id: number;
+      title: string;
+      model_provider_id: number | null;
+      has_context_summary?: boolean;
+      context_usage_percent?: number;
+      context_tokens?: number;
+      context_window_tokens?: number;
+      created_at: string;
+      updated_at: string;
+    }>("/chat/conversations", { model_provider_id, title: title || "" }),
   getChatMessages: (convId: number) =>
     request<
       {

@@ -95,15 +95,17 @@ def get_chat_models(db: Session) -> list[ProviderProfile]:
 
 
 def build_chat_messages(db: Session, conversation_id: int, new_content: str) -> list[dict]:
-    """Load last 50 messages from conversation and append new user message."""
+    """Legacy helper kept for tests; prefers full history then appends the new user turn.
+
+    Production send path uses `pack_chat_context` for token-window + summarization.
+    """
     messages = db.scalars(
         select(ChatMessage)
         .where(ChatMessage.conversation_id == conversation_id)
         .order_by(ChatMessage.created_at.asc())
     ).all()
 
-    recent = messages[-50:] if len(messages) > 50 else messages
-    result = [{"role": message.role, "content": message.content} for message in recent]
+    result = [{"role": message.role, "content": message.content} for message in messages]
     result.append({"role": "user", "content": new_content})
     return result
 
@@ -175,6 +177,43 @@ def _upstream_error_event(
         },
     )
     return f"data: {json.dumps({'error': chat_error_payload(code=code, summary=summary, detail=detail, status_code=response.status_code)})}\n\n"
+
+
+async def complete_chat_once(
+    provider: ChatProviderConfig,
+    messages: list[dict],
+    *,
+    max_tokens: int = 900,
+) -> str:
+    """Non-streaming chat completion used for context summarization."""
+    api_key = decrypt_value_or_raise(provider.api_key)
+    url = f"{provider.base_url.rstrip('/')}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": provider.model_name,
+        "messages": messages,
+        "stream": False,
+        "max_tokens": max(int(max_tokens or 900), 64),
+        "temperature": 0.2,
+    }
+    timeout = max(float(provider.timeout_seconds or 120.0), 1.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(url, json=payload, headers=headers)
+        if response.status_code != 200:
+            detail = _sanitize_error_text(response.text, limit=380)
+            raise RuntimeError(f"summarize upstream HTTP {response.status_code}: {detail}")
+        data = response.json()
+        try:
+            content = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError("summarize upstream returned unexpected payload") from exc
+        text = str(content or "").strip()
+        if not text:
+            raise RuntimeError("summarize upstream returned empty content")
+        return text
 
 
 async def stream_chat_completion(

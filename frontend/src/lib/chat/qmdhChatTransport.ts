@@ -2,14 +2,24 @@ import { HttpChatTransport, type ChatTransport, type UIMessage, type UIMessageCh
 
 import { buildApiUrl, getAuthHeaders } from "../../api";
 import type { ChatSendAttachment } from "./chatAttachmentUtils";
-import { parseQmdhSseLine } from "./qmdhSseParser";
+import { parseQmdhSseLine, type QmdhSsePayload } from "./qmdhSseParser";
 import { type ChatStreamError, formatStreamError } from "./types";
 
 type SendMessagesOptions = Parameters<ChatTransport<UIMessage>["sendMessages"]>[0];
 
 const TEXT_PART_ID = "assistant-text";
 
-function parseQmdhSseStream(stream: ReadableStream<Uint8Array>): ReadableStream<UIMessageChunk> {
+export type ChatStreamMeta = {
+  status?: string;
+  label?: string;
+  context?: QmdhSsePayload["context"];
+};
+
+
+function parseQmdhSseStream(
+  stream: ReadableStream<Uint8Array>,
+  onMeta?: (meta: ChatStreamMeta) => void,
+): ReadableStream<UIMessageChunk> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -49,6 +59,19 @@ function parseQmdhSseStream(stream: ReadableStream<Uint8Array>): ReadableStream<
             controller.close();
             return;
           }
+          if (parsed.status || parsed.context || parsed.label) {
+            onMeta?.({
+              status: parsed.status,
+              label: parsed.label,
+              context: parsed.context,
+            });
+            if (!started && (parsed.status === "generating" || parsed.status === "preparing")) {
+              controller.enqueue({ type: "start" });
+              controller.enqueue({ type: "start-step" });
+              controller.enqueue({ type: "text-start", id: TEXT_PART_ID });
+              started = true;
+            }
+          }
           if (parsed.delta) {
             if (!started) {
               controller.enqueue({ type: "start" });
@@ -81,10 +104,20 @@ function extractUserMessageContent(messages: UIMessage[]): string {
 }
 
 export class QmdhChatTransport extends HttpChatTransport<UIMessage> {
-  constructor(private readonly getConversationId: () => number | null) {
+  private onMeta?: (meta: ChatStreamMeta) => void;
+
+  constructor(
+    private readonly getConversationId: () => number | null,
+    onMeta?: (meta: ChatStreamMeta) => void,
+  ) {
     super({
       api: buildApiUrl("/chat/conversations/0/messages"),
     });
+    this.onMeta = onMeta;
+  }
+
+  setMetaHandler(onMeta?: (meta: ChatStreamMeta) => void) {
+    this.onMeta = onMeta;
   }
 
   async sendMessages(options: SendMessagesOptions): Promise<ReadableStream<UIMessageChunk>> {

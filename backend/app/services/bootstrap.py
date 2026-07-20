@@ -68,6 +68,7 @@ def ensure_schema(engine: Engine) -> None:
     prompt_template_columns = existing_columns("prompt_templates")
     provider_profile_columns = existing_columns("provider_profiles")
     inspiration_post_columns = existing_columns("inspiration_posts")
+    conversation_columns = existing_columns("conversations")
     with engine.begin() as connection:
         if project_columns and "owner_user_id" not in project_columns:
             connection.execute(text("ALTER TABLE projects ADD COLUMN owner_user_id INTEGER"))
@@ -151,6 +152,13 @@ def ensure_schema(engine: Engine) -> None:
             connection.execute(text("ALTER TABLE usage_ledgers ADD COLUMN uncached_input_tokens INTEGER NOT NULL DEFAULT 0"))
         if usage_ledger_columns and "usage_payload" not in usage_ledger_columns:
             connection.execute(text("ALTER TABLE usage_ledgers ADD COLUMN usage_payload JSON NOT NULL DEFAULT '{}'"))
+        conversation_columns = existing_columns("conversations")
+        if conversation_columns and "context_summary" not in conversation_columns:
+            connection.execute(text("ALTER TABLE conversations ADD COLUMN context_summary TEXT NOT NULL DEFAULT ''"))
+        if conversation_columns and "context_summary_until_message_id" not in conversation_columns:
+            connection.execute(text("ALTER TABLE conversations ADD COLUMN context_summary_until_message_id INTEGER"))
+        if conversation_columns and "context_summary_updated_at" not in conversation_columns:
+            connection.execute(text("ALTER TABLE conversations ADD COLUMN context_summary_updated_at DATETIME"))
 
 
 def _seed_shared_prompt_templates(db: Session) -> None:

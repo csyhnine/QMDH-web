@@ -744,6 +744,10 @@ class ConversationOut(BaseModel):
     id: int
     title: str
     model_provider_id: int | None = None
+    has_context_summary: bool = False
+    context_usage_percent: int = 0
+    context_tokens: int = 0
+    context_window_tokens: int = 0
     created_at: datetime
     updated_at: datetime
 

@@ -1,5 +1,19 @@
 import type { ChatStreamError } from "./types";
 
+export type ChatToolCall = {
+  name: string;
+  summary: string;
+};
+
+export type ChatThinkingStep = {
+  key: string;
+  label: string;
+  detail: string;
+  status: string;
+  agent_key?: string;
+  agent_label?: string;
+};
+
 export type QmdhSsePayload = {
   delta?: string;
   error?: ChatStreamError | string;
@@ -14,6 +28,10 @@ export type QmdhSsePayload = {
     compressed?: boolean;
     just_compressed?: boolean;
   };
+  thinking_step?: ChatThinkingStep;
+  tool_calls?: ChatToolCall[];
+  policy_version?: string;
+  release_display_name?: string;
 };
 
 export function parseQmdhSseLine(line: string): "skip" | "done" | QmdhSsePayload {

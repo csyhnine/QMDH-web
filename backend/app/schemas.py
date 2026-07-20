@@ -755,6 +755,12 @@ class ConversationOut(BaseModel):
 class ChatMessageCreate(BaseModel):
     content: str = ""
     attachments: list[ChatAttachmentIn] = Field(default_factory=list, max_length=4)
+    agent_mode: bool = False
+    policy_version: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Reserved for agent-gov-001 effective policy pin; ignored in B1.",
+    )
 
     @model_validator(mode="after")
     def validate_has_payload(self) -> ChatMessageCreate:
@@ -763,12 +769,41 @@ class ChatMessageCreate(BaseModel):
         return self
 
 
+class ChatAgentToolCallOut(BaseModel):
+    name: str
+    summary: str
+
+
+class ChatAgentTaskProposalOut(BaseModel):
+    proposal_id: str
+    workflow_key: str
+    title: str
+    project_code: str
+    requested_provider: str
+    provider_display_name: str
+    classification: str = DataClassification.b.value
+    payload: dict[str, Any] = Field(default_factory=dict)
+    summary: str
+    status: str = "pending_confirmation"
+
+
+class ChatAgentThinkingStepOut(BaseModel):
+    key: str
+    label: str
+    detail: str = ""
+    status: str = "done"
+
+
 class ChatMessageOut(BaseModel):
     id: int
     role: str
     content: str
     attachments: list[ChatAttachmentOut] = Field(default_factory=list)
     created_at: datetime
+    agent_tool_calls: list[ChatAgentToolCallOut] = Field(default_factory=list)
+    agent_task_proposals: list[ChatAgentTaskProposalOut] = Field(default_factory=list)
+    agent_thinking_steps: list[ChatAgentThinkingStepOut] = Field(default_factory=list)
+    policy_version: str | None = None
 
 
 class ChatWordExportIn(BaseModel):
@@ -930,6 +965,19 @@ class AgentSkillReleaseUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class AgentChatToolOut(BaseModel):
+    key: str
+    label: str
+    description: str
+
+
+class AssignedAgentOut(BaseModel):
+    key: str
+    display_name: str
+    role: str
+    is_primary: bool
+
+
 class AgentSkillReleaseOut(BaseModel):
     id: int
     key: str
@@ -937,8 +985,33 @@ class AgentSkillReleaseOut(BaseModel):
     environment: str
     openclaw_version: str
     skill_keys: list[str]
+    system_prompt_template: str = ""
+    chat_tool_allowlist: list[str] = Field(default_factory=list)
     notes: str
     is_active: bool
     created_by_user_name: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class ChatAgentPolicyLayerOut(BaseModel):
+    layer: str
+    label: str
+    detail: str | None = None
+    disabled_tool_keys: list[str] = Field(default_factory=list)
+    prompt_overlay: str = ""
+
+
+class ChatAgentPolicyOut(BaseModel):
+    policy_version: str
+    release_display_name: str | None = None
+    environment: str
+    enabled_tools: list[AgentChatToolOut] = Field(default_factory=list)
+    disabled_tools: list[AgentChatToolOut] = Field(default_factory=list)
+    policy_layers: list[ChatAgentPolicyLayerOut] = Field(default_factory=list)
+    data_scope_note: str
+    capabilities_summary: str
+    baseline_prompt: str
+    personalization_summary: str | None = None
+    user_group_name: str | None = None
+    assigned_agents: list[AssignedAgentOut] = Field(default_factory=list)

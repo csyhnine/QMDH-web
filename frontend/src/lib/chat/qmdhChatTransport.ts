@@ -2,7 +2,12 @@ import { HttpChatTransport, type ChatTransport, type UIMessage, type UIMessageCh
 
 import { buildApiUrl, getAuthHeaders } from "../../api";
 import type { ChatSendAttachment } from "./chatAttachmentUtils";
-import { parseQmdhSseLine, type QmdhSsePayload } from "./qmdhSseParser";
+import {
+  parseQmdhSseLine,
+  type ChatThinkingStep,
+  type ChatToolCall,
+  type QmdhSsePayload,
+} from "./qmdhSseParser";
 import { type ChatStreamError, formatStreamError } from "./types";
 
 type SendMessagesOptions = Parameters<ChatTransport<UIMessage>["sendMessages"]>[0];
@@ -15,6 +20,19 @@ export type ChatStreamMeta = {
   status?: string;
   label?: string;
   context?: QmdhSsePayload["context"];
+  policy_version?: string;
+  release_display_name?: string;
+};
+
+export type QmdhChatTransportOptions = {
+  getConversationId: () => number | null;
+  getAgentMode?: () => boolean;
+  onMeta?: (meta: ChatStreamMeta) => void;
+  onToolCalls?: (toolCalls: ChatToolCall[]) => void;
+  onThinkingStep?: (step: ChatThinkingStep) => void;
+  onPolicyVersion?: (policyVersion: string) => void;
+  onAgentThinking?: () => void;
+  onAgentProgress?: () => void;
 };
 
 function yieldToRenderer(): Promise<void> {
@@ -36,7 +54,7 @@ function sleep(ms: number): Promise<void> {
  */
 function parseQmdhSseStream(
   stream: ReadableStream<Uint8Array>,
-  onMeta?: (meta: ChatStreamMeta) => void,
+  callbacks?: QmdhChatTransportOptions,
 ): ReadableStream<UIMessageChunk> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -100,19 +118,42 @@ function parseQmdhSseStream(
           return;
         }
 
-        if (parsed.status || parsed.context || parsed.label) {
-          onMeta?.({
+        if (parsed.status || parsed.context || parsed.label || parsed.policy_version || parsed.release_display_name) {
+          callbacks?.onMeta?.({
             status: parsed.status,
             label: parsed.label,
             context: parsed.context,
+            policy_version: parsed.policy_version,
+            release_display_name: parsed.release_display_name,
           });
-          // Open the assistant bubble as soon as generation begins (before first token).
-          if (parsed.status === "generating" || parsed.status === "preparing") {
+          if (
+            parsed.status === "generating" ||
+            parsed.status === "preparing" ||
+            parsed.status === "thinking"
+          ) {
             await ensureStarted();
           }
         }
 
+        if (parsed.tool_calls?.length) {
+          await ensureStarted();
+          callbacks?.onToolCalls?.(parsed.tool_calls);
+        }
+        if (parsed.thinking_step) {
+          await ensureStarted();
+          callbacks?.onAgentThinking?.();
+          callbacks?.onThinkingStep?.(parsed.thinking_step);
+        }
+        if (parsed.policy_version) {
+          callbacks?.onPolicyVersion?.(parsed.policy_version);
+        }
+        if (parsed.status === "thinking") {
+          await ensureStarted();
+          callbacks?.onAgentThinking?.();
+        }
+
         if (parsed.delta) {
+          callbacks?.onAgentProgress?.();
           pendingDelta += parsed.delta;
           const now = Date.now();
           if (now - lastFlushAt >= DELTA_FLUSH_MS || pendingDelta.length >= 24) {
@@ -156,7 +197,6 @@ function parseQmdhSseStream(
             await ingestLine(line);
           }
 
-          // If tokens are arriving slower than the coalesce window, still flush periodically.
           if (pendingDelta) {
             await sleep(DELTA_FLUSH_MS);
             await flushDelta(true);
@@ -189,31 +229,29 @@ function extractUserMessageContent(messages: UIMessage[]): string {
 }
 
 export class QmdhChatTransport extends HttpChatTransport<UIMessage> {
-  private onMeta?: (meta: ChatStreamMeta) => void;
+  private readonly options: QmdhChatTransportOptions;
 
-  constructor(
-    private readonly getConversationId: () => number | null,
-    onMeta?: (meta: ChatStreamMeta) => void,
-  ) {
+  constructor(options: QmdhChatTransportOptions) {
     super({
       api: buildApiUrl("/chat/conversations/0/messages"),
     });
-    this.onMeta = onMeta;
+    this.options = options;
   }
 
   setMetaHandler(onMeta?: (meta: ChatStreamMeta) => void) {
-    this.onMeta = onMeta;
+    this.options.onMeta = onMeta;
   }
 
   async sendMessages(options: SendMessagesOptions): Promise<ReadableStream<UIMessageChunk>> {
-    const conversationId = this.getConversationId();
+    const conversationId = this.options.getConversationId();
     if (conversationId == null) {
       throw new Error("请先选择或创建会话");
     }
 
     const content = extractUserMessageContent(options.messages);
-    const requestBody = options.body as { attachments?: ChatSendAttachment[] } | undefined;
+    const requestBody = options.body as { attachments?: ChatSendAttachment[]; agent_mode?: boolean } | undefined;
     const attachments = requestBody?.attachments ?? [];
+    const agentMode = requestBody?.agent_mode ?? this.options.getAgentMode?.() ?? false;
     if (!content.trim() && attachments.length === 0) {
       throw new Error("消息内容不能为空");
     }
@@ -226,7 +264,7 @@ export class QmdhChatTransport extends HttpChatTransport<UIMessage> {
         ...getAuthHeaders(),
         ...(options.headers as Record<string, string> | undefined),
       },
-      body: JSON.stringify({ content, attachments }),
+      body: JSON.stringify({ content, attachments, agent_mode: agentMode }),
       credentials: "same-origin",
       signal: options.abortSignal,
       cache: "no-store",
@@ -243,6 +281,6 @@ export class QmdhChatTransport extends HttpChatTransport<UIMessage> {
   }
 
   protected processResponseStream(stream: ReadableStream<Uint8Array>): ReadableStream<UIMessageChunk> {
-    return parseQmdhSseStream(stream, this.onMeta);
+    return parseQmdhSseStream(stream, this.options);
   }
 }

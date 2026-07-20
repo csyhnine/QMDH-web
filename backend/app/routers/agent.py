@@ -233,6 +233,8 @@ def _to_skill_release_out(release: AgentSkillRelease) -> AgentSkillReleaseOut:
         environment=release.environment,
         openclaw_version=release.openclaw_version,
         skill_keys=list(release.skill_keys or []),
+        system_prompt_template=release.system_prompt_template or "",
+        chat_tool_allowlist=list(release.chat_tool_allowlist or []),
         notes=release.notes or "",
         is_active=release.is_active,
         created_by_user_name=release.created_by.name if release.created_by else None,

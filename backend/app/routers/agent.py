@@ -7,6 +7,7 @@ import re
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,14 +15,20 @@ from app.core.audit import write_audit_log
 from app.core.auth import AgentAuthProfile, get_current_agent_auth, get_current_auth_user, require_ops_access
 from app.core.config import settings
 from app.database import get_db
-from app.models import AgentClient, AgentJob, AgentSkillRelease, Asset, InspirationPost, Project, ProjectResearchNote, Task, TaskStatus, User, Workflow
+from app.models import AgentClient, AgentJob, AgentPolicyOverride, AgentSkillRelease, Asset, Conversation, InspirationPost, Project, ProjectResearchNote, Task, TaskStatus, User, Workflow
 from app.schemas import (
+    AdminAgentTraceOut,
+    AdminChatConversationOut,
+    AgentChatToolOut,
     AgentClientOut,
     AgentImageTaskCreate,
     AgentInspirationImportIn,
     AgentJobCompleteIn,
     AgentJobOut,
     AgentOfficialSkillOut,
+    AgentPolicyOverrideCreate,
+    AgentPolicyOverrideOut,
+    AgentPolicyOverrideUpdate,
     AgentProjectArtifactCreate,
     AgentResearchNoteCreate,
     AgentSkillReleaseCreate,
@@ -29,7 +36,22 @@ from app.schemas import (
     AgentSkillReleaseUpdate,
     AgentWorkflowIntentCreate,
     AssetType,
+    ChatAgentPolicyDefaultsOut,
+    ChatMessageOut,
     InspirationPostCreate,
+)
+from app.services.agent_admin_service import (
+    list_admin_agent_traces,
+    list_admin_chat_conversations,
+    list_admin_chat_messages,
+)
+from app.services.agent_policy_service import (
+    CHAT_AGENT_BASELINE_PROMPT,
+    CHAT_AGENT_DATA_SCOPE_NOTE,
+    DEFAULT_CHAT_TOOL_ALLOWLIST,
+    list_chat_tool_catalog,
+    normalize_chat_tool_allowlist,
+    normalize_disabled_tool_keys,
 )
 from app.services.agent_skill_registry import list_official_skills
 from app.services.inspiration_media import prepare_inspiration_image
@@ -826,6 +848,8 @@ def create_skill_release(
         environment=payload.environment,
         openclaw_version=payload.openclaw_version.strip(),
         skill_keys=[item.strip() for item in payload.skill_keys if item.strip()],
+        system_prompt_template=payload.system_prompt_template.strip(),
+        chat_tool_allowlist=list(normalize_chat_tool_allowlist(payload.chat_tool_allowlist)),
         notes=payload.notes.strip(),
         is_active=payload.is_active,
         created_by_user_id=auth_user.user_id,
@@ -843,6 +867,7 @@ def create_skill_release(
             "release_key": release.key,
             "environment": release.environment,
             "skill_keys": release.skill_keys,
+            "chat_tool_allowlist": release.chat_tool_allowlist,
             "openclaw_version": release.openclaw_version,
         },
     )
@@ -867,6 +892,8 @@ def update_skill_release(
     for field, value in update_data.items():
         if field == "skill_keys" and value is not None:
             value = [item.strip() for item in value if item.strip()]
+        elif field == "chat_tool_allowlist" and value is not None:
+            value = list(normalize_chat_tool_allowlist(value))
         elif isinstance(value, str):
             value = value.strip()
         setattr(release, field, value)
@@ -878,9 +905,240 @@ def update_skill_release(
         actor_id=auth_user.user_id,
         target_type="agent_skill_release",
         target_id=release.id,
-        target_name=release.display_name,
         details={"updated_fields": list(update_data.keys())},
     )
     db.commit()
     db.refresh(release)
     return _to_skill_release_out(release)
+
+
+@router.get("/admin/chat-tools", response_model=list[AgentChatToolOut])
+def list_admin_chat_tools(
+    auth_user=Depends(get_current_auth_user),
+) -> list[AgentChatToolOut]:
+    require_ops_access(auth_user)
+    return [AgentChatToolOut(**item) for item in list_chat_tool_catalog()]
+
+
+@router.get("/admin/chat-policy-defaults", response_model=ChatAgentPolicyDefaultsOut)
+def get_admin_chat_policy_defaults(
+    auth_user=Depends(get_current_auth_user),
+) -> ChatAgentPolicyDefaultsOut:
+    require_ops_access(auth_user)
+    return ChatAgentPolicyDefaultsOut(
+        baseline_prompt=CHAT_AGENT_BASELINE_PROMPT.strip(),
+        data_scope_note=CHAT_AGENT_DATA_SCOPE_NOTE,
+        default_tool_allowlist=list(DEFAULT_CHAT_TOOL_ALLOWLIST),
+        tools=[AgentChatToolOut(**item) for item in list_chat_tool_catalog()],
+    )
+
+
+def _to_policy_override_out(db: Session, override: AgentPolicyOverride) -> AgentPolicyOverrideOut:
+    scope_display_name: str | None = None
+    if override.scope == "user":
+        try:
+            user_id = int(override.scope_key)
+        except ValueError:
+            user_id = None
+        if user_id is not None:
+            user = db.get(User, user_id)
+            if user is not None:
+                scope_display_name = user.display_name or user.name
+    elif override.scope == "group":
+        scope_display_name = override.scope_key
+
+    return AgentPolicyOverrideOut(
+        id=override.id,
+        scope=override.scope,
+        scope_key=override.scope_key,
+        scope_display_name=scope_display_name,
+        disabled_tool_keys=list(override.disabled_tool_keys or []),
+        system_prompt_overlay=override.system_prompt_overlay or "",
+        notes=override.notes or "",
+        is_active=override.is_active,
+        updated_at=override.updated_at,
+    )
+
+
+def _validate_override_scope(db: Session, *, scope: str, scope_key: str) -> str:
+    normalized_key = scope_key.strip()
+    if not normalized_key:
+        raise HTTPException(status_code=400, detail="scope_key is required")
+
+    if scope == "group":
+        return normalized_key
+
+    if scope == "user":
+        try:
+            user_id = int(normalized_key)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="user scope_key must be a numeric user id") from exc
+        user = db.get(User, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found for override")
+        return str(user_id)
+
+    raise HTTPException(status_code=400, detail="scope must be group or user")
+
+
+@router.get("/admin/policy-overrides", response_model=list[AgentPolicyOverrideOut])
+def list_policy_overrides(
+    db: Session = Depends(get_db),
+    auth_user=Depends(get_current_auth_user),
+) -> list[AgentPolicyOverrideOut]:
+    require_ops_access(auth_user)
+    overrides = db.scalars(
+        select(AgentPolicyOverride).order_by(AgentPolicyOverride.scope.asc(), AgentPolicyOverride.scope_key.asc())
+    ).all()
+    return [_to_policy_override_out(db, item) for item in overrides]
+
+
+@router.post("/admin/policy-overrides", response_model=AgentPolicyOverrideOut, status_code=status.HTTP_201_CREATED)
+def create_policy_override(
+    payload: AgentPolicyOverrideCreate,
+    db: Session = Depends(get_db),
+    auth_user=Depends(get_current_auth_user),
+) -> AgentPolicyOverrideOut:
+    require_ops_access(auth_user)
+    scope_key = _validate_override_scope(db, scope=payload.scope, scope_key=payload.scope_key)
+    existing = db.scalar(
+        select(AgentPolicyOverride).where(
+            AgentPolicyOverride.scope == payload.scope,
+            AgentPolicyOverride.scope_key == scope_key,
+        )
+    )
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Policy override already exists for this scope")
+
+    override = AgentPolicyOverride(
+        scope=payload.scope,
+        scope_key=scope_key,
+        disabled_tool_keys=list(normalize_disabled_tool_keys(payload.disabled_tool_keys)),
+        system_prompt_overlay=payload.system_prompt_overlay.strip(),
+        notes=payload.notes.strip(),
+        is_active=payload.is_active,
+        created_by_user_id=auth_user.user_id,
+    )
+    db.add(override)
+    write_audit_log(
+        db=db,
+        event_type="agent.policy_override.created",
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="agent_policy_override",
+        target_name=f"{payload.scope}:{scope_key}",
+        details={
+            "scope": payload.scope,
+            "scope_key": scope_key,
+            "disabled_tool_keys": override.disabled_tool_keys,
+        },
+    )
+    db.commit()
+    db.refresh(override)
+    return _to_policy_override_out(db, override)
+
+
+@router.patch("/admin/policy-overrides/{override_id}", response_model=AgentPolicyOverrideOut)
+def update_policy_override(
+    override_id: int,
+    payload: AgentPolicyOverrideUpdate,
+    db: Session = Depends(get_db),
+    auth_user=Depends(get_current_auth_user),
+) -> AgentPolicyOverrideOut:
+    require_ops_access(auth_user)
+    override = db.get(AgentPolicyOverride, override_id)
+    if override is None:
+        raise HTTPException(status_code=404, detail="Policy override not found")
+
+    update_data = payload.model_dump(exclude_unset=True)
+    if "disabled_tool_keys" in update_data and update_data["disabled_tool_keys"] is not None:
+        update_data["disabled_tool_keys"] = list(normalize_disabled_tool_keys(update_data["disabled_tool_keys"]))
+    if "system_prompt_overlay" in update_data and update_data["system_prompt_overlay"] is not None:
+        update_data["system_prompt_overlay"] = update_data["system_prompt_overlay"].strip()
+    if "notes" in update_data and update_data["notes"] is not None:
+        update_data["notes"] = update_data["notes"].strip()
+
+    for field, value in update_data.items():
+        setattr(override, field, value)
+
+    write_audit_log(
+        db=db,
+        event_type="agent.policy_override.updated",
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="agent_policy_override",
+        target_id=override.id,
+        target_name=f"{override.scope}:{override.scope_key}",
+        details={"updated_fields": list(update_data.keys())},
+    )
+    db.commit()
+    db.refresh(override)
+    return _to_policy_override_out(db, override)
+
+
+@router.delete("/admin/policy-overrides/{override_id}", status_code=204)
+def delete_policy_override(
+    override_id: int,
+    db: Session = Depends(get_db),
+    auth_user=Depends(get_current_auth_user),
+) -> Response:
+    require_ops_access(auth_user)
+    override = db.get(AgentPolicyOverride, override_id)
+    if override is None:
+        raise HTTPException(status_code=404, detail="Policy override not found")
+    write_audit_log(
+        db=db,
+        event_type="agent.policy_override.deleted",
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="agent_policy_override",
+        target_id=override.id,
+        target_name=f"{override.scope}:{override.scope_key}",
+        details={},
+    )
+    db.delete(override)
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.get("/admin/chat-conversations", response_model=list[AdminChatConversationOut])
+def list_admin_chat_conversations_route(
+    user_id: int | None = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    auth_user=Depends(get_current_auth_user),
+) -> list[AdminChatConversationOut]:
+    require_ops_access(auth_user)
+    rows = list_admin_chat_conversations(db, user_id=user_id, limit=limit)
+    return [AdminChatConversationOut(**row) for row in rows]
+
+
+@router.get("/admin/chat-conversations/{conversation_id}/messages", response_model=list[ChatMessageOut])
+def get_admin_chat_conversation_messages(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    auth_user=Depends(get_current_auth_user),
+) -> list[ChatMessageOut]:
+    require_ops_access(auth_user)
+    conversation = db.get(Conversation, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return list_admin_chat_messages(db, conversation_id=conversation_id)
+
+
+@router.get("/admin/agent-traces", response_model=list[AdminAgentTraceOut])
+def list_admin_agent_assist_traces(
+    conversation_id: int | None = None,
+    actor_id: int | None = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    auth_user=Depends(get_current_auth_user),
+) -> list[AdminAgentTraceOut]:
+    require_ops_access(auth_user)
+    rows = list_admin_agent_traces(
+        db,
+        conversation_id=conversation_id,
+        actor_id=actor_id,
+        limit=limit,
+    )
+    return [AdminAgentTraceOut(**row) for row in rows]

@@ -654,11 +654,71 @@ export type AgentSkillReleaseRecord = {
   environment: "test" | "prod";
   openclaw_version: string;
   skill_keys: string[];
+  system_prompt_template: string;
+  chat_tool_allowlist: string[];
   notes: string;
   is_active: boolean;
   created_by_user_name: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type AdminChatConversationRecord = {
+  id: number;
+  title: string;
+  user_id: number;
+  user_name: string;
+  user_display_name: string;
+  model_provider_id: number | null;
+  agent_thread_id: string;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdminAgentTraceRecord = {
+  id: number;
+  created_at: string;
+  actor_id: number | null;
+  actor_name: string;
+  conversation_id: number | null;
+  provider_name: string | null;
+  details: Record<string, unknown>;
+};
+
+export type AgentPolicyOverrideRecord = {
+  id: number;
+  scope: "group" | "user";
+  scope_key: string;
+  scope_display_name: string | null;
+  disabled_tool_keys: string[];
+  system_prompt_overlay: string;
+  notes: string;
+  is_active: boolean;
+  updated_at: string;
+};
+
+export type AgentPolicyOverrideCreatePayload = {
+  scope: "group" | "user";
+  scope_key: string;
+  disabled_tool_keys?: string[];
+  system_prompt_overlay?: string;
+  notes?: string;
+  is_active?: boolean;
+};
+
+export type AgentPolicyOverrideUpdatePayload = {
+  disabled_tool_keys?: string[];
+  system_prompt_overlay?: string;
+  notes?: string;
+  is_active?: boolean;
+};
+
+export type ChatAgentPolicyDefaultsRecord = {
+  baseline_prompt: string;
+  data_scope_note: string;
+  default_tool_allowlist: string[];
+  tools: AgentChatToolRecord[];
 };
 
 export type AgentSkillReleaseCreatePayload = {
@@ -667,6 +727,8 @@ export type AgentSkillReleaseCreatePayload = {
   environment: "test" | "prod";
   openclaw_version: string;
   skill_keys: string[];
+  system_prompt_template: string;
+  chat_tool_allowlist: string[];
   notes: string;
   is_active: boolean;
 };
@@ -929,6 +991,42 @@ export const api = {
   agentClients: () => request<AgentClientRecord[]>("/agent/admin/clients"),
   officialSkills: () => request<AgentOfficialSkill[]>("/agent/admin/skills"),
   agentSkillReleases: () => request<AgentSkillReleaseRecord[]>("/agent/admin/releases"),
+  agentChatTools: () => request<AgentChatToolRecord[]>("/agent/admin/chat-tools"),
+  agentChatPolicyDefaults: () => request<ChatAgentPolicyDefaultsRecord>("/agent/admin/chat-policy-defaults"),
+  agentPolicyOverrides: () => request<AgentPolicyOverrideRecord[]>("/agent/admin/policy-overrides"),
+  createAgentPolicyOverride: (payload: AgentPolicyOverrideCreatePayload) =>
+    postJson<AgentPolicyOverrideRecord>("/agent/admin/policy-overrides", payload),
+  updateAgentPolicyOverride: (overrideId: number, payload: AgentPolicyOverrideUpdatePayload) =>
+    patchJson<AgentPolicyOverrideRecord>(`/agent/admin/policy-overrides/${overrideId}`, payload),
+  deleteAgentPolicyOverride: (overrideId: number) => deleteRequest(`/agent/admin/policy-overrides/${overrideId}`),
+  adminChatConversations: (params?: { userId?: number; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.userId != null) query.set("user_id", String(params.userId));
+    if (params?.limit != null) query.set("limit", String(params.limit));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<AdminChatConversationRecord[]>(`/agent/admin/chat-conversations${suffix}`);
+  },
+  adminChatConversationMessages: (conversationId: number) =>
+    request<
+      {
+        id: number;
+        role: string;
+        content: string;
+        created_at: string;
+        agent_tool_calls?: { name: string; summary: string }[];
+        agent_task_proposals?: { proposal_id: string; summary: string; workflow_key: string }[];
+        agent_thinking_steps?: { key: string; label: string; detail: string; status: string; agent_label?: string }[];
+        policy_version?: string | null;
+      }[]
+    >(`/agent/admin/chat-conversations/${conversationId}/messages`),
+  adminAgentTraces: (params?: { conversationId?: number; actorId?: number; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.conversationId != null) query.set("conversation_id", String(params.conversationId));
+    if (params?.actorId != null) query.set("actor_id", String(params.actorId));
+    if (params?.limit != null) query.set("limit", String(params.limit));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<AdminAgentTraceRecord[]>(`/agent/admin/agent-traces${suffix}`);
+  },
   createAgentSkillRelease: (payload: AgentSkillReleaseCreatePayload) =>
     postJson<AgentSkillReleaseRecord>("/agent/admin/releases", payload),
   updateAgentSkillRelease: (releaseId: number, payload: AgentSkillReleaseUpdatePayload) =>

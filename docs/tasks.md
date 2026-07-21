@@ -135,24 +135,37 @@
 
 ## Priority Queue
 
+### Task: [agent-gov-001] Chat Agent 治理切片（release override + Admin 可观测）
+- 状态：**READY_FOR_PR** — 分支 `feat/agent-gov-001`
+- 范围：group/user policy overrides、Admin release 编辑（prompt + tool allowlist）、Admin Chat 可观测
+- Migration：`l3m4n5o6p7q8`（`agent_policy_overrides`，接在 `k2l3m4n5o6p7` 后）
+- 验证：pytest 8 passed；frontend build OK
+- 不含：multi-agent、B2 HITL、crawl、ref-intent、Meili memory
+- Next：PR 合 main → 部署时 alembic upgrade（单独批准）
+
+### Task: [canvas-20260721] 画布复制 + 全部/所选运行
+- 状态：**stash 中**（`stash@{0}` on `main`；勿与 gov 分支混提）
+- 留档：恢复后见 `docs/archive/handoff-2026-07-21-canvas-copy-run-wip.md`
+- Next：gov 合入后再回 main `stash pop`
+
 ### Task: [local-wip-20260720] 画布模板 + Chat 上下文 + 真流式
-- 状态：**DONE（已部署生产 `3ff220b`）**
+- 状态：**DONE（已部署生产 `3ff220b`，前端热更约 `cb85fc6`）**
 - 留档：`docs/archive/deploy-2026-07-20-main-canvas-chat-b1.md`
-- Next：人工冒烟
+- Next：随新包回归冒烟
 
 ### Task: [chat-004] Chat Agent B1 切片
 - 状态：**DONE（已合 main 且已部署）**；**UI 默认隐藏**
-- HEAD：`3ff220b`；Migration：`k2l3m4n5o6p7`
+- HEAD：约 `cb85fc6`；Migration：`k2l3m4n5o6p7`
 - Next：助手产品完整后再开 `VITE_CHAT_AGENT_UI_ENABLED`
 
 ### Task: [agent-wip-001] Chat Agent / 多 Agent 合入（索引）
-- 状态：**IN PROGRESS** — B1 已合 `main`；gov/B2/multi 仍在 WIP 整包
+- 状态：**IN PROGRESS** — B1 已合 `main`；**gov 切片本地就绪**（`feat/agent-gov-001`，未合）；B2/multi 仍在 WIP 整包
 - 整包 WIP：`wip/agent-multi-chat-2026-07` @ `4b0a5b3`（保持不动，未 rebase）
 - 现状交接：`docs/archive/handoff-2026-07-16-agent-wip-status.md`
 - 架构留档：`docs/archive/handoff-2026-07-03-agent-multi-chat-wip.md`
-- WIP 内其余：`agent-gov-001`、`chat-b2-001`、`agent-multi-*`、`crawl-001` C1+C2、`ref-intent-001`
-- 未做：crawl C3；整包 rebase；gov→B2 切片 PR
-- 建议切片：~~B1~~ → gov → B2 → multi/crawl/ref-intent
+- WIP 内其余：~~`agent-gov-001`~~（已抽分支）、`chat-b2-001`、`agent-multi-*`、`crawl-001` C1+C2、`ref-intent-001`
+- 未做：crawl C3；整包 rebase；gov PR 合入 → B2 切片
+- 建议切片：~~B1~~ → **gov（本地就绪）** → B2 → multi/crawl/ref-intent
 - 约束：勿与 VIP / 生图路由 / 访客热修混 PR；部署需 migration；Meili 可选降级
 - 验收（合入后）：
   1. 生产或预发 `/studio/chat` 可开 `agent_mode` 且只读 tools 出卡片

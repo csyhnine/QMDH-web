@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams } from "
 import {
   api,
   type AgentClientRecord,
+  type AgentChatToolRecord,
   type AgentOfficialSkill,
   type AgentSkillReleaseRecord,
   type DashboardStats,
@@ -339,18 +340,21 @@ function CanvasTemplateEditRoute() {
 function AgentsRoute() {
   const [clients, setClients] = useState<AgentClientRecord[]>([]);
   const [skills, setSkills] = useState<AgentOfficialSkill[]>([]);
+  const [chatTools, setChatTools] = useState<AgentChatToolRecord[]>([]);
   const [releases, setReleases] = useState<AgentSkillReleaseRecord[]>([]);
   const [error, setError] = useState("");
 
   async function refresh() {
     try {
-      const [nextClients, nextSkills, nextReleases] = await Promise.all([
+      const [nextClients, nextSkills, nextChatTools, nextReleases] = await Promise.all([
         api.agentClients(),
         api.officialSkills(),
+        api.agentChatTools(),
         api.agentSkillReleases(),
       ]);
       setClients(nextClients);
       setSkills(nextSkills);
+      setChatTools(nextChatTools);
       setReleases(nextReleases);
       setError("");
     } catch (err) {
@@ -367,6 +371,7 @@ function AgentsRoute() {
       <AgentOpsPage
         clients={clients}
         skills={skills}
+        chatTools={chatTools}
         releases={releases}
         error={error}
         onRefresh={() => void refresh()}

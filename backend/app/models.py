@@ -455,6 +455,27 @@ class AgentSkillRelease(Base):
     created_by: Mapped[User | None] = relationship()
 
 
+class AgentPolicyOverride(Base):
+    __tablename__ = "agent_policy_overrides"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scope: Mapped[str] = mapped_column(String(20), index=True)
+    scope_key: Mapped[str] = mapped_column(String(120), index=True)
+    disabled_tool_keys: Mapped[list[str]] = mapped_column(JSON, default=list)
+    system_prompt_overlay: Mapped[str] = mapped_column(Text, default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    created_by: Mapped[User | None] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("scope", "scope_key", name="ix_agent_policy_overrides_scope_scope_key"),
+    )
+
+
 class PromptTemplate(Base):
     __tablename__ = "prompt_templates"
 

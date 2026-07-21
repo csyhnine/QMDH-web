@@ -5849,6 +5849,216 @@ button {
   line-height: 1.55;
 }
 
+.agent-policy-overview {
+  margin-bottom: 16px;
+}
+
+.agent-policy-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.agent-policy-card {
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.agent-policy-card h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.agent-policy-note {
+  margin: 0 0 8px;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.agent-policy-baseline,
+.agent-policy-overlay,
+.agent-policy-preview details pre {
+  margin: 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #374151;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.agent-policy-preview {
+  padding: 14px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #fcfdff;
+}
+
+.agent-policy-preview-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: #2563eb;
+}
+
+.agent-tool-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 960px) {
+  .agent-policy-overview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.agent-designer-config-live {
+  margin-bottom: 16px;
+  border: 1px solid #bfdbfe;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.agent-designer-config-live-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agent-designer-config-live-body h3 {
+  margin: 0;
+}
+
+.agent-designer-config-live-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.agent-designer-config-editor {
+  margin-bottom: 16px;
+}
+
+.agent-designer-config-form {
+  padding: 4px 0;
+}
+
+.agent-designer-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.agent-advanced-panel {
+  margin-bottom: 16px;
+  padding: 0;
+}
+
+.agent-advanced-panel > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-advanced-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.agent-advanced-panel > summary span {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.agent-advanced-panel > summary small {
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.agent-advanced-panel[open] > summary {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.agent-advanced-panel .agent-policy-overrides-panel {
+  border: none;
+  margin: 0;
+  padding-top: 0;
+}
+
+@media (max-width: 960px) {
+  .agent-designer-config-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.agent-policy-overrides-panel {
+  margin-bottom: 16px;
+}
+
+.agent-policy-overrides-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.9fr);
+  gap: 16px;
+}
+
+.agent-policy-overrides-table .admin-table-row {
+  grid-template-columns: 1.1fr 0.7fr 0.8fr 0.6fr 0.9fr;
+}
+
+.agent-policy-override-form {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  background: #fff;
+}
+
+@media (max-width: 1100px) {
+  .agent-policy-overrides-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.agent-ops-subpanel {
+  margin-top: 16px;
+  display: grid;
+  gap: 16px;
+}
+
+.agent-ops-message-list {
+  display: grid;
+  gap: 12px;
+}
+
+.agent-ops-message {
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.agent-ops-message header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.agent-ops-message p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
+
 .feedback-admin-table .admin-table-row {
   grid-template-columns: minmax(160px, 0.95fr) minmax(220px, 1.2fr) 110px 130px 120px;
 }

@@ -952,6 +952,8 @@ class AgentSkillReleaseCreate(BaseModel):
     environment: str = Field(default="test", pattern=r"^(test|prod)$")
     openclaw_version: str = Field(default="latest", min_length=1, max_length=50)
     skill_keys: list[str] = Field(default_factory=list)
+    system_prompt_template: str = ""
+    chat_tool_allowlist: list[str] = Field(default_factory=list)
     notes: str = ""
     is_active: bool = True
 
@@ -961,6 +963,8 @@ class AgentSkillReleaseUpdate(BaseModel):
     environment: str | None = Field(default=None, pattern=r"^(test|prod)$")
     openclaw_version: str | None = Field(default=None, min_length=1, max_length=50)
     skill_keys: list[str] | None = None
+    system_prompt_template: str | None = None
+    chat_tool_allowlist: list[str] | None = None
     notes: str | None = None
     is_active: bool | None = None
 
@@ -969,6 +973,64 @@ class AgentChatToolOut(BaseModel):
     key: str
     label: str
     description: str
+
+
+class AdminChatConversationOut(BaseModel):
+    id: int
+    title: str
+    user_id: int
+    user_name: str
+    user_display_name: str
+    model_provider_id: int | None = None
+    agent_thread_id: str = ""
+    message_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminAgentTraceOut(BaseModel):
+    id: int
+    created_at: datetime
+    actor_id: int | None = None
+    actor_name: str
+    conversation_id: int | None = None
+    provider_name: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentPolicyOverrideOut(BaseModel):
+    id: int
+    scope: str
+    scope_key: str
+    scope_display_name: str | None = None
+    disabled_tool_keys: list[str] = Field(default_factory=list)
+    system_prompt_overlay: str = ""
+    notes: str = ""
+    is_active: bool
+    updated_at: datetime
+
+
+class AgentPolicyOverrideCreate(BaseModel):
+    scope: str = Field(pattern=r"^(group|user)$")
+    scope_key: str = Field(min_length=1, max_length=120)
+    disabled_tool_keys: list[str] = Field(default_factory=list)
+    system_prompt_overlay: str = ""
+    notes: str = ""
+    is_active: bool = True
+
+
+class AgentPolicyOverrideUpdate(BaseModel):
+    disabled_tool_keys: list[str] | None = None
+    system_prompt_overlay: str | None = None
+    notes: str | None = None
+    is_active: bool | None = None
+
+
+class ChatAgentPolicyDefaultsOut(BaseModel):
+    baseline_prompt: str
+    data_scope_note: str
+    default_tool_allowlist: list[str]
+    tools: list[AgentChatToolOut] = Field(default_factory=list)
 
 
 class AssignedAgentOut(BaseModel):

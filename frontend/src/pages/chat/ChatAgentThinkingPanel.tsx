@@ -22,26 +22,35 @@ function statusLabel(status: string) {
   return status;
 }
 
+/** Collapse duplicate keys (keep latest) so persisted history never shows stuck "进行中". */
+export function normalizeThinkingSteps(steps: ChatThinkingStep[]): ChatThinkingStep[] {
+  const byKey = new Map<string, ChatThinkingStep>();
+  const order: string[] = [];
+  for (const step of steps) {
+    if (!byKey.has(step.key)) {
+      order.push(step.key);
+    }
+    byKey.set(step.key, step);
+  }
+  return order.map((key) => byKey.get(key)!);
+}
+
 export default function ChatAgentThinkingPanel({ steps, compact = false, live = false }: ChatAgentThinkingPanelProps) {
-  if (steps.length === 0) {
+  const normalized = normalizeThinkingSteps(steps);
+  if (normalized.length === 0) {
     return null;
   }
 
-  const visibleSteps = compact ? steps.slice(-4) : steps;
+  const visibleSteps = compact ? normalized.slice(-4) : normalized;
+  const allSettled = visibleSteps.every((step) => step.status === "done" || step.status === "error");
+  const heading = live && !allSettled ? "思考中" : "思考过程";
 
   return (
     <div className={`chat-agent-thinking-panel${compact ? " is-compact is-dock" : ""}${live ? " is-live" : ""}`}>
-      {!compact ? (
-        <div className="chat-agent-thinking-head">
-          <strong>助手思考过程</strong>
-          {live ? <span className="chat-agent-thinking-live">实时</span> : null}
-        </div>
-      ) : (
-        <div className="chat-agent-thinking-head is-compact">
-          <strong>思考中</strong>
-          {live ? <span className="chat-agent-thinking-live">实时</span> : null}
-        </div>
-      )}
+      <div className={`chat-agent-thinking-head${compact ? " is-compact" : ""}`}>
+        <strong>{compact ? heading : "助手思考过程"}</strong>
+        {live && !allSettled ? <span className="chat-agent-thinking-live">实时</span> : null}
+      </div>
       <ol className="chat-agent-thinking-steps">
         {visibleSteps.map((step) => (
           <li

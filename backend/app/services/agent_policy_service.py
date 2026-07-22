@@ -10,51 +10,100 @@ from sqlalchemy.orm import Session
 from app.models import AgentPolicyOverride, AgentSkillRelease, User
 
 CHAT_AGENT_BASELINE_PROMPT = (
-    "你是 QMDH 设计助手，在 Chat 对话区为设计师提供咨询式帮助。"
-    "你可以检索院内灵感库、共享 prompt 模板、已启用的图像/视频模型与工作流配置，"
-    "并用清晰的中文解释检索结果与下一步建议。"
-    "用户仅寒暄、问候、感谢或未提出检索/配置需求时，直接简短友好回复，不要调用任何工具。"
-    "若用户希望直接生图或改图，引导其前往 Studio 生成页提交持久化异步任务。"
-    "回答应简洁、专业，优先给出可执行的检索结论。"
+    "你是 QMDH 设计助手，在网页 Chat 为设计师提供帮助。"
+    "系统已自动提供当前可用的生图/视频模型列表；创建任务时 requested_provider 必须使用列表中的 provider_name。"
+    "用户仅寒暄、问候、感谢时，直接简短友好回复，不要调用任何工具。"
+    "若用户要找 prompt 模板，可调用 search_shared_templates。"
+    "若用户明确要求生图、改图或生成视频，且对应 create_* 工具已启用，"
+    "直接调用 create_image_generate_task / create_image_edit_task / create_video_generate_task；"
+    "工具会立即入队生成，不要再说「请确认提交」，也不要声称图片已经完成显示——告知用户任务已开始，结果会在卡片中更新。"
+    "若创建任务工具未启用，引导用户前往 Studio。"
+    "回答应简洁、专业。"
 )
 
 CHAT_AGENT_DATA_SCOPE_NOTE = (
-    "当前助手可检索院内灵感库与共享模板，并汇总已启用的模型与工作流配置。"
+    "当前助手可检索共享模板；可用模型由系统自动注入。"
+    "生图/改图/视频任务创建后立即入队，结果在对话卡片中展示。"
 )
 
+# Slim defaults: templates + create tasks + memory. Low-value tools stay in catalog for opt-in.
 DEFAULT_CHAT_TOOL_ALLOWLIST: tuple[str, ...] = (
-    "search_inspiration_posts",
     "search_shared_templates",
-    "list_enabled_image_providers",
-    "list_active_workflows",
-    "summarize_generation_stack",
+    "create_image_generate_task",
+    "create_image_edit_task",
+    "create_video_generate_task",
+    "memory_recall",
+    "memory_store",
+    "memory_forget",
 )
+
+# Old propose_* keys still accepted when loading releases / overrides.
+CHAT_TOOL_KEY_ALIASES: dict[str, str] = {
+    "propose_image_generate_task": "create_image_generate_task",
+    "propose_image_edit_task": "create_image_edit_task",
+    "propose_video_generate_task": "create_video_generate_task",
+}
 
 CHAT_TOOL_CATALOG: tuple[dict[str, str], ...] = (
-    {
-        "key": "search_inspiration_posts",
-        "label": "搜索灵感帖子",
-        "description": "检索已入库 inspiration_posts（Meilisearch / PostgreSQL）。",
-    },
     {
         "key": "search_shared_templates",
         "label": "搜索共享模板",
         "description": "检索院内共享 prompt 模板。",
     },
     {
+        "key": "create_image_generate_task",
+        "label": "创建生图任务",
+        "description": "【Web Chat】立即创建并入队生图任务，结果在对话卡片展示。",
+    },
+    {
+        "key": "create_image_edit_task",
+        "label": "创建改图任务",
+        "description": "【Web Chat】立即创建并入队改图任务。",
+    },
+    {
+        "key": "create_video_generate_task",
+        "label": "创建视频任务",
+        "description": "【Web Chat】立即创建并入队视频任务。",
+    },
+    {
+        "key": "memory_recall",
+        "label": "检索记忆库",
+        "description": "按语义/关键词检索当前设计师的私有记忆。",
+    },
+    {
+        "key": "memory_store",
+        "label": "写入记忆库",
+        "description": "将重要偏好/事实写入当前用户私有记忆库。",
+    },
+    {
+        "key": "memory_forget",
+        "label": "删除记忆",
+        "description": "按 memory_id 删除当前用户自己的一条记忆。",
+    },
+    {
+        "key": "search_inspiration_posts",
+        "label": "搜索灵感帖子（可选）",
+        "description": "检索灵感库。库内容较少时可关闭，避免空搜。",
+    },
+    {
         "key": "list_enabled_image_providers",
-        "label": "列出可用模型",
-        "description": "列出已启用的图像/视频 ProviderProfile。",
+        "label": "列出可用模型（可选）",
+        "description": "通常无需勾选：系统已自动注入可用模型。",
     },
     {
         "key": "list_active_workflows",
-        "label": "列出工作流",
-        "description": "列出当前可用 workflow keys。",
+        "label": "列出工作流（可选）",
+        "description": "列出 workflow keys；设计师一般不需要。",
     },
     {
         "key": "summarize_generation_stack",
-        "label": "汇总生成栈",
-        "description": "汇总模型与工作流配置摘要。",
+        "label": "汇总生成栈（可选）",
+        "description": "模型+工作流摘要，偏调试用。",
+    },
+    {
+        "key": "read_skill_resource",
+        "label": "读取 Skill 附属文件（可选）",
+        "description": "读取已启用 Skill 包内 references 等文本；有 GitHub Skill 包时才有用。",
     },
 )
 
@@ -81,11 +130,16 @@ class EffectiveChatPolicy:
     user_group_name: str | None = None
 
 
+def canonicalize_chat_tool_key(raw: str) -> str:
+    key = str(raw or "").strip()
+    return CHAT_TOOL_KEY_ALIASES.get(key, key)
+
+
 def normalize_chat_tool_allowlist(values: list[str] | None) -> tuple[str, ...]:
     allowed = {item["key"] for item in CHAT_TOOL_CATALOG}
     normalized: list[str] = []
     for raw in values or []:
-        key = str(raw).strip()
+        key = canonicalize_chat_tool_key(raw)
         if key and key in allowed and key not in normalized:
             normalized.append(key)
     if not normalized:
@@ -97,7 +151,7 @@ def normalize_disabled_tool_keys(values: list[str] | None) -> tuple[str, ...]:
     allowed = {item["key"] for item in CHAT_TOOL_CATALOG}
     normalized: list[str] = []
     for raw in values or []:
-        key = str(raw).strip()
+        key = canonicalize_chat_tool_key(raw)
         if key and key in allowed and key not in normalized:
             normalized.append(key)
     return tuple(normalized)
@@ -155,6 +209,7 @@ def resolve_effective_chat_policy(
     policy_version: str | None = None,
     user_id: int | None = None,
 ) -> EffectiveChatPolicy:
+    """Resolve Chat policy for the given environment / optional pinned release key."""
     release: AgentSkillRelease | None = None
     pinned_key = (policy_version or "").strip()
 
@@ -248,6 +303,27 @@ def resolve_effective_chat_policy(
             if user_layer is not None:
                 layers.append(user_layer)
                 disabled_all.extend(user_disabled)
+
+    from app.models import AgentSkillCatalogEntry
+    from app.services.agent_skill_install_service import build_enabled_skills_prompt_section
+
+    skills_section = build_enabled_skills_prompt_section(db)
+    if skills_section.strip():
+        prompt = f"{prompt}\n\n{skills_section.strip()}"
+
+    has_bundled = db.scalar(
+        select(AgentSkillCatalogEntry.id).where(
+            AgentSkillCatalogEntry.is_active == True,  # noqa: E712
+            AgentSkillCatalogEntry.skill_md != "",
+        )
+    )
+    if has_bundled is not None and "read_skill_resource" not in allowlist:
+        if "read_skill_resource" not in disabled_all:
+            allowlist = (*allowlist, "read_skill_resource")
+
+    for memory_tool in ("memory_recall", "memory_store", "memory_forget"):
+        if memory_tool not in allowlist and memory_tool not in disabled_all:
+            allowlist = (*allowlist, memory_tool)
 
     return EffectiveChatPolicy(
         policy_version=base_policy.policy_version,

@@ -8,6 +8,7 @@ import type { Provider } from "../../api";
 import { CanvasDraftInput, CanvasDraftTextarea } from "./CanvasDraftField";
 import CanvasModelSelect from "./CanvasModelSelect";
 import type { UpstreamDeliverables } from "./canvasNodeContext";
+import { useCanvasNodeActions } from "./canvasNodeContext";
 import { NODE_KIND_LABEL, type CanvasGenerateNode, type GenerateNodeData } from "./canvasTypes";
 
 type CanvasNodeInspectorProps = {
@@ -38,6 +39,7 @@ export default function CanvasNodeInspector({
   onUngroup,
   onClose,
 }: CanvasNodeInspectorProps) {
+  const { previewMedia } = useCanvasNodeActions();
   if (!node) {
     return (
       <aside className="qmdh-canvas-inspector is-empty">
@@ -308,7 +310,13 @@ export default function CanvasNodeInspector({
               /\.(mp4|webm|mov)(\?|$)/i.test(resultPreview) ? (
                 <video src={resultPreview} controls playsInline />
               ) : (
-                <img src={resultPreview} alt="" />
+                <button
+                  type="button"
+                  className="qmdh-canvas-inspector-preview-hit"
+                  onClick={() => previewMedia(resultPreview)}
+                >
+                  <img src={resultPreview} alt="" />
+                </button>
               )
             ) : (
               <div className="qmdh-canvas-inspector-result-empty">暂无结果</div>

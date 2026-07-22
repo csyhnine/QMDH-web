@@ -5,9 +5,11 @@ import {
   MAX_CHAT_ATTACHMENTS,
   type ChatPendingAttachment,
   type ChatSendAttachment,
+  createChatAttachmentLocalId,
   detectChatAttachmentKind,
   releaseChatAttachmentPreviews,
   uploadChatAttachmentFile,
+  yieldToBrowserPaint,
 } from "./chatAttachmentUtils";
 
 type UseChatAttachmentsOptions = {
@@ -22,6 +24,9 @@ export function useChatAttachments(options: UseChatAttachmentsOptions = {}) {
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState("");
+
+  const readyCount = attachments.filter((item) => item.status === "ready").length;
+  const uploadingCount = attachments.filter((item) => item.status === "uploading").length;
 
   function canAcceptFiles() {
     return !disabled && !uploading && attachments.length < MAX_CHAT_ATTACHMENTS;
@@ -47,24 +52,65 @@ export function useChatAttachments(options: UseChatAttachmentsOptions = {}) {
     }
 
     const selectedFiles = supportedFiles.slice(0, remainingSlots);
+    const pendingItems: ChatPendingAttachment[] = selectedFiles.map((file) => {
+      const kind = detectChatAttachmentKind(file) ?? "file";
+      return {
+        localId: createChatAttachmentLocalId(),
+        fileName: file.name,
+        previewUrl: kind === "image" ? URL.createObjectURL(file) : "",
+        storagePath: "",
+        mimeType: file.type || "",
+        kind,
+        status: "uploading",
+      };
+    });
+
     setUploading(true);
     setError("");
+    setAttachments((current) => [...current, ...pendingItems]);
+    await yieldToBrowserPaint();
 
+    const failures: string[] = [];
     try {
-      const nextAttachments = [...attachments];
-      for (const file of selectedFiles) {
-        const uploaded = await uploadChatAttachmentFile(file);
-        nextAttachments.push({
-          fileName: uploaded.file_name,
-          previewUrl: uploaded.kind === "image" ? URL.createObjectURL(file) : "",
-          storagePath: uploaded.storage_path,
-          mimeType: uploaded.mime_type,
-          kind: uploaded.kind,
-        });
+      const results = await Promise.all(
+        selectedFiles.map(async (file, index) => {
+          const localId = pendingItems[index].localId;
+          try {
+            const uploaded = await uploadChatAttachmentFile(file);
+            setAttachments((current) =>
+              current.map((item) =>
+                item.localId === localId
+                  ? {
+                      ...item,
+                      fileName: uploaded.file_name,
+                      storagePath: uploaded.storage_path,
+                      mimeType: uploaded.mime_type,
+                      kind: uploaded.kind,
+                      status: "ready",
+                    }
+                  : item,
+              ),
+            );
+            return { localId, ok: true as const };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "上传附件失败";
+            failures.push(message);
+            setAttachments((current) => {
+              const target = current.find((item) => item.localId === localId);
+              if (target) {
+                releaseChatAttachmentPreviews([target]);
+              }
+              return current.filter((item) => item.localId !== localId);
+            });
+            return { localId, ok: false as const };
+          }
+        }),
+      );
+
+      if (failures.length > 0) {
+        const anyReady = results.some((item) => item.ok);
+        setError(anyReady ? `部分附件上传失败：${failures[0]}` : failures[0]);
       }
-      setAttachments(nextAttachments);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "上传附件失败");
     } finally {
       setUploading(false);
       if (fileInputRef.current) {
@@ -123,8 +169,8 @@ export function useChatAttachments(options: UseChatAttachmentsOptions = {}) {
   function removeAttachment(index: number) {
     setAttachments((current) => {
       const target = current[index];
-      if (target?.kind === "image" && target.previewUrl) {
-        URL.revokeObjectURL(target.previewUrl);
+      if (target) {
+        releaseChatAttachmentPreviews([target]);
       }
       return current.filter((_, itemIndex) => itemIndex !== index);
     });
@@ -140,17 +186,21 @@ export function useChatAttachments(options: UseChatAttachmentsOptions = {}) {
   }
 
   function toSendPayload(): ChatSendAttachment[] {
-    return attachments.map((item) => ({
-      storage_path: item.storagePath,
-      file_name: item.fileName,
-      mime_type: item.mimeType,
-      kind: item.kind,
-    }));
+    return attachments
+      .filter((item) => item.status === "ready" && item.storagePath)
+      .map((item) => ({
+        storage_path: item.storagePath,
+        file_name: item.fileName,
+        mime_type: item.mimeType,
+        kind: item.kind,
+      }));
   }
 
   return {
     attachments,
     uploading,
+    uploadingCount,
+    readyCount,
     isDragging,
     error,
     fileInputRef,

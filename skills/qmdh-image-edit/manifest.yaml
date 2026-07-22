@@ -1,8 +1,9 @@
 key: qmdh-image-edit
-name: QMDH Image Edit
+name: QMDH 改图
 version: 0.1.0
 author: QMDH
-description: Trigger managed QMDH image editing from OpenClaw.
+runtime: openclaw
+description: 【本机 OpenClaw】通过托管任务触发 QMDH 图像编辑。不作用于 Web Chat。
 inputs:
   - title
   - project_id

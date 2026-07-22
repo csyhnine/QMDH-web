@@ -645,6 +645,56 @@ export type AgentOfficialSkill = {
   path: string;
   inputs: string[];
   outputs: string[];
+  source?: "builtin" | "custom" | string;
+  deletable?: boolean;
+  id?: number | null;
+  notes?: string;
+  is_active?: boolean;
+  source_uri?: string;
+  source_repo?: string;
+  source_path?: string;
+  file_count?: number;
+  has_scripts?: boolean;
+  file_manifest?: Array<{ path: string; size?: number; kind?: string }>;
+  content_hash?: string;
+  has_skill_md?: boolean;
+  /** openclaw = 本机端；chat = 注入 Web Chat；both = 两侧 */
+  runtime?: "openclaw" | "chat" | "both" | string;
+};
+
+export type AgentOfficialSkillCreatePayload = {
+  key: string;
+  name: string;
+  version?: string;
+  description?: string;
+  author?: string;
+  inputs?: string[];
+  outputs?: string[];
+  notes?: string;
+  is_active?: boolean;
+};
+
+export type AgentSkillInstallCandidate = {
+  key: string;
+  path: string;
+  name: string;
+  description: string;
+  file_count: number;
+  has_scripts: boolean;
+};
+
+export type AgentSkillInstallResult = {
+  status: "installed" | "needs_selection" | string;
+  skill?: AgentOfficialSkill | null;
+  candidates?: AgentSkillInstallCandidate[];
+};
+
+export type AgentSkillFileContent = {
+  skill_key: string;
+  path: string;
+  kind: string;
+  size: number;
+  content: string | null;
 };
 
 export type AgentSkillReleaseRecord = {
@@ -769,6 +819,29 @@ export type ChatAgentPolicyRecord = {
   personalization_summary: string | null;
   user_group_name: string | null;
   assigned_agents: AssignedAgentRecord[];
+};
+
+export type AgentMemoryRecord = {
+  id: number;
+  memory_type: string;
+  content: string;
+  source_turn_ref: string;
+  conversation_id: number | null;
+  is_paused: boolean;
+  created_at: string;
+};
+
+export type ChatAgentTaskConfirmPayload = {
+  proposal_id: string;
+  workflow_key: string;
+  title: string;
+  project_code: string;
+  requested_provider: string;
+  provider_display_name?: string;
+  classification?: string;
+  payload?: Record<string, unknown>;
+  summary?: string;
+  policy_version?: string;
 };
 
 export type FeedbackMessage = {
@@ -990,6 +1063,20 @@ export const api = {
     patchJson<FeedbackRecord>(`/feedback/admin/${feedbackId}`, payload),
   agentClients: () => request<AgentClientRecord[]>("/agent/admin/clients"),
   officialSkills: () => request<AgentOfficialSkill[]>("/agent/admin/skills"),
+  createOfficialSkill: (payload: AgentOfficialSkillCreatePayload) =>
+    postJson<AgentOfficialSkill>("/agent/admin/skills", payload),
+  installOfficialSkill: (payload: { source: string; skill_key?: string; overwrite?: boolean }) =>
+    postJson<AgentSkillInstallResult>("/agent/admin/skills/install", payload),
+  officialSkillFile: (skillKey: string, filePath: string) =>
+    request<AgentSkillFileContent>(
+      `/agent/admin/skills/${encodeURIComponent(skillKey)}/files/${filePath
+        .split("/")
+        .map((part) => encodeURIComponent(part))
+        .join("/")}`,
+    ),
+  updateOfficialSkill: (skillKey: string, payload: { is_active?: boolean; name?: string; description?: string }) =>
+    patchJson<AgentOfficialSkill>(`/agent/admin/skills/${encodeURIComponent(skillKey)}`, payload),
+  deleteOfficialSkill: (skillKey: string) => deleteRequest(`/agent/admin/skills/${encodeURIComponent(skillKey)}`),
   agentSkillReleases: () => request<AgentSkillReleaseRecord[]>("/agent/admin/releases"),
   agentChatTools: () => request<AgentChatToolRecord[]>("/agent/admin/chat-tools"),
   agentChatPolicyDefaults: () => request<ChatAgentPolicyDefaultsRecord>("/agent/admin/chat-policy-defaults"),
@@ -1200,6 +1287,15 @@ export const api = {
       }[]
     >(`/chat/conversations/${convId}/messages`),
   getChatAgentPolicy: () => request<ChatAgentPolicyRecord>("/chat/agent-policy"),
+  listChatAgentMemory: () => request<AgentMemoryRecord[]>("/chat/agent-memory"),
+  pauseChatAgentMemory: (memoryId: number, paused: boolean) =>
+    postJson<AgentMemoryRecord>(`/chat/agent-memory/${memoryId}/pause`, { paused }),
+  deleteChatAgentMemory: (memoryId: number) => deleteRequest(`/chat/agent-memory/${memoryId}`),
+  confirmChatAgentTask: (conversationId: number, payload: ChatAgentTaskConfirmPayload) =>
+    postJson<{ id: number; title: string; status: string }>(
+      `/chat/conversations/${conversationId}/confirm-agent-task`,
+      payload,
+    ),
   deleteChatConversation: (convId: number) => deleteRequest(`/chat/conversations/${convId}`),
   exportChatMessageWord: async (
     convId: number,

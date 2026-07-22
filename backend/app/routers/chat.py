@@ -6,7 +6,7 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,13 +19,15 @@ from app.integrations.studio_agent.agent import (
     ChatAgentThinkingStep,
     StudioAgentReply,
     StudioAgentUnavailableError,
-    run_studio_agent_isolated,
 )
 from app.models import AgentSkillRelease, ChatMessage, Conversation, ProviderProfile, User
 from app.schemas import (
     AgentChatToolOut,
+    AgentMemoryEntryOut,
+    AgentMemoryPauseIn,
     ChatAgentPolicyLayerOut,
     ChatAgentPolicyOut,
+    ChatAgentTaskConfirmIn,
     ChatAgentTaskProposalOut,
     ChatAgentThinkingStepOut,
     ChatAgentToolCallOut,
@@ -38,6 +40,7 @@ from app.schemas import (
     ChatWordExportIn,
     ConversationCreate,
     ConversationOut,
+    TaskOut,
 )
 from app.services.chat_attachment_upload import (
     build_chat_file_relative_path,
@@ -54,18 +57,27 @@ from app.services.chat_word_export import build_chat_word_document, default_chat
 from app.services.media_storage import resolve_storage_path, write_binary_asset
 from app.services.chat_context import estimate_conversation_context, pack_chat_context
 from app.services.chat_agent_service import (
-    build_chat_agent_message,
     embed_agent_message_meta,
     format_agent_thinking_sse,
     format_agent_thinking_step_sse,
     parse_agent_message_meta,
     stream_chat_agent_sse,
 )
+from app.services.agent_harness_service import run_chat_agent_harness_isolated
+from app.services.agent_memory_service import (
+    build_compacted_memory_context,
+    delete_memory_entry,
+    list_memory_entries,
+    record_chat_turn_memory,
+    set_memory_paused,
+    write_hitl_confirmation_memory,
+)
 from app.services.agent_policy_service import (
     CHAT_AGENT_BASELINE_PROMPT,
     build_chat_policy_summary,
     resolve_effective_chat_policy,
 )
+from app.services.chat_agent_task_service import proposal_from_confirm_payload, submit_confirmed_chat_agent_task
 from app.services.chat_service import (
     chat_error_payload,
     format_chat_error_message,
@@ -327,6 +339,133 @@ def get_chat_agent_policy(
     )
 
 
+@router.get("/agent-memory", response_model=list[AgentMemoryEntryOut])
+def list_chat_agent_memory(
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> list[AgentMemoryEntryOut]:
+    if auth_user.user_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    entries = list_memory_entries(db, user_id=auth_user.user_id, include_paused=True, limit=80)
+    return [
+        AgentMemoryEntryOut(
+            id=entry.id,
+            memory_type=entry.memory_type,
+            content=entry.content,
+            source_turn_ref=entry.source_turn_ref,
+            conversation_id=entry.conversation_id,
+            is_paused=entry.is_paused,
+            created_at=entry.created_at,
+        )
+        for entry in entries
+    ]
+
+
+@router.post("/agent-memory/{memory_id}/pause", response_model=AgentMemoryEntryOut)
+def pause_chat_agent_memory(
+    memory_id: int,
+    payload: AgentMemoryPauseIn,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> AgentMemoryEntryOut:
+    if auth_user.user_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    entry = set_memory_paused(db, user_id=auth_user.user_id, memory_id=memory_id, paused=payload.paused)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    db.commit()
+    return AgentMemoryEntryOut(
+        id=entry.id,
+        memory_type=entry.memory_type,
+        content=entry.content,
+        source_turn_ref=entry.source_turn_ref,
+        conversation_id=entry.conversation_id,
+        is_paused=entry.is_paused,
+        created_at=entry.created_at,
+    )
+
+
+@router.delete("/agent-memory/{memory_id}", status_code=204)
+def delete_chat_agent_memory(
+    memory_id: int,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> Response:
+    if auth_user.user_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if not delete_memory_entry(db, user_id=auth_user.user_id, memory_id=memory_id):
+        raise HTTPException(status_code=404, detail="Memory not found")
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post(
+    "/conversations/{conversation_id}/confirm-agent-task",
+    response_model=TaskOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def confirm_chat_agent_task(
+    conversation_id: int,
+    payload: ChatAgentTaskConfirmIn,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> TaskOut:
+    _verify_owner(db, conversation_id, auth_user.user_id)
+    if auth_user.user_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    current_user = db.get(User, auth_user.user_id)
+    if current_user is not None:
+        enforce_user_quota(db, user=current_user)
+
+    policy = resolve_effective_chat_policy(
+        db,
+        environment="prod",
+        policy_version=(payload.policy_version or "").strip() or None,
+        user_id=auth_user.user_id,
+    )
+    proposal = proposal_from_confirm_payload(payload.model_dump())
+    try:
+        task_out = submit_confirmed_chat_agent_task(
+            db,
+            auth_user=auth_user,
+            policy=policy,
+            proposal=proposal,
+            background_tasks=background_tasks,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    write_hitl_confirmation_memory(
+        db,
+        user_id=auth_user.user_id,
+        conversation_id=conversation_id,
+        proposal_id=proposal.proposal_id,
+        task_id=task_out.id,
+        workflow_key=proposal.workflow_key,
+    )
+    write_audit_log(
+        db,
+        event_type=AuditEventType.STUDIO_AGENT_ASSIST,
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="chat_agent_task",
+        target_id=task_out.id,
+        target_name=task_out.title,
+        project_code=task_out.project_code,
+        workflow_key=task_out.workflow_key,
+        provider_name=task_out.requested_provider,
+        details={
+            "conversation_id": conversation_id,
+            "proposal_id": proposal.proposal_id,
+            "policy_version": policy.policy_version,
+        },
+    )
+    db.commit()
+    return task_out
+
+
 @router.delete("/conversations/{conversation_id}", status_code=204)
 def delete_conversation(
     conversation_id: int,
@@ -449,16 +588,21 @@ async def send_message(
 
     if payload.agent_mode:
         policy_version = (payload.policy_version or "").strip() or None
-        agent_message = build_chat_agent_message(
-            recent,
-            content,
-            attachment_names=[item["file_name"] for item in attachments if item.get("file_name")],
-        )
 
         async def generate_agent():
             loop = asyncio.get_running_loop()
             thinking_queue: asyncio.Queue[dict[str, str] | None] = asyncio.Queue()
             collected_thinking_steps: list[dict[str, object]] = []
+            harness_audit_holder: dict[str, object] = {}
+
+            def upsert_thinking_step(step: dict[str, object]) -> None:
+                key = step.get("key")
+                if isinstance(key, str) and key:
+                    for index, existing in enumerate(collected_thinking_steps):
+                        if existing.get("key") == key:
+                            collected_thinking_steps[index] = step
+                            return
+                collected_thinking_steps.append(step)
 
             def thinking_callback(step: ChatAgentThinkingStep) -> None:
                 payload_dict = step.to_dict()
@@ -466,15 +610,21 @@ async def send_message(
 
             async def run_agent() -> StudioAgentReply:
                 try:
-                    return await asyncio.to_thread(
-                        run_studio_agent_isolated,
-                        message=agent_message,
+                    harness_result = await asyncio.to_thread(
+                        run_chat_agent_harness_isolated,
+                        recent_messages=recent,
+                        new_content=content,
                         user_name=auth_user.name,
                         user_id=auth_user.user_id,
+                        conversation_id=conversation_id,
                         provider_id=provider_profile_id,
                         policy_version=policy_version,
+                        attachment_names=[item["file_name"] for item in attachments if item.get("file_name")],
                         thinking_callback=thinking_callback,
                     )
+                    harness_audit_holder.clear()
+                    harness_audit_holder.update(harness_result.audit_details)
+                    return harness_result.reply
                 finally:
                     loop.call_soon_threadsafe(thinking_queue.put_nowait, None)
 
@@ -492,13 +642,13 @@ async def send_message(
                     continue
                 if step is None:
                     break
-                collected_thinking_steps.append(step)
+                upsert_thinking_step(step)
                 yield format_agent_thinking_step_sse(step)
 
             while not thinking_queue.empty():
                 step = thinking_queue.get_nowait()
                 if step is not None:
-                    collected_thinking_steps.append(step)
+                    upsert_thinking_step(step)
                     yield format_agent_thinking_step_sse(step)
 
             try:
@@ -545,8 +695,22 @@ async def send_message(
                 detail="回复已生成",
                 status="done",
             ).to_dict()
-            collected_thinking_steps.append(compose_done)
+            upsert_thinking_step(compose_done)
             yield format_agent_thinking_step_sse(compose_done)
+
+            audit_details: dict[str, object] = {
+                "model_name": agent_reply.model_name,
+                "conversation_id": conversation_id,
+                "message_preview": content[:120],
+                "reply_preview": agent_reply.text[:240],
+                "tool_calls": [call.name for call in agent_reply.tool_calls],
+                "task_proposals": [item.get("proposal_id") for item in agent_reply.task_proposals],
+                "thinking_steps": [step.get("key") for step in collected_thinking_steps],
+                "policy_version": agent_reply.policy_version,
+            }
+            harness_audit = harness_audit_holder
+            if isinstance(harness_audit, dict):
+                audit_details.update(harness_audit)
 
             write_audit_log(
                 db,
@@ -555,15 +719,7 @@ async def send_message(
                 actor_id=auth_user.user_id,
                 target_type="chat_agent",
                 provider_name=agent_reply.provider_name,
-                details={
-                    "model_name": agent_reply.model_name,
-                    "conversation_id": conversation_id,
-                    "message_preview": content[:120],
-                    "reply_preview": agent_reply.text[:240],
-                    "tool_calls": [call.name for call in agent_reply.tool_calls],
-                    "thinking_steps": [step.get("key") for step in collected_thinking_steps],
-                    "policy_version": agent_reply.policy_version,
-                },
+                details=audit_details,
             )
 
             full_content = agent_reply.text.strip() or "助手未返回内容，请重试。"
@@ -625,6 +781,16 @@ async def send_message(
             all_messages,
             provider_config,
             provider_profile=provider_row,
+            memory_context=(
+                build_compacted_memory_context(
+                    db,
+                    user_id=auth_user.user_id,
+                    conversation_id=conversation_id,
+                    query=content,
+                ).context
+                if auth_user.user_id is not None
+                else ""
+            ),
         )
 
         yield f"data: {json.dumps({'context': packed.context_payload()}, ensure_ascii=False)}\n\n"
@@ -690,6 +856,14 @@ async def send_message(
                 completion_tokens=last_usage_payload["completion_tokens"],
                 total_tokens=last_usage_payload["total_tokens"],
                 usage_payload=last_usage_payload,
+            )
+            record_chat_turn_memory(
+                db,
+                user_id=auth_user.user_id,
+                conversation_id=conversation_id,
+                user_message=content,
+                assistant_reply=full_content,
+                route="chat",
             )
             db.commit()
         elif last_error_payload:

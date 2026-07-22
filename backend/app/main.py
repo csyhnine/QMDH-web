@@ -87,6 +87,12 @@ async def lifespan(_: FastAPI):
     with SessionLocal() as db:
         seed_initial_data(db)
         recover_stale_tasks(db)
+    try:
+        from app.integrations.search.agent_memory_index import ensure_agent_memory_index
+
+        ensure_agent_memory_index()
+    except Exception:
+        pass
 
     scheduler = BackgroundScheduler()
     scheduler.add_job(

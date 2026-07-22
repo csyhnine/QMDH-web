@@ -301,16 +301,18 @@ async def pack_chat_context(
     provider_profile: ProviderProfile | None = None,
     allow_summarize: bool = True,
     on_status: object | None = None,
+    memory_context: str = "",
 ) -> PackedChatContext:
     """Build provider messages that fit the model context window, summarizing older turns when needed.
 
     `on_status` may be an async callable receiving status labels like \"compressing\".
+    `memory_context` is per-user durable memory recall injected as a system note.
     """
     context_window = resolve_context_window(provider_profile or provider_config)
     budget = input_token_budget(context_window)
     summary_budget = summary_token_budget()
-    trigger_ratio = float(settings.chat_summary_trigger_ratio or 0.85)
-    trigger_ratio = min(max(trigger_ratio, 0.5), 0.98)
+    trigger_ratio = float(settings.chat_summary_trigger_ratio or 0.75)
+    trigger_ratio = min(max(trigger_ratio, 0.45), 0.98)
     trigger_budget = int(budget * trigger_ratio)
 
     ordered = sorted(messages, key=lambda item: (item.created_at, item.id or 0))
@@ -334,10 +336,11 @@ async def pack_chat_context(
     recent_tokens = sum(estimate_message_tokens(message) for message in recent)
     projected = recent_tokens + older_tokens + (estimate_text_tokens(existing_summary) if existing_summary else 0)
 
+    # Codex-style earlier compact: lower turn threshold + token pressure
     should_summarize = bool(
         allow_summarize
         and uncovered
-        and (projected > trigger_budget or older_tokens > summary_budget or len(uncovered) >= 8)
+        and (projected > trigger_budget or older_tokens > summary_budget or len(uncovered) >= 6)
     )
 
     if should_summarize:
@@ -371,6 +374,14 @@ async def pack_chat_context(
             )
 
     api_messages: list[dict[str, object]] = []
+    memory_note = (memory_context or "").strip()
+    if memory_note:
+        api_messages.append(
+            {
+                "role": "system",
+                "content": memory_note[:3500],
+            }
+        )
     if existing_summary:
         api_messages.append(_summary_system_message(existing_summary))
         used_summary = True

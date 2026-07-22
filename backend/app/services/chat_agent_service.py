@@ -163,7 +163,7 @@ def _split_stream_chunks(text: str) -> list[str]:
 
 
 async def stream_chat_agent_sse(reply: StudioAgentReply) -> AsyncGenerator[str, None]:
-    """Emit policy, tool_calls (if any), then fake-streamed text deltas for Chat UI."""
+    """Emit policy, tool_calls / tool_result, proposals, then text deltas."""
     yield format_agent_policy_sse(policy_version=reply.policy_version)
 
     if reply.task_proposals:
@@ -177,6 +177,8 @@ async def stream_chat_agent_sse(reply: StudioAgentReply) -> AsyncGenerator[str, 
             ]
         }
         yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        for call in reply.tool_calls:
+            yield f"data: {json.dumps({'tool_result': {'name': call.name, 'summary': call.summary}}, ensure_ascii=False)}\n\n"
 
     for chunk in _split_stream_chunks(reply.text):
         yield f"data: {json.dumps({'delta': chunk}, ensure_ascii=False)}\n\n"

@@ -33,6 +33,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
     uploadNodeImage,
     saveAnnotation,
     getUpstreamDeliverables,
+    previewMedia,
   } = useCanvasNodeActions();
   const updateNodeInternals = useUpdateNodeInternals();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -108,7 +109,13 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
       <div className="qmdh-canvas-node-body">
         {isUpload ? (
           preview ? (
-            <img src={preview} alt="" className="qmdh-canvas-node-preview is-fill" />
+            <button
+              type="button"
+              className="qmdh-canvas-node-preview-hit nodrag nopan"
+              onClick={() => previewMedia(preview)}
+            >
+              <img src={preview} alt="" className="qmdh-canvas-node-preview is-fill" />
+            </button>
           ) : (
             <div className="qmdh-canvas-node-preview is-empty is-fill">点击下方按钮上传图片</div>
           )
@@ -127,7 +134,13 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
               onWidthChange={(annotationWidth) => patch({ annotationWidth })}
             />
           ) : preview ? (
-            <img src={preview} alt="" className="qmdh-canvas-node-preview is-fill" />
+            <button
+              type="button"
+              className="qmdh-canvas-node-preview-hit nodrag nopan"
+              onClick={() => previewMedia(preview)}
+            >
+              <img src={preview} alt="" className="qmdh-canvas-node-preview is-fill" />
+            </button>
           ) : (
             <div className="qmdh-canvas-node-preview is-empty is-fill">连接上游图片后选中本节点开始标注</div>
           )
@@ -135,9 +148,21 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
           <>
             {preview ? (
               data.nodeKind === "video" && /\.(mp4|webm|mov)(\?|$)/i.test(preview) ? (
-                <video src={preview} className="qmdh-canvas-node-preview" muted playsInline />
+                <button
+                  type="button"
+                  className="qmdh-canvas-node-preview-hit nodrag nopan"
+                  onClick={() => previewMedia(preview)}
+                >
+                  <video src={preview} className="qmdh-canvas-node-preview" muted playsInline />
+                </button>
               ) : (
-                <img src={preview} alt="" className="qmdh-canvas-node-preview" />
+                <button
+                  type="button"
+                  className="qmdh-canvas-node-preview-hit nodrag nopan"
+                  onClick={() => previewMedia(preview)}
+                >
+                  <img src={preview} alt="" className="qmdh-canvas-node-preview" />
+                </button>
               )
             ) : (
               <div className="qmdh-canvas-node-preview is-empty">
@@ -173,7 +198,15 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
           </>
         ) : (
           <div className="qmdh-canvas-node-config nodrag nopan" onWheel={(event) => event.stopPropagation()}>
-            {preview ? <img src={preview} alt="" className="qmdh-canvas-node-preview is-compact" /> : null}
+            {preview ? (
+              <button
+                type="button"
+                className="qmdh-canvas-node-preview-hit is-compact nodrag nopan"
+                onClick={() => previewMedia(preview)}
+              >
+                <img src={preview} alt="" className="qmdh-canvas-node-preview is-compact" />
+              </button>
+            ) : null}
 
             <div className="qmdh-canvas-kind-badge">{NODE_KIND_LABEL[data.nodeKind]}</div>
 

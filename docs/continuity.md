@@ -16,19 +16,15 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Current Baseline
 
-- **Active development sequence**: ① **生产已部署 `3ff220b`** → ② 人工冒烟 → ③ gov → B2 切片 → ④ VIP Admin / 访客 P2
-- Current branch: **`main` @ `3ff220b`**（与生产 / `origin/main` 对齐）
-- **Deploy archive**：`docs/archive/deploy-2026-07-20-main-canvas-chat-b1.md`
-- Production: **`https://cityusbdisk.cn`** — Git **`3ff220b`**；Alembic **`k2l3m4n5o6p7`**
-- 07-20 功能留档：`docs/archive/handoff-2026-07-20-canvas-chat-streaming-wip.md`
-- 上次部署：`docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`
-- **VIP**：代码路径已有；Admin 建 `gpt-image-2-vip` 即可测
+- **Active development sequence**：① 套壳 Codex 工程 harness + 跨对话记忆 + B2 生成助手 → ② 部署 gov（若生产仍缺）→ ③ 开设计助手 UI（产品就绪后）
+- Current branch: **`main`**（以 `git rev-parse HEAD` 为准；约 **`736b800`** 含 gov-001）
+- Production: **`https://cityusbdisk.cn`** — 上次大包约 `3ff220b`，前端热更约 `cb85fc6`；**gov (`l3m4n5o6p7q8`) 可能尚未上生产**（以服务器 `git rev-parse` / alembic 为准）
+- Alembic head：**`n5o6p7q8r9s0`**（`agent_skill_catalog`；记忆=`m4n5o6p7q8r9`；gov=`l3m4n5o6p7q8`）
 - **Chat Agent（重要）**：
-  - **B1 已部署**：后端在生产；**UI 默认隐藏**（`VITE_CHAT_AGENT_UI_ENABLED`）
-  - **产品方向**：普通 Chat 继续落库，服务后续个性化助手
-  - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**
-  - 后续切片：gov → B2 → multi/crawl/ref-intent
-- Alembic head：**`k2l3m4n5o6p7`**
+  - **B1 已合 main**：只读 tools + SSE；**UI 默认隐藏**（`VITE_CHAT_AGENT_UI_ENABLED`）
+  - **gov-001 已合 main**：release / override / Admin 可观测
+  - **产品定调**：QMDH UI 壳 + Codex **风格 harness**（非换 GPT）+ Admin Skill 发版 + 跨对话记忆 + HITL 生图/视频
+  - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**（勿整包 merge）；从中切片 B2 / memory
 - Local dev URLs:
   - frontend: `http://127.0.0.1:18080`
   - backend: `http://127.0.0.1:18010`

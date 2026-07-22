@@ -14,7 +14,10 @@ export default function ChatMessageContent({
   emptyStreamingText = "...",
 }: ChatMessageContentProps) {
   if (!text) {
-    return streaming ? <div className="chat-msg-content chat-msg-thinking">{emptyStreamingText}</div> : null;
+    if (!streaming || !emptyStreamingText) {
+      return null;
+    }
+    return <div className="chat-msg-content chat-msg-thinking">{emptyStreamingText}</div>;
   }
 
   if (role === "user" || streaming) {

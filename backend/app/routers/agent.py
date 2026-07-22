@@ -25,12 +25,18 @@ from app.schemas import (
     AgentInspirationImportIn,
     AgentJobCompleteIn,
     AgentJobOut,
+    AgentOfficialSkillCreate,
     AgentOfficialSkillOut,
+    AgentOfficialSkillUpdate,
     AgentPolicyOverrideCreate,
     AgentPolicyOverrideOut,
     AgentPolicyOverrideUpdate,
     AgentProjectArtifactCreate,
     AgentResearchNoteCreate,
+    AgentSkillFileContentOut,
+    AgentSkillInstallCandidate,
+    AgentSkillInstallRequest,
+    AgentSkillInstallResult,
     AgentSkillReleaseCreate,
     AgentSkillReleaseOut,
     AgentSkillReleaseUpdate,
@@ -814,10 +820,212 @@ def list_agent_clients(
 
 @router.get("/admin/skills", response_model=list[AgentOfficialSkillOut])
 def list_agent_skills(
+    db: Session = Depends(get_db),
     auth_user=Depends(get_current_auth_user),
 ) -> list[AgentOfficialSkillOut]:
     require_ops_access(auth_user)
-    return [AgentOfficialSkillOut(**item) for item in list_official_skills()]
+    return [AgentOfficialSkillOut(**item) for item in list_official_skills(db, include_inactive=True)]
+
+
+@router.post("/admin/skills/install", response_model=AgentSkillInstallResult)
+def install_agent_skill(
+    payload: AgentSkillInstallRequest,
+    db: Session = Depends(get_db),
+    auth_user=Depends(get_current_auth_user),
+) -> AgentSkillInstallResult:
+    require_ops_access(auth_user)
+    from app.services.agent_skill_install_service import SkillInstallError, install_skill_from_source
+
+    try:
+        result = install_skill_from_source(
+            db,
+            source=payload.source,
+            skill_key=payload.skill_key,
+            overwrite=payload.overwrite,
+            created_by_user_id=auth_user.user_id,
+        )
+    except SkillInstallError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if result["status"] == "needs_selection":
+        return AgentSkillInstallResult(
+            status="needs_selection",
+            candidates=[AgentSkillInstallCandidate(**item) for item in result["candidates"]],
+        )
+
+    entry = result["entry"]
+    item = result["item"]
+    write_audit_log(
+        db=db,
+        event_type="agent.skill_catalog.installed",
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="agent_skill_catalog",
+        target_id=entry.id,
+        target_name=entry.key,
+        details={
+            "source": payload.source[:500],
+            "source_repo": entry.source_repo,
+            "content_hash": entry.content_hash,
+            "overwrite": payload.overwrite,
+        },
+    )
+    db.commit()
+    return AgentSkillInstallResult(status="installed", skill=AgentOfficialSkillOut(**item))
+
+
+@router.get("/admin/skills/{skill_key}/files/{file_path:path}", response_model=AgentSkillFileContentOut)
+def get_agent_skill_file(
+    skill_key: str,
+    file_path: str,
+    db: Session = Depends(get_db),
+    auth_user=Depends(get_current_auth_user),
+) -> AgentSkillFileContentOut:
+    require_ops_access(auth_user)
+    from app.services.agent_skill_install_service import get_skill_file_content
+
+    try:
+        payload = get_skill_file_content(db, skill_key=skill_key, relative_path=file_path)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return AgentSkillFileContentOut(**payload)
+
+
+@router.post("/admin/skills", response_model=AgentOfficialSkillOut, status_code=status.HTTP_201_CREATED)
+def create_agent_skill(
+    payload: AgentOfficialSkillCreate,
+    db: Session = Depends(get_db),
+    auth_user=Depends(get_current_auth_user),
+) -> AgentOfficialSkillOut:
+    require_ops_access(auth_user)
+    from app.services.agent_skill_registry import create_catalog_skill, list_official_skills as _list
+
+    try:
+        entry = create_catalog_skill(
+            db,
+            key=payload.key,
+            name=payload.name,
+            version=payload.version,
+            description=payload.description,
+            author=payload.author,
+            inputs=payload.inputs,
+            outputs=payload.outputs,
+            notes=payload.notes,
+            created_by_user_id=auth_user.user_id,
+            is_active=payload.is_active,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    write_audit_log(
+        db=db,
+        event_type="agent.skill_catalog.created",
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="agent_skill_catalog",
+        target_id=entry.id,
+        target_name=entry.name,
+        details={"key": entry.key, "version": entry.version, "is_active": entry.is_active},
+    )
+    db.commit()
+    item = next(i for i in _list(db, include_inactive=True) if i["key"] == entry.key)
+    return AgentOfficialSkillOut(**item)
+
+
+@router.patch("/admin/skills/{skill_key}", response_model=AgentOfficialSkillOut)
+def update_agent_skill(
+    skill_key: str,
+    payload: AgentOfficialSkillUpdate,
+    db: Session = Depends(get_db),
+    auth_user=Depends(get_current_auth_user),
+) -> AgentOfficialSkillOut:
+    require_ops_access(auth_user)
+    from app.services.agent_skill_registry import set_skill_active
+    from app.models import AgentSkillCatalogEntry
+
+    update_data = payload.model_dump(exclude_unset=True)
+    if "is_active" in update_data and len(update_data) == 1:
+        try:
+            item = set_skill_active(db, skill_key=skill_key, is_active=bool(update_data["is_active"]))
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        write_audit_log(
+            db=db,
+            event_type="agent.skill_catalog.toggled",
+            actor_name=auth_user.name,
+            actor_id=auth_user.user_id,
+            target_type="agent_skill_catalog",
+            target_name=skill_key,
+            details={"is_active": bool(update_data["is_active"])},
+        )
+        db.commit()
+        return AgentOfficialSkillOut(**item)
+
+    entry = db.scalar(select(AgentSkillCatalogEntry).where(AgentSkillCatalogEntry.key == skill_key))
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Custom skill not found (builtins: use is_active toggle only)")
+    if skill_key in {item["key"] for item in list_official_skills(db) if item.get("source") == "builtin"} and "is_active" not in update_data:
+        # Allow metadata edit only for pure custom rows; builtins can only toggle via set_skill_active path above.
+        pass
+
+    for field, value in update_data.items():
+        if field == "inputs":
+            entry.inputs_json = [item.strip() for item in (value or []) if str(item).strip()]
+        elif field == "outputs":
+            entry.outputs_json = [item.strip() for item in (value or []) if str(item).strip()]
+        elif field == "is_active":
+            entry.is_active = bool(value)
+        elif isinstance(value, str):
+            setattr(entry, field, value.strip())
+        elif value is not None:
+            setattr(entry, field, value)
+
+    from app.services.agent_skill_registry import sync_enabled_skills_to_releases
+
+    sync_enabled_skills_to_releases(db)
+    write_audit_log(
+        db=db,
+        event_type="agent.skill_catalog.updated",
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="agent_skill_catalog",
+        target_id=entry.id,
+        target_name=entry.key,
+        details={"updated_fields": list(update_data.keys())},
+    )
+    db.commit()
+    db.refresh(entry)
+    item = next(i for i in list_official_skills(db, include_inactive=True) if i["key"] == entry.key)
+    return AgentOfficialSkillOut(**item)
+
+
+@router.delete("/admin/skills/{skill_key}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_agent_skill(
+    skill_key: str,
+    db: Session = Depends(get_db),
+    auth_user=Depends(get_current_auth_user),
+) -> Response:
+    require_ops_access(auth_user)
+    from app.services.agent_skill_registry import delete_catalog_skill
+
+    try:
+        entry = delete_catalog_skill(db, skill_key=skill_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    write_audit_log(
+        db=db,
+        event_type="agent.skill_catalog.deleted",
+        actor_name=auth_user.name,
+        actor_id=auth_user.user_id,
+        target_type="agent_skill_catalog",
+        target_name=entry.key,
+        details={"key": entry.key},
+    )
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/admin/releases", response_model=list[AgentSkillReleaseOut])

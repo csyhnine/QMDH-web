@@ -1,8 +1,9 @@
 key: qmdh-save-research-summary
-name: QMDH Save Research Summary
+name: QMDH 保存调研摘要
 version: 0.1.0
 author: QMDH
-description: Save a research summary into a QMDH project as a managed note.
+runtime: openclaw
+description: 【本机 OpenClaw】将调研摘要保存为项目内托管笔记。不作用于 Web Chat。
 inputs:
   - project_id
   - title

@@ -9,11 +9,13 @@ export const CHAT_FILE_ACCEPT =
 export type ChatAttachmentKind = "image" | "file";
 
 export type ChatPendingAttachment = {
+  localId: string;
   fileName: string;
   previewUrl: string;
   storagePath: string;
   mimeType: string;
   kind: ChatAttachmentKind;
+  status: "uploading" | "ready";
 };
 
 export type ChatSendAttachment = {
@@ -34,6 +36,22 @@ export function detectChatAttachmentKind(file: File): ChatAttachmentKind | null 
     return "file";
   }
   return null;
+}
+
+export function createChatAttachmentLocalId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `chat-att-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Yield so React can paint "uploading" UI before heavy FileReader / JSON work. */
+export function yieldToBrowserPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
 }
 
 export async function readFileAsDataUrl(file: File): Promise<string> {
@@ -72,7 +90,7 @@ export async function uploadChatAttachmentFile(file: File): Promise<ChatSendAtta
 
 export function releaseChatAttachmentPreviews(items: ChatPendingAttachment[]) {
   for (const item of items) {
-    if (item.kind === "image") {
+    if (item.kind === "image" && item.previewUrl) {
       URL.revokeObjectURL(item.previewUrl);
     }
   }

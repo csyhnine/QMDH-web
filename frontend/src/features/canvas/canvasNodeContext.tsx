@@ -14,6 +14,7 @@ export type CanvasNodeActions = {
   uploadNodeImage: (nodeId: string, file: File) => Promise<void>;
   saveAnnotation: (nodeId: string) => Promise<void>;
   getUpstreamDeliverables: (nodeId: string) => UpstreamDeliverables;
+  previewMedia: (url: string) => void;
 };
 
 const CanvasNodeActionsContext = createContext<CanvasNodeActions | null>(null);
@@ -40,6 +41,7 @@ export function useCanvasNodeActions(): CanvasNodeActions {
       uploadNodeImage: async () => undefined,
       saveAnnotation: async () => undefined,
       getUpstreamDeliverables: () => ({ images: [], videos: [] }),
+      previewMedia: () => undefined,
     };
   }
   return value;

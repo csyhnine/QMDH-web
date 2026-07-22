@@ -5,6 +5,7 @@ import { api } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import {
   getPersistedMessageId,
+  getUiMessageAgentTaskProposals,
   getUiMessageAgentThinkingSteps,
   getUiMessageAgentToolCalls,
   getUiMessageAttachments,
@@ -14,14 +15,16 @@ import {
 } from "../../lib/chat/qmdhChatMessageUtils";
 import { chatRoundElementId, extractChatRounds } from "../../lib/chat/chatRoundUtils";
 import { QmdhChatTransport } from "../../lib/chat/qmdhChatTransport";
-import type { ChatThinkingStep, ChatToolCall } from "../../lib/chat/qmdhSseParser";
+import type { ChatTaskProposal, ChatThinkingStep, ChatToolCall } from "../../lib/chat/qmdhSseParser";
 import { chatAgentModeDefault, isChatAgentUiEnabled } from "../../lib/featureFlags";
 import { useChatAttachments } from "../../lib/chat/useChatAttachments";
 import ChatAgentCapabilitiesDrawer from "./ChatAgentCapabilitiesDrawer";
+import ChatAgentMemoryDrawer from "./ChatAgentMemoryDrawer";
 import ChatAgentThinkingPanel, { mergeThinkingSteps } from "./ChatAgentThinkingPanel";
 import type { ChatAgentPolicy } from "./chatAgentConstants";
 import ChatConversationNav from "./ChatConversationNav";
 import ChatMessageContent from "./ChatMessageContent";
+import ChatTaskProposalCard, { type ProposalDecision } from "./ChatTaskProposalCard";
 import ChatToolCallList from "./ChatToolCallList";
 
 const ACTIVE_CHAT_STORAGE_KEY = "qmdh.active.chat";
@@ -90,11 +93,14 @@ export default function ChatPage() {
     return saved !== "false";
   });
   const [activeToolCalls, setActiveToolCalls] = useState<ChatToolCall[]>([]);
+  const [activeTaskProposals, setActiveTaskProposals] = useState<ChatTaskProposal[]>([]);
+  const [proposalDecisions, setProposalDecisions] = useState<Record<string, ProposalDecision>>({});
   const [activeThinkingSteps, setActiveThinkingSteps] = useState<ChatThinkingStep[]>([]);
   const [activePolicyVersion, setActivePolicyVersion] = useState<string | null>(null);
   const [agentThinking, setAgentThinking] = useState(false);
   const [agentPolicy, setAgentPolicy] = useState<ChatAgentPolicy | null>(null);
   const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
 
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const messagesBottomRef = useRef<HTMLDivElement | null>(null);
@@ -149,6 +155,9 @@ export default function ChatPage() {
         onToolCalls: (toolCalls) => {
           setActiveToolCalls(toolCalls);
         },
+        onTaskProposals: (proposals) => {
+          setActiveTaskProposals(proposals);
+        },
         onThinkingStep: (step) => {
           setAgentThinking(true);
           setActiveThinkingSteps((current) => mergeThinkingSteps(current, step));
@@ -174,6 +183,8 @@ export default function ChatPage() {
       setStreamStatusLabel("");
       setAgentThinking(false);
       setActiveThinkingSteps([]);
+      setActiveTaskProposals([]);
+      setActiveToolCalls([]);
       const conversationId = activeChatIdRef.current;
       if (conversationId == null) {
         return;
@@ -432,13 +443,15 @@ export default function ChatPage() {
       return;
     }
     const hasText = Boolean(chatInput.trim());
-    const hasAttachments = attachmentState.attachments.length > 0;
+    const hasAttachments = attachmentState.readyCount > 0;
     if ((!hasText && !hasAttachments) || !activeChatId || streaming || attachmentState.uploading) {
       return;
     }
 
     const content = chatInput.trim();
-    const uiAttachments = attachmentState.attachments.map((item) => ({
+    const uiAttachments = attachmentState.attachments
+      .filter((item) => item.status === "ready" && item.storagePath)
+      .map((item) => ({
       file_name: item.fileName,
       mime_type: item.mimeType,
       url: item.kind === "image" ? item.previewUrl || item.storagePath : item.storagePath,
@@ -452,6 +465,7 @@ export default function ChatPage() {
     attachmentState.setError("");
     shouldAutoScrollRef.current = true;
     setActiveToolCalls([]);
+    setActiveTaskProposals([]);
     setActiveThinkingSteps([]);
     setActivePolicyVersion(null);
     if (effectiveAgentMode) {
@@ -498,7 +512,7 @@ export default function ChatPage() {
     Boolean(activeChatId) &&
     !streaming &&
     !attachmentState.uploading &&
-    (Boolean(chatInput.trim()) || attachmentState.attachments.length > 0);
+    (Boolean(chatInput.trim()) || attachmentState.readyCount > 0);
 
   const chatRounds = useMemo(() => extractChatRounds(chatMessages), [chatMessages]);
   const emptyStreamingText =
@@ -606,29 +620,52 @@ export default function ChatPage() {
               </div>
             ) : null}
             {isChatAgentUiEnabled ? (
-              <>
-                <label className="chat-agent-toggle" title="开启后可检索院内灵感、模板与生成栈配置">
+              <div className="chat-agent-controls">
+                <label
+                  className={`chat-agent-toggle${agentMode ? " is-on" : " is-off"}`}
+                  title="开启后可检索院内灵感、模板与生成栈配置"
+                >
                   <input
                     type="checkbox"
                     checked={agentMode}
                     onChange={(event) => setAgentMode(event.target.checked)}
                     disabled={streaming || isGuest}
                   />
-                  <span>设计助手</span>
-                  {agentPolicy ? (
-                    <em className="chat-agent-toggle-meta">{agentPolicy.enabled_tools.length} 工具</em>
-                  ) : null}
+                  <span className="chat-agent-switch" aria-hidden="true">
+                    <span className="chat-agent-switch-frame">
+                      <span className="chat-agent-switch-track">
+                        <span className="chat-agent-switch-led chat-agent-switch-led--green" />
+                        <span className="chat-agent-switch-led chat-agent-switch-led--red" />
+                        <span className="chat-agent-switch-knob" />
+                      </span>
+                    </span>
+                  </span>
+                  <span className="chat-agent-toggle-label">设计助手</span>
+                  <em className="chat-agent-toggle-meta">
+                    {agentPolicy ? `${agentPolicy.enabled_tools.length} 工具` : "—"}
+                  </em>
                 </label>
-                {agentMode ? (
+                <div className={`chat-agent-actions${agentMode ? " is-open" : ""}`} aria-hidden={!agentMode}>
                   <button
                     type="button"
                     className="chat-agent-capabilities-btn"
+                    disabled={!agentMode}
+                    tabIndex={agentMode ? 0 : -1}
                     onClick={() => setCapabilitiesOpen(true)}
                   >
                     我的助手能力
                   </button>
-                ) : null}
-              </>
+                  <button
+                    type="button"
+                    className="chat-agent-capabilities-btn"
+                    disabled={!agentMode}
+                    tabIndex={agentMode ? 0 : -1}
+                    onClick={() => setMemoryOpen(true)}
+                  >
+                    我的记忆
+                  </button>
+                </div>
+              </div>
             ) : null}
           </div>
         </header>
@@ -639,6 +676,9 @@ export default function ChatPage() {
             policy={agentPolicy}
             onClose={() => setCapabilitiesOpen(false)}
           />
+        ) : null}
+        {isChatAgentUiEnabled ? (
+          <ChatAgentMemoryDrawer open={memoryOpen && agentMode} onClose={() => setMemoryOpen(false)} />
         ) : null}
 
         {activeChatId ? (
@@ -665,8 +705,25 @@ export default function ChatPage() {
                     />
                   </div>
                 ) : null}
+                {activeTaskProposals.length > 0 ? (
+                  <div className="chat-task-proposal-panel">
+                    {activeTaskProposals.map((proposal) => (
+                      <ChatTaskProposalCard
+                        key={proposal.proposal_id}
+                        proposal={proposal}
+                        conversationId={activeChatId}
+                        policyVersion={activePolicyVersion ?? agentPolicy?.policy_version}
+                        decision={proposalDecisions[proposal.proposal_id]}
+                        onDecisionChange={(proposalId, decision) =>
+                          setProposalDecisions((current) => ({ ...current, [proposalId]: decision }))
+                        }
+                      />
+                    ))}
+                  </div>
+                ) : null}
                 {chatMessages.map((message, index) => {
                   const messageToolCalls = getUiMessageAgentToolCalls(message);
+                  const messageTaskProposals = getUiMessageAgentTaskProposals(message);
                   const messageThinkingSteps = getUiMessageAgentThinkingSteps(message);
                   const messagePolicyVersion = getUiMessagePolicyVersion(message);
                   const isStreamingMessage =
@@ -708,7 +765,19 @@ export default function ChatPage() {
                             )}
                           </div>
                         ) : null}
-                        {message.role === "assistant" && messageThinkingSteps.length > 0 ? (
+                        {message.role === "assistant" &&
+                        isStreamingMessage &&
+                        effectiveAgentMode &&
+                        (agentThinking || activeThinkingSteps.length > 0) ? (
+                          activeThinkingSteps.length > 0 ? (
+                            <ChatAgentThinkingPanel steps={activeThinkingSteps} live compact />
+                          ) : (
+                            <div className="chat-agent-thinking" role="status" aria-live="polite">
+                              <span className="chat-agent-thinking-dot" aria-hidden="true" />
+                              {emptyStreamingText}
+                            </div>
+                          )
+                        ) : message.role === "assistant" && messageThinkingSteps.length > 0 ? (
                           <ChatAgentThinkingPanel steps={messageThinkingSteps} compact />
                         ) : null}
                         {message.role === "assistant" && messageToolCalls.length > 0 ? (
@@ -718,11 +787,33 @@ export default function ChatPage() {
                             policyVersion={messagePolicyVersion}
                           />
                         ) : null}
+                        {message.role === "assistant" && messageTaskProposals.length > 0 ? (
+                          <div className="chat-task-proposal-panel is-inline">
+                            {messageTaskProposals.map((proposal) => (
+                              <ChatTaskProposalCard
+                                key={proposal.proposal_id}
+                                proposal={proposal}
+                                conversationId={activeChatId}
+                                policyVersion={messagePolicyVersion}
+                                decision={proposalDecisions[proposal.proposal_id]}
+                                onDecisionChange={(proposalId, decision) =>
+                                  setProposalDecisions((current) => ({ ...current, [proposalId]: decision }))
+                                }
+                              />
+                            ))}
+                          </div>
+                        ) : null}
                         <ChatMessageContent
                           text={getUiMessageText(message)}
                           role={message.role === "user" ? "user" : "assistant"}
                           streaming={isStreamingMessage}
-                          emptyStreamingText={emptyStreamingText}
+                          emptyStreamingText={
+                            isStreamingMessage &&
+                            effectiveAgentMode &&
+                            (agentThinking || activeThinkingSteps.length > 0)
+                              ? ""
+                              : emptyStreamingText
+                          }
                         />
                         {message.role === "assistant" && getUiMessageText(message).trim() ? (
                           <div className="chat-msg-actions">
@@ -774,28 +865,31 @@ export default function ChatPage() {
             </div>
 
             <div className="chat-input-area">
-              {effectiveAgentMode && streaming && (agentThinking || activeThinkingSteps.length > 0) ? (
-                <div className="chat-agent-thinking-dock">
-                  {activeThinkingSteps.length > 0 ? (
-                    <ChatAgentThinkingPanel steps={activeThinkingSteps} live compact />
-                  ) : (
-                    <div className="chat-agent-thinking" role="status" aria-live="polite">
-                      <span className="chat-agent-thinking-dot" aria-hidden="true" />
-                      正在启动助手…
-                    </div>
-                  )}
-                </div>
-              ) : null}
-              {attachmentState.attachments.length > 0 || attachmentState.error ? (
+              {attachmentState.attachments.length > 0 ||
+              attachmentState.uploading ||
+              attachmentState.error ? (
                 <div className="chat-attachment-bar">
+                  {attachmentState.uploading ? (
+                    <p className="chat-attachment-uploading" role="status" aria-live="polite">
+                      附件上传中…（{attachmentState.uploadingCount}/{attachmentState.attachments.length}）
+                      大文件可能需要数十秒，界面未卡死
+                    </p>
+                  ) : null}
                   {attachmentState.attachments.length > 0 ? (
                     <div className="chat-attachment-list">
                       {attachmentState.attachments.map((attachment, index) => (
                         <div
-                          key={attachment.storagePath}
-                          className={`chat-attachment-chip ${attachment.kind === "file" ? "is-file" : ""}`}
+                          key={attachment.localId}
+                          className={`chat-attachment-chip ${attachment.kind === "file" ? "is-file" : ""} ${
+                            attachment.status === "uploading" ? "is-uploading" : ""
+                          }`}
+                          title={
+                            attachment.status === "uploading"
+                              ? `${attachment.fileName}（上传中）`
+                              : attachment.fileName
+                          }
                         >
-                          {attachment.kind === "image" ? (
+                          {attachment.kind === "image" && attachment.previewUrl ? (
                             <img src={attachment.previewUrl} alt={attachment.fileName} />
                           ) : (
                             <div className="chat-attachment-file">
@@ -803,15 +897,21 @@ export default function ChatPage() {
                               <small>{attachment.fileName}</small>
                             </div>
                           )}
-                          <button
-                            type="button"
-                            className="chat-attachment-remove"
-                            aria-label={`移除 ${attachment.fileName}`}
-                            onClick={() => attachmentState.removeAttachment(index)}
-                            disabled={streaming || attachmentState.uploading}
-                          >
-                            ×
-                          </button>
+                          {attachment.status === "uploading" ? (
+                            <span className="chat-attachment-uploading-mask" aria-hidden="true">
+                              <span className="chat-attachment-spinner" />
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="chat-attachment-remove"
+                              aria-label={`移除 ${attachment.fileName}`}
+                              onClick={() => attachmentState.removeAttachment(index)}
+                              disabled={streaming || attachmentState.uploading}
+                            >
+                              ×
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -861,12 +961,20 @@ export default function ChatPage() {
                   type="button"
                   className="chat-send-btn"
                   disabled={!canSendMessage}
+                  aria-label={attachmentState.uploading ? "附件上传中" : "发送"}
+                  title={attachmentState.uploading ? "附件上传中，请稍候" : "发送"}
                   onClick={() => void handleSendMessage()}
                 >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 2L11 13" />
-                    <path d="M22 2L15 22L11 13L2 9L22 2Z" />
-                  </svg>
+                  {attachmentState.uploading ? (
+                    <span className="chat-send-uploading" aria-hidden="true">
+                      <span className="chat-attachment-spinner" />
+                    </span>
+                  ) : (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 2L11 13" />
+                      <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+                    </svg>
+                  )}
                 </button>
               </div>
             </div>

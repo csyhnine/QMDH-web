@@ -785,6 +785,36 @@ class ChatAgentTaskProposalOut(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     summary: str
     status: str = "pending_confirmation"
+    task_id: int | None = None
+    task_status: str | None = None
+    result_urls: list[str] = Field(default_factory=list)
+
+
+class ChatAgentTaskConfirmIn(BaseModel):
+    proposal_id: str
+    workflow_key: str
+    title: str = Field(min_length=1, max_length=150)
+    project_code: str
+    requested_provider: str
+    provider_display_name: str = ""
+    classification: str = DataClassification.b.value
+    payload: dict[str, Any] = Field(default_factory=dict)
+    summary: str = ""
+    policy_version: str | None = Field(default=None, max_length=64)
+
+
+class AgentMemoryEntryOut(BaseModel):
+    id: int
+    memory_type: str
+    content: str
+    source_turn_ref: str = ""
+    conversation_id: int | None = None
+    is_paused: bool = False
+    created_at: datetime
+
+
+class AgentMemoryPauseIn(BaseModel):
+    paused: bool = True
 
 
 class ChatAgentThinkingStepOut(BaseModel):
@@ -944,6 +974,71 @@ class AgentOfficialSkillOut(BaseModel):
     path: str
     inputs: list[str] = Field(default_factory=list)
     outputs: list[str] = Field(default_factory=list)
+    source: str = "builtin"
+    deletable: bool = False
+    id: int | None = None
+    notes: str = ""
+    is_active: bool = True
+    source_uri: str = ""
+    source_repo: str = ""
+    source_path: str = ""
+    file_count: int = 0
+    has_scripts: bool = False
+    file_manifest: list[dict[str, object]] = Field(default_factory=list)
+    content_hash: str = ""
+    has_skill_md: bool = False
+
+
+class AgentOfficialSkillCreate(BaseModel):
+    key: str = Field(min_length=2, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$")
+    name: str = Field(min_length=1, max_length=150)
+    version: str = Field(default="0.1.0", max_length=50)
+    description: str = ""
+    author: str = Field(default="", max_length=120)
+    inputs: list[str] = Field(default_factory=list)
+    outputs: list[str] = Field(default_factory=list)
+    notes: str = ""
+    is_active: bool = True
+
+
+class AgentOfficialSkillUpdate(BaseModel):
+    is_active: bool | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=150)
+    version: str | None = Field(default=None, max_length=50)
+    description: str | None = None
+    author: str | None = Field(default=None, max_length=120)
+    inputs: list[str] | None = None
+    outputs: list[str] | None = None
+    notes: str | None = None
+
+
+class AgentSkillInstallRequest(BaseModel):
+    source: str = Field(min_length=3, max_length=2000)
+    skill_key: str | None = Field(default=None, max_length=100)
+    overwrite: bool = False
+
+
+class AgentSkillInstallCandidate(BaseModel):
+    key: str
+    path: str
+    name: str
+    description: str = ""
+    file_count: int = 0
+    has_scripts: bool = False
+
+
+class AgentSkillInstallResult(BaseModel):
+    status: str
+    skill: AgentOfficialSkillOut | None = None
+    candidates: list[AgentSkillInstallCandidate] = Field(default_factory=list)
+
+
+class AgentSkillFileContentOut(BaseModel):
+    skill_key: str
+    path: str
+    kind: str
+    size: int = 0
+    content: str | None = None
 
 
 class AgentSkillReleaseCreate(BaseModel):

@@ -62,6 +62,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   const [bannerOk, setBannerOk] = useState("");
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [bannerError, setBannerError] = useState("");
+  const [mediaPreviewUrl, setMediaPreviewUrl] = useState<string | null>(null);
 
   const sessionLoading = isTemplateMode ? templateEditor.loading : canvas.loading;
   const sessionSaving = isTemplateMode ? templateEditor.saving : canvas.saving;
@@ -473,6 +474,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
       uploadNodeImage,
       saveAnnotation,
       getUpstreamDeliverables,
+      previewMedia: (url: string) => setMediaPreviewUrl(url),
     }),
     [
       sessionLoading,
@@ -696,6 +698,36 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
           />
         </div>
       </div>
+      {mediaPreviewUrl ? (
+        <div
+          className="media-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="画布媒体预览"
+          onClick={() => setMediaPreviewUrl(null)}
+        >
+          <div className="media-lightbox-surface" onClick={(event) => event.stopPropagation()}>
+            <header className="media-lightbox-head">
+              <span className="media-lightbox-title">预览</span>
+              <button
+                type="button"
+                className="media-lightbox-close"
+                aria-label="关闭"
+                onClick={() => setMediaPreviewUrl(null)}
+              >
+                ×
+              </button>
+            </header>
+            <div className="media-lightbox-body">
+              {/\.(mp4|webm|mov)(\?|$)/i.test(mediaPreviewUrl) ? (
+                <video src={mediaPreviewUrl} controls autoPlay playsInline />
+              ) : (
+                <img src={mediaPreviewUrl} alt="" />
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </CanvasNodeActionsProvider>
   );
 }

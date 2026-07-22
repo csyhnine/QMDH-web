@@ -169,6 +169,42 @@ def ensure_schema(engine: Engine) -> None:
                 text("ALTER TABLE agent_skill_releases ADD COLUMN chat_tool_allowlist JSON NOT NULL DEFAULT '[]'")
             )
 
+        memory_columns = existing_columns("agent_memory_entries")
+        if memory_columns and "is_paused" not in memory_columns:
+            connection.execute(
+                text("ALTER TABLE agent_memory_entries ADD COLUMN is_paused BOOLEAN NOT NULL DEFAULT false")
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_agent_memory_entries_is_paused "
+                    "ON agent_memory_entries (is_paused)"
+                )
+            )
+
+        skill_catalog_columns = existing_columns("agent_skill_catalog")
+        if skill_catalog_columns and "source_uri" not in skill_catalog_columns:
+            connection.execute(text("ALTER TABLE agent_skill_catalog ADD COLUMN source_uri TEXT NOT NULL DEFAULT ''"))
+        if skill_catalog_columns and "source_repo" not in skill_catalog_columns:
+            connection.execute(
+                text("ALTER TABLE agent_skill_catalog ADD COLUMN source_repo VARCHAR(255) NOT NULL DEFAULT ''")
+            )
+        if skill_catalog_columns and "source_path" not in skill_catalog_columns:
+            connection.execute(
+                text("ALTER TABLE agent_skill_catalog ADD COLUMN source_path VARCHAR(500) NOT NULL DEFAULT ''")
+            )
+        if skill_catalog_columns and "skill_md" not in skill_catalog_columns:
+            connection.execute(text("ALTER TABLE agent_skill_catalog ADD COLUMN skill_md TEXT NOT NULL DEFAULT ''"))
+        if skill_catalog_columns and "files_json" not in skill_catalog_columns:
+            connection.execute(text("ALTER TABLE agent_skill_catalog ADD COLUMN files_json JSON NOT NULL DEFAULT '{}'"))
+        if skill_catalog_columns and "file_manifest" not in skill_catalog_columns:
+            connection.execute(
+                text("ALTER TABLE agent_skill_catalog ADD COLUMN file_manifest JSON NOT NULL DEFAULT '[]'")
+            )
+        if skill_catalog_columns and "content_hash" not in skill_catalog_columns:
+            connection.execute(
+                text("ALTER TABLE agent_skill_catalog ADD COLUMN content_hash VARCHAR(64) NOT NULL DEFAULT ''")
+            )
+
 
 def _seed_shared_prompt_templates(db: Session) -> None:
     if not DEFAULT_SHARED_PROMPT_TEMPLATES:
@@ -365,11 +401,10 @@ def seed_initial_data(db: Session) -> None:
                     "仅在用户提出检索或配置相关需求时再介绍可用工具。"
                 ),
                 chat_tool_allowlist=[
-                    "search_inspiration_posts",
                     "search_shared_templates",
-                    "list_enabled_image_providers",
-                    "list_active_workflows",
-                    "summarize_generation_stack",
+                    "create_image_generate_task",
+                    "create_image_edit_task",
+                    "create_video_generate_task",
                 ],
                 notes="Web Chat 助手模式默认生产策略；Release key 即 policy_version。",
                 is_active=True,
@@ -382,11 +417,10 @@ def seed_initial_data(db: Session) -> None:
         )
         if not list(chat_prod_release.chat_tool_allowlist or []):
             chat_prod_release.chat_tool_allowlist = [
-                "search_inspiration_posts",
                 "search_shared_templates",
-                "list_enabled_image_providers",
-                "list_active_workflows",
-                "summarize_generation_stack",
+                "create_image_generate_task",
+                "create_image_edit_task",
+                "create_video_generate_task",
             ]
 
     projects = [

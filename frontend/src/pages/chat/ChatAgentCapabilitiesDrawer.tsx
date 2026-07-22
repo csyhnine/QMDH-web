@@ -38,14 +38,19 @@ export default function ChatAgentCapabilitiesDrawer({ open, policy, onClose }: C
         </header>
 
         <section className="chat-agent-drawer-section">
-          <h3>策略版本</h3>
+          <h3>Web Chat 策略版本</h3>
           <div className="chat-agent-panel-badges">
             <span className="chat-agent-badge">{policy.environment === "prod" ? "生产" : "测试"}</span>
-            <span className="chat-agent-badge is-muted">{policy.policy_version}</span>
+            <span className="chat-agent-badge is-muted">release: {policy.policy_version}</span>
             {policy.release_display_name ? (
-              <span className="chat-agent-badge is-muted">{policy.release_display_name}</span>
-            ) : null}
+              <span className="chat-agent-badge">{policy.release_display_name}</span>
+            ) : (
+              <span className="chat-agent-badge is-muted">代码默认能力包</span>
+            )}
           </div>
+          <p className="chat-agent-drawer-highlight">
+            以下是网页 Chat 助手当前可用的工具（由管理员在「助手能力 → Web Chat 策略」配置）。本机 OpenClaw Skill 与此无关。
+          </p>
           {policy.personalization_summary ? (
             <p className="chat-agent-drawer-highlight">{policy.personalization_summary}</p>
           ) : null}

@@ -1,8 +1,9 @@
 key: qmdh-save-inspiration
-name: QMDH Save Inspiration
+name: QMDH 保存灵感
 version: 0.1.0
 author: QMDH
-description: Save a discovered reference into the QMDH inspiration library.
+runtime: openclaw
+description: 【本机 OpenClaw】将发现的参考图保存到院内灵感库。不作用于 Web Chat。
 inputs:
   - title
   - image_path

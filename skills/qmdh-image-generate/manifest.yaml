@@ -1,8 +1,9 @@
 key: qmdh-image-generate
-name: QMDH Image Generate
+name: QMDH 生图
 version: 0.1.0
 author: QMDH
-description: Trigger managed QMDH image generation from OpenClaw.
+runtime: openclaw
+description: 【本机 OpenClaw】通过托管任务触发 QMDH 文生图。不作用于 Web Chat。
 inputs:
   - title
   - project_id

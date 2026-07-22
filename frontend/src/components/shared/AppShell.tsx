@@ -32,7 +32,7 @@ const adminNavItems: Array<{ key: AdminTab; label: string; path: string }> = [
   { key: "models", label: "模型", path: "/admin/models" },
   { key: "templates", label: "模板", path: "/admin/templates" },
   { key: "canvas-templates", label: "画布模板", path: "/admin/canvas-templates" },
-  { key: "agents", label: "代理", path: "/admin/agents" },
+  { key: "agents", label: "助手能力", path: "/admin/agents" },
   { key: "users", label: "账号", path: "/admin/users" },
   { key: "settings", label: "设置", path: "/admin/settings" },
 ];

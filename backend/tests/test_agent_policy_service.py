@@ -25,10 +25,16 @@ class AgentPolicyServiceTests(unittest.TestCase):
         self.SessionLocal = sessionmaker(bind=self.engine)
 
     def test_normalize_chat_tool_allowlist_falls_back_to_defaults(self) -> None:
-        self.assertEqual(len(normalize_chat_tool_allowlist([])), 5)
+        defaults = normalize_chat_tool_allowlist([])
+        self.assertIn("search_shared_templates", defaults)
+        self.assertIn("create_image_generate_task", defaults)
         self.assertEqual(
             normalize_chat_tool_allowlist(["search_inspiration_posts"]),
             ("search_inspiration_posts",),
+        )
+        self.assertEqual(
+            normalize_chat_tool_allowlist(["propose_image_generate_task"]),
+            ("create_image_generate_task",),
         )
 
     def test_resolve_active_prod_release(self) -> None:
@@ -52,7 +58,8 @@ class AgentPolicyServiceTests(unittest.TestCase):
 
         self.assertEqual(policy.policy_version, "qmdh-chat-prod")
         self.assertIn("寒暄时简短回复。", policy.system_prompt)
-        self.assertEqual(policy.chat_tool_allowlist, ("search_shared_templates",))
+        # memory tools are auto-appended when not disabled
+        self.assertIn("search_shared_templates", policy.chat_tool_allowlist)
 
     def test_resolve_pinned_policy_version(self) -> None:
         with self.SessionLocal() as db:
@@ -74,7 +81,7 @@ class AgentPolicyServiceTests(unittest.TestCase):
             policy = resolve_effective_chat_policy(db, policy_version="qmdh-chat-test")
 
         self.assertEqual(policy.policy_version, "qmdh-chat-test")
-        self.assertEqual(policy.chat_tool_allowlist, ("summarize_generation_stack",))
+        self.assertIn("summarize_generation_stack", policy.chat_tool_allowlist)
 
     def test_build_chat_system_prompt_keeps_baseline(self) -> None:
         prompt = build_chat_system_prompt(baseline=CHAT_AGENT_BASELINE_PROMPT, template="")

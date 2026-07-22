@@ -135,42 +135,46 @@
 
 ## Priority Queue
 
+### Task: [agent-codex-harness-001] 套壳 Codex 工程 harness + 记忆 + 生成助手
+- 状态：**READY_FOR_PR** — 分支 `feat/agent-codex-harness-001`
+- 定调：学 openai/codex harness（loop/registry/HITL/compact），**非**换 GPT；Skill=Admin 能力包；跨对话记忆正式交付
+- Migration：`m4n5o6p7q8r9`（`agent_memory_entries`）
+- 验证：相关 pytest 10 passed；`npm run build` OK
+- 部署：gov 在 `origin/main`；生产 SSH 本机不可用 → `docs/archive/deploy-ready-2026-07-21-gov-harness.md`
+- 约束：勿整包 merge `wip/agent-multi-chat-2026-07`；生图视频走 `POST /tasks`
+
 ### Task: [agent-gov-001] Chat Agent 治理切片（release override + Admin 可观测）
-- 状态：**READY_FOR_PR** — 分支 `feat/agent-gov-001`
-- 范围：group/user policy overrides、Admin release 编辑（prompt + tool allowlist）、Admin Chat 可观测
-- Migration：`l3m4n5o6p7q8`（`agent_policy_overrides`，接在 `k2l3m4n5o6p7` 后）
-- 验证：pytest 8 passed；frontend build OK
-- 不含：multi-agent、B2 HITL、crawl、ref-intent、Meili memory
-- Next：PR 合 main → 部署时 alembic upgrade（单独批准）
+- 状态：**DONE（已合 main `736b800`）**；生产部署见服务器 HEAD / alembic 是否到 `l3m4n5o6p7q8`
+- Migration：`l3m4n5o6p7q8`
+- Next：生产 upgrade + rebuild（若尚未）
+
+### Task: [agent-memory-001] 跨对话记忆 MVP
+- 状态：**IN PROGRESS**（本迭代 Slice 4）
+- 范围：用户级 `agent_memory_entries`、注入 agent_mode、设计师查看/删除/暂停；会话内 compact 加强
+- 来源：从 WIP 瘦身，勿整包
+
+### Task: [chat-b2-001] Chat → 生图/视频 HITL
+- 状态：**IN PROGRESS**（本迭代 Slice 3）
+- 范围：propose → 确认卡 → `POST /tasks`（先图像后视频）；写入 Skill allowlist
+- 来源：从 WIP 瘦身
 
 ### Task: [canvas-20260721] 画布复制 + 全部/所选运行
-- 状态：**stash 中**（`stash@{0}` on `main`；勿与 gov 分支混提）
-- 留档：恢复后见 `docs/archive/handoff-2026-07-21-canvas-copy-run-wip.md`
-- Next：gov 合入后再回 main `stash pop`
+- 状态：**stash 中**（`stash@{0}` on `main`）
+- Next：本 agent 包稳定后再 `stash pop`
 
 ### Task: [local-wip-20260720] 画布模板 + Chat 上下文 + 真流式
 - 状态：**DONE（已部署生产 `3ff220b`，前端热更约 `cb85fc6`）**
 - 留档：`docs/archive/deploy-2026-07-20-main-canvas-chat-b1.md`
-- Next：随新包回归冒烟
 
 ### Task: [chat-004] Chat Agent B1 切片
 - 状态：**DONE（已合 main 且已部署）**；**UI 默认隐藏**
-- HEAD：约 `cb85fc6`；Migration：`k2l3m4n5o6p7`
+- Migration：`k2l3m4n5o6p7`
 - Next：助手产品完整后再开 `VITE_CHAT_AGENT_UI_ENABLED`
 
 ### Task: [agent-wip-001] Chat Agent / 多 Agent 合入（索引）
-- 状态：**IN PROGRESS** — B1 已合 `main`；**gov 切片本地就绪**（`feat/agent-gov-001`，未合）；B2/multi 仍在 WIP 整包
-- 整包 WIP：`wip/agent-multi-chat-2026-07` @ `4b0a5b3`（保持不动，未 rebase）
-- 现状交接：`docs/archive/handoff-2026-07-16-agent-wip-status.md`
-- 架构留档：`docs/archive/handoff-2026-07-03-agent-multi-chat-wip.md`
-- WIP 内其余：~~`agent-gov-001`~~（已抽分支）、`chat-b2-001`、`agent-multi-*`、`crawl-001` C1+C2、`ref-intent-001`
-- 未做：crawl C3；整包 rebase；gov PR 合入 → B2 切片
-- 建议切片：~~B1~~ → **gov（本地就绪）** → B2 → multi/crawl/ref-intent
-- 约束：勿与 VIP / 生图路由 / 访客热修混 PR；部署需 migration；Meili 可选降级
-- 验收（合入后）：
-  1. 生产或预发 `/studio/chat` 可开 `agent_mode` 且只读 tools 出卡片
-  2. 未开 Agent 的对话路径不回归
-  3. Gemini / 普通生图路由不受影响
+- 状态：**IN PROGRESS** — B1+gov 已合 `main`；harness/memory/B2 本迭代切片中；multi/crawl 仍在 WIP
+- 整包 WIP：`wip/agent-multi-chat-2026-07` @ `4b0a5b3`（保持不动）
+- 建议切片：~~B1~~ → ~~gov~~ → **harness + memory + B2** → multi/crawl/ref-intent
 
 ### Task: [guest-001] Studio 访客模式
 - 状态：**DONE（P0+P1 已部署生产 2026-07-16）**；P2 未做

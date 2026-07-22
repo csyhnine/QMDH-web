@@ -14,6 +14,22 @@ export type ChatThinkingStep = {
   agent_label?: string;
 };
 
+export type ChatTaskProposal = {
+  proposal_id: string;
+  workflow_key: string;
+  title: string;
+  project_code: string;
+  requested_provider: string;
+  provider_display_name: string;
+  classification: string;
+  payload: Record<string, unknown>;
+  summary: string;
+  status?: string;
+  task_id?: number | null;
+  task_status?: string | null;
+  result_urls?: string[];
+};
+
 export type QmdhSsePayload = {
   delta?: string;
   error?: ChatStreamError | string;
@@ -30,6 +46,8 @@ export type QmdhSsePayload = {
   };
   thinking_step?: ChatThinkingStep;
   tool_calls?: ChatToolCall[];
+  tool_result?: ChatToolCall;
+  task_proposals?: ChatTaskProposal[];
   policy_version?: string;
   release_display_name?: string;
 };

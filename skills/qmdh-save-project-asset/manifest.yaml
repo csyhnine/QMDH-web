@@ -1,8 +1,9 @@
 key: qmdh-save-project-asset
-name: QMDH Save Project Asset
+name: QMDH 保存项目素材
 version: 0.1.0
 author: QMDH
-description: Save an OpenClaw artifact into a QMDH project as a managed asset.
+runtime: openclaw
+description: 【本机 OpenClaw】将产物保存为项目内托管素材。不作用于 Web Chat。
 inputs:
   - project_id
   - name

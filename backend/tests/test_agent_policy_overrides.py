@@ -77,7 +77,9 @@ class AgentPolicyOverrideTests(unittest.TestCase):
             policy = resolve_effective_chat_policy(db, environment="prod", user_id=self.user_id)
 
         self.assertEqual(policy.policy_version, "qmdh-chat-prod")
-        self.assertEqual(policy.chat_tool_allowlist, ("search_shared_templates",))
+        self.assertIn("search_shared_templates", policy.chat_tool_allowlist)
+        self.assertNotIn("search_inspiration_posts", policy.chat_tool_allowlist)
+        self.assertNotIn("list_active_workflows", policy.chat_tool_allowlist)
         self.assertIn("发布 overlay", policy.system_prompt)
         self.assertIn("优先共享模板。", policy.system_prompt)
         self.assertIn("回答不超过三条。", policy.system_prompt)

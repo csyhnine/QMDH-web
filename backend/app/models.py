@@ -476,6 +476,51 @@ class AgentPolicyOverride(Base):
     )
 
 
+class AgentMemoryEntry(Base):
+    __tablename__ = "agent_memory_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    conversation_id: Mapped[int | None] = mapped_column(ForeignKey("conversations.id"), nullable=True, index=True)
+    memory_type: Mapped[str] = mapped_column(String(30), default="summary")
+    content: Mapped[str] = mapped_column(Text, default="")
+    source_turn_ref: Mapped[str] = mapped_column(String(120), default="")
+    is_paused: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped[User] = relationship()
+    conversation: Mapped["Conversation | None"] = relationship()
+
+
+class AgentSkillCatalogEntry(Base):
+    """Admin-managed skill catalog (filesystem builtins + GitHub/custom bundles)."""
+
+    __tablename__ = "agent_skill_catalog"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(150))
+    version: Mapped[str] = mapped_column(String(50), default="0.1.0")
+    description: Mapped[str] = mapped_column(Text, default="")
+    author: Mapped[str] = mapped_column(String(120), default="")
+    inputs_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    outputs_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    source_uri: Mapped[str] = mapped_column(Text, default="")
+    source_repo: Mapped[str] = mapped_column(String(255), default="")
+    source_path: Mapped[str] = mapped_column(String(500), default="")
+    skill_md: Mapped[str] = mapped_column(Text, default="")
+    files_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    file_manifest: Mapped[list] = mapped_column(JSON, default=list)
+    content_hash: Mapped[str] = mapped_column(String(64), default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    created_by: Mapped[User | None] = relationship()
+
+
 class PromptTemplate(Base):
     __tablename__ = "prompt_templates"
 

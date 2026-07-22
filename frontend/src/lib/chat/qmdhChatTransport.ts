@@ -4,6 +4,7 @@ import { buildApiUrl, getAuthHeaders } from "../../api";
 import type { ChatSendAttachment } from "./chatAttachmentUtils";
 import {
   parseQmdhSseLine,
+  type ChatTaskProposal,
   type ChatThinkingStep,
   type ChatToolCall,
   type QmdhSsePayload,
@@ -29,6 +30,7 @@ export type QmdhChatTransportOptions = {
   getAgentMode?: () => boolean;
   onMeta?: (meta: ChatStreamMeta) => void;
   onToolCalls?: (toolCalls: ChatToolCall[]) => void;
+  onTaskProposals?: (proposals: ChatTaskProposal[]) => void;
   onThinkingStep?: (step: ChatThinkingStep) => void;
   onPolicyVersion?: (policyVersion: string) => void;
   onAgentThinking?: () => void;
@@ -138,6 +140,10 @@ function parseQmdhSseStream(
         if (parsed.tool_calls?.length) {
           await ensureStarted();
           callbacks?.onToolCalls?.(parsed.tool_calls);
+        }
+        if (parsed.task_proposals?.length) {
+          await ensureStarted();
+          callbacks?.onTaskProposals?.(parsed.task_proposals);
         }
         if (parsed.thinking_step) {
           await ensureStarted();

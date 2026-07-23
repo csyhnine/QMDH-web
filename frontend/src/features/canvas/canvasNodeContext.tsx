@@ -16,7 +16,7 @@ export type CanvasNodeActions = {
   disabled?: boolean;
   patchNode: (nodeId: string, patch: Partial<GenerateNodeData>) => void;
   patchNoteNode: (nodeId: string, patch: Partial<NoteNodeData>) => void;
-  generateNode: (nodeId: string, data: GenerateNodeData) => void;
+  generateNode: (nodeId: string, data: GenerateNodeData) => void | Promise<void>;
   syncNodeTask: (nodeId: string, data: GenerateNodeData) => void | Promise<void>;
   uploadNodeImage: (nodeId: string, file: File) => Promise<void>;
   saveAnnotation: (nodeId: string) => Promise<void>;

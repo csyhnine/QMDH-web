@@ -24,6 +24,7 @@ import {
   emptyCanvasGraph,
   isGenerateNode,
   isGroupNode,
+  isNoteNode,
 } from "./canvasTypes";
 
 const KNOWN_KINDS: CanvasNodeKind[] = [
@@ -428,4 +429,280 @@ export function collectUpstreamDeliverables(
   }
 
   return { images, videos };
+}
+
+const RUNNABLE_NODE_KINDS = new Set(["text2img", "img2img", "video", "upscale"]);
+
+/** AI generate nodes that create studio tasks (excludes upload/annotate). */
+export function isRunnableCanvasNode(node: CanvasFlowNode): boolean {
+  return isGenerateNode(node) && RUNNABLE_NODE_KINDS.has(node.data.nodeKind);
+}
+
+/** Kahn topo order over runnable nodes only. Non-runnable upstream (upload etc.) is ignored for ordering. */
+export function listRunnableNodeIdsInTopoOrder(
+  nodes: CanvasFlowNode[],
+  edges: Edge[],
+  onlyIds?: Iterable<string>
+): { order: string[]; cycle: boolean } {
+  const scope = onlyIds ? new Set(onlyIds) : null;
+  const runnableIds = new Set(
+    nodes
+      .filter(isRunnableCanvasNode)
+      .filter((node) => !scope || scope.has(node.id))
+      .map((node) => node.id)
+  );
+  const indegree = new Map<string, number>();
+  const adjacency = new Map<string, string[]>();
+  for (const id of runnableIds) {
+    indegree.set(id, 0);
+    adjacency.set(id, []);
+  }
+  for (const edge of edges) {
+    if (!runnableIds.has(edge.source) || !runnableIds.has(edge.target)) continue;
+    adjacency.get(edge.source)!.push(edge.target);
+    indegree.set(edge.target, (indegree.get(edge.target) || 0) + 1);
+  }
+
+  const queue = [...runnableIds].filter((id) => (indegree.get(id) || 0) === 0);
+  const order: string[] = [];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    order.push(id);
+    for (const next of adjacency.get(id) || []) {
+      const nextDegree = (indegree.get(next) || 0) - 1;
+      indegree.set(next, nextDegree);
+      if (nextDegree === 0) queue.push(next);
+    }
+  }
+  return { order, cycle: order.length !== runnableIds.size };
+}
+
+/** Expand selection so selecting a group includes its children (nested groups supported). */
+export function expandSelectionWithGroupChildren(
+  nodes: CanvasFlowNode[],
+  selectedIds: string[]
+): Set<string> {
+  const selected = new Set(selectedIds);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const node of nodes) {
+      if (node.parentId && selected.has(node.parentId) && !selected.has(node.id)) {
+        selected.add(node.id);
+        grew = true;
+      }
+    }
+  }
+  return selected;
+}
+
+/** Runnable nodes inside the current selection (groups expand to children), in topo order. */
+export function listRunnableNodeIdsForSelection(
+  nodes: CanvasFlowNode[],
+  edges: Edge[],
+  selectedIds: string[]
+): { order: string[]; cycle: boolean; expandedIds: Set<string> } {
+  const expandedIds = expandSelectionWithGroupChildren(nodes, selectedIds);
+  const { order, cycle } = listRunnableNodeIdsInTopoOrder(nodes, edges, expandedIds);
+  return { order, cycle, expandedIds };
+}
+
+function resetClonedGenerateData(data: GenerateNodeData): GenerateNodeData {
+  const busy =
+    data.status === "submitting" || data.status === "pending" || data.status === "running";
+  const hasMedia =
+    data.assetUrls.length > 0 || data.referenceImages.length > 0 || Boolean(data.previewImagePath);
+  return {
+    ...data,
+    taskId: null,
+    errorMessage: undefined,
+    status: busy ? (hasMedia ? "completed" : "idle") : data.status,
+  };
+}
+
+/**
+ * Duplicate the current selection (including children of selected groups).
+ * Remaps internal edges; clears in-flight task state on generate nodes.
+ */
+export function duplicateCanvasSelection(
+  nodes: CanvasFlowNode[],
+  edges: Edge[],
+  selectedIds: string[],
+  offset = { x: 48, y: 48 }
+): { nodes: CanvasFlowNode[]; edges: Edge[]; createdIds: string[] } | null {
+  const selected = expandSelectionWithGroupChildren(nodes, selectedIds);
+  const toClone = nodes.filter((node) => selected.has(node.id));
+  if (toClone.length === 0) return null;
+
+  const idMap = new Map<string, string>();
+  for (const node of toClone) {
+    const prefix = node.type === "group" ? "group" : node.type === "note" ? "note" : "gen";
+    idMap.set(node.id, `${prefix}-${nanoid()}`);
+  }
+
+  const created: CanvasFlowNode[] = toClone.map((node) => {
+    const newId = idMap.get(node.id)!;
+    const parentAlsoCloned = Boolean(node.parentId && idMap.has(node.parentId));
+
+    let position = { ...node.position };
+    let parentId = node.parentId;
+    let extent = node.extent;
+
+    if (parentAlsoCloned && node.parentId) {
+      parentId = idMap.get(node.parentId);
+    } else if (node.parentId) {
+      const abs = absolutePosition(node, nodes);
+      position = { x: abs.x + offset.x, y: abs.y + offset.y };
+      parentId = undefined;
+      extent = undefined;
+    } else {
+      position = { x: node.position.x + offset.x, y: node.position.y + offset.y };
+    }
+
+    const base = {
+      ...node,
+      id: newId,
+      position,
+      parentId,
+      extent,
+      selected: true,
+    };
+
+    if (isGenerateNode(node)) {
+      return {
+        ...base,
+        type: "generate" as const,
+        data: resetClonedGenerateData(node.data),
+      };
+    }
+    if (isNoteNode(node)) {
+      return {
+        ...base,
+        type: "note" as const,
+        data: { ...node.data },
+      };
+    }
+    return {
+      ...base,
+      type: "group" as const,
+      data: { ...node.data },
+    };
+  });
+
+  const nextNodes: CanvasFlowNode[] = [
+    ...nodes.map((node) => ({ ...node, selected: false })),
+    ...created,
+  ];
+
+  const remappedEdges: Edge[] = edges
+    .filter((edge) => idMap.has(edge.source) && idMap.has(edge.target))
+    .map((edge) => ({
+      ...edge,
+      id: `e-${idMap.get(edge.source)}-${idMap.get(edge.target)}-${nanoid(6)}`,
+      source: idMap.get(edge.source)!,
+      target: idMap.get(edge.target)!,
+      selected: false,
+    }));
+
+  return {
+    nodes: nextNodes,
+    edges: edges.concat(remappedEdges),
+    createdIds: [...idMap.values()],
+  };
+}
+
+/** Snapshot selection for clipboard paste (absolute positions, detached from parents). */
+export function snapshotCanvasSelection(
+  nodes: CanvasFlowNode[],
+  edges: Edge[],
+  selectedIds: string[]
+): { nodes: CanvasFlowNode[]; edges: Edge[] } | null {
+  const selected = expandSelectionWithGroupChildren(nodes, selectedIds);
+  const toCopy = nodes.filter((node) => selected.has(node.id));
+  if (toCopy.length === 0) return null;
+
+  const snapped: CanvasFlowNode[] = toCopy.map((node) => {
+    const abs = absolutePosition(node, nodes);
+    const parentAlsoSelected = Boolean(node.parentId && selected.has(node.parentId));
+    if (parentAlsoSelected) {
+      return { ...node, selected: false };
+    }
+    const { parentId: _parentId, extent: _extent, ...rest } = node;
+    return {
+      ...rest,
+      position: abs,
+      parentId: undefined,
+      extent: undefined,
+      selected: false,
+    } as CanvasFlowNode;
+  });
+
+  const internalEdges = edges.filter((edge) => selected.has(edge.source) && selected.has(edge.target));
+  return { nodes: snapped, edges: internalEdges };
+}
+
+/** Paste a clipboard snapshot into the graph with fresh ids. */
+export function pasteCanvasSnapshot(
+  currentNodes: CanvasFlowNode[],
+  currentEdges: Edge[],
+  snapshot: { nodes: CanvasFlowNode[]; edges: Edge[] },
+  offset = { x: 48, y: 48 }
+): { nodes: CanvasFlowNode[]; edges: Edge[]; createdIds: string[] } | null {
+  if (snapshot.nodes.length === 0) return null;
+
+  const idMap = new Map<string, string>();
+  for (const node of snapshot.nodes) {
+    const prefix = node.type === "group" ? "group" : node.type === "note" ? "note" : "gen";
+    idMap.set(node.id, `${prefix}-${nanoid()}`);
+  }
+
+  const created: CanvasFlowNode[] = snapshot.nodes.map((node) => {
+    const newId = idMap.get(node.id)!;
+    const parentAlsoCloned = Boolean(node.parentId && idMap.has(node.parentId));
+    let position = {
+      x: node.position.x + (parentAlsoCloned ? 0 : offset.x),
+      y: node.position.y + (parentAlsoCloned ? 0 : offset.y),
+    };
+    let parentId = node.parentId;
+    let extent = node.extent;
+    if (parentAlsoCloned && node.parentId) {
+      parentId = idMap.get(node.parentId);
+    } else {
+      parentId = undefined;
+      extent = undefined;
+    }
+
+    const base = {
+      ...node,
+      id: newId,
+      position,
+      parentId,
+      extent,
+      selected: true,
+    };
+
+    if (isGenerateNode(node)) {
+      return { ...base, type: "generate" as const, data: resetClonedGenerateData(node.data) };
+    }
+    if (isNoteNode(node)) {
+      return { ...base, type: "note" as const, data: { ...node.data } };
+    }
+    return { ...base, type: "group" as const, data: { ...node.data } };
+  });
+
+  const remappedEdges: Edge[] = snapshot.edges
+    .filter((edge) => idMap.has(edge.source) && idMap.has(edge.target))
+    .map((edge) => ({
+      ...edge,
+      id: `e-${idMap.get(edge.source)}-${idMap.get(edge.target)}-${nanoid(6)}`,
+      source: idMap.get(edge.source)!,
+      target: idMap.get(edge.target)!,
+      selected: false,
+    }));
+
+  return {
+    nodes: [...currentNodes.map((node) => ({ ...node, selected: false })), ...created],
+    edges: [...currentEdges, ...remappedEdges],
+    createdIds: [...idMap.values()],
+  };
 }

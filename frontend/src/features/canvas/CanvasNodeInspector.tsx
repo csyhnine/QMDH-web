@@ -18,6 +18,7 @@ type CanvasNodeInspectorProps = {
   upstream: UpstreamDeliverables;
   disabled?: boolean;
   selectionCount?: number;
+  selectedRunnableCount?: number;
   onChange: (nodeId: string, patch: Partial<GenerateNodeData>) => void;
   onGenerate: (nodeId: string, data: GenerateNodeData) => void;
   onSyncTask?: (nodeId: string, data: GenerateNodeData) => void;
@@ -25,6 +26,7 @@ type CanvasNodeInspectorProps = {
   onSaveAnnotation: (nodeId: string) => Promise<void>;
   onGroup?: () => void;
   onUngroup?: () => void;
+  onRunSelection?: () => void;
   onClose: () => void;
 };
 
@@ -34,12 +36,14 @@ export default function CanvasNodeInspector({
   upstream,
   disabled = false,
   selectionCount = 0,
+  selectedRunnableCount = 0,
   onChange,
   onGenerate,
   onSyncTask,
   onSaveAnnotation,
   onGroup,
   onUngroup,
+  onRunSelection,
   onClose,
 }: CanvasNodeInspectorProps) {
   const { previewMedia } = useCanvasNodeActions();
@@ -47,10 +51,25 @@ export default function CanvasNodeInspector({
     return (
       <aside className="qmdh-canvas-inspector is-empty">
         <strong>节点配置</strong>
-        {selectionCount > 1 ? (
+        {selectionCount > 0 ? (
           <>
-            <p>已选中 {selectionCount} 个节点，可编组一起拖动。</p>
+            <p>
+              已选中 {selectionCount} 个对象
+              {selectedRunnableCount > 0
+                ? `，其中 ${selectedRunnableCount} 个可批量运行（选中编组会包含组内生成节点）。`
+                : "。可编组拖动；若选中编组，组内生成节点可批量运行。"}
+            </p>
             <div className="qmdh-canvas-inspector-multi">
+              {onRunSelection ? (
+                <button
+                  type="button"
+                  className="qmdh-canvas-inspector-generate"
+                  disabled={disabled || selectedRunnableCount === 0}
+                  onClick={onRunSelection}
+                >
+                  运行所选{selectedRunnableCount > 0 ? ` (${selectedRunnableCount})` : ""}
+                </button>
+              ) : null}
               <button type="button" disabled={disabled} onClick={onGroup}>
                 编组
               </button>
@@ -61,7 +80,7 @@ export default function CanvasNodeInspector({
           </>
         ) : (
           <p>
-            左键框选节点，中键平移画布。双击空白可加备注；右键添加生成 / 标注等节点。
+            左键框选节点，中键平移画布。双击空白可加备注；右键添加生成 / 标注等节点。选中编组或多项后可批量运行。
           </p>
         )}
       </aside>

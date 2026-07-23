@@ -24,8 +24,14 @@ import { CanvasNodeActionsProvider } from "./canvasNodeContext";
 import {
   collectUpstreamDeliverables,
   createUploadImageNode,
+  duplicateCanvasSelection,
   groupSelectedNodes,
+  isRunnableCanvasNode,
+  listRunnableNodeIdsForSelection,
+  listRunnableNodeIdsInTopoOrder,
+  pasteCanvasSnapshot,
   serializeCanvasGraph,
+  snapshotCanvasSelection,
   ungroupSelectedNodes,
   type CanvasNodeDefaults,
 } from "./canvasGraphUtils";
@@ -67,6 +73,9 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     url: string;
     compareUrl?: string | null;
   } | null>(null);
+  const [runningAll, setRunningAll] = useState(false);
+  const clipboardRef = useRef<{ nodes: CanvasFlowNode[]; edges: Edge[] } | null>(null);
+  const runningAllRef = useRef(false);
 
   const sessionLoading = isTemplateMode ? templateEditor.loading : canvas.loading;
   const sessionSaving = isTemplateMode ? templateEditor.saving : canvas.saving;
@@ -292,6 +301,41 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     });
   }, [edges, persistGraph, selectedNodeIds, viewport]);
 
+  const canDuplicate = selectedNodeIds.length > 0;
+
+  const onDuplicateSelection = useCallback(() => {
+    if (sessionLoading || selectedNodeIds.length === 0) return;
+    const result = duplicateCanvasSelection(nodes, edges, selectedNodeIds);
+    if (!result) return;
+    setNodes(result.nodes);
+    setEdges(result.edges);
+    setSelectedNodeIds(result.createdIds);
+    persistGraph(result.nodes, result.edges, viewport);
+    setBannerError("");
+    setBannerOk(`已复制 ${result.createdIds.length} 个节点`);
+  }, [edges, nodes, persistGraph, selectedNodeIds, sessionLoading, viewport]);
+
+  const onCopySelection = useCallback(() => {
+    if (selectedNodeIds.length === 0) return;
+    const snapshot = snapshotCanvasSelection(nodes, edges, selectedNodeIds);
+    if (!snapshot) return;
+    clipboardRef.current = snapshot;
+    setBannerOk(`已复制 ${snapshot.nodes.length} 个节点（Ctrl+V 粘贴）`);
+    setBannerError("");
+  }, [edges, nodes, selectedNodeIds]);
+
+  const onPasteSelection = useCallback(() => {
+    if (sessionLoading || !clipboardRef.current) return;
+    const result = pasteCanvasSnapshot(nodes, edges, clipboardRef.current);
+    if (!result) return;
+    setNodes(result.nodes);
+    setEdges(result.edges);
+    setSelectedNodeIds(result.createdIds);
+    persistGraph(result.nodes, result.edges, viewport);
+    setBannerError("");
+    setBannerOk(`已粘贴 ${result.createdIds.length} 个节点`);
+  }, [edges, nodes, persistGraph, sessionLoading, viewport]);
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (sessionLoading) return;
@@ -301,17 +345,34 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
         return;
       }
-      if (event.key.toLowerCase() === "g" && event.shiftKey) {
+      const key = event.key.toLowerCase();
+      if (key === "g" && event.shiftKey) {
         event.preventDefault();
         onUngroupSelection();
-      } else if (event.key.toLowerCase() === "g") {
+      } else if (key === "g") {
         event.preventDefault();
         onGroupSelection();
+      } else if (key === "d") {
+        event.preventDefault();
+        onDuplicateSelection();
+      } else if (key === "c") {
+        event.preventDefault();
+        onCopySelection();
+      } else if (key === "v") {
+        event.preventDefault();
+        onPasteSelection();
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sessionLoading, onGroupSelection, onUngroupSelection]);
+  }, [
+    sessionLoading,
+    onCopySelection,
+    onDuplicateSelection,
+    onGroupSelection,
+    onPasteSelection,
+    onUngroupSelection,
+  ]);
 
   const uploadNodeImage = useCallback(
     async (nodeId: string, file: File) => {
@@ -425,8 +486,8 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   const runGenerate = useCanvasNodeGenerate(providers, nodes, edges, patchNode);
 
   const handleGenerate = useCallback(
-    (nodeId: string, data: GenerateNodeData) => {
-      void runGenerate(nodeId, {
+    async (nodeId: string, data: GenerateNodeData) => {
+      await runGenerate(nodeId, {
         ...data,
         projectCode: data.projectCode || projectCode,
         requestedProvider:
@@ -447,6 +508,96 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     },
     [patchNode]
   );
+
+  const runnableCount = useMemo(
+    () => nodes.filter(isRunnableCanvasNode).length,
+    [nodes]
+  );
+
+  const selectedRunnableCount = useMemo(
+    () => listRunnableNodeIdsForSelection(nodes, edges, selectedNodeIds).order.length,
+    [edges, nodes, selectedNodeIds]
+  );
+
+  const runWorkflow = useCallback(
+    async (mode: "all" | "selection") => {
+      if (sessionLoading || runningAllRef.current || isTemplateMode) return;
+
+      const label = mode === "all" ? "全局运行" : "批量运行";
+      const scoped =
+        mode === "selection"
+          ? listRunnableNodeIdsForSelection(nodesRef.current, edges, selectedNodeIds)
+          : {
+              ...listRunnableNodeIdsInTopoOrder(nodesRef.current, edges),
+              expandedIds: new Set<string>(),
+            };
+      const { order, cycle } = scoped;
+
+      if (cycle) {
+        setBannerError(
+          mode === "selection"
+            ? "所选节点之间存在环状依赖，无法批量运行"
+            : "工作流存在环状依赖，无法全局运行"
+        );
+        setBannerOk("");
+        return;
+      }
+      if (order.length === 0) {
+        setBannerError(
+          mode === "selection"
+            ? "所选范围内没有可运行的生成节点（文生图 / 图生图 / 视频 / 放大；选中编组会包含组内节点）"
+            : "没有可运行的生成节点（文生图 / 图生图 / 视频 / 放大）"
+        );
+        setBannerOk("");
+        return;
+      }
+
+      runningAllRef.current = true;
+      setRunningAll(true);
+      setBannerError("");
+      setBannerOk(`${label} 0/${order.length}`);
+
+      try {
+        let finished = 0;
+        for (const nodeId of order) {
+          const latest = nodesRef.current.find((node) => node.id === nodeId);
+          if (!latest || !isGenerateNode(latest) || !isRunnableCanvasNode(latest)) {
+            finished += 1;
+            continue;
+          }
+          const alreadyDone =
+            latest.data.status === "completed" && latest.data.assetUrls.some((url) => Boolean(url));
+          if (alreadyDone) {
+            finished += 1;
+            setBannerOk(`${label} ${finished}/${order.length}（已跳过有结果的节点）`);
+            continue;
+          }
+
+          setBannerOk(`${label} ${finished + 1}/${order.length}：${latest.data.label || nodeId}`);
+          await handleGenerate(nodeId, latest.data);
+
+          const after = nodesRef.current.find((node) => node.id === nodeId);
+          if (after && isGenerateNode(after) && after.data.status === "failed") {
+            setBannerError(
+              `节点「${after.data.label || nodeId}」失败：${after.data.errorMessage || "请检查配置"}，已停止后续节点`
+            );
+            setBannerOk("");
+            return;
+          }
+          finished += 1;
+          setBannerOk(`${label} ${finished}/${order.length}`);
+        }
+        setBannerOk(`${label}完成：${finished}/${order.length}`);
+      } finally {
+        runningAllRef.current = false;
+        setRunningAll(false);
+      }
+    },
+    [edges, handleGenerate, isTemplateMode, selectedNodeIds, sessionLoading]
+  );
+
+  const handleRunAll = useCallback(() => void runWorkflow("all"), [runWorkflow]);
+  const handleRunSelection = useCallback(() => void runWorkflow("selection"), [runWorkflow]);
 
   const getUpstreamDeliverables = useCallback(
     (nodeId: string) => collectUpstreamDeliverables(nodeId, nodes, edges),
@@ -472,7 +623,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   const nodeActions = useMemo(
     () => ({
       providers,
-      disabled: sessionLoading,
+      disabled: sessionLoading || runningAll,
       patchNode,
       patchNoteNode,
       generateNode: handleGenerate,
@@ -485,6 +636,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     }),
     [
       sessionLoading,
+      runningAll,
       getUpstreamDeliverables,
       handleGenerate,
       handleSyncNodeTask,
@@ -589,23 +741,53 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
           </div>
           <div className="qmdh-canvas-toolbar-center">
             <span className="qmdh-canvas-toolbar-hint">
-              右键添加节点 · 左键框选 · 中键平移 · Ctrl+G 编组 · Ctrl+Shift+G 解散 · 双击空白加备注
+              右键添加 · 框选 · Ctrl+C/V 复制粘贴 · Ctrl+D 原地复制 · Ctrl+G 编组 · 选中后可「运行所选」
             </span>
           </div>
           <div className="qmdh-canvas-toolbar-right">
+            {!isTemplateMode ? (
+              <>
+                <button
+                  type="button"
+                  className="qmdh-canvas-toolbar-run"
+                  disabled={sessionLoading || runningAll || runnableCount === 0}
+                  onClick={handleRunAll}
+                  title="按连线顺序串行运行所有文生图/图生图/视频/放大节点；已有结果的节点会跳过"
+                >
+                  {runningAll ? "运行中…" : "全部运行"}
+                </button>
+                <button
+                  type="button"
+                  className="qmdh-canvas-toolbar-run is-secondary"
+                  disabled={sessionLoading || runningAll || selectedRunnableCount === 0}
+                  onClick={handleRunSelection}
+                  title="只运行当前选中范围内的生成节点；选中编组会包含组内子节点"
+                >
+                  运行所选{selectedRunnableCount > 0 ? ` (${selectedRunnableCount})` : ""}
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              disabled={!canDuplicate || sessionLoading || runningAll}
+              onClick={onDuplicateSelection}
+              title="复制所选节点（Ctrl+D）"
+            >
+              复制
+            </button>
             {!isTemplateMode && canUseOpsViews ? (
               <button
                 type="button"
-                disabled={!canvas.activeProject || sessionLoading || publishingTemplate}
+                disabled={!canvas.activeProject || sessionLoading || publishingTemplate || runningAll}
                 onClick={() => void handlePublishAsTemplate()}
               >
                 {publishingTemplate ? "发布中…" : "发布为模板"}
               </button>
             ) : null}
-            <button type="button" disabled={!canGroup || sessionLoading} onClick={onGroupSelection}>
+            <button type="button" disabled={!canGroup || sessionLoading || runningAll} onClick={onGroupSelection}>
               编组
             </button>
-            <button type="button" disabled={!canUngroup || sessionLoading} onClick={onUngroupSelection}>
+            <button type="button" disabled={!canUngroup || sessionLoading || runningAll} onClick={onUngroupSelection}>
               解散
             </button>
             <span>{providerHint}</span>
@@ -678,7 +860,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
             nodeDefaults={nodeDefaults}
             canGroup={canGroup}
             canUngroup={canUngroup}
-            disabled={sessionLoading}
+            disabled={sessionLoading || runningAll}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onEdgesReplace={onEdgesReplace}
@@ -694,8 +876,9 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
             node={selectedNode}
             providers={providers}
             upstream={selectedUpstream}
-            disabled={sessionLoading}
+            disabled={sessionLoading || runningAll}
             selectionCount={selectedNodeIds.length}
+            selectedRunnableCount={selectedRunnableCount}
             onChange={patchNode}
             onGenerate={handleGenerate}
             onSyncTask={handleSyncNodeTask}
@@ -703,6 +886,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
             onSaveAnnotation={saveAnnotation}
             onGroup={onGroupSelection}
             onUngroup={onUngroupSelection}
+            onRunSelection={handleRunSelection}
             onClose={() => setSelectedNodeIds([])}
           />
         </div>

@@ -12,6 +12,7 @@ import { CanvasDraftInput, CanvasDraftTextarea } from "./CanvasDraftField";
 import CanvasModelSelect from "./CanvasModelSelect";
 import { useCanvasNodeActions } from "./canvasNodeContext";
 import { NODE_KIND_LABEL, type GenerateNodeData } from "./canvasTypes";
+import { canSyncCanvasNodeTask } from "./useCanvasNodeGenerate";
 
 type GenerateNodeProps = NodeProps<Node<GenerateNodeData, "generate">>;
 
@@ -20,6 +21,7 @@ const statusLabel: Record<GenerateNodeData["status"], string> = {
   submitting: "提交中",
   pending: "排队中",
   running: "生成中",
+  awaiting_result: "待回填",
   completed: "已完成",
   failed: "失败",
 };
@@ -30,6 +32,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
     disabled,
     patchNode,
     generateNode,
+    syncNodeTask,
     uploadNodeImage,
     saveAnnotation,
     getUpstreamDeliverables,
@@ -47,6 +50,23 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
     ? data.assetUrls[0] || baseImage
     : data.assetUrls[0] || data.previewImagePath || data.referenceImages[0] || "";
   const busy = data.status === "submitting" || data.status === "pending" || data.status === "running";
+  const canSync = canSyncCanvasNodeTask(data);
+  const resultUrl = data.assetUrls[0] || "";
+  const originalUrl =
+    data.referenceImages.find((path) => path && path !== resultUrl) ||
+    upstream.images.find((path) => path && path !== resultUrl) ||
+    "";
+
+  function openPreview(url: string) {
+    const isVideo = /\.(mp4|webm|mov)(\?|$)/i.test(url);
+    const canCompare =
+      !isVideo &&
+      Boolean(resultUrl) &&
+      url === resultUrl &&
+      Boolean(originalUrl) &&
+      originalUrl !== resultUrl;
+    previewMedia(url, canCompare ? originalUrl : null);
+  }
   const needsInput = data.nodeKind === "img2img" || isUpscale || isAnnotate;
   const hasUpstreamMedia = upstream.images.length > 0 || upstream.videos.length > 0;
   const hasLocalImage = data.referenceImages.length > 0 || data.assetUrls.length > 0 || Boolean(baseImage);
@@ -112,7 +132,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
             <button
               type="button"
               className="qmdh-canvas-node-preview-hit nodrag nopan"
-              onClick={() => previewMedia(preview)}
+              onClick={() => openPreview(preview)}
             >
               <img src={preview} alt="" className="qmdh-canvas-node-preview is-fill" />
             </button>
@@ -127,17 +147,19 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
               tool={data.annotationTool}
               color={data.annotationColor}
               width={data.annotationWidth}
+              opacity={data.annotationOpacity}
               disabled={disabled || busy}
               onChangeStrokes={(annotationStrokes) => patch({ annotationStrokes })}
               onToolChange={(annotationTool) => patch({ annotationTool })}
               onColorChange={(annotationColor) => patch({ annotationColor })}
               onWidthChange={(annotationWidth) => patch({ annotationWidth })}
+              onOpacityChange={(annotationOpacity) => patch({ annotationOpacity })}
             />
           ) : preview ? (
             <button
               type="button"
               className="qmdh-canvas-node-preview-hit nodrag nopan"
-              onClick={() => previewMedia(preview)}
+              onClick={() => openPreview(preview)}
             >
               <img src={preview} alt="" className="qmdh-canvas-node-preview is-fill" />
             </button>
@@ -151,7 +173,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
                 <button
                   type="button"
                   className="qmdh-canvas-node-preview-hit nodrag nopan"
-                  onClick={() => previewMedia(preview)}
+                  onClick={() => openPreview(preview)}
                 >
                   <video src={preview} className="qmdh-canvas-node-preview" muted playsInline />
                 </button>
@@ -159,7 +181,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
                 <button
                   type="button"
                   className="qmdh-canvas-node-preview-hit nodrag nopan"
-                  onClick={() => previewMedia(preview)}
+                  onClick={() => openPreview(preview)}
                 >
                   <img src={preview} alt="" className="qmdh-canvas-node-preview" />
                 </button>
@@ -202,7 +224,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
               <button
                 type="button"
                 className="qmdh-canvas-node-preview-hit is-compact nodrag nopan"
-                onClick={() => previewMedia(preview)}
+                onClick={() => openPreview(preview)}
               >
                 <img src={preview} alt="" className="qmdh-canvas-node-preview is-compact" />
               </button>
@@ -364,6 +386,20 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
           >
             {busy ? "保存中…" : data.status === "failed" ? "重试保存" : "保存标注"}
           </button>
+        ) : canSync ? (
+          <div className="qmdh-canvas-node-foot-actions">
+            <button type="button" disabled={disabled || busy} onClick={() => void syncNodeTask(id, data)}>
+              拉取结果
+            </button>
+            <button
+              type="button"
+              className="is-secondary"
+              disabled={disabled || busy || !canSubmit}
+              onClick={() => generateNode(id, data)}
+            >
+              重新生成
+            </button>
+          </div>
         ) : (
           <button
             type="button"

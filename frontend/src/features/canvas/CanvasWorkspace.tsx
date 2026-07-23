@@ -11,6 +11,7 @@ import {
 } from "@xyflow/react";
 
 import { api, type CanvasTemplateSummary, type Provider } from "../../api";
+import MediaCompareSlider from "../../components/shared/MediaCompareSlider";
 import { useAuth } from "../../context/AuthContext";
 import { isRuntimeUpscaleProvider, publicProviderDisplayName } from "../studio/modelAdminUtils";
 import { firstCanvasProviderName } from "./canvasProviderGroups";
@@ -37,7 +38,7 @@ import type {
 import { isGenerateNode, isGroupNode } from "./canvasTypes";
 import { graphFromActiveProject, useCanvasProject } from "./useCanvasProject";
 import { graphFromTemplate, useCanvasTemplateEditor } from "./useCanvasTemplateEditor";
-import { resumeCanvasNodeTaskPolls, useCanvasNodeGenerate } from "./useCanvasNodeGenerate";
+import { resumeCanvasNodeTaskPolls, syncCanvasNodeTask, useCanvasNodeGenerate, isResumableCanvasNodeTask } from "./useCanvasNodeGenerate";
 
 type CanvasWorkspaceProps = {
   editTemplateId?: number;
@@ -62,7 +63,10 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   const [bannerOk, setBannerOk] = useState("");
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [bannerError, setBannerError] = useState("");
-  const [mediaPreviewUrl, setMediaPreviewUrl] = useState<string | null>(null);
+  const [mediaPreview, setMediaPreview] = useState<{
+    url: string;
+    compareUrl?: string | null;
+  } | null>(null);
 
   const sessionLoading = isTemplateMode ? templateEditor.loading : canvas.loading;
   const sessionSaving = isTemplateMode ? templateEditor.saving : canvas.saving;
@@ -228,13 +232,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     () =>
       nodes
         .filter(isGenerateNode)
-        .filter(
-          (node) =>
-            typeof node.data.taskId === "number" &&
-            (node.data.status === "pending" ||
-              node.data.status === "running" ||
-              node.data.status === "submitting")
-        )
+        .filter((node) => isResumableCanvasNodeTask(node.data))
         .map((node) => `${node.id}:${node.data.taskId}`)
         .sort()
         .join("|"),
@@ -443,6 +441,13 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     [nodeDefaults, projectCode, runGenerate]
   );
 
+  const handleSyncNodeTask = useCallback(
+    (nodeId: string, data: GenerateNodeData) => {
+      void syncCanvasNodeTask(nodeId, data, patchNode);
+    },
+    [patchNode]
+  );
+
   const getUpstreamDeliverables = useCallback(
     (nodeId: string) => collectUpstreamDeliverables(nodeId, nodes, edges),
     [edges, nodes]
@@ -471,15 +476,18 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
       patchNode,
       patchNoteNode,
       generateNode: handleGenerate,
+      syncNodeTask: handleSyncNodeTask,
       uploadNodeImage,
       saveAnnotation,
       getUpstreamDeliverables,
-      previewMedia: (url: string) => setMediaPreviewUrl(url),
+      previewMedia: (url: string, compareUrl?: string | null) =>
+        setMediaPreview({ url, compareUrl: compareUrl || null }),
     }),
     [
       sessionLoading,
       getUpstreamDeliverables,
       handleGenerate,
+      handleSyncNodeTask,
       patchNode,
       patchNoteNode,
       providers,
@@ -690,6 +698,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
             selectionCount={selectedNodeIds.length}
             onChange={patchNode}
             onGenerate={handleGenerate}
+            onSyncTask={handleSyncNodeTask}
             onUploadImage={uploadNodeImage}
             onSaveAnnotation={saveAnnotation}
             onGroup={onGroupSelection}
@@ -698,31 +707,38 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
           />
         </div>
       </div>
-      {mediaPreviewUrl ? (
+      {mediaPreview ? (
         <div
           className="media-lightbox"
           role="dialog"
           aria-modal="true"
-          aria-label="画布媒体预览"
-          onClick={() => setMediaPreviewUrl(null)}
+          aria-label={mediaPreview.compareUrl ? "画布媒体对比预览" : "画布媒体预览"}
+          onClick={() => setMediaPreview(null)}
         >
-          <div className="media-lightbox-surface" onClick={(event) => event.stopPropagation()}>
+          <div
+            className={`media-lightbox-surface${mediaPreview.compareUrl ? " is-compare" : ""}`}
+            onClick={(event) => event.stopPropagation()}
+          >
             <header className="media-lightbox-head">
-              <span className="media-lightbox-title">预览</span>
+              <span className="media-lightbox-title">
+                {mediaPreview.compareUrl ? "生成图 · 原图对比" : "预览"}
+              </span>
               <button
                 type="button"
                 className="media-lightbox-close"
                 aria-label="关闭"
-                onClick={() => setMediaPreviewUrl(null)}
+                onClick={() => setMediaPreview(null)}
               >
                 ×
               </button>
             </header>
-            <div className="media-lightbox-body">
-              {/\.(mp4|webm|mov)(\?|$)/i.test(mediaPreviewUrl) ? (
-                <video src={mediaPreviewUrl} controls autoPlay playsInline />
+            <div className={`media-lightbox-body${mediaPreview.compareUrl ? " is-compare" : ""}`}>
+              {/\.(mp4|webm|mov)(\?|$)/i.test(mediaPreview.url) ? (
+                <video src={mediaPreview.url} controls autoPlay playsInline />
+              ) : mediaPreview.compareUrl ? (
+                <MediaCompareSlider leftSrc={mediaPreview.url} rightSrc={mediaPreview.compareUrl} />
               ) : (
-                <img src={mediaPreviewUrl} alt="" />
+                <img src={mediaPreview.url} alt="" />
               )}
             </div>
           </div>

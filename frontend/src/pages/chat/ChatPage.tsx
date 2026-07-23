@@ -623,7 +623,7 @@ export default function ChatPage() {
               <div className="chat-agent-controls">
                 <label
                   className={`chat-agent-toggle${agentMode ? " is-on" : " is-off"}`}
-                  title="开启后可检索院内灵感、模板与生成栈配置"
+                  title="开启后可搜索模板、创建生图/改图/视频任务，并使用记忆"
                 >
                   <input
                     type="checkbox"

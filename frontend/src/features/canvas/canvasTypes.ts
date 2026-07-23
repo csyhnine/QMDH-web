@@ -14,6 +14,7 @@ export type CanvasNodeStatus =
   | "submitting"
   | "pending"
   | "running"
+  | "awaiting_result"
   | "completed"
   | "failed";
 
@@ -52,6 +53,7 @@ export type GenerateNodeData = {
   annotationTool: AnnotationTool;
   annotationColor: string;
   annotationWidth: number;
+  annotationOpacity: number;
 };
 
 export type GroupNodeData = {

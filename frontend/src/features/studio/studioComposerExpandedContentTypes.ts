@@ -44,6 +44,7 @@ export type StudioComposerBodyProps = Pick<
   | "onPromptSubmitShortcut"
   | "onReferenceDrop"
   | "onRemoveReferenceUpload"
+  | "onReplaceReferenceUpload"
 >;
 
 export type StudioComposerModeSwitchProps = {
@@ -56,6 +57,7 @@ export type StudioReferenceDropzoneProps = {
   onOpenReferencePicker: () => void;
   onReferenceDrop: (event: DragEvent<HTMLElement>) => void;
   onRemoveReferenceUpload: (index: number) => void;
+  onReplaceReferenceUpload?: (index: number, item: ReferenceUploadItem) => void;
 };
 
 export type StudioPromptTextareaProps = Pick<

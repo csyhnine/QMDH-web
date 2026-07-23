@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import {
   ANNOTATION_COLORS,
   ANNOTATION_TOOL_LABEL,
+  clampAnnotationOpacity,
+  DEFAULT_ANNOTATION_OPACITY,
   newAnnotationId,
   type AnnotationStroke,
   type AnnotationTool,
@@ -15,11 +17,18 @@ type AnnotateBoardProps = {
   tool: AnnotationTool;
   color: string;
   width: number;
+  opacity?: number;
   disabled?: boolean;
+  /** Max CSS width for the drawing surface (keeps aspect ratio). */
+  maxWidth?: number;
+  /** Max CSS height for the drawing surface (keeps aspect ratio). */
+  maxHeight?: number;
+  className?: string;
   onChangeStrokes: (strokes: AnnotationStroke[]) => void;
   onToolChange: (tool: AnnotationTool) => void;
   onColorChange: (color: string) => void;
   onWidthChange: (width: number) => void;
+  onOpacityChange?: (opacity: number) => void;
 };
 
 export default function AnnotateBoard({
@@ -28,11 +37,16 @@ export default function AnnotateBoard({
   tool,
   color,
   width,
+  opacity = DEFAULT_ANNOTATION_OPACITY,
   disabled = false,
+  maxWidth = 420,
+  maxHeight,
+  className = "",
   onChangeStrokes,
   onToolChange,
   onColorChange,
   onWidthChange,
+  onOpacityChange,
 }: AnnotateBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
@@ -40,6 +54,7 @@ export default function AnnotateBoard({
   const drawingRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
+  const opacityValue = clampAnnotationOpacity(opacity);
 
   const paint = useCallback((nextStrokes: AnnotationStroke[], draft: AnnotationStroke | null = null) => {
     const canvas = canvasRef.current;
@@ -69,10 +84,12 @@ export default function AnnotateBoard({
         if (cancelled) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
-        const maxW = 420;
-        const scale = Math.min(1, maxW / Math.max(1, img.naturalWidth || maxW));
-        const cssW = Math.max(160, Math.round((img.naturalWidth || maxW) * scale));
-        const cssH = Math.max(160, Math.round((img.naturalHeight || maxW) * scale));
+        const natW = Math.max(1, img.naturalWidth || maxWidth);
+        const natH = Math.max(1, img.naturalHeight || Math.round(natW * 0.75));
+        const heightCap = Math.max(120, maxHeight ?? Math.round(maxWidth * 1.25));
+        const scale = Math.min(1, maxWidth / natW, heightCap / natH);
+        const cssW = Math.max(120, Math.round(natW * scale));
+        const cssH = Math.max(80, Math.round(natH * scale));
         const dpr = Math.max(1, window.devicePixelRatio || 1);
         canvas.width = Math.round(cssW * dpr);
         canvas.height = Math.round(cssH * dpr);
@@ -95,7 +112,7 @@ export default function AnnotateBoard({
     return () => {
       cancelled = true;
     };
-  }, [baseUrl, paint]);
+  }, [baseUrl, maxHeight, maxWidth, paint]);
 
   useEffect(() => {
     if (!ready) return;
@@ -127,6 +144,7 @@ export default function AnnotateBoard({
           id: newAnnotationId(),
           type: "text",
           color,
+          opacity: opacityValue,
           x: p.x,
           y: p.y,
           text: text.trim(),
@@ -137,15 +155,42 @@ export default function AnnotateBoard({
     }
 
     if (tool === "pen") {
-      draftRef.current = { id: newAnnotationId(), type: "pen", color, width, points: [p] };
+      draftRef.current = {
+        id: newAnnotationId(),
+        type: "pen",
+        color,
+        width,
+        opacity: opacityValue,
+        points: [p],
+      };
+    } else if (tool === "region") {
+      draftRef.current = {
+        id: newAnnotationId(),
+        type: "region",
+        color,
+        width,
+        opacity: opacityValue,
+        points: [p],
+      };
     } else if (tool === "rect" || tool === "ellipse") {
-      draftRef.current = { id: newAnnotationId(), type: tool, color, width, x: p.x, y: p.y, w: 0, h: 0 };
+      draftRef.current = {
+        id: newAnnotationId(),
+        type: tool,
+        color,
+        width,
+        opacity: opacityValue,
+        x: p.x,
+        y: p.y,
+        w: 0,
+        h: 0,
+      };
     } else {
       draftRef.current = {
         id: newAnnotationId(),
         type: "arrow",
         color,
         width,
+        opacity: opacityValue,
         x1: p.x,
         y1: p.y,
         x2: p.x,
@@ -159,7 +204,7 @@ export default function AnnotateBoard({
     if (!drawingRef.current || !draftRef.current) return;
     const p = normFromEvent(event);
     const draft = draftRef.current;
-    if (draft.type === "pen") {
+    if (draft.type === "pen" || draft.type === "region") {
       draftRef.current = { ...draft, points: draft.points.concat(p) };
     } else if (draft.type === "rect" || draft.type === "ellipse") {
       draftRef.current = { ...draft, w: p.x - draft.x, h: p.y - draft.y };
@@ -179,6 +224,10 @@ export default function AnnotateBoard({
       paint(strokes, null);
       return;
     }
+    if (draft.type === "region" && draft.points.length < 3) {
+      paint(strokes, null);
+      return;
+    }
     if ((draft.type === "rect" || draft.type === "ellipse") && Math.abs(draft.w) < 0.01 && Math.abs(draft.h) < 0.01) {
       paint(strokes, null);
       return;
@@ -187,7 +236,7 @@ export default function AnnotateBoard({
   }
 
   return (
-    <div className="qmdh-canvas-annotate nodrag nopan">
+    <div className={`qmdh-canvas-annotate nodrag nopan${className ? ` ${className}` : ""}`}>
       <div className="qmdh-canvas-annotate-tools">
         {(Object.keys(ANNOTATION_TOOL_LABEL) as AnnotationTool[]).map((item) => (
           <button
@@ -233,6 +282,17 @@ export default function AnnotateBoard({
             value={width}
             disabled={disabled}
             onChange={(event) => onWidthChange(Number(event.target.value))}
+          />
+        </label>
+        <label className="qmdh-canvas-annotate-width">
+          透明
+          <input
+            type="range"
+            min={5}
+            max={100}
+            value={Math.round(opacityValue * 100)}
+            disabled={disabled || !onOpacityChange}
+            onChange={(event) => onOpacityChange?.(Number(event.target.value) / 100)}
           />
         </label>
       </div>

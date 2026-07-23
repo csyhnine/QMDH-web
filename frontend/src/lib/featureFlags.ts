@@ -3,14 +3,13 @@ export const isStudioAgentEnabled = import.meta.env.VITE_STUDIO_AGENT_ENABLED ==
 
 /**
  * Show Chat「设计助手」开关 / 能力抽屉。
- * B1 代码已合入，但产品未完整前默认隐藏；本地可设 `VITE_CHAT_AGENT_UI_ENABLED=true` 打开。
- * 普通 Chat 对话仍照常落库，用于后续个性化助手方向。
+ * 默认开启；临时下线可设 `VITE_CHAT_AGENT_UI_ENABLED=false`。
  */
-export const isChatAgentUiEnabled = import.meta.env.VITE_CHAT_AGENT_UI_ENABLED === "true";
+export const isChatAgentUiEnabled = import.meta.env.VITE_CHAT_AGENT_UI_ENABLED !== "false";
 
-/** Default Chat 助手模式（仅 UI 开启时生效）。 */
+/** Default Chat 助手模式（仅 UI 开启时生效）。默认开启。 */
 export const chatAgentModeDefault =
-  isChatAgentUiEnabled && import.meta.env.VITE_CHAT_AGENT_MODE_DEFAULT === "true";
+  isChatAgentUiEnabled && import.meta.env.VITE_CHAT_AGENT_MODE_DEFAULT !== "false";
 
 /**
  * Designer infinite canvas（无限画布）。

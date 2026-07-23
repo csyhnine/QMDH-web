@@ -135,6 +135,9 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        VITE_CHAT_AGENT_UI_ENABLED: ${VITE_CHAT_AGENT_UI_ENABLED:-true}
+        VITE_CHAT_AGENT_MODE_DEFAULT: ${VITE_CHAT_AGENT_MODE_DEFAULT:-true}
     depends_on:
       backend:
         condition: service_healthy

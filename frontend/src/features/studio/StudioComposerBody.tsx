@@ -14,6 +14,7 @@ export default function StudioComposerBody({
   onPromptSubmitShortcut,
   onReferenceDrop,
   onRemoveReferenceUpload,
+  onReplaceReferenceUpload,
 }: StudioComposerBodyProps) {
   return (
     <div className="composer-body">
@@ -24,6 +25,7 @@ export default function StudioComposerBody({
           onOpenReferencePicker={onOpenReferencePicker}
           onReferenceDrop={onReferenceDrop}
           onRemoveReferenceUpload={onRemoveReferenceUpload}
+          onReplaceReferenceUpload={onReplaceReferenceUpload}
         />
       </div>
 

@@ -10,6 +10,7 @@ import CanvasModelSelect from "./CanvasModelSelect";
 import type { UpstreamDeliverables } from "./canvasNodeContext";
 import { useCanvasNodeActions } from "./canvasNodeContext";
 import { NODE_KIND_LABEL, type CanvasGenerateNode, type GenerateNodeData } from "./canvasTypes";
+import { canSyncCanvasNodeTask } from "./useCanvasNodeGenerate";
 
 type CanvasNodeInspectorProps = {
   node: CanvasGenerateNode | null;
@@ -19,6 +20,7 @@ type CanvasNodeInspectorProps = {
   selectionCount?: number;
   onChange: (nodeId: string, patch: Partial<GenerateNodeData>) => void;
   onGenerate: (nodeId: string, data: GenerateNodeData) => void;
+  onSyncTask?: (nodeId: string, data: GenerateNodeData) => void;
   onUploadImage: (nodeId: string, file: File) => Promise<void>;
   onSaveAnnotation: (nodeId: string) => Promise<void>;
   onGroup?: () => void;
@@ -34,6 +36,7 @@ export default function CanvasNodeInspector({
   selectionCount = 0,
   onChange,
   onGenerate,
+  onSyncTask,
   onSaveAnnotation,
   onGroup,
   onUngroup,
@@ -67,7 +70,13 @@ export default function CanvasNodeInspector({
 
   const data = node.data;
   const busy = data.status === "submitting" || data.status === "pending" || data.status === "running";
+  const canSync = canSyncCanvasNodeTask(data);
   const resultPreview = data.assetUrls[0] || data.previewImagePath || data.referenceImages[0] || "";
+  const compareOriginal =
+    data.assetUrls[0] &&
+    (data.referenceImages.find((path) => path && path !== data.assetUrls[0]) ||
+      upstream.images.find((path) => path && path !== data.assetUrls[0]) ||
+      "");
   const isUpload = data.nodeKind === "upload";
   const isUpscale = data.nodeKind === "upscale";
   const isAnnotate = data.nodeKind === "annotate";
@@ -259,7 +268,26 @@ export default function CanvasNodeInspector({
 
           {data.errorMessage ? <p className="qmdh-canvas-node-error">{data.errorMessage}</p> : null}
 
-          {isUpload ? null : (
+          {isUpload ? null : canSync ? (
+            <div className="qmdh-canvas-inspector-actions">
+              <button
+                type="button"
+                className="qmdh-canvas-inspector-generate"
+                disabled={disabled || busy || !onSyncTask}
+                onClick={() => onSyncTask?.(node.id, data)}
+              >
+                拉取结果
+              </button>
+              <button
+                type="button"
+                className="qmdh-canvas-inspector-generate is-secondary"
+                disabled={disabled || busy || !canSubmit}
+                onClick={() => onGenerate(node.id, data)}
+              >
+                重新生成
+              </button>
+            </div>
+          ) : (
             <button
               type="button"
               className="qmdh-canvas-inspector-generate"
@@ -313,7 +341,12 @@ export default function CanvasNodeInspector({
                 <button
                   type="button"
                   className="qmdh-canvas-inspector-preview-hit"
-                  onClick={() => previewMedia(resultPreview)}
+                  onClick={() =>
+                    previewMedia(
+                      resultPreview,
+                      data.assetUrls[0] && compareOriginal ? compareOriginal : null
+                    )
+                  }
                 >
                   <img src={resultPreview} alt="" />
                 </button>

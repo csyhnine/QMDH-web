@@ -33,6 +33,7 @@ export function getStudioComposerBodyProps({
   onPromptSubmitShortcut,
   onReferenceDrop,
   onRemoveReferenceUpload,
+  onReplaceReferenceUpload,
 }: StudioComposerExpandedContentProps): StudioComposerBodyProps {
   return {
     promptTextareaRef,
@@ -45,6 +46,7 @@ export function getStudioComposerBodyProps({
     onPromptSubmitShortcut,
     onReferenceDrop,
     onRemoveReferenceUpload,
+    onReplaceReferenceUpload,
   };
 }
 

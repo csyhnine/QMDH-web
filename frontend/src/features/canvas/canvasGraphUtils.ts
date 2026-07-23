@@ -3,12 +3,14 @@ import type { Edge, Node, Viewport } from "@xyflow/react";
 import { defaultStudioForm, normalizeStudioResolution } from "../studio/studioConstants";
 import type { UpscaleNoise, UpscaleScale, UpscaleStyle } from "../studio/studioUpscaleOptions";
 import { nanoid } from "./canvasId";
+import { clampAnnotationOpacity } from "./annotateTypes";
 import type {
   CanvasFlowNode,
   CanvasGenerateNode,
   CanvasGraphState,
   CanvasGroupNode,
   CanvasNodeKind,
+  CanvasNodeStatus,
   CanvasNoteNode,
   GenerateNodeData,
   GroupNodeData,
@@ -32,6 +34,33 @@ const KNOWN_KINDS: CanvasNodeKind[] = [
   "upscale",
   "annotate",
 ];
+
+const KNOWN_STATUSES: CanvasNodeStatus[] = [
+  "idle",
+  "submitting",
+  "pending",
+  "running",
+  "awaiting_result",
+  "completed",
+  "failed",
+];
+
+function normalizeNodeStatus(
+  raw: unknown,
+  options: {
+    nodeKind: CanvasNodeKind;
+    assetUrls: string[];
+    referenceImages: string[];
+  }
+): CanvasNodeStatus {
+  if (typeof raw === "string" && (KNOWN_STATUSES as string[]).includes(raw)) {
+    return raw as CanvasNodeStatus;
+  }
+  if (options.nodeKind === "upload" && (options.assetUrls.length > 0 || options.referenceImages.length > 0)) {
+    return "completed";
+  }
+  return "idle";
+}
 
 export function parseCanvasGraph(raw: unknown): CanvasGraphState {
   if (!raw || typeof raw !== "object") return emptyCanvasGraph();
@@ -111,6 +140,8 @@ function normalizeStoredNode(node: Node): CanvasFlowNode {
   const nodeKind = inferNodeKind(data);
   const upscaleDefaults = defaultUpscaleFields();
   const annotationDefaults = defaultAnnotationFields();
+  const referenceImages = Array.isArray(data.referenceImages) ? data.referenceImages.map(String) : [];
+  const assetUrls = Array.isArray(data.assetUrls) ? data.assetUrls.map(String) : [];
   return {
     ...node,
     type: "generate",
@@ -127,15 +158,11 @@ function normalizeStoredNode(node: Node): CanvasFlowNode {
       requestedProvider: String(data.requestedProvider || ""),
       classification: String(data.classification || defaultStudioForm.classification),
       creationMode: creationModeForNodeKind(nodeKind),
-      referenceImages: Array.isArray(data.referenceImages) ? data.referenceImages.map(String) : [],
+      referenceImages,
       previewImagePath: data.previewImagePath ? String(data.previewImagePath) : undefined,
       taskId: typeof data.taskId === "number" ? data.taskId : null,
-      status:
-        data.status ||
-        (nodeKind === "upload" && (data.assetUrls?.length || data.referenceImages?.length)
-          ? "completed"
-          : "idle"),
-      assetUrls: Array.isArray(data.assetUrls) ? data.assetUrls.map(String) : [],
+      status: normalizeNodeStatus(data.status, { nodeKind, assetUrls, referenceImages }),
+      assetUrls,
       errorMessage: data.errorMessage ? String(data.errorMessage) : undefined,
       upscaleStyle: asUpscaleStyle(data.upscaleStyle ?? upscaleDefaults.upscaleStyle),
       upscaleNoise: asUpscaleNoise(data.upscaleNoise ?? upscaleDefaults.upscaleNoise),
@@ -146,6 +173,10 @@ function normalizeStoredNode(node: Node): CanvasFlowNode {
       annotationTool: data.annotationTool || annotationDefaults.annotationTool,
       annotationColor: String(data.annotationColor || annotationDefaults.annotationColor),
       annotationWidth: Number(data.annotationWidth) || annotationDefaults.annotationWidth,
+      annotationOpacity: clampAnnotationOpacity(
+        data.annotationOpacity,
+        annotationDefaults.annotationOpacity
+      ),
     },
   };
 }

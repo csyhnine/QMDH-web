@@ -15,6 +15,15 @@ type PatchNode = (nodeId: string, patch: Partial<GenerateNodeData>) => void;
 
 const activePollKeys = new Set<string>();
 
+/** Soft client wait budget before surfacing「拉取结果」. */
+const POLL_DEADLINE_MS = 15 * 60 * 1000;
+const POLL_FAST_WINDOW_MS = 3 * 60 * 1000;
+const POLL_FAST_INTERVAL_MS = 2000;
+const POLL_SLOW_INTERVAL_MS = 5000;
+
+const WAIT_TIMEOUT_MESSAGE = "等待较久，可点击「拉取结果」同步；也可在生成页查看任务。";
+const LEGACY_WAIT_TIMEOUT_HINT = "等待超时";
+
 async function sleep(ms: number) {
   await new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -43,6 +52,35 @@ function failureMessage(task: Task): string {
   if (typeof task.result?.message === "string") return task.result.message;
   if (typeof task.result?.error_summary === "string") return task.result.error_summary;
   return "生成失败，请重试";
+}
+
+export function isClientWaitTimeoutMessage(message: string | undefined): boolean {
+  const text = (message || "").trim();
+  if (!text) return false;
+  return text.includes(LEGACY_WAIT_TIMEOUT_HINT) || text.includes("拉取结果");
+}
+
+/** Nodes that still have a live Studio task to attach to (no new createTask). */
+export function canSyncCanvasNodeTask(data: Pick<GenerateNodeData, "taskId" | "status" | "errorMessage">): boolean {
+  if (typeof data.taskId !== "number") return false;
+  if (data.status === "awaiting_result") return true;
+  if (data.status === "failed" && isClientWaitTimeoutMessage(data.errorMessage)) return true;
+  return false;
+}
+
+export function isResumableCanvasNodeTask(
+  data: Pick<GenerateNodeData, "taskId" | "status" | "errorMessage">
+): boolean {
+  if (typeof data.taskId !== "number") return false;
+  if (
+    data.status === "pending" ||
+    data.status === "running" ||
+    data.status === "submitting" ||
+    data.status === "awaiting_result"
+  ) {
+    return true;
+  }
+  return data.status === "failed" && isClientWaitTimeoutMessage(data.errorMessage);
 }
 
 async function resolveCompletedUrls(task: Task, wantedType: "image" | "video"): Promise<string[]> {
@@ -76,8 +114,29 @@ export async function pollTaskUntilDone(
 
   try {
     let lastBusyStatus: GenerateNodeData["status"] | "" = "";
-    for (let attempt = 0; attempt < 90; attempt += 1) {
-      if (attempt > 0) await sleep(2000);
+    const startedAt = Date.now();
+    let attempt = 0;
+    let softNotified = false;
+
+    // Keep polling until the Studio task finishes. After POLL_DEADLINE_MS surface
+    // awaiting_result so the user can sync / regenerate, but do not abandon the taskId.
+    for (;;) {
+      if (attempt > 0) {
+        const elapsed = Date.now() - startedAt;
+        await sleep(elapsed < POLL_FAST_WINDOW_MS ? POLL_FAST_INTERVAL_MS : POLL_SLOW_INTERVAL_MS);
+      }
+      attempt += 1;
+
+      const elapsed = Date.now() - startedAt;
+      if (!softNotified && elapsed >= POLL_DEADLINE_MS) {
+        softNotified = true;
+        lastBusyStatus = "awaiting_result";
+        patchNode(nodeId, {
+          status: "awaiting_result",
+          errorMessage: WAIT_TIMEOUT_MESSAGE,
+          taskId,
+        });
+      }
 
       let latest: Task;
       try {
@@ -120,35 +179,79 @@ export async function pollTaskUntilDone(
         return;
       }
 
+      if (softNotified) {
+        // Stay on awaiting_result so「拉取结果」remains available while we keep polling.
+        continue;
+      }
+
       const nextStatus: GenerateNodeData["status"] =
         latest.status === "running" ? "running" : "pending";
       if (nextStatus !== lastBusyStatus) {
         lastBusyStatus = nextStatus;
         patchNode(nodeId, {
           status: nextStatus,
+          errorMessage: undefined,
           taskId,
         });
       }
     }
-    patchNode(nodeId, {
-      status: "failed",
-      errorMessage: "等待超时，请稍后在生成页查看任务状态。",
-      taskId,
-    });
   } finally {
     activePollKeys.delete(pollKey);
   }
 }
 
-export function resumeCanvasNodeTaskPolls(
-  nodes: CanvasFlowNode[],
+export async function syncCanvasNodeTask(
+  nodeId: string,
+  data: GenerateNodeData,
   patchNode: PatchNode
-) {
+): Promise<void> {
+  if (typeof data.taskId !== "number") return;
+  const taskId = data.taskId;
+  const wantedType = data.nodeKind === "video" ? "video" : "image";
+
+  // One-shot fetch so「拉取结果」works even when a background poller is already attached.
+  try {
+    const latest = await api.getTask(taskId);
+    if (latest.status === "failed") {
+      patchNode(nodeId, { status: "failed", errorMessage: failureMessage(latest), taskId });
+      return;
+    }
+    if (latest.status === "completed") {
+      let urls = await resolveCompletedUrls(latest, wantedType);
+      for (let retry = 0; retry < 3 && urls.length === 0; retry += 1) {
+        await sleep(1000);
+        try {
+          const again = await api.getTask(taskId);
+          urls = await resolveCompletedUrls(again, wantedType);
+        } catch {
+          break;
+        }
+      }
+      patchNode(nodeId, {
+        status: "completed",
+        assetUrls: urls,
+        errorMessage: undefined,
+        taskId,
+      });
+      return;
+    }
+  } catch {
+    // Fall through to resume polling.
+  }
+
+  patchNode(nodeId, {
+    status: "pending",
+    errorMessage: undefined,
+    taskId,
+  });
+  await pollTaskUntilDone(taskId, nodeId, patchNode, wantedType);
+}
+
+export function resumeCanvasNodeTaskPolls(nodes: CanvasFlowNode[], patchNode: PatchNode) {
   for (const node of nodes) {
     if (!isGenerateNode(node)) continue;
-    const { taskId, status, nodeKind } = node.data;
-    if (typeof taskId !== "number") continue;
-    if (status !== "pending" && status !== "running" && status !== "submitting") continue;
+    const { taskId, nodeKind } = node.data;
+    if (!isResumableCanvasNodeTask(node.data) || typeof taskId !== "number") continue;
     void pollTaskUntilDone(
       taskId,
       node.id,

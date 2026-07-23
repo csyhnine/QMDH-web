@@ -149,6 +149,7 @@ export function useStudioReferenceUploads({
     openReferencePicker,
     referenceUploads,
     removeReferenceUpload: referenceUploadState.removeReferenceUpload,
+    replaceReferenceUploadAt: referenceUploadState.replaceReferenceUploadAt,
     replaceReferenceUploads: referenceUploadState.replaceReferenceUploads,
     uploadingReference,
   };

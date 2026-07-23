@@ -44,6 +44,15 @@ export function useStudioReferenceUploadState({
     syncReferenceUploads(nextUploads);
   }
 
+  function replaceReferenceUploadAt(index: number, item: ReferenceUploadItem) {
+    const current = referenceUploadsRef.current;
+    if (index < 0 || index >= current.length) return;
+    const previous = current[index];
+    if (previous) releaseReferencePreview(previous.previewUrl);
+    const nextUploads = current.map((entry, currentIndex) => (currentIndex === index ? item : entry));
+    syncReferenceUploads(nextUploads);
+  }
+
   function replaceReferenceUploads(nextUploads: ReferenceUploadItem[]) {
     releaseReferencePreviews(referenceUploadsRef.current);
     setReferenceUploadItems(nextUploads);
@@ -65,6 +74,7 @@ export function useStudioReferenceUploadState({
     clearReferenceUploads,
     referenceUploads,
     removeReferenceUpload,
+    replaceReferenceUploadAt,
     replaceReferenceUploads,
     syncReferenceUploads,
   };

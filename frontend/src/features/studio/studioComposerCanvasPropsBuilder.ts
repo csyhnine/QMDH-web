@@ -116,6 +116,7 @@ export function buildStudioComposerCanvasProps({
     onReferenceDrop: referenceUpload.handleReferenceDrop,
     onReferenceInputChange: referenceUpload.handleReferenceInputChange,
     onRemoveReferenceUpload: referenceUpload.removeReferenceUpload,
+    onReplaceReferenceUpload: referenceUpload.replaceReferenceUploadAt,
     onResolutionSelect: (resolutionId) =>
       setStudioForm((current) => ({ ...current, resolution: resolutionId })),
     onSaveCustomTemplate: () => void studioTemplates.saveCustomTemplate(),

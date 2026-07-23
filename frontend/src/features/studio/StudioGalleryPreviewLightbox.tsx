@@ -1,3 +1,5 @@
+import MediaCompareSlider from "../../components/shared/MediaCompareSlider";
+import { resolveStudioCompareOriginalUrl } from "./studioCompareUtils";
 import type { StudioGalleryPreviewLightboxProps } from "./studioMediaLightboxTypes";
 import { isVideoAsset } from "./studioUtils";
 
@@ -10,25 +12,35 @@ export default function StudioGalleryPreviewLightbox({
 }: StudioGalleryPreviewLightboxProps) {
   const videoAsset = isVideoAsset(galleryPreview.asset);
   const canUseAsReference = !videoAsset && Boolean(onUseAsReference);
+  const compareUrl =
+    !videoAsset ? resolveStudioCompareOriginalUrl(galleryPreview.task, previewUrl) : null;
+  const showCompare = Boolean(compareUrl);
 
   return (
     <div
       className="media-lightbox"
       role="dialog"
       aria-modal="true"
-      aria-label={videoAsset ? "生成视频预览" : "生成图预览"}
+      aria-label={videoAsset ? "生成视频预览" : showCompare ? "生成图与原图对比" : "生成图预览"}
       onClick={onClose}
     >
-      <div className="media-lightbox-surface" onClick={(event) => event.stopPropagation()}>
+      <div
+        className={`media-lightbox-surface${showCompare ? " is-compare" : ""}`}
+        onClick={(event) => event.stopPropagation()}
+      >
         <header className="media-lightbox-head">
-          <span className="media-lightbox-title">{galleryPreview.asset.name}</span>
+          <span className="media-lightbox-title">
+            {showCompare ? `${galleryPreview.asset.name} · 对比` : galleryPreview.asset.name}
+          </span>
           <button type="button" className="media-lightbox-close" aria-label="关闭" onClick={onClose}>
             ×
           </button>
         </header>
-        <div className="media-lightbox-body">
+        <div className={`media-lightbox-body${showCompare ? " is-compare" : ""}`}>
           {videoAsset ? (
             <video src={previewUrl} controls autoPlay playsInline />
+          ) : showCompare && compareUrl ? (
+            <MediaCompareSlider leftSrc={previewUrl} rightSrc={compareUrl} />
           ) : (
             <img src={previewUrl} alt="" />
           )}

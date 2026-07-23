@@ -63,6 +63,7 @@ export type StudioComposerCanvasProps = {
   onReferenceDrop: (event: DragEvent<HTMLElement>) => void;
   onReferenceInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemoveReferenceUpload: (index: number) => void;
+  onReplaceReferenceUpload: (index: number, item: ReferenceUploadItem) => void;
   onResolutionSelect: (resolutionId: string) => void;
   onSaveCustomTemplate: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;

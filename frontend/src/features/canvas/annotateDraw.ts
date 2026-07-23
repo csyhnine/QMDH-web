@@ -1,4 +1,9 @@
-import type { AnnotationPoint, AnnotationStroke } from "./annotateTypes";
+import {
+  annotationColorWithOpacity,
+  clampAnnotationOpacity,
+  type AnnotationPoint,
+  type AnnotationStroke,
+} from "./annotateTypes";
 
 function strokePx(width: number, canvasW: number): number {
   return Math.max(1, (width / 480) * canvasW);
@@ -6,6 +11,10 @@ function strokePx(width: number, canvasW: number): number {
 
 function toCanvas(point: AnnotationPoint, w: number, h: number): { x: number; y: number } {
   return { x: point.x * w, y: point.y * h };
+}
+
+function strokeOpacity(stroke: AnnotationStroke, fallback: number): number {
+  return clampAnnotationOpacity(stroke.opacity, fallback);
 }
 
 export function drawAnnotationStrokes(
@@ -21,6 +30,7 @@ export function drawAnnotationStrokes(
         ctx.restore();
         continue;
       }
+      ctx.globalAlpha = strokeOpacity(stroke, 1);
       ctx.strokeStyle = stroke.color;
       ctx.lineWidth = strokePx(stroke.width, canvasW);
       ctx.lineCap = "round";
@@ -33,26 +43,55 @@ export function drawAnnotationStrokes(
         ctx.lineTo(p.x, p.y);
       }
       ctx.stroke();
+    } else if (stroke.type === "region") {
+      if (stroke.points.length < 3) {
+        ctx.restore();
+        continue;
+      }
+      const alpha = strokeOpacity(stroke, 0.35);
+      ctx.beginPath();
+      const first = toCanvas(stroke.points[0]!, canvasW, canvasH);
+      ctx.moveTo(first.x, first.y);
+      for (let i = 1; i < stroke.points.length; i += 1) {
+        const p = toCanvas(stroke.points[i]!, canvasW, canvasH);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = annotationColorWithOpacity(stroke.color, alpha);
+      ctx.fill();
+      ctx.strokeStyle = annotationColorWithOpacity(stroke.color, Math.min(1, alpha + 0.35));
+      ctx.lineWidth = Math.max(1, strokePx(stroke.width, canvasW) * 0.6);
+      ctx.lineJoin = "round";
+      ctx.stroke();
     } else if (stroke.type === "rect") {
-      ctx.strokeStyle = stroke.color;
-      ctx.lineWidth = strokePx(stroke.width, canvasW);
+      const alpha = strokeOpacity(stroke, 0.35);
       const x = stroke.x * canvasW;
       const y = stroke.y * canvasH;
-      ctx.strokeRect(x, y, stroke.w * canvasW, stroke.h * canvasH);
-    } else if (stroke.type === "ellipse") {
-      ctx.strokeStyle = stroke.color;
+      const w = stroke.w * canvasW;
+      const h = stroke.h * canvasH;
+      ctx.fillStyle = annotationColorWithOpacity(stroke.color, alpha);
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = annotationColorWithOpacity(stroke.color, Math.min(1, alpha + 0.35));
       ctx.lineWidth = strokePx(stroke.width, canvasW);
+      ctx.strokeRect(x, y, w, h);
+    } else if (stroke.type === "ellipse") {
+      const alpha = strokeOpacity(stroke, 0.35);
       const cx = (stroke.x + stroke.w / 2) * canvasW;
       const cy = (stroke.y + stroke.h / 2) * canvasH;
       const rx = Math.abs(stroke.w * canvasW) / 2;
       const ry = Math.abs(stroke.h * canvasH) / 2;
       ctx.beginPath();
       ctx.ellipse(cx, cy, Math.max(rx, 0.5), Math.max(ry, 0.5), 0, 0, Math.PI * 2);
+      ctx.fillStyle = annotationColorWithOpacity(stroke.color, alpha);
+      ctx.fill();
+      ctx.strokeStyle = annotationColorWithOpacity(stroke.color, Math.min(1, alpha + 0.35));
+      ctx.lineWidth = strokePx(stroke.width, canvasW);
       ctx.stroke();
     } else if (stroke.type === "arrow") {
       const start = toCanvas({ x: stroke.x1, y: stroke.y1 }, canvasW, canvasH);
       const end = toCanvas({ x: stroke.x2, y: stroke.y2 }, canvasW, canvasH);
       const lw = strokePx(stroke.width, canvasW);
+      ctx.globalAlpha = strokeOpacity(stroke, 1);
       ctx.strokeStyle = stroke.color;
       ctx.fillStyle = stroke.color;
       ctx.lineWidth = lw;
@@ -72,6 +111,7 @@ export function drawAnnotationStrokes(
     } else if (stroke.type === "text") {
       const p = toCanvas({ x: stroke.x, y: stroke.y }, canvasW, canvasH);
       const size = Math.max(12, (stroke.fontSize / 480) * canvasW);
+      ctx.globalAlpha = strokeOpacity(stroke, 1);
       ctx.fillStyle = stroke.color;
       ctx.font = `700 ${size}px "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif`;
       ctx.textBaseline = "top";

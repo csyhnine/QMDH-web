@@ -47,6 +47,7 @@ export type StudioComposerDockProps = {
   onProviderSelect: (providerName: string) => void;
   onGrokVideoSkuSelect: (sku: import("./grokVideoUtils").GrokVideoSku) => void;
   onRemoveReferenceUpload: (index: number) => void;
+  onReplaceReferenceUpload: (index: number, item: ReferenceUploadItem) => void;
   onReferenceDrop: (event: DragEvent<HTMLElement>) => void;
   onReferenceInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onResolutionSelect: (resolutionId: string) => void;

@@ -32,7 +32,7 @@ export default function MediaCompareSlider({
     const rect = root.getBoundingClientRect();
     if (rect.width <= 0) return;
     const next = ((clientX - rect.left) / rect.width) * 100;
-    setPosition(Math.min(92, Math.max(8, next)));
+    setPosition(Math.min(100, Math.max(0, next)));
   }, []);
 
   useEffect(() => {

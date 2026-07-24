@@ -1,7 +1,13 @@
 import type { Asset, Provider, Task } from "../../api";
 import { isGrokSkuId } from "./grokVideoUtils";
 import { isRuntimeStudioProvider } from "./modelAdminUtils";
-import { IMAGE_EDIT_WORKFLOW_KEY, IMAGE_UPSCALE_WORKFLOW_KEY, VIDEO_WORKFLOW_KEY, normalizeStudioResolution } from "./studioConstants";
+import {
+  IMAGE_EDIT_WORKFLOW_KEY,
+  IMAGE_UPSCALE_WORKFLOW_KEY,
+  SOURCE_ASPECT_RATIO_LABEL,
+  VIDEO_WORKFLOW_KEY,
+  normalizeStudioResolution,
+} from "./studioConstants";
 import { inferStyleFromAsset } from "./studioAssetUtils";
 import { inferRequestedImageCount, taskReferenceImages, taskResultString } from "./studioTaskUtils";
 import type { ReferenceUploadItem, StudioFormState } from "./studioTypes";
@@ -62,6 +68,11 @@ export function buildStudioFormFromTask({
     })?.provider_name ?? studioForm.requestedProvider;
 
   const restoredGrokSku = taskResultString(task, "video_sku");
+  const restoredAspectRatio = taskResultString(task, "aspect_ratio");
+  const nextAspectRatio =
+    nextMode === "edit"
+      ? restoredAspectRatio || SOURCE_ASPECT_RATIO_LABEL
+      : restoredAspectRatio || studioForm.aspectRatio;
 
   return {
     nextForm: {
@@ -72,7 +83,7 @@ export function buildStudioFormFromTask({
       projectCode: task.project_code,
       requestedProvider: nextProvider,
       style: taskResultString(task, "style") || inferStyleFromAsset(asset, studioForm.style),
-      aspectRatio: taskResultString(task, "aspect_ratio") || studioForm.aspectRatio,
+      aspectRatio: nextAspectRatio,
       resolution: normalizeStudioResolution(taskResultString(task, "resolution") || studioForm.resolution),
       imageCount: nextMode === "video" ? 1 : inferRequestedImageCount(task),
       deliverable: taskResultString(task, "storyboard") || taskResultString(task, "deliverable") || studioForm.deliverable,

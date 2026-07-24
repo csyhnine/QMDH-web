@@ -12,6 +12,7 @@ export default function StudioComposerDisplayMenuPanel({
   onResolutionSelect,
 }: StudioComposerDisplayMenuPanelProps) {
   const isVideoMode = studioForm.creationMode === "video";
+  const isEditMode = studioForm.creationMode === "edit";
   const isGrokVideo = isVideoMode && isGrokHaodeyaProvider(selectedProvider);
 
   return (
@@ -22,6 +23,9 @@ export default function StudioComposerDisplayMenuPanel({
         title="比例"
         onSelect={onAspectRatioSelect}
       />
+      {isEditMode ? (
+        <p className="composer-menu-note">选择「遵循原图」时不向模型传宽高比，输出跟参考图一致。</p>
+      ) : null}
 
       {isVideoMode ? (
         isGrokVideo ? (

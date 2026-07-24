@@ -3614,6 +3614,13 @@ button {
   grid-column: 1 / -1;
 }
 
+.composer-menu-note {
+  margin: 0;
+  color: var(--muted, #6b7280);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .composer-quickmeta {
   margin-left: auto;
 }
@@ -3693,7 +3700,7 @@ button {
 
 .template-browser-categorized {
   display: grid;
-  grid-template-columns: 112px minmax(280px, 1fr) minmax(320px, 360px);
+  grid-template-columns: 136px minmax(280px, 1fr) minmax(320px, 360px);
   gap: 18px;
   align-items: start;
   height: clamp(360px, 52vh, 488px);
@@ -3764,9 +3771,14 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 0 12px;
+  gap: 8px;
+  padding: 0 10px;
   text-align: left;
+}
+
+.template-nav-item > span,
+.template-nav-subitem {
+  white-space: nowrap;
 }
 
 .template-nav-item:hover,

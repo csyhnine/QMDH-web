@@ -449,7 +449,121 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         self.assertEqual(content[0]["type"], "text")
         self.assertEqual(content[1]["type"], "image_url")
         self.assertEqual(content[1]["image_url"]["url"], reference_image)
+        self.assertEqual(generation_body["image_config"]["aspect_ratio"], "16:9")
+        self.assertEqual(outcome.result["aspect_ratio"], "16:9")
         self.assertEqual(outcome.result["request_strategy"], "chat_modalities_image_edit")
+
+    def test_chat_modalities_image_edit_follow_source_omits_aspect_ratio(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="openrouter_gemini_image",
+            api_key="test-key",
+            base_url="https://openrouter.example.test/v1",
+            model_name="google/gemini-3.1-flash-image-preview",
+            timeout_seconds=1,
+            strategies={
+                "image.generate": "chat_modalities_image",
+                "image.edit": "chat_modalities_image_edit",
+            },
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "openrouter_gemini_image",
+                "google/gemini-3.1-flash-image-preview",
+                ["image.generate", "image.edit"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": "https://cdn.example.test/generated-chat-edit.png"}}
+                        ]
+                    }
+                }
+            ]
+        }
+        reference_image = "data:image/png;base64,cmVmZXJlbmNlLWltYWdl"
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"chat-edit-image")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.edit",
+                        {
+                            "edit_prompt": "Preserve the massing and enrich facade rhythm",
+                            "aspect_ratio": "遵循原图",
+                            "source_image": reference_image,
+                        },
+                    )
+
+        generation_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        content = generation_body["messages"][0]["content"]
+        self.assertNotIn("image_config", generation_body)
+        self.assertNotIn("Aspect ratio:", content[0]["text"])
+        self.assertEqual(outcome.result.get("aspect_ratio"), "")
+        self.assertEqual(outcome.result["request_strategy"], "chat_modalities_image_edit")
+
+    def test_chat_modalities_image_edit_2k_follow_source_omits_aspect_ratio_keeps_image_size(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="openrouter_gemini_image",
+            api_key="test-key",
+            base_url="https://openrouter.example.test/v1",
+            model_name="google/gemini-3.1-flash-image-preview",
+            timeout_seconds=1,
+            strategies={
+                "image.generate": "chat_modalities_image",
+                "image.edit": "chat_modalities_image_edit",
+            },
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "openrouter_gemini_image",
+                "google/gemini-3.1-flash-image-preview",
+                ["image.generate", "image.edit"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": "https://cdn.example.test/generated-chat-edit-2k.png"}}
+                        ]
+                    }
+                }
+            ]
+        }
+        reference_image = "data:image/png;base64,cmVmZXJlbmNlLWltYWdl"
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"chat-edit-2k")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    adapter.execute(
+                        "image.edit",
+                        {
+                            "edit_prompt": "Preserve the massing and enrich facade rhythm",
+                            "aspect_ratio": "遵循原图",
+                            "resolution": "2k",
+                            "source_image": reference_image,
+                        },
+                    )
+
+        generation_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        image_config = generation_body["image_config"]
+        self.assertEqual(image_config.get("image_size"), "2K")
+        self.assertNotIn("aspect_ratio", image_config)
+        self.assertNotIn("aspectRatio", image_config)
 
     def test_chat_modalities_smart_ratio_resolves_to_provider_whitelist(self) -> None:
         profile = ImageProviderProfile(

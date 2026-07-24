@@ -6,6 +6,17 @@ import struct
 from app.services.media_storage import read_binary_asset
 
 SMART_RATIO_LABELS = frozenset({"智能", "auto", "automatic", "smart"})
+SOURCE_ASPECT_RATIO_LABELS = frozenset(
+    {
+        "遵循原图",
+        "遵循原图比例",
+        "原图比例",
+        "原图",
+        "source",
+        "match_source",
+        "follow_source",
+    }
+)
 
 GEMINI_IMAGE_ASPECT_RATIOS: tuple[str, ...] = (
     "1:1",

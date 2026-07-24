@@ -21,7 +21,12 @@ from sqlalchemy.orm import Session
 from app.core.config import ImageProviderProfile, settings
 from app.database import SessionLocal
 from app.models import Asset, AssetType, Project, ProviderCall, Task, TaskStatus, Workflow
-from app.services.image_aspect_ratio import read_image_dimensions, resolve_image_aspect_ratio
+from app.services.image_aspect_ratio import (
+    SMART_RATIO_LABELS,
+    SOURCE_ASPECT_RATIO_LABELS,
+    read_image_dimensions,
+    resolve_image_aspect_ratio,
+)
 from app.services.media_storage import (
     read_binary_asset,
     write_base64_asset,
@@ -509,10 +514,27 @@ def _resolved_image_aspect_ratio(profile: ImageProviderProfile, payload: dict) -
     )
 
 
+def _should_omit_upstream_aspect_ratio(payload: dict) -> bool:
+    """Omit aspect_ratio for image-to-image when the user asks to follow the source image."""
+    if not _extract_reference_images(payload):
+        return False
+    raw = str(payload.get("aspect_ratio") or "").strip()
+    if not raw:
+        return True
+    return raw in SMART_RATIO_LABELS or raw in SOURCE_ASPECT_RATIO_LABELS
+
+
 def _aspect_ratio_result_fields(profile: ImageProviderProfile, payload: dict) -> dict[str, str]:
+    requested = str(payload.get("aspect_ratio") or "").strip()
+    if _should_omit_upstream_aspect_ratio(payload):
+        return {
+            "aspect_ratio_requested": requested,
+            "aspect_ratio_resolved": "",
+            "aspect_ratio": "",
+        }
     resolved = _resolved_image_aspect_ratio(profile, payload)
     return {
-        "aspect_ratio_requested": str(payload.get("aspect_ratio") or "").strip(),
+        "aspect_ratio_requested": requested,
         "aspect_ratio_resolved": resolved,
         "aspect_ratio": resolved,
     }
@@ -826,21 +848,14 @@ def _resolve_image_model_name(profile: ImageProviderProfile, payload: dict) -> s
 
 
 def _build_upstream_image_config(profile: ImageProviderProfile, payload: dict) -> dict[str, str]:
-    aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
+    # Gemini / Haodeya image_config uses snake_case only (aspect_ratio, image_size).
     resolution = _normalize_image_resolution(payload)
-    if _uses_haodeya_gateway(profile):
-        # Haodeya channel 9 CPA 2K (2026-07): gemini-3.1-flash-image + modalities + snake_case image_config.
-        config: dict[str, str] = {"aspect_ratio": aspect_ratio}
-        if resolution == "2k":
-            config["image_size"] = "2K"
-        return config
-    config = {
-        "aspect_ratio": aspect_ratio,
-        "aspectRatio": aspect_ratio,
-    }
+    omit_aspect_ratio = _should_omit_upstream_aspect_ratio(payload)
+    config: dict[str, str] = {}
+    if not omit_aspect_ratio:
+        config["aspect_ratio"] = _resolved_image_aspect_ratio(profile, payload)
     if resolution == "2k":
         config["image_size"] = "2K"
-        config["imageSize"] = "2K"
     return config
 
 
@@ -1022,14 +1037,16 @@ def _build_chat_modalities_image_edit_plan(
         reference_result["chat_modalities_image_edit_fallback_from"] = requested_capability
     reference_result.update(_image_generation_result_fields(profile, payload))
 
-    body = {
+    body: dict[str, object] = {
         "model": _resolve_image_model_name(profile, payload),
         "messages": [{"role": "user", "content": content}],
         "modalities": list(IMAGE_GENERATION_MODALITIES),
         "max_tokens": _image_generation_max_tokens(payload),
-        "image_config": _build_upstream_image_config(profile, payload),
         "stream": False,
     }
+    image_config = _build_upstream_image_config(profile, payload)
+    if image_config:
+        body["image_config"] = image_config
     return ImageRequestPlan(
         endpoint_path="/chat/completions",
         body=body,
@@ -1119,7 +1136,8 @@ def _build_chat_completions_image_edit_plan(
                 profile=profile,
                 payload=payload,
                 prompt=prompt,
-                include_aspect_ratio_in_prompt=not use_image_config,
+                # Image-to-image: never inject aspect_ratio into prompt or image_config.
+                include_aspect_ratio_in_prompt=False,
             ),
         }
     ]
@@ -1143,7 +1161,9 @@ def _build_chat_completions_image_edit_plan(
     }
     if use_image_config:
         body["modalities"] = list(IMAGE_GENERATION_MODALITIES)
-        body["image_config"] = _build_upstream_image_config(profile, payload)
+        image_config = _build_upstream_image_config(profile, payload)
+        if image_config:
+            body["image_config"] = image_config
     return ImageRequestPlan(
         endpoint_path="/chat/completions",
         body=body,

@@ -1,16 +1,31 @@
 import type { Provider } from "../../api";
-import { IMAGE_EDIT_WORKFLOW_KEY, IMAGE_WORKFLOW_KEY, VIDEO_WORKFLOW_KEY, normalizeStudioResolution } from "./studioConstants";
+import {
+  IMAGE_EDIT_WORKFLOW_KEY,
+  IMAGE_WORKFLOW_KEY,
+  VIDEO_WORKFLOW_KEY,
+  isSourceAspectRatio,
+  normalizeStudioResolution,
+} from "./studioConstants";
 import { resolveSelectedGrokSku, getSelectedGrokSkuConfig, isGrokHaodeyaProvider } from "./grokVideoUtils";
 import type { StudioFormState } from "./studioTypes";
 import { clampImageCount } from "./studioAssetUtils";
 
+function imageAspectRatioForPayload(form: StudioFormState, workflowKey: string): string {
+  // Image-edit default "遵循原图" omits aspect_ratio so upstream keeps source dimensions.
+  // A fixed ratio selected in edit mode is still sent as an explicit override.
+  if (workflowKey === IMAGE_EDIT_WORKFLOW_KEY && isSourceAspectRatio(form.aspectRatio)) {
+    return "";
+  }
+  return form.aspectRatio;
+}
+
 export function buildImagePayload(form: StudioFormState, workflowKey: string): Record<string, unknown> {
-  const referenceImages =
-    workflowKey === IMAGE_EDIT_WORKFLOW_KEY ? form.referenceImages.filter((value) => Boolean(value)) : [];
+  const isImageEdit = workflowKey === IMAGE_EDIT_WORKFLOW_KEY;
+  const referenceImages = isImageEdit ? form.referenceImages.filter((value) => Boolean(value)) : [];
   const primaryReferenceImage = referenceImages[0] ?? "";
   const payload: Record<string, unknown> = {
     style: form.style,
-    aspect_ratio: form.aspectRatio,
+    aspect_ratio: imageAspectRatioForPayload(form, workflowKey),
     resolution: normalizeStudioResolution(form.resolution),
     image_count: clampImageCount(form.imageCount),
     deliverable: form.deliverable,
@@ -20,7 +35,7 @@ export function buildImagePayload(form: StudioFormState, workflowKey: string): R
     reference_image: primaryReferenceImage,
     source_image: primaryReferenceImage,
     prompt: form.prompt,
-    edit_prompt: workflowKey === IMAGE_EDIT_WORKFLOW_KEY ? form.prompt : "",
+    edit_prompt: isImageEdit ? form.prompt : "",
   };
 
   return Object.fromEntries(

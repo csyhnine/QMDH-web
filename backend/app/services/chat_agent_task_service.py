@@ -404,11 +404,13 @@ def build_image_edit_proposal(
 
     resolved_project = (project_code or "").strip() or resolve_default_project_code(ctx.db, user_id=ctx.user_id)
     resolved_provider = resolve_requested_provider_name(ctx.db, requested_provider)
+    # Keep aspect_ratio in the tool signature for compatibility, but omit it from the task
+    # payload so image-to-image matches the source dimensions upstream.
+    _ = aspect_ratio
     payload = {
         "edit_prompt": cleaned_prompt,
         "prompt": cleaned_prompt,
         "reference_image": reference_path,
-        "aspect_ratio": _normalize_aspect_ratio(aspect_ratio),
         "resolution": _normalize_resolution(resolution),
         "image_count": 1,
     }
@@ -424,7 +426,7 @@ def build_image_edit_proposal(
     if len(task_title) < 3:
         task_title = cleaned_prompt[:48] or "Chat 改图任务"
 
-    summary = f"改图 · {payload['aspect_ratio']} · {payload['resolution'].upper()} · {display_name} · {resolved_project}"
+    summary = f"改图 · {payload['resolution'].upper()} · {display_name} · {resolved_project}"
     return ChatAgentTaskProposal(
         proposal_id=str(uuid.uuid4()),
         workflow_key="image-edit",

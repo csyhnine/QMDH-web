@@ -26,7 +26,34 @@ export const stylePresets = [
   { id: "minimal", label: "极简体块" },
 ];
 
+export const SOURCE_ASPECT_RATIO_LABEL = "遵循原图";
+
 export const aspectRatioOptions = ["智能", "21:9", "16:9", "3:2", "4:3", "1:1", "3:4", "2:3", "9:16"];
+
+/** Image-edit ratios: default follows the reference image; fixed ratios remain optional overrides. */
+export const imageEditAspectRatioOptions = [
+  SOURCE_ASPECT_RATIO_LABEL,
+  "21:9",
+  "16:9",
+  "3:2",
+  "4:3",
+  "1:1",
+  "3:4",
+  "2:3",
+  "9:16",
+];
+
+export function isSourceAspectRatio(value: string | undefined | null): boolean {
+  const normalized = String(value || "").trim();
+  return (
+    !normalized ||
+    normalized === SOURCE_ASPECT_RATIO_LABEL ||
+    normalized === "遵循原图比例" ||
+    normalized === "原图比例" ||
+    normalized === "原图" ||
+    normalized === "智能"
+  );
+}
 
 export const maxStudioImageCount = 3;
 

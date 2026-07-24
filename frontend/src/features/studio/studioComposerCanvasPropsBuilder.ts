@@ -1,4 +1,10 @@
-import { aspectRatioOptions, resolutionOptions } from "./studioConstants";
+import {
+  SOURCE_ASPECT_RATIO_LABEL,
+  aspectRatioOptions,
+  imageEditAspectRatioOptions,
+  isSourceAspectRatio,
+  resolutionOptions,
+} from "./studioConstants";
 import {
   GROK_VIDEO_ASPECT_RATIOS,
   getSelectedGrokSkuConfig,
@@ -57,7 +63,11 @@ export function buildStudioComposerCanvasProps({
 
   const isGrokVideo = studioForm.creationMode === "video" && isGrokHaodeyaProvider(selectedProvider);
   const grokSkuConfig = isGrokVideo ? getSelectedGrokSkuConfig(studioForm, selectedProvider) : null;
-  const composerAspectRatioOptions = isGrokVideo ? [...GROK_VIDEO_ASPECT_RATIOS] : aspectRatioOptions;
+  const composerAspectRatioOptions = isGrokVideo
+    ? [...GROK_VIDEO_ASPECT_RATIOS]
+    : studioForm.creationMode === "edit"
+      ? imageEditAspectRatioOptions
+      : aspectRatioOptions;
 
   return {
     activeComposerMenu,
@@ -103,9 +113,16 @@ export function buildStudioComposerCanvasProps({
           mode === "video"
             ? grokVideoSkuForProviderSelection(provider, current.grokVideoSku)
             : "";
+        let nextAspectRatio = current.aspectRatio;
+        if (mode === "edit") {
+          nextAspectRatio = SOURCE_ASPECT_RATIO_LABEL;
+        } else if (current.creationMode === "edit" && isSourceAspectRatio(current.aspectRatio)) {
+          nextAspectRatio = "16:9";
+        }
         return {
           ...current,
           creationMode: mode,
+          aspectRatio: nextAspectRatio,
           grokVideoSku: nextGrokSku,
         };
       });

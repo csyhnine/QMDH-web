@@ -304,12 +304,18 @@ def _build_happyhorse_request_body(sku: str, prompt: str, payload: dict) -> dict
     ratio = (
         str(payload.get("ratio") or payload.get("aspect_ratio") or "16:9").strip() or "16:9"
     )
+    # Upstream HappyHorse expects nested input/parameters (not Grok frame_images).
     body: dict[str, object] = {
         "model": sku,
         "prompt": prompt,
         "duration": duration,
         "resolution": "720P",
         "ratio": ratio,
+        "parameters": {
+            "duration": duration,
+            "resolution": "720P",
+            "ratio": ratio,
+        },
     }
 
     reference_paths = _collect_reference_paths(payload)
@@ -318,6 +324,7 @@ def _build_happyhorse_request_body(sku: str, prompt: str, payload: dict) -> dict
     if mode == "t2v":
         if public_urls:
             raise ValueError("HappyHorse t2v must not include reference images")
+        body["input"] = {"prompt": prompt}
         return body
     if mode == "i2v":
         if len(public_urls) > 1:
@@ -325,14 +332,20 @@ def _build_happyhorse_request_body(sku: str, prompt: str, payload: dict) -> dict
         start_url = str(payload.get("start_image_url") or "").strip() or (public_urls[0] if public_urls else "")
         if not start_url:
             raise ValueError("HappyHorse i2v requires media type=first_frame")
-        body["media"] = [{"type": "first_frame", "url": resolve_public_media_url(start_url)}]
+        body["input"] = {
+            "prompt": prompt,
+            "media": [{"type": "first_frame", "url": resolve_public_media_url(start_url)}],
+        }
         return body
     # r2v
     if not public_urls:
         raise ValueError("HappyHorse r2v requires 1–9 reference_image media items")
     if len(public_urls) > 9:
         raise ValueError("HappyHorse r2v accepts at most 9 reference images")
-    body["media"] = [{"type": "reference_image", "url": url} for url in public_urls]
+    body["input"] = {
+        "prompt": prompt,
+        "media": [{"type": "reference_image", "url": url} for url in public_urls],
+    }
     return body
 
 

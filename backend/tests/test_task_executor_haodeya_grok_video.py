@@ -383,7 +383,13 @@ class HappyHorseVideoBodyTests(unittest.TestCase):
         self.assertEqual(body["duration"], 5)
         self.assertEqual(body["resolution"], "720P")
         self.assertEqual(body["ratio"], "16:9")
+        self.assertEqual(body["input"], {"prompt": "a white cat"})
+        self.assertEqual(
+            body["parameters"],
+            {"duration": 5, "resolution": "720P", "ratio": "16:9"},
+        )
         self.assertNotIn("media", body)
+        self.assertNotIn("frame_images", body)
 
     def test_i2v_requires_first_frame_media(self) -> None:
         from app.services.provider_adapters.haodeya_grok_video import _build_happyhorse_request_body
@@ -408,9 +414,18 @@ class HappyHorseVideoBodyTests(unittest.TestCase):
                 },
             )
         self.assertEqual(
-            body["media"],
-            [{"type": "first_frame", "url": "https://cdn.example.com/first.png"}],
+            body["input"],
+            {
+                "prompt": "a cat running",
+                "media": [{"type": "first_frame", "url": "https://cdn.example.com/first.png"}],
+            },
         )
+        self.assertEqual(
+            body["parameters"],
+            {"duration": 5, "resolution": "720P", "ratio": "16:9"},
+        )
+        self.assertNotIn("media", body)
+        self.assertNotIn("frame_images", body)
 
     def test_r2v_uses_reference_image_media(self) -> None:
         from app.services.provider_adapters.haodeya_grok_video import _build_happyhorse_request_body
@@ -432,12 +447,16 @@ class HappyHorseVideoBodyTests(unittest.TestCase):
                 },
             )
         self.assertEqual(
-            body["media"],
-            [
-                {"type": "reference_image", "url": "https://cdn.example.com/person.jpg"},
-                {"type": "reference_image", "url": "https://cdn.example.com/prop.jpg"},
-            ],
+            body["input"],
+            {
+                "prompt": "[Image 1] holds [Image 2]",
+                "media": [
+                    {"type": "reference_image", "url": "https://cdn.example.com/person.jpg"},
+                    {"type": "reference_image", "url": "https://cdn.example.com/prop.jpg"},
+                ],
+            },
         )
+        self.assertNotIn("media", body)
 
     def test_duration_must_match_sku(self) -> None:
         from app.services.provider_adapters.haodeya_grok_video import _build_happyhorse_request_body

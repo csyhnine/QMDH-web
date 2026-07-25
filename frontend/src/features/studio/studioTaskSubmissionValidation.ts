@@ -4,6 +4,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type { LoadState, StudioFormState } from "./studioTypes";
 import { clampReferenceImageCount } from "./studioUtils";
 import { getSelectedGrokSkuConfig, grokReferenceUploadError, isGrokHaodeyaProvider } from "./grokVideoUtils";
+import { getHappyHorseSkuConfig, happyHorseReferenceUploadError, isHappyHorseProvider } from "./happyHorseVideoUtils";
 
 type ValidationOptions = {
   form: StudioFormState;
@@ -61,7 +62,21 @@ export function validateStudioTaskSubmission({
     }
 
     const referenceImageCount = clampReferenceImageCount(form.referenceImages.length);
-    if (isGrokHaodeyaProvider(providerForSubmit)) {
+    if (isHappyHorseProvider(providerForSubmit)) {
+      const skuConfig = getHappyHorseSkuConfig(providerForSubmit);
+      if (!skuConfig) {
+        setState((current) => ({
+          ...current,
+          error: "请选择带 -5s/-10s 后缀的 HappyHorse 视频档位。",
+        }));
+        return { ok: false };
+      }
+      const hhError = happyHorseReferenceUploadError(providerForSubmit, referenceImageCount);
+      if (hhError) {
+        setState((current) => ({ ...current, error: hhError }));
+        return { ok: false };
+      }
+    } else if (isGrokHaodeyaProvider(providerForSubmit)) {
       const skuConfig = getSelectedGrokSkuConfig(form, providerForSubmit);
       if (!skuConfig) {
         setState((current) => ({

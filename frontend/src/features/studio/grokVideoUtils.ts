@@ -63,6 +63,9 @@ export function isGrokSkuId(value: string | undefined | null): value is GrokVide
 
 export function isGrokHaodeyaProvider(provider: Provider | undefined): boolean {
   if (!provider) return false;
+  // HappyHorse reuses haodeya_grok adapter_kind but must not open the Grok SKU menu.
+  const identity = `${provider.provider_name} ${provider.model_name}`.toLowerCase();
+  if (identity.includes("happyhorse")) return false;
   if (provider.adapter_kind === "haodeya_grok") return true;
   return GROK_SKU_SET.has(provider.model_name);
 }

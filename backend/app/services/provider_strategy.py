@@ -153,6 +153,9 @@ def profile_prefers_chat_completions_image(*, provider_name: str, model_name: st
 
 def profile_prefers_dashscope_video(*, provider_name: str, model_name: str, base_url: str) -> bool:
     identity = f"{provider_name} {model_name} {base_url}".lower()
+    # Haodeya gateway HappyHorse / Wan video must not be hijacked to Aliyun DashScope.
+    if "haodeya" in identity:
+        return False
     return "dashscope" in identity or "aliyuncs.com" in identity or "wan" in identity or "happyhorse" in identity
 
 
@@ -168,6 +171,10 @@ def profile_prefers_volcengine_jimeng_video(*, provider_name: str, model_name: s
 
 def profile_prefers_haodeya_grok_video(*, provider_name: str, model_name: str, base_url: str) -> bool:
     identity = f"{provider_name} {model_name} {base_url}".lower()
+    if "happyhorse" in identity and "haodeya" in identity:
+        return True
+    if model_name.strip().startswith("happyhorse-1.1-"):
+        return True
     if "haodeya" in identity or "grok-imagine-video" in identity:
         return True
     return model_name.strip() in {
@@ -188,8 +195,11 @@ def profile_prefers_haodeya_async_image(*, provider_name: str, model_name: str, 
 
     Gemini CPA (`gemini-3.1-flash-image`) also uses `newapi.haodeya.xyz` but must stay on
     `chat_completions_image` / `chat_modalities_image`, not `/images/generations` async.
+    Wan2.7 uses synchronous `/images/generations` with literal size tiers.
     """
     identity = f"{provider_name} {model_name} {base_url}".lower()
+    if "wan2.7" in identity or "wan2_7" in identity:
+        return False
     return (
         "gpt-image-2-vip" in identity
         or "gpt-image-vip" in identity

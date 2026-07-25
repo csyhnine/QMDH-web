@@ -1,5 +1,6 @@
 import { defaultStudioForm } from "./studioConstants";
 import { grokReferenceLimit } from "./grokVideoUtils";
+import { happyHorseReferenceLimit, isHappyHorseProvider } from "./happyHorseVideoUtils";
 import { selectedReferenceUploadProviderName } from "./studioControllerProps";
 import type { StudioDerivedState } from "./studioDerivedState";
 import type { useStudioControllerState } from "./useStudioControllerState";
@@ -14,13 +15,14 @@ export function buildStudioReferenceUploadOptions({
   controllerState: ControllerState;
   selectedProvider: StudioDerivedState["selectedProvider"];
 }): Parameters<typeof useStudioReferenceUploads>[0] {
+  const videoReferenceLimit = isHappyHorseProvider(selectedProvider)
+    ? happyHorseReferenceLimit(selectedProvider)
+    : grokReferenceLimit(controllerState.studioForm, selectedProvider);
   return {
     defaultTitle: defaultStudioForm.title,
     fileInputRef: controllerState.fileInputRef,
     maxReferenceCount:
-      controllerState.studioForm.creationMode === "video"
-        ? grokReferenceLimit(controllerState.studioForm, selectedProvider)
-        : 4,
+      controllerState.studioForm.creationMode === "video" ? videoReferenceLimit : 4,
     onClearError: controllerState.clearLoadError,
     onError: controllerState.pushLoadError,
     selectedProviderName: selectedReferenceUploadProviderName({

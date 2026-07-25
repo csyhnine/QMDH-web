@@ -567,6 +567,23 @@ def _uses_haodeya_gateway(profile: ImageProviderProfile) -> bool:
     return "haodeya" in profile.base_url.lower()
 
 
+def _uses_haodeya_wan_image(profile: ImageProviderProfile) -> bool:
+    """Wan2.7 on Haodeya must use /images/generations with literal size 1K/2K/4K."""
+    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    flavor = str(adapter_config.get("provider_flavor") or "").strip().lower()
+    if flavor in {"haodeya_wan_image", "wan_image"}:
+        return True
+    if str(adapter_config.get("image_size_mode") or "").strip().lower() == "literal_tier":
+        return True
+    identity = f"{profile.provider_name} {profile.model_name}".lower()
+    return "wan2.7" in identity or "wan2_7" in identity
+
+
+def _literal_image_size_tier(payload: dict) -> str:
+    resolution = _normalize_image_resolution(payload)
+    return {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
+
+
 def _uses_haodeya_async_image_gateway(profile: ImageProviderProfile) -> bool:
     adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
     flavor = str(adapter_config.get("provider_flavor") or "").strip().lower()
@@ -797,6 +814,9 @@ def _should_use_chat_modalities_plan_for_2k(
 ) -> bool:
     if _normalize_image_resolution(payload) != "2k" or not _uses_haodeya_gateway(profile):
         return False
+    # Wan2.7 must stay on /images/generations with size=2K — never chat/completions.
+    if _uses_haodeya_wan_image(profile):
+        return False
     return strategy in {
         OPENAI_IMAGES_STRATEGY,
         CHAT_COMPLETIONS_IMAGE_STRATEGY,
@@ -838,6 +858,9 @@ def _uses_cpa_2k_model_suffix(profile: ImageProviderProfile) -> bool:
 def _resolve_image_model_name(profile: ImageProviderProfile, payload: dict) -> str:
     base_model = _strip_image_model_2k_suffix(profile.model_name)
     resolution = _normalize_image_resolution(payload)
+    if _uses_haodeya_wan_image(profile):
+        # Wan SKUs keep a stable model id; tier is carried by size=1K/2K/4K.
+        return base_model
     if _uses_haodeya_async_image_gateway(profile):
         return _resolve_haodeya_async_upstream_model(profile, resolution)
     if _uses_haodeya_gateway(profile):
@@ -864,7 +887,9 @@ def _image_generation_result_fields(profile: ImageProviderProfile, payload: dict
     resolution = _normalize_image_resolution(payload)
     fields["resolution"] = resolution
     fields["image_model_resolved"] = _resolve_image_model_name(profile, payload)
-    if resolution == "2k":
+    if _uses_haodeya_wan_image(profile):
+        fields["image_size"] = _literal_image_size_tier(payload)
+    elif resolution == "2k":
         fields["image_size"] = "2K"
     return fields
 
@@ -875,7 +900,19 @@ def _openai_image_request_body(
     payload: dict,
     prompt: str,
 ) -> dict[str, object]:
-    body: dict[str, object] = {
+    if _uses_haodeya_wan_image(profile):
+        body: dict[str, object] = {
+            "model": _resolve_image_model_name(profile, payload),
+            "prompt": prompt,
+            "size": _literal_image_size_tier(payload),
+            "n": max(1, int(payload.get("image_count") or payload.get("n") or 1)),
+        }
+        detail = str(payload.get("prompt_supplement") or "").strip()
+        if detail:
+            body["prompt"] = f"{prompt}\n\nAdditional guidance: {detail}"
+        return body
+
+    body = {
         "model": profile.model_name,
         "prompt": prompt,
         "size": _openai_size_for_aspect_ratio(_resolved_image_aspect_ratio(profile, payload)),

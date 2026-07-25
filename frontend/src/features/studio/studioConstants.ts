@@ -64,15 +64,17 @@ export const resolutionOptions = [
   { id: "2k", label: "高清 2K" },
 ];
 
-/** Normalizes legacy 4k UI values to 1k; keeps 1k/2k for upstream model suffix routing. */
+/** Keeps 1k/2k/4k for upstream routing (wan2.7-pro uses literal size 4K). */
 export function normalizeStudioResolution(resolution: string | undefined | null): string {
   const normalized = String(resolution || "").trim().toLowerCase();
+  if (normalized === "4k") return "4k";
   if (normalized === "2k") return "2k";
   return "1k";
 }
 
 export function studioResolutionLabel(resolution: string | undefined | null): string {
   const id = normalizeStudioResolution(resolution);
+  if (id === "4k") return "超清 4K";
   return resolutionOptions.find((option) => option.id === id)?.label ?? "标准 1K";
 }
 

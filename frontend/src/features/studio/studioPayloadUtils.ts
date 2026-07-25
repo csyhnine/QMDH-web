@@ -7,6 +7,7 @@ import {
   normalizeStudioResolution,
 } from "./studioConstants";
 import { resolveSelectedGrokSku, getSelectedGrokSkuConfig, isGrokHaodeyaProvider } from "./grokVideoUtils";
+import { buildHappyHorseVideoPayload, isHappyHorseProvider } from "./happyHorseVideoUtils";
 import type { StudioFormState } from "./studioTypes";
 import { clampImageCount } from "./studioAssetUtils";
 
@@ -49,6 +50,10 @@ export function buildImagePayload(form: StudioFormState, workflowKey: string): R
 export function buildVideoPayload(form: StudioFormState, provider?: Provider): Record<string, unknown> {
   const referenceImages = form.referenceImages.filter((value) => Boolean(value));
   const aspectRatio = form.aspectRatio.trim();
+
+  if (provider && isHappyHorseProvider(provider)) {
+    return buildHappyHorseVideoPayload(form, provider);
+  }
 
   if (provider && isGrokHaodeyaProvider(provider)) {
     const videoSku = resolveSelectedGrokSku(form, provider);

@@ -17,9 +17,14 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`**（以 `git rev-parse HEAD` 为准；冷启动核对目标 **`8809239`**）
-- Production: **`https://cityusbdisk.cn`** — Git **`8809239`**，与 `origin/main` 对齐（2026-07-25 核实）
+- Current branch: **`main`**（以 `git rev-parse HEAD` 为准）
+- Production: **`https://cityusbdisk.cn`** — 2026-07-25 部署 Haodeya 新模型分流后核对 `git rev-parse HEAD`
 - Alembic head：**`o6p7q8r9s0t1`**（skill bundle；catalog=`n5o6p7q8r9s0`；记忆=`m4n5o6p7q8r9`；gov=`l3m4n5o6p7q8`）
+- **Haodeya 新模型（2026-07-25）**：
+  - 网关 `https://newapi.haodeya.xyz/v1`
+  - Chat：生产启用 `qwen3.8-max-preview`（其它 qwen 档位停用）
+  - 生图：`wan2.7-image` / `wan2.7-image-pro` → `/images/generations` + 字面 size
+  - 视频：HappyHorse 六个 `-5s/-10s` SKU → `/videos`（禁止裸名）
 - **Chat Agent（重要）**：
   - **B1 / gov / harness / memory** 已合 main 并已上生产
   - **「设计助手」UI 默认开启**（`VITE_CHAT_AGENT_UI_ENABLED !== "false"`）

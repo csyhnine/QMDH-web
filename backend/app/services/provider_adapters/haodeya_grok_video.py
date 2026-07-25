@@ -23,10 +23,24 @@ _SUCCEEDED_STATUSES = {"completed", "succeeded", "success"}
 _FAILED_STATUSES = {"failed", "failure", "cancelled", "canceled", "expired"}
 
 GROK_VIDEO_SKUS: dict[str, dict[str, object]] = {
-    "x-ai/grok-imagine-video-i2v": {"duration": 5, "mode": "i2v"},
-    "x-ai/grok-imagine-video-i2v-10s": {"duration": 10, "mode": "i2v"},
-    "x-ai/grok-imagine-video-ref": {"duration": 5, "mode": "ref"},
-    "x-ai/grok-imagine-video-ref-10s": {"duration": 10, "mode": "ref"},
+    "x-ai/grok-imagine-video-i2v": {"duration": 5, "mode": "i2v", "family": "grok"},
+    "x-ai/grok-imagine-video-i2v-10s": {"duration": 10, "mode": "i2v", "family": "grok"},
+    "x-ai/grok-imagine-video-ref": {"duration": 5, "mode": "ref", "family": "grok"},
+    "x-ai/grok-imagine-video-ref-10s": {"duration": 10, "mode": "ref", "family": "grok"},
+}
+
+HAPPYHORSE_VIDEO_SKUS: dict[str, dict[str, object]] = {
+    "happyhorse-1.1-t2v-5s": {"duration": 5, "mode": "t2v", "family": "happyhorse"},
+    "happyhorse-1.1-t2v-10s": {"duration": 10, "mode": "t2v", "family": "happyhorse"},
+    "happyhorse-1.1-i2v-5s": {"duration": 5, "mode": "i2v", "family": "happyhorse"},
+    "happyhorse-1.1-i2v-10s": {"duration": 10, "mode": "i2v", "family": "happyhorse"},
+    "happyhorse-1.1-r2v-5s": {"duration": 5, "mode": "r2v", "family": "happyhorse"},
+    "happyhorse-1.1-r2v-10s": {"duration": 10, "mode": "r2v", "family": "happyhorse"},
+}
+
+HAODEYA_VIDEO_SKUS: dict[str, dict[str, object]] = {
+    **GROK_VIDEO_SKUS,
+    **HAPPYHORSE_VIDEO_SKUS,
 }
 
 _DEPRECATED_GROK_MODEL = "x-ai/grok-imagine-video"
@@ -35,6 +49,10 @@ _PLACEHOLDER_PROFILE_MODELS = {
     "haodeya_grok",
     "grok_imagine_video",
     "grok-imagine",
+    "haodeya_happyhorse",
+    "happyhorse-1.1-t2v",
+    "happyhorse-1.1-i2v",
+    "happyhorse-1.1-r2v",
 }
 
 
@@ -122,7 +140,7 @@ class HaodeyaGrokVideoProviderAdapter:
                 "upstream_status": _extract_task_status(final_payload),
                 "upstream_download": "content",
                 "video_sku": sku,
-                "grok_video_mode": GROK_VIDEO_SKUS[sku]["mode"],
+                "grok_video_mode": HAODEYA_VIDEO_SKUS[sku]["mode"],
                 "request_strategy": diagnostics.strategy,
                 "request_endpoint": diagnostics.endpoint_path,
                 "request_url": diagnostics.request_url,
@@ -143,7 +161,7 @@ class HaodeyaGrokVideoProviderAdapter:
 
 
 def _grok_sku_billing_tier(sku: str) -> str:
-    meta = GROK_VIDEO_SKUS.get(str(sku or "").strip())
+    meta = HAODEYA_VIDEO_SKUS.get(str(sku or "").strip())
     if isinstance(meta, dict) and int(meta.get("duration") or 5) >= 10:
         return "2k"
     if str(sku or "").strip().endswith("-10s") or "10s" in str(sku or ""):
@@ -155,12 +173,12 @@ def _resolve_grok_sku(profile: ImageProviderProfile, payload: dict) -> str:
     explicit_sku = str(payload.get("video_sku") or "").strip()
     if explicit_sku:
         sku = explicit_sku
-    elif profile.model_name.strip() in GROK_VIDEO_SKUS:
+    elif profile.model_name.strip() in HAODEYA_VIDEO_SKUS:
         sku = profile.model_name.strip()
     elif profile.model_name.strip().lower() in _PLACEHOLDER_PROFILE_MODELS:
         raise ValueError(
-            "Grok video task is missing video_sku. In Studio, select one of the four Grok tiers "
-            "(e.g. x-ai/grok-imagine-video-i2v) before submitting."
+            "Video task is missing video_sku. Select a concrete SKU with duration suffix "
+            "(e.g. happyhorse-1.1-t2v-5s or x-ai/grok-imagine-video-i2v) before submitting."
         )
     else:
         sku = profile.model_name.strip()
@@ -171,12 +189,12 @@ def _resolve_grok_sku(profile: ImageProviderProfile, payload: dict) -> str:
         )
     if sku in _PLACEHOLDER_PROFILE_MODELS or sku.lower() == profile.provider_name.strip().lower():
         raise ValueError(
-            f"Invalid upstream Grok model {sku!r}. Admin model_name/provider_name must not be sent to Haodeya; "
-            f"use one of: {', '.join(GROK_VIDEO_SKUS)}"
+            f"Invalid upstream video model {sku!r}. Admin model_name/provider_name must not be sent bare; "
+            f"use one of: {', '.join(HAODEYA_VIDEO_SKUS)}"
         )
-    if sku not in GROK_VIDEO_SKUS:
+    if sku not in HAODEYA_VIDEO_SKUS:
         raise ValueError(
-            f"Unsupported Grok video SKU {sku!r}; expected one of: {', '.join(GROK_VIDEO_SKUS)}"
+            f"Unsupported Haodeya video SKU {sku!r}; expected one of: {', '.join(HAODEYA_VIDEO_SKUS)}"
         )
 
     # Optional Admin remap: Studio still picks a tier; adapter_config can redirect to another known SKU.
@@ -185,7 +203,7 @@ def _resolve_grok_sku(profile: ImageProviderProfile, payload: dict) -> str:
 
 
 def _apply_grok_sku_admin_override(profile: ImageProviderProfile, sku: str) -> str:
-    meta = GROK_VIDEO_SKUS.get(sku)
+    meta = HAODEYA_VIDEO_SKUS.get(sku)
     if not isinstance(meta, dict):
         return sku
     mode = str(meta.get("mode") or "").strip()
@@ -196,10 +214,10 @@ def _apply_grok_sku_admin_override(profile: ImageProviderProfile, sku: str) -> s
     if not isinstance(override, str) or not override.strip():
         return sku
     remapped = override.strip()
-    if remapped not in GROK_VIDEO_SKUS:
+    if remapped not in HAODEYA_VIDEO_SKUS:
         raise ValueError(
-            f"Admin adapter_config.{override_key}={remapped!r} is not a supported Grok SKU; "
-            f"expected one of: {', '.join(GROK_VIDEO_SKUS)}"
+            f"Admin adapter_config.{override_key}={remapped!r} is not a supported video SKU; "
+            f"expected one of: {', '.join(HAODEYA_VIDEO_SKUS)}"
         )
     return remapped
 
@@ -221,7 +239,15 @@ def _collect_reference_paths(payload: dict) -> list[str]:
 
 
 def _build_haodeya_grok_request_body(sku: str, prompt: str, payload: dict) -> dict[str, object]:
-    cfg = GROK_VIDEO_SKUS[sku]
+    cfg = HAODEYA_VIDEO_SKUS[sku]
+    family = str(cfg.get("family") or "grok")
+    if family == "happyhorse":
+        return _build_happyhorse_request_body(sku, prompt, payload)
+    return _build_grok_request_body(sku, prompt, payload)
+
+
+def _build_grok_request_body(sku: str, prompt: str, payload: dict) -> dict[str, object]:
+    cfg = HAODEYA_VIDEO_SKUS[sku]
     mode = str(cfg["mode"])
     # Duration always follows the resolved SKU (Studio selection or Admin remap).
     duration = int(cfg["duration"])
@@ -263,6 +289,48 @@ def _build_haodeya_grok_request_body(sku: str, prompt: str, payload: dict) -> di
     return body
 
 
+def _build_happyhorse_request_body(sku: str, prompt: str, payload: dict) -> dict[str, object]:
+    cfg = HAODEYA_VIDEO_SKUS[sku]
+    mode = str(cfg["mode"])
+    duration = int(cfg["duration"])
+    # Gateway requires duration to match the -5s/-10s SKU suffix; do not trust mismatched payload.
+    payload_duration = payload.get("duration")
+    if payload_duration is not None and int(payload_duration) != duration:
+        raise ValueError(
+            f"HappyHorse duration must be {duration} for SKU {sku}; got {payload_duration}"
+        )
+
+    ratio = (
+        str(payload.get("ratio") or payload.get("aspect_ratio") or "16:9").strip() or "16:9"
+    )
+    body: dict[str, object] = {
+        "model": sku,
+        "prompt": prompt,
+        "duration": duration,
+        "resolution": "720P",
+        "ratio": ratio,
+    }
+
+    reference_paths = _collect_reference_paths(payload)
+    public_urls = [resolve_public_media_url(path) for path in reference_paths]
+
+    if mode == "t2v":
+        return body
+    if mode == "i2v":
+        if len(public_urls) > 1:
+            raise ValueError("HappyHorse i2v accepts at most one start frame image")
+        start_url = str(payload.get("start_image_url") or "").strip() or (public_urls[0] if public_urls else "")
+        if start_url:
+            body["frame_images"] = [_grok_frame_image_item(resolve_public_media_url(start_url))]
+        return body
+    # r2v
+    if len(public_urls) > 4:
+        raise ValueError("HappyHorse r2v accepts at most 4 reference images")
+    if public_urls:
+        body["input_references"] = [_grok_image_item(url) for url in public_urls]
+    return body
+
+
 def _grok_image_item(url: str) -> dict[str, object]:
     return {"type": "image_url", "image_url": {"url": url}}
 
@@ -290,9 +358,9 @@ def _submit_haodeya_grok_video_task(profile: ImageProviderProfile, body: dict[st
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")
-        raise ValueError(f"Haodeya Grok video submit failed with HTTP {exc.code}: {detail}") from exc
+        raise ValueError(f"Haodeya video submit failed with HTTP {exc.code}: {detail}") from exc
     except URLError as exc:
-        raise ValueError(f"Haodeya Grok video submit request failed: {exc.reason}") from exc
+        raise ValueError(f"Haodeya video submit request failed: {exc.reason}") from exc
 
 
 def _poll_haodeya_grok_video_result(
@@ -315,21 +383,21 @@ def _poll_haodeya_grok_video_result(
                 last_payload = json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")
-            raise ValueError(f"Haodeya Grok video poll failed with HTTP {exc.code}: {detail}") from exc
+            raise ValueError(f"Haodeya video poll failed with HTTP {exc.code}: {detail}") from exc
         except URLError as exc:
-            raise ValueError(f"Haodeya Grok video poll request failed: {exc.reason}") from exc
+            raise ValueError(f"Haodeya video poll request failed: {exc.reason}") from exc
 
         status = _extract_task_status(last_payload)
         if status in _SUCCEEDED_STATUSES:
             return last_payload
         if status in _FAILED_STATUSES:
             error_detail = last_payload.get("error") or last_payload.get("message") or last_payload
-            raise ValueError(f"Haodeya Grok video task failed with status={status}: {error_detail}")
+            raise ValueError(f"Haodeya video task failed with status={status}: {error_detail}")
 
         sleep(_POLL_INTERVAL_SECONDS)
 
     raise ValueError(
-        f"Haodeya Grok video task timed out after {profile.timeout_seconds}s; last status={_extract_task_status(last_payload)}"
+        f"Haodeya video task timed out after {profile.timeout_seconds}s; last status={_extract_task_status(last_payload)}"
     )
 
 
@@ -362,6 +430,6 @@ def _download_haodeya_grok_video_content(profile: ImageProviderProfile, task_id:
             return response.read()
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")
-        raise ValueError(f"Haodeya Grok video content download failed with HTTP {exc.code}: {detail}") from exc
+        raise ValueError(f"Haodeya video content download failed with HTTP {exc.code}: {detail}") from exc
     except URLError as exc:
-        raise ValueError(f"Haodeya Grok video content download request failed: {exc.reason}") from exc
+        raise ValueError(f"Haodeya video content download request failed: {exc.reason}") from exc

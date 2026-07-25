@@ -46,6 +46,17 @@ IMAGE_MODEL_PRICES: dict[str, dict[str, Any]] = {
         "unit_price_2k": 2.67,
         "pricing_unit": "per_image",
     },
+    "wan2.7-image": {
+        "unit_price_1k": 0.2,
+        "unit_price_2k": 0.2,
+        "pricing_unit": "per_image",
+    },
+    "wan2.7-image-pro": {
+        "unit_price_1k": 0.5,
+        "unit_price_2k": 0.5,
+        "unit_price_4k": 0.5,
+        "pricing_unit": "per_image",
+    },
 }
 
 CHAT_MODEL_PRICES: dict[str, dict[str, float]] = {

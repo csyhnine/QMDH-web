@@ -3,6 +3,11 @@ import type { Edge } from "@xyflow/react";
 
 import { api, type Provider, type Task } from "../../api";
 import { defaultStudioForm, IMAGE_UPSCALE_WORKFLOW_KEY } from "../studio/studioConstants";
+import {
+  creationModeForNodeKind,
+  defaultAspectRatioFor,
+  resolveAspectRatioForSurface,
+} from "../studio/studioCanvasLinkage";
 import { findUpscaleProvider } from "../studio/studioUpscaleActions";
 import { resolveStudioProviderForForm } from "../studio/studioTaskFormUtils";
 import { buildTaskSubmissionPayload } from "../studio/studioTaskSubmissionActions";
@@ -357,14 +362,17 @@ export function useCanvasNodeGenerate(
 
       const form: StudioFormState = {
         ...defaultStudioForm,
-        creationMode: data.creationMode,
+        creationMode: creationModeForNodeKind(data.nodeKind),
         title: data.label,
         prompt: data.prompt,
         projectCode: data.projectCode || defaultStudioForm.projectCode,
         requestedProvider: data.requestedProvider,
         classification: data.classification || "B",
         style: data.style || defaultStudioForm.style,
-        aspectRatio: data.aspectRatio || defaultStudioForm.aspectRatio,
+        aspectRatio: resolveAspectRatioForSurface(
+          data.nodeKind,
+          data.aspectRatio || defaultAspectRatioFor(data.nodeKind)
+        ),
         resolution: data.resolution || defaultStudioForm.resolution,
         referenceImages,
         notes: "",

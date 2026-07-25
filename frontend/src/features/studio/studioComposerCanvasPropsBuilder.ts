@@ -1,12 +1,10 @@
+import { resolutionOptions, isSourceAspectRatio } from "./studioConstants";
 import {
-  SOURCE_ASPECT_RATIO_LABEL,
-  aspectRatioOptions,
-  imageEditAspectRatioOptions,
-  isSourceAspectRatio,
-  resolutionOptions,
-} from "./studioConstants";
+  aspectRatioOptionsFor,
+  defaultAspectRatioFor,
+  resolveAspectRatioForSurface,
+} from "./studioCanvasLinkage";
 import {
-  GROK_VIDEO_ASPECT_RATIOS,
   getSelectedGrokSkuConfig,
   grokVideoSkuForProviderSelection,
   isGrokHaodeyaProvider,
@@ -32,6 +30,7 @@ export function buildStudioComposerCanvasProps({
   submissionProgress,
   taskActions,
 }: StudioDesignerViewProps): StudioComposerCanvasProps {
+  void state;
   const {
     activeProject,
     availableProviders,
@@ -63,11 +62,9 @@ export function buildStudioComposerCanvasProps({
 
   const isGrokVideo = studioForm.creationMode === "video" && isGrokHaodeyaProvider(selectedProvider);
   const grokSkuConfig = isGrokVideo ? getSelectedGrokSkuConfig(studioForm, selectedProvider) : null;
-  const composerAspectRatioOptions = isGrokVideo
-    ? [...GROK_VIDEO_ASPECT_RATIOS]
-    : studioForm.creationMode === "edit"
-      ? imageEditAspectRatioOptions
-      : aspectRatioOptions;
+  const composerAspectRatioOptions = aspectRatioOptionsFor(studioForm.creationMode, {
+    grokVideo: isGrokVideo,
+  });
 
   return {
     activeComposerMenu,
@@ -113,11 +110,18 @@ export function buildStudioComposerCanvasProps({
           mode === "video"
             ? grokVideoSkuForProviderSelection(provider, current.grokVideoSku)
             : "";
+        const nextIsGrok = mode === "video" && isGrokHaodeyaProvider(provider);
         let nextAspectRatio = current.aspectRatio;
         if (mode === "edit") {
-          nextAspectRatio = SOURCE_ASPECT_RATIO_LABEL;
+          nextAspectRatio = defaultAspectRatioFor("edit");
         } else if (current.creationMode === "edit" && isSourceAspectRatio(current.aspectRatio)) {
-          nextAspectRatio = "16:9";
+          nextAspectRatio = defaultAspectRatioFor(mode);
+        } else {
+          nextAspectRatio = resolveAspectRatioForSurface(mode, current.aspectRatio);
+          const allowed = aspectRatioOptionsFor(mode, { grokVideo: Boolean(nextIsGrok) });
+          if (!allowed.includes(nextAspectRatio)) {
+            nextAspectRatio = defaultAspectRatioFor(mode);
+          }
         }
         return {
           ...current,

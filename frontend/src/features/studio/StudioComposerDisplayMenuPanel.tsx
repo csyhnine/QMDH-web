@@ -1,5 +1,6 @@
 import StudioComposerOptionGroup from "./StudioComposerOptionGroup";
-import { normalizeStudioResolution } from "./studioConstants";
+import { SOURCE_ASPECT_RATIO_LABEL, normalizeStudioResolution } from "./studioConstants";
+import { linkForCreationMode } from "./studioCanvasLinkage";
 import { isGrokHaodeyaProvider } from "./grokVideoUtils";
 import type { StudioComposerDisplayMenuPanelProps } from "./studioComposerDisplayMenuTypes";
 
@@ -14,6 +15,7 @@ export default function StudioComposerDisplayMenuPanel({
   const isVideoMode = studioForm.creationMode === "video";
   const isEditMode = studioForm.creationMode === "edit";
   const isGrokVideo = isVideoMode && isGrokHaodeyaProvider(selectedProvider);
+  const editDefaultLabel = linkForCreationMode("edit").defaultAspectRatio || SOURCE_ASPECT_RATIO_LABEL;
 
   return (
     <div className="composer-menu-panel composer-menu-panel-display">
@@ -24,7 +26,9 @@ export default function StudioComposerDisplayMenuPanel({
         onSelect={onAspectRatioSelect}
       />
       {isEditMode ? (
-        <p className="composer-menu-note">选择「遵循原图」时不向模型传宽高比，输出跟参考图一致。</p>
+        <p className="composer-menu-note">
+          选择「{editDefaultLabel}」时不向模型传宽高比，输出跟参考图一致。
+        </p>
       ) : null}
 
       {isVideoMode ? (

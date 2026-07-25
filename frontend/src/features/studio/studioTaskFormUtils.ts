@@ -4,10 +4,10 @@ import { isRuntimeStudioProvider } from "./modelAdminUtils";
 import {
   IMAGE_EDIT_WORKFLOW_KEY,
   IMAGE_UPSCALE_WORKFLOW_KEY,
-  SOURCE_ASPECT_RATIO_LABEL,
   VIDEO_WORKFLOW_KEY,
   normalizeStudioResolution,
 } from "./studioConstants";
+import { defaultAspectRatioFor, resolveAspectRatioForSurface } from "./studioCanvasLinkage";
 import { inferStyleFromAsset } from "./studioAssetUtils";
 import { inferRequestedImageCount, taskReferenceImages, taskResultString } from "./studioTaskUtils";
 import type { ReferenceUploadItem, StudioFormState } from "./studioTypes";
@@ -71,8 +71,8 @@ export function buildStudioFormFromTask({
   const restoredAspectRatio = taskResultString(task, "aspect_ratio");
   const nextAspectRatio =
     nextMode === "edit"
-      ? restoredAspectRatio || SOURCE_ASPECT_RATIO_LABEL
-      : restoredAspectRatio || studioForm.aspectRatio;
+      ? resolveAspectRatioForSurface("edit", restoredAspectRatio)
+      : restoredAspectRatio || defaultAspectRatioFor(nextMode);
 
   return {
     nextForm: {

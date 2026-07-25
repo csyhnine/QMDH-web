@@ -37,6 +37,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Current Product Reality
 
+- **Studio ↔ Canvas linkage**：文生图 / 图像编辑 / 视频生成与画布 `text2img` / `img2img` / `video` 的比例选项、默认值、workflow 映射统一由 `frontend/src/features/studio/studioCanvasLinkage.ts` 驱动；改比例/默认/workflow 只改该文件。画布「图生图」对应生成页「图像编辑」（默认「遵循原图」）。`upscale` / `upload` / `annotate` 为画布侧专用表面。
 - Active runtime roles: `admin`, `ops`, `designer` (`ops` = designer studio access + inspiration/feedback/templates backoffice; other admin modules show 🔒)
 - Studio history, assets, chat conversations, and personal projects are account-owned, not project-member shared.
 - Backend/admin surfaces remain admin-only.

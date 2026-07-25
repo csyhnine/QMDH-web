@@ -5,3 +5,4 @@ export * from "./studioPayloadUtils";
 export * from "./studioReferenceUtils";
 export * from "./studioTaskUtils";
 export * from "./studioTemplateFormUtils";
+export * from "./studioCanvasLinkage";

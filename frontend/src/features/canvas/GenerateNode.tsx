@@ -1,7 +1,9 @@
 import { Handle, Position, useUpdateNodeInternals, type Node, type NodeProps } from "@xyflow/react";
 import { useEffect, useMemo, useRef } from "react";
 
-import { aspectRatioOptions, resolutionOptions } from "../studio/studioConstants";
+import { resolutionOptions } from "../studio/studioConstants";
+import { aspectRatioOptionsFor } from "../studio/studioCanvasLinkage";
+import { isGrokHaodeyaProvider } from "../studio/grokVideoUtils";
 import {
   upscaleNoiseOptions,
   upscaleScaleOptions,
@@ -44,6 +46,10 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
   const isUpload = data.nodeKind === "upload";
   const isUpscale = data.nodeKind === "upscale";
   const isAnnotate = data.nodeKind === "annotate";
+  const selectedProvider = providers.find((item) => item.provider_name === data.requestedProvider);
+  const ratioOptions = aspectRatioOptionsFor(data.nodeKind, {
+    grokVideo: data.nodeKind === "video" && isGrokHaodeyaProvider(selectedProvider),
+  });
   const baseImage =
     upstream.images[0] || data.referenceImages[0] || data.previewImagePath || data.assetUrls[0] || "";
   const preview = isAnnotate
@@ -269,7 +275,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
                     disabled={disabled || busy}
                     onChange={(event) => patch({ aspectRatio: event.target.value })}
                   >
-                    {aspectRatioOptions.map((ratio) => (
+                    {ratioOptions.map((ratio) => (
                       <option key={ratio} value={ratio}>
                         {ratio}
                       </option>

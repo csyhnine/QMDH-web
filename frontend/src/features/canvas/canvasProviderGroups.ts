@@ -4,6 +4,10 @@ import {
   publicProviderDisplayName,
 } from "../studio/modelAdminUtils";
 import {
+  aspectRatioNeedsResetForSurface,
+  defaultAspectRatioFor,
+} from "../studio/studioCanvasLinkage";
+import {
   NODE_KIND_LABEL,
   creationModeForNodeKind,
   type CanvasNodeKind,
@@ -100,6 +104,9 @@ export function patchFromProviderSelection(
     if (!data.label || data.label === NODE_KIND_LABEL[data.nodeKind]) {
       patch.label = NODE_KIND_LABEL[nextKind];
     }
+    if (aspectRatioNeedsResetForSurface(nextKind, data.aspectRatio)) {
+      patch.aspectRatio = defaultAspectRatioFor(nextKind);
+    }
   };
 
   if (group === "upscale" && data.nodeKind !== "upscale") {
@@ -108,6 +115,14 @@ export function patchFromProviderSelection(
     switchKind("video");
   } else if (group === "image" && (data.nodeKind === "video" || data.nodeKind === "upscale")) {
     switchKind("text2img");
+  } else if (
+    group === "image" &&
+    data.nodeKind === "text2img" &&
+    provider.capabilities.includes("image.edit") &&
+    !provider.capabilities.includes("image.generate")
+  ) {
+    // Edit-only image providers map to img2img / Studio 图像编辑.
+    switchKind("img2img");
   }
   return patch;
 }

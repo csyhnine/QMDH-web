@@ -9,6 +9,13 @@ import {
   type AnnotationTool,
 } from "./annotateTypes";
 
+export type { CanvasSurfaceKind } from "../studio/studioCanvasLinkage";
+export {
+  creationModeForNodeKind,
+  linkForNodeKind,
+  nodeKindForCreationMode,
+} from "../studio/studioCanvasLinkage";
+
 export type CanvasNodeStatus =
   | "idle"
   | "submitting"
@@ -95,12 +102,6 @@ export const ADDABLE_NODE_KINDS: CanvasNodeKind[] = [
   "upscale",
   "annotate",
 ];
-
-export function creationModeForNodeKind(nodeKind: CanvasNodeKind): StudioFormState["creationMode"] {
-  if (nodeKind === "img2img") return "edit";
-  if (nodeKind === "video") return "video";
-  return "generate";
-}
 
 export function defaultUpscaleFields() {
   return {

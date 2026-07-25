@@ -1,6 +1,10 @@
 import type { Edge, Node, Viewport } from "@xyflow/react";
 
-import { defaultStudioForm, normalizeStudioResolution } from "../studio/studioConstants";
+import {
+  defaultStudioForm,
+  normalizeStudioResolution,
+} from "../studio/studioConstants";
+import { resolveAspectRatioForSurface } from "../studio/studioCanvasLinkage";
 import type { UpscaleNoise, UpscaleScale, UpscaleStyle } from "../studio/studioUpscaleOptions";
 import { nanoid } from "./canvasId";
 import { clampAnnotationOpacity } from "./annotateTypes";
@@ -153,7 +157,7 @@ function normalizeStoredNode(node: Node): CanvasFlowNode {
       templateId: data.templateId ?? null,
       prompt: String(data.prompt || ""),
       style: String(data.style || defaultStudioForm.style),
-      aspectRatio: String(data.aspectRatio || defaultStudioForm.aspectRatio),
+      aspectRatio: resolveAspectRatioForSurface(nodeKind, data.aspectRatio),
       resolution: normalizeStudioResolution(data.resolution),
       projectCode: String(data.projectCode || defaultStudioForm.projectCode),
       requestedProvider: String(data.requestedProvider || ""),
@@ -212,7 +216,7 @@ export function createBlankGenerateNode(
       templateId: null,
       prompt: "",
       style: defaultStudioForm.style,
-      aspectRatio: defaultStudioForm.aspectRatio,
+      aspectRatio: resolveAspectRatioForSurface(nodeKind, null),
       resolution: defaultStudioForm.resolution,
       projectCode: defaults.projectCode,
       requestedProvider: providerForKind(nodeKind, defaults),

@@ -381,13 +381,17 @@ class HappyHorseVideoBodyTests(unittest.TestCase):
         )
         self.assertEqual(body["model"], "happyhorse-1.1-t2v-5s")
         self.assertEqual(body["duration"], 5)
-        self.assertEqual(body["resolution"], "720P")
-        self.assertEqual(body["ratio"], "16:9")
-        self.assertEqual(body["input"], {"prompt": "a white cat"})
+        self.assertEqual(body["size"], "720P")
         self.assertEqual(
-            body["parameters"],
-            {"duration": 5, "resolution": "720P", "ratio": "16:9"},
+            body["metadata"],
+            {
+                "input": {"prompt": "a white cat"},
+                "parameters": {"resolution": "720P", "duration": 5},
+            },
         )
+        self.assertNotIn("resolution", body)
+        self.assertNotIn("input", body)
+        self.assertNotIn("parameters", body)
         self.assertNotIn("media", body)
         self.assertNotIn("frame_images", body)
 
@@ -413,17 +417,20 @@ class HappyHorseVideoBodyTests(unittest.TestCase):
                     "start_image_url": "https://cdn.example.com/first.png",
                 },
             )
+        self.assertEqual(body["size"], "720P")
         self.assertEqual(
-            body["input"],
+            body["metadata"],
             {
-                "prompt": "a cat running",
-                "media": [{"type": "first_frame", "url": "https://cdn.example.com/first.png"}],
+                "input": {
+                    "prompt": "a cat running",
+                    "media": [
+                        {"type": "first_frame", "url": "https://cdn.example.com/first.png"}
+                    ],
+                },
+                "parameters": {"resolution": "720P", "duration": 5},
             },
         )
-        self.assertEqual(
-            body["parameters"],
-            {"duration": 5, "resolution": "720P", "ratio": "16:9"},
-        )
+        self.assertNotIn("input", body)
         self.assertNotIn("media", body)
         self.assertNotIn("frame_images", body)
 
@@ -447,7 +454,7 @@ class HappyHorseVideoBodyTests(unittest.TestCase):
                 },
             )
         self.assertEqual(
-            body["input"],
+            body["metadata"]["input"],
             {
                 "prompt": "[Image 1] holds [Image 2]",
                 "media": [
@@ -456,6 +463,7 @@ class HappyHorseVideoBodyTests(unittest.TestCase):
                 ],
             },
         )
+        self.assertNotIn("input", body)
         self.assertNotIn("media", body)
 
     def test_duration_must_match_sku(self) -> None:

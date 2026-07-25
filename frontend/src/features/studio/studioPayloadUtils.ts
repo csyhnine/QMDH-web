@@ -7,7 +7,11 @@ import {
   normalizeStudioResolution,
 } from "./studioConstants";
 import { resolveSelectedGrokSku, getSelectedGrokSkuConfig, isGrokHaodeyaProvider } from "./grokVideoUtils";
-import { buildHappyHorseVideoPayload, isHappyHorseProvider } from "./happyHorseVideoUtils";
+import {
+  buildHappyHorseVideoPayload,
+  getSelectedHappyHorseSkuConfig,
+  isHappyHorseProvider,
+} from "./happyHorseVideoUtils";
 import type { StudioFormState } from "./studioTypes";
 import { clampImageCount } from "./studioAssetUtils";
 

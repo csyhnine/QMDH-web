@@ -1,6 +1,7 @@
 import type { Provider } from "../../api";
 import type { StudioFormState } from "./studioTypes";
 import { getSelectedGrokSkuConfig, isGrokHaodeyaProvider } from "./grokVideoUtils";
+import { getSelectedHappyHorseSkuConfig, isHappyHorseProvider } from "./happyHorseVideoUtils";
 
 export function isComposerBlurWithinForm(event: React.FocusEvent<HTMLFormElement>): boolean {
   return event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget);
@@ -22,6 +23,14 @@ export function composerReferenceHint(
   form?: StudioFormState
 ): string {
   if (mode === "video") {
+    if (isHappyHorseProvider(provider) && form) {
+      const skuConfig = getSelectedHappyHorseSkuConfig(form, provider);
+      if (skuConfig) {
+        const uploaded =
+          referenceUploadCount > 0 ? `已上传 ${referenceUploadCount} 张。` : "当前未上传图片，纯文本也可提交。";
+        return `${skuConfig.referenceHint} ${uploaded} 720p · 生成通常 30 秒～数分钟。`;
+      }
+    }
     if (isGrokHaodeyaProvider(provider) && form) {
       const skuConfig = getSelectedGrokSkuConfig(form, provider);
       if (skuConfig) {

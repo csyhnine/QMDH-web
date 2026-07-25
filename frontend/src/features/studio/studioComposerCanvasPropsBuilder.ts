@@ -8,8 +8,13 @@ import {
   getSelectedGrokSkuConfig,
   grokVideoSkuForProviderSelection,
   isGrokHaodeyaProvider,
-  type GrokVideoSku,
 } from "./grokVideoUtils";
+import {
+  getSelectedHappyHorseSkuConfig,
+  happyHorseVideoSkuForProviderSelection,
+  isHappyHorseProvider,
+} from "./happyHorseVideoUtils";
+import type { StudioVideoSku } from "./studioComposerGrokSkuMenuTypes";
 import type { StudioComposerCanvasProps } from "./studioComposerCanvasTypes";
 import type { StudioDesignerViewProps } from "./studioDesignerViewTypes";
 
@@ -50,20 +55,27 @@ export function buildStudioComposerCanvasProps({
     setStudioForm((current) => ({
       ...current,
       requestedProvider: providerName,
-      grokVideoSku: grokVideoSkuForProviderSelection(provider, current.grokVideoSku),
+      grokVideoSku: isHappyHorseProvider(provider)
+        ? happyHorseVideoSkuForProviderSelection(provider, current.grokVideoSku)
+        : grokVideoSkuForProviderSelection(provider, current.grokVideoSku),
     }));
     setActiveComposerMenu(null);
   };
 
-  const handleGrokVideoSkuSelect = (sku: GrokVideoSku) => {
+  const handleGrokVideoSkuSelect = (sku: StudioVideoSku) => {
     setStudioForm((current) => ({ ...current, grokVideoSku: sku }));
     setActiveComposerMenu(null);
   };
 
   const isGrokVideo = studioForm.creationMode === "video" && isGrokHaodeyaProvider(selectedProvider);
+  const isHappyHorseVideo =
+    studioForm.creationMode === "video" && isHappyHorseProvider(selectedProvider);
   const grokSkuConfig = isGrokVideo ? getSelectedGrokSkuConfig(studioForm, selectedProvider) : null;
+  const happyHorseSkuConfig = isHappyHorseVideo
+    ? getSelectedHappyHorseSkuConfig(studioForm, selectedProvider)
+    : null;
   const composerAspectRatioOptions = aspectRatioOptionsFor(studioForm.creationMode, {
-    grokVideo: isGrokVideo,
+    grokVideo: isGrokVideo || isHappyHorseVideo,
   });
 
   return {
@@ -81,9 +93,10 @@ export function buildStudioComposerCanvasProps({
     referenceUploads: referenceUpload.referenceUploads,
     resolutionOptions,
     selectedProvider,
-    selectedGrokSkuLabel: grokSkuConfig?.label ?? null,
+    selectedGrokSkuLabel: grokSkuConfig?.label ?? happyHorseSkuConfig?.label ?? null,
     selectedProviderModelName: selectedProvider?.display_name ?? selectedProvider?.model_name ?? null,
-    selectedResolutionLabel: isGrokVideo ? "720p（固定）" : selectedResolution?.label ?? null,
+    selectedResolutionLabel:
+      isGrokVideo || isHappyHorseVideo ? "720p（固定）" : selectedResolution?.label ?? null,
     sharedTemplates: studioTemplates.sharedTemplates,
     showComposer: activeViewIsStudio,
     studioForm,
@@ -108,9 +121,13 @@ export function buildStudioComposerCanvasProps({
         const provider = availableProviders.find((item) => item.provider_name === current.requestedProvider);
         const nextGrokSku =
           mode === "video"
-            ? grokVideoSkuForProviderSelection(provider, current.grokVideoSku)
+            ? isHappyHorseProvider(provider)
+              ? happyHorseVideoSkuForProviderSelection(provider, current.grokVideoSku)
+              : grokVideoSkuForProviderSelection(provider, current.grokVideoSku)
             : "";
-        const nextIsGrok = mode === "video" && isGrokHaodeyaProvider(provider);
+        const nextIsFixed720p =
+          mode === "video" &&
+          (isGrokHaodeyaProvider(provider) || isHappyHorseProvider(provider));
         let nextAspectRatio = current.aspectRatio;
         if (mode === "edit") {
           nextAspectRatio = defaultAspectRatioFor("edit");
@@ -118,7 +135,7 @@ export function buildStudioComposerCanvasProps({
           nextAspectRatio = defaultAspectRatioFor(mode);
         } else {
           nextAspectRatio = resolveAspectRatioForSurface(mode, current.aspectRatio);
-          const allowed = aspectRatioOptionsFor(mode, { grokVideo: Boolean(nextIsGrok) });
+          const allowed = aspectRatioOptionsFor(mode, { grokVideo: Boolean(nextIsFixed720p) });
           if (!allowed.includes(nextAspectRatio)) {
             nextAspectRatio = defaultAspectRatioFor(mode);
           }

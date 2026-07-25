@@ -4,7 +4,11 @@ import type { Dispatch, SetStateAction } from "react";
 import type { LoadState, StudioFormState } from "./studioTypes";
 import { clampReferenceImageCount } from "./studioUtils";
 import { getSelectedGrokSkuConfig, grokReferenceUploadError, isGrokHaodeyaProvider } from "./grokVideoUtils";
-import { getHappyHorseSkuConfig, happyHorseReferenceUploadError, isHappyHorseProvider } from "./happyHorseVideoUtils";
+import {
+  getSelectedHappyHorseSkuConfig,
+  happyHorseReferenceUploadError,
+  isHappyHorseProvider,
+} from "./happyHorseVideoUtils";
 
 type ValidationOptions = {
   form: StudioFormState;
@@ -63,15 +67,15 @@ export function validateStudioTaskSubmission({
 
     const referenceImageCount = clampReferenceImageCount(form.referenceImages.length);
     if (isHappyHorseProvider(providerForSubmit)) {
-      const skuConfig = getHappyHorseSkuConfig(providerForSubmit);
+      const skuConfig = getSelectedHappyHorseSkuConfig(form, providerForSubmit);
       if (!skuConfig) {
         setState((current) => ({
           ...current,
-          error: "请选择带 -5s/-10s 后缀的 HappyHorse 视频档位。",
+          error: "请先选择 HappyHorse 视频档位。",
         }));
         return { ok: false };
       }
-      const hhError = happyHorseReferenceUploadError(providerForSubmit, referenceImageCount);
+      const hhError = happyHorseReferenceUploadError(form, providerForSubmit, referenceImageCount);
       if (hhError) {
         setState((current) => ({ ...current, error: hhError }));
         return { ok: false };

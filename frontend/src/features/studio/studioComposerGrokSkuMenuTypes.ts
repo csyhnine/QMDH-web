@@ -1,11 +1,14 @@
 import type { ComposerMenuKey, StudioFormState } from "./studioTypes";
 import type { GrokVideoSku } from "./grokVideoUtils";
+import type { HappyHorseVideoSku } from "./happyHorseVideoUtils";
+
+export type StudioVideoSku = GrokVideoSku | HappyHorseVideoSku;
 
 export type StudioComposerGrokSkuMenuProps = {
   activeComposerMenu: ComposerMenuKey;
   selectedGrokSkuLabel: string | null;
   studioForm: StudioFormState;
-  onGrokVideoSkuSelect: (sku: GrokVideoSku) => void;
+  onGrokVideoSkuSelect: (sku: StudioVideoSku) => void;
   onToggleComposerMenu: (menu: Exclude<ComposerMenuKey, null>) => void;
 };
 

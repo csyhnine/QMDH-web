@@ -12,32 +12,20 @@
 
 ## Latest Handoffs
 
+### [2026-07-25] HappyHorse 对齐 Grok「单模型 + 档位菜单」— **待部署**
+- 问题：HappyHorse 6 个 SKU 曾作为独立模型出现在列表里
+- 修复：统一 `haodeya_happyhorse` 入口 + Studio 档位菜单（文生/图生/参考 × 5s/10s），散装 SKU profile 停用
+- Safe to hand off: **部署后 Yes**
+
 ### [2026-07-25] Haodeya 新模型分流（chat / wan2.7 / HappyHorse）— **已上生产**
-- Git：**`47890dc`**（本地 = `origin/main` = 生产 `/www/wwwroot/qmdh-web`）
-- Alembic：**`o6p7q8r9s0t1` (head)**（本轮无新迁移）
-- 目标：不同能力走不同路径，禁止全部打成 chat
-- 代码：
-  - wan2.7：`/images/generations`，字面 `size=1K/2K/4K`；禁止 2K 误切 chat
-  - HappyHorse：`POST /videos`，SKU 必须带 `-5s/-10s`，body `duration` 与 SKU 匹配；`ratio` + `720P`
-  - 前端：HappyHorse 不进 Grok 档位菜单；wan-pro 可选 4K
-- 生产 DB：
-  - Chat：仅启用 `qwen3.8-max-preview`（`qwen3.7-*` / `qwen3.6-flash` 已停用）；另有 `glm-5.2` / `deepseek-v4-pro`
-  - wan2.7-image / wan2.7-image-pro：`strategies.image.generate=openai_images`
-  - HappyHorse：6 个 SKU profile 已启用
-- 网关：`https://newapi.haodeya.xyz/v1`；`qwen3.8-max-preview` 探测 200
-- 部署：frontend + backend + worker 已重建；health 200
+- Git：**`47890dc`**（产品）；文档基线至 `d73966b`
+- Alembic：**`o6p7q8r9s0t1` (head)**
+- Chat：仅启用 `qwen3.8-max-preview`
+- wan2.7：字面 size；HappyHorse：`/videos` + duration 匹配 SKU
 - Safe to hand off: **Yes**
 
 ### [2026-07-25] 用量日志单行 + 能力/参数展示 — **已上生产**
-- Git：**`8809239`**（产品代码）；文档基线曾至 `1a92599`
-- Alembic：**`o6p7q8r9s0t1` (head)**
-- 归档：`docs/archive/deploy-2026-07-25-usage-logs-summary.md`
+- Git：**`8809239`**；归档：`docs/archive/deploy-2026-07-25-usage-logs-summary.md`
 - Safe to hand off: **Yes**
 
-### [2026-07-24] Studio ↔ Canvas 联动 + 图生图「遵循原图」— **已上生产**
-- Git 含：`f057dff`（`studioCanvasLinkage.ts`）、`aff7bda`（编辑模式默认遵循原图 / 上游省略 `aspect_ratio`）
-- 约定：改比例选项/默认值/workflow 映射只改 `frontend/src/features/studio/studioCanvasLinkage.ts`
-- 画布 `img2img` ↔ 生成页「图像编辑」；`upscale` / `upload` / `annotate` 为画布侧专用
-- Safe to hand off: **Yes**
-
-<!-- 更早条目见 docs/archive/handoff-2026-07-21-stale-entries.md；deploy-2026-07-20 -->
+<!-- 更早条目见 docs/archive -->

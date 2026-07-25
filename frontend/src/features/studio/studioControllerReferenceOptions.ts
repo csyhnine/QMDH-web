@@ -16,7 +16,7 @@ export function buildStudioReferenceUploadOptions({
   selectedProvider: StudioDerivedState["selectedProvider"];
 }): Parameters<typeof useStudioReferenceUploads>[0] {
   const videoReferenceLimit = isHappyHorseProvider(selectedProvider)
-    ? happyHorseReferenceLimit(selectedProvider)
+    ? happyHorseReferenceLimit(controllerState.studioForm, selectedProvider)
     : grokReferenceLimit(controllerState.studioForm, selectedProvider);
   return {
     defaultTitle: defaultStudioForm.title,

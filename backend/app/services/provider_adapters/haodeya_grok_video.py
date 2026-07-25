@@ -50,6 +50,7 @@ _PLACEHOLDER_PROFILE_MODELS = {
     "grok_imagine_video",
     "grok-imagine",
     "haodeya_happyhorse",
+    "happyhorse-1.1",
     "happyhorse-1.1-t2v",
     "happyhorse-1.1-i2v",
     "happyhorse-1.1-r2v",

@@ -1,5 +1,6 @@
 import type { Asset, Provider, Task } from "../../api";
 import { isGrokSkuId } from "./grokVideoUtils";
+import { isHappyHorseSkuId } from "./happyHorseVideoUtils";
 import { isRuntimeStudioProvider } from "./modelAdminUtils";
 import {
   IMAGE_EDIT_WORKFLOW_KEY,
@@ -89,7 +90,10 @@ export function buildStudioFormFromTask({
       deliverable: taskResultString(task, "storyboard") || taskResultString(task, "deliverable") || studioForm.deliverable,
       notes: taskResultString(task, "motion_prompt") || taskResultString(task, "prompt_supplement") || studioForm.notes,
       referenceImages: nextUploads.map((item) => item.storagePath),
-      grokVideoSku: isGrokSkuId(restoredGrokSku) ? restoredGrokSku : studioForm.grokVideoSku,
+      grokVideoSku:
+        isGrokSkuId(restoredGrokSku) || isHappyHorseSkuId(restoredGrokSku)
+          ? restoredGrokSku
+          : studioForm.grokVideoSku,
     },
     nextUploads,
   };

@@ -17,14 +17,14 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`47890dc`**
-- Production: **`https://cityusbdisk.cn`** — Git **`47890dc`**（2026-07-25 Haodeya 新模型分流已部署）
+- Current branch: **`main`** @ **`4edaaec`**
+- Production: **`https://cityusbdisk.cn`** — Git **`4edaaec`**（2026-07-25 历史卡片下载 + wan aspect-aware size 已部署）
 - Alembic head：**`o6p7q8r9s0t1`**（skill bundle；catalog=`n5o6p7q8r9s0`；记忆=`m4n5o6p7q8r9`；gov=`l3m4n5o6p7q8`）
 - **Haodeya 新模型（2026-07-25）**：
   - 网关 `https://newapi.haodeya.xyz/v1`
   - Chat：生产启用 `qwen3.8-max-preview`（其它 qwen 档位停用）
-  - 生图：`wan2.7-image` / `wan2.7-image-pro` → `/images/generations` + 字面 size
-  - 视频：HappyHorse 六个 `-5s/-10s` SKU → `/videos`（禁止裸名）
+  - 生图：`wan2.7-image` / `wan2.7-image-pro` → `/images/generations`；字面 size 或具体比例对应的 `WxH`
+  - 视频：HappyHorse 单模型 + 档位菜单（对齐 Grok）
 - **Chat Agent（重要）**：
   - **B1 / gov / harness / memory** 已合 main 并已上生产
   - **「设计助手」UI 默认开启**（`VITE_CHAT_AGENT_UI_ENABLED !== "false"`）
@@ -212,8 +212,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Domain: `cityusbdisk.cn`（京ICP备14011242号-4，已备案）
 - Deploy path: `/www/wwwroot/qmdh-web`
 - Deployment model: Docker Compose（**worker ×3**）
-- **Production Git: `8809239`** — frontend/backend/worker rebuilt 2026-07-25
-- **GitHub `main`:** aligned with production @ `8809239`
+- **Production Git: `4edaaec`** — frontend/backend/worker rebuilt 2026-07-25（gallery download + wan WxH）
+- **GitHub `main`:** aligned with production @ `4edaaec`
 - Alembic: **`o6p7q8r9s0t1` (head)**
 - Latest session archive: `docs/handoff.md` → `[2026-07-25] 用量日志单行 + 能力/参数展示`
 - **Deploy archive:** `docs/archive/deploy-2026-07-25-usage-logs-summary.md`（此前大包见 `deploy-2026-07-20-main-canvas-chat-b1.md`）
@@ -273,7 +273,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Near-Term Suggested Next Steps
 
-1. Cold-start: `git pull` from GitHub → confirm HEAD `8809239`（或更新后的 main）→ 读最新 `docs/handoff.md`.
+1. Cold-start: `git pull` from GitHub → confirm HEAD `4edaaec`（或更新后的 main）→ 读最新 `docs/handoff.md`.
 2. When owner approves deploy: `sudo -u admin git pull --ff-only` → rebuild affected images（改了 `usage_ledger` / task 路径则含 worker）；勿动 `.env`；无新迁移则不必 alembic.
 3. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.
 4. Optional: smoke CPA `gemini-3.1-flash-image` in Studio；用量日志抽查 `/admin/usage-logs`.

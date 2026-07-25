@@ -17,8 +17,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`**（以 `git rev-parse HEAD` 为准）
-- Production: **`https://cityusbdisk.cn`** — 2026-07-25 部署 Haodeya 新模型分流后核对 `git rev-parse HEAD`
+- Current branch: **`main`** @ **`47890dc`**
+- Production: **`https://cityusbdisk.cn`** — Git **`47890dc`**（2026-07-25 Haodeya 新模型分流已部署）
 - Alembic head：**`o6p7q8r9s0t1`**（skill bundle；catalog=`n5o6p7q8r9s0`；记忆=`m4n5o6p7q8r9`；gov=`l3m4n5o6p7q8`）
 - **Haodeya 新模型（2026-07-25）**：
   - 网关 `https://newapi.haodeya.xyz/v1`

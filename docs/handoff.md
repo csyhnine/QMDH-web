@@ -12,20 +12,21 @@
 
 ## Latest Handoffs
 
-### [2026-07-25] Haodeya 新模型分流（chat / wan2.7 / HappyHorse）— **待部署后核对 HEAD**
+### [2026-07-25] Haodeya 新模型分流（chat / wan2.7 / HappyHorse）— **已上生产**
+- Git：**`47890dc`**（本地 = `origin/main` = 生产 `/www/wwwroot/qmdh-web`）
+- Alembic：**`o6p7q8r9s0t1` (head)**（本轮无新迁移）
 - 目标：不同能力走不同路径，禁止全部打成 chat
 - 代码：
   - wan2.7：`/images/generations`，字面 `size=1K/2K/4K`；禁止 2K 误切 chat
   - HappyHorse：`POST /videos`，SKU 必须带 `-5s/-10s`，body `duration` 与 SKU 匹配；`ratio` + `720P`
   - 前端：HappyHorse 不进 Grok 档位菜单；wan-pro 可选 4K
-- 生产 DB（已配，不依赖本 commit）：
-  - Chat：仅启用 `qwen3.8-max-preview`（其余 qwen 档位已停用）；另有 `glm-5.2` / `deepseek-v4-pro`
+- 生产 DB：
+  - Chat：仅启用 `qwen3.8-max-preview`（`qwen3.7-*` / `qwen3.6-flash` 已停用）；另有 `glm-5.2` / `deepseek-v4-pro`
   - wan2.7-image / wan2.7-image-pro：`strategies.image.generate=openai_images`
   - HappyHorse：6 个 SKU profile 已启用
 - 网关：`https://newapi.haodeya.xyz/v1`；`qwen3.8-max-preview` 探测 200
-- 部署需重建：**frontend + backend + worker**（无新 Alembic）
-- 关键文件：`task_executor.py`、`provider_strategy.py`、`haodeya_grok_video.py`、`happyHorseVideoUtils.ts` 等
-- Safe to hand off: **部署完成后 Yes**
+- 部署：frontend + backend + worker 已重建；health 200
+- Safe to hand off: **Yes**
 
 ### [2026-07-25] 用量日志单行 + 能力/参数展示 — **已上生产**
 - Git：**`8809239`**（产品代码）；文档基线曾至 `1a92599`

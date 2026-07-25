@@ -23,8 +23,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - **Haodeya 新模型（2026-07-25）**：
   - 网关 `https://newapi.haodeya.xyz/v1`
   - Chat：生产启用 `qwen3.8-max-preview`（其它 qwen 档位停用）
-  - 生图：`wan2.7-image` / `wan2.7-image-pro` → `/images/generations`；字面 size 或具体比例对应的 `WxH`
-  - 视频：HappyHorse 单模型 + 档位菜单（对齐 Grok）
+  - 生图：`wan2.7-image` / `wan2.7-image-pro` → 无参考图 `/images/generations`；有参考图 `/images/edits` multipart；size 字面 `1K/2K/4K`（4K 仅 pro 文生图）
+  - 视频：HappyHorse 单模型 + 档位菜单；请求体 `media`（i2v=`first_frame`，r2v=`reference_image` 1～9）+ duration 与 SKU 一致
 - **Chat Agent（重要）**：
   - **B1 / gov / harness / memory** 已合 main 并已上生产
   - **「设计助手」UI 默认开启**（`VITE_CHAT_AGENT_UI_ENABLED !== "false"`）

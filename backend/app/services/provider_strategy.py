@@ -195,7 +195,8 @@ def profile_prefers_haodeya_async_image(*, provider_name: str, model_name: str, 
 
     Gemini CPA (`gemini-3.1-flash-image`) also uses `newapi.haodeya.xyz` but must stay on
     `chat_completions_image` / `chat_modalities_image`, not `/images/generations` async.
-    Wan2.7 uses synchronous `/images/generations` with literal size tiers.
+    Wan2.7 text-to-image uses synchronous `/images/generations` with literal size tiers;
+    Wan2.7 image edit (with reference) uses `/images/edits` multipart and must not use generations.
     """
     identity = f"{provider_name} {model_name} {base_url}".lower()
     if "wan2.7" in identity or "wan2_7" in identity:

@@ -65,7 +65,9 @@ export function validateStudioTaskSubmission({
       return { ok: false };
     }
 
-    const referenceImageCount = clampReferenceImageCount(form.referenceImages.length);
+    const referenceImageCount = isHappyHorseProvider(providerForSubmit)
+      ? form.referenceImages.filter(Boolean).length
+      : clampReferenceImageCount(form.referenceImages.length);
     if (isHappyHorseProvider(providerForSubmit)) {
       const skuConfig = getSelectedHappyHorseSkuConfig(form, providerForSubmit);
       if (!skuConfig) {

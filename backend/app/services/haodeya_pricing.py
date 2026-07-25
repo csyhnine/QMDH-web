@@ -20,6 +20,15 @@ GROK_VIDEO_SKU_PRICES: dict[str, float] = {
     "x-ai/grok-imagine-video-ref-10s": 6.66,
 }
 
+HAPPYHORSE_VIDEO_SKU_PRICES: dict[str, float] = {
+    "happyhorse-1.1-t2v-5s": 3.4,
+    "happyhorse-1.1-i2v-5s": 3.4,
+    "happyhorse-1.1-r2v-5s": 3.4,
+    "happyhorse-1.1-t2v-10s": 6.8,
+    "happyhorse-1.1-i2v-10s": 6.8,
+    "happyhorse-1.1-r2v-10s": 6.8,
+}
+
 IMAGE_MODEL_PRICES: dict[str, dict[str, Any]] = {
     "google/gemini-3.1-flash-image-preview": {
         "unit_price_1k": 0.67,
@@ -141,9 +150,17 @@ def _apply_image_profile_pricing(profile: ProviderProfile, image_pricing: dict[s
         adapter_config["unit_price_1k"] = float(image_pricing["unit_price_1k"])
     if "unit_price_2k" in image_pricing:
         adapter_config["unit_price_2k"] = float(image_pricing["unit_price_2k"])
+    if "unit_price_4k" in image_pricing:
+        adapter_config["unit_price_4k"] = float(image_pricing["unit_price_4k"])
     profile.adapter_config = adapter_config
 
     unit_price_2k = adapter_config.get("unit_price_2k", profile.unit_price)
+    unit_price_4k = adapter_config.get("unit_price_4k")
+    if unit_price_4k is not None:
+        return (
+            f"{profile.provider_name}:1k={profile.unit_price},2k={unit_price_2k},"
+            f"4k={unit_price_4k} {PRICING_CURRENCY}"
+        )
     return f"{profile.provider_name}:1k={profile.unit_price},2k={unit_price_2k} {PRICING_CURRENCY}"
 
 
@@ -209,6 +226,22 @@ def sync_haodeya_pricing(db: Session) -> PricingSyncResult:
             adapter_config["unit_price_2k"] = 6.66
             profile.adapter_config = adapter_config
             updated_profiles.append(f"{profile.provider_name}:5s=3.33,10s=6.66 {PRICING_CURRENCY}")
+            changed = True
+
+        if (
+            provider_name == "haodeya_happyhorse"
+            or model_name in HAPPYHORSE_VIDEO_SKU_PRICES
+            or "happyhorse" in model_name.lower()
+            or "happyhorse" in provider_name.lower()
+        ):
+            profile.pricing_currency = PRICING_CURRENCY
+            profile.pricing_unit = "per_video"
+            profile.unit_price = 3.4
+            adapter_config = dict(profile.adapter_config or {})
+            adapter_config["unit_price_1k"] = 3.4
+            adapter_config["unit_price_2k"] = 6.8
+            profile.adapter_config = adapter_config
+            updated_profiles.append(f"{profile.provider_name}:5s=3.4,10s=6.8 {PRICING_CURRENCY}")
             changed = True
 
         image_pricing = _image_pricing_for_model(model_name)

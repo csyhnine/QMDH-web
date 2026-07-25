@@ -370,5 +370,85 @@ class HaodeyaGrokVideoAdapterTests(unittest.TestCase):
             adapter.execute("video.generate", {"prompt": "test"})
 
 
+class HappyHorseVideoBodyTests(unittest.TestCase):
+    def test_t2v_body(self) -> None:
+        from app.services.provider_adapters.haodeya_grok_video import _build_happyhorse_request_body
+
+        body = _build_happyhorse_request_body(
+            "happyhorse-1.1-t2v-5s",
+            "a white cat",
+            {"duration": 5, "ratio": "16:9"},
+        )
+        self.assertEqual(body["model"], "happyhorse-1.1-t2v-5s")
+        self.assertEqual(body["duration"], 5)
+        self.assertEqual(body["resolution"], "720P")
+        self.assertEqual(body["ratio"], "16:9")
+        self.assertNotIn("media", body)
+
+    def test_i2v_requires_first_frame_media(self) -> None:
+        from app.services.provider_adapters.haodeya_grok_video import _build_happyhorse_request_body
+
+        with self.assertRaisesRegex(ValueError, "first_frame"):
+            _build_happyhorse_request_body(
+                "happyhorse-1.1-i2v-5s",
+                "a cat running",
+                {"duration": 5},
+            )
+
+        with patch(
+            "app.services.provider_adapters.haodeya_grok_video.resolve_public_media_url",
+            side_effect=lambda url: url,
+        ):
+            body = _build_happyhorse_request_body(
+                "happyhorse-1.1-i2v-5s",
+                "a cat running",
+                {
+                    "duration": 5,
+                    "start_image_url": "https://cdn.example.com/first.png",
+                },
+            )
+        self.assertEqual(
+            body["media"],
+            [{"type": "first_frame", "url": "https://cdn.example.com/first.png"}],
+        )
+
+    def test_r2v_uses_reference_image_media(self) -> None:
+        from app.services.provider_adapters.haodeya_grok_video import _build_happyhorse_request_body
+
+        with patch(
+            "app.services.provider_adapters.haodeya_grok_video.resolve_public_media_url",
+            side_effect=lambda url: url,
+        ):
+            body = _build_happyhorse_request_body(
+                "happyhorse-1.1-r2v-5s",
+                "[Image 1] holds [Image 2]",
+                {
+                    "duration": 5,
+                    "ratio": "16:9",
+                    "reference_images": [
+                        "https://cdn.example.com/person.jpg",
+                        "https://cdn.example.com/prop.jpg",
+                    ],
+                },
+            )
+        self.assertEqual(
+            body["media"],
+            [
+                {"type": "reference_image", "url": "https://cdn.example.com/person.jpg"},
+                {"type": "reference_image", "url": "https://cdn.example.com/prop.jpg"},
+            ],
+        )
+
+    def test_duration_must_match_sku(self) -> None:
+        from app.services.provider_adapters.haodeya_grok_video import _build_happyhorse_request_body
+
+        with self.assertRaisesRegex(ValueError, "duration must be 5"):
+            _build_happyhorse_request_body(
+                "happyhorse-1.1-t2v-5s",
+                "x",
+                {"duration": 10},
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

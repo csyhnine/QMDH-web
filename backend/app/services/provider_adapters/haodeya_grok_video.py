@@ -316,19 +316,23 @@ def _build_happyhorse_request_body(sku: str, prompt: str, payload: dict) -> dict
     public_urls = [resolve_public_media_url(path) for path in reference_paths]
 
     if mode == "t2v":
+        if public_urls:
+            raise ValueError("HappyHorse t2v must not include reference images")
         return body
     if mode == "i2v":
         if len(public_urls) > 1:
-            raise ValueError("HappyHorse i2v accepts at most one start frame image")
+            raise ValueError("HappyHorse i2v accepts exactly one first_frame image")
         start_url = str(payload.get("start_image_url") or "").strip() or (public_urls[0] if public_urls else "")
-        if start_url:
-            body["frame_images"] = [_grok_frame_image_item(resolve_public_media_url(start_url))]
+        if not start_url:
+            raise ValueError("HappyHorse i2v requires media type=first_frame")
+        body["media"] = [{"type": "first_frame", "url": resolve_public_media_url(start_url)}]
         return body
     # r2v
-    if len(public_urls) > 4:
-        raise ValueError("HappyHorse r2v accepts at most 4 reference images")
-    if public_urls:
-        body["input_references"] = [_grok_image_item(url) for url in public_urls]
+    if not public_urls:
+        raise ValueError("HappyHorse r2v requires 1–9 reference_image media items")
+    if len(public_urls) > 9:
+        raise ValueError("HappyHorse r2v accepts at most 9 reference images")
+    body["media"] = [{"type": "reference_image", "url": url} for url in public_urls]
     return body
 
 

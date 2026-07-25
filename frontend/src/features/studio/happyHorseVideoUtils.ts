@@ -37,25 +37,25 @@ export const HAPPYHORSE_VIDEO_SKU_CONFIG: Record<HappyHorseVideoSku, HappyHorseS
     duration: 5,
     mode: "i2v",
     label: "图生 · 5 秒",
-    referenceHint: "图生视频：可选 1 张起始图，或纯文本提交。",
+    referenceHint: "图生视频：必须上传 1 张首帧图。",
   },
   "happyhorse-1.1-i2v-10s": {
     duration: 10,
     mode: "i2v",
     label: "图生 · 10 秒",
-    referenceHint: "图生视频：可选 1 张起始图，或纯文本提交。",
+    referenceHint: "图生视频：必须上传 1 张首帧图。",
   },
   "happyhorse-1.1-r2v-5s": {
     duration: 5,
     mode: "r2v",
     label: "参考 · 5 秒",
-    referenceHint: "多图参考生成（最多 4 张）。",
+    referenceHint: "多图参考生成（1～9 张）。",
   },
   "happyhorse-1.1-r2v-10s": {
     duration: 10,
     mode: "r2v",
     label: "参考 · 10 秒",
-    referenceHint: "多图参考生成（最多 4 张）。",
+    referenceHint: "多图参考生成（1～9 张）。",
   },
 };
 
@@ -130,7 +130,7 @@ export function happyHorseReferenceLimit(form: StudioFormState, provider?: Provi
   if (!config) return 4;
   if (config.mode === "t2v") return 0;
   if (config.mode === "i2v") return 1;
-  return 4;
+  return 9;
 }
 
 export function happyHorseReferenceUploadError(
@@ -143,11 +143,17 @@ export function happyHorseReferenceUploadError(
   if (config.mode === "t2v" && count > 0) {
     return "文生视频档位不需要参考图。";
   }
-  if (config.mode === "i2v" && count > 1) {
-    return "图生视频档位最多只能上传 1 张起始图。";
+  if (config.mode === "i2v" && count < 1) {
+    return "图生视频档位必须上传 1 张首帧图。";
   }
-  if (config.mode === "r2v" && count > 4) {
-    return "参考生视频档位最多只能上传 4 张参考图。";
+  if (config.mode === "i2v" && count > 1) {
+    return "图生视频档位最多只能上传 1 张首帧图。";
+  }
+  if (config.mode === "r2v" && count < 1) {
+    return "参考生视频档位至少上传 1 张参考图。";
+  }
+  if (config.mode === "r2v" && count > 9) {
+    return "参考生视频档位最多只能上传 9 张参考图。";
   }
   return null;
 }

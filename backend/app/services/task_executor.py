@@ -4,6 +4,7 @@ import json
 import logging
 import mimetypes
 import re
+import uuid
 from base64 import b64decode, b64encode
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -84,6 +85,8 @@ class ImageRequestPlan:
     adapter_mode: str
     effective_capability: str
     strategy: str
+    # (field_name, filename, content, content_type) — when set, POST as multipart/form-data.
+    multipart_files: tuple[tuple[str, str, bytes, str], ...] = ()
 
 
 class SimulatedProviderAdapter(ProviderAdapter):
@@ -180,6 +183,7 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
                     headers=request_plan.headers,
                     timeout_seconds=self.profile.timeout_seconds,
                     endpoint_path=request_plan.endpoint_path,
+                    multipart_files=request_plan.multipart_files,
                 )
 
                 if request_plan.adapter_mode == "haodeya_async_image" and request_plan.endpoint_path.startswith("/images/"):
@@ -385,6 +389,26 @@ def _build_image_request_plan(
     effective_capability = capability
     strategy = requested_strategy
 
+    # Haodeya wan: no ref → /images/generations; has ref → /images/edits multipart (never chat / generations-with-ref).
+    if _uses_haodeya_wan_image(profile):
+        if reference_images:
+            return _build_haodeya_wan_image_edits_plan(
+                profile=profile,
+                requested_capability=capability,
+                effective_capability="image.edit",
+                payload=payload,
+                prompt=prompt,
+            )
+        if capability == "image.edit":
+            raise ValueError("Wan image edit requires a reference image")
+        return _build_openai_images_plan(
+            profile=profile,
+            requested_capability=capability,
+            effective_capability="image.generate",
+            payload=payload,
+            prompt=prompt,
+        )
+
     if (
         capability == "image.generate"
         and reference_images
@@ -584,52 +608,18 @@ def _literal_image_size_tier(payload: dict) -> str:
     return {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
 
 
-_WAN_TIER_LONG_EDGE = {"1k": 1024, "2k": 2048, "4k": 4096}
-
-
-def _wan_pixel_size_for_aspect(aspect_ratio: str, resolution: str) -> str | None:
-    """Map aspect + resolution tier to Wan Method-2 WxH (literal 1K/2K/4K is always square)."""
-    raw = str(aspect_ratio or "").strip()
-    if not raw or ":" not in raw:
-        return None
-    if raw in SMART_RATIO_LABELS or raw in SOURCE_ASPECT_RATIO_LABELS:
-        return None
-    try:
-        width_text, height_text = raw.split(":", 1)
-        ratio_w = float(width_text.strip())
-        ratio_h = float(height_text.strip())
-    except ValueError:
-        return None
-    if ratio_w <= 0 or ratio_h <= 0:
-        return None
-    long_edge = _WAN_TIER_LONG_EDGE.get(resolution, _WAN_TIER_LONG_EDGE["1k"])
-    if ratio_w >= ratio_h:
-        width = long_edge
-        height = max(64, int(round(long_edge * ratio_h / ratio_w / 16) * 16))
-    else:
-        height = long_edge
-        width = max(64, int(round(long_edge * ratio_w / ratio_h / 16) * 16))
-    return f"{width}x{height}"
+def _wan_supports_4k(profile: ImageProviderProfile) -> bool:
+    identity = f"{profile.provider_name} {profile.model_name}".lower()
+    return "wan2.7-image-pro" in identity or "wan2_7-image-pro" in identity
 
 
 def _wan_image_size(profile: ImageProviderProfile, payload: dict) -> str:
-    """Wan size: follow-source / smart → literal tier; concrete ratio → WxH at that tier."""
+    """Haodeya wan size is a literal tier only (1K/2K/4K). 4K is pro text-to-image only."""
     resolution = _normalize_image_resolution(payload)
-    # 4K is text-to-image only on wan2.7-image-pro; editing caps at 2K.
-    if resolution == "4k" and _extract_reference_images(payload):
+    has_refs = bool(_extract_reference_images(payload))
+    if resolution == "4k" and (has_refs or not _wan_supports_4k(profile)):
         resolution = "2k"
-        payload = {**payload, "resolution": "2k"}
-
-    if _should_omit_upstream_aspect_ratio(payload):
-        return {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
-
-    requested = str(payload.get("aspect_ratio") or "").strip()
-    if not requested or requested in SMART_RATIO_LABELS:
-        return {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
-
-    resolved = _resolved_image_aspect_ratio(profile, payload)
-    pixel = _wan_pixel_size_for_aspect(resolved, resolution)
-    return pixel or {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
+    return {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
 
 
 def _uses_haodeya_async_image_gateway(profile: ImageProviderProfile) -> bool:
@@ -933,8 +923,10 @@ def _build_upstream_image_config(profile: ImageProviderProfile, payload: dict) -
 def _image_generation_result_fields(profile: ImageProviderProfile, payload: dict) -> dict[str, str]:
     fields = _aspect_ratio_result_fields(profile, payload)
     resolution = _normalize_image_resolution(payload)
-    if _uses_haodeya_wan_image(profile) and resolution == "4k" and _extract_reference_images(payload):
-        resolution = "2k"
+    if _uses_haodeya_wan_image(profile):
+        has_refs = bool(_extract_reference_images(payload))
+        if resolution == "4k" and (has_refs or not _wan_supports_4k(profile)):
+            resolution = "2k"
     fields["resolution"] = resolution
     fields["image_model_resolved"] = _resolve_image_model_name(profile, payload)
     if _uses_haodeya_wan_image(profile):
@@ -984,6 +976,11 @@ def _build_openai_images_plan(
     prompt: str,
 ) -> ImageRequestPlan:
     reference_images = _extract_reference_images(payload)
+    if _uses_haodeya_wan_image(profile) and reference_images:
+        raise ValueError(
+            "Wan image tasks with a reference image must use /images/edits; "
+            "do not submit them to /images/generations"
+        )
     reference_image = reference_images[0] if reference_images else ""
     prompt_for_generation = prompt
     reference_result: dict[str, object] = {}
@@ -1027,6 +1024,53 @@ def _build_openai_images_plan(
         adapter_mode="modelscope_async" if _uses_modelscope_async_mode(profile) else "openai",
         effective_capability=effective_capability,
         strategy=OPENAI_IMAGES_STRATEGY,
+    )
+
+
+def _build_haodeya_wan_image_edits_plan(
+    *,
+    profile: ImageProviderProfile,
+    requested_capability: str,
+    effective_capability: str,
+    payload: dict,
+    prompt: str,
+) -> ImageRequestPlan:
+    reference_images = _extract_reference_images(payload)
+    if not reference_images:
+        raise ValueError("Wan image edit requires a reference image")
+
+    prompt_text = prompt
+    detail = str(payload.get("prompt_supplement") or "").strip()
+    if detail:
+        prompt_text = f"{prompt}\n\nAdditional guidance: {detail}"
+
+    image_bytes, filename, content_type = _load_reference_image_bytes(reference_images[0])
+    body: dict[str, object] = {
+        "model": _resolve_image_model_name(profile, payload),
+        "prompt": prompt_text,
+        "size": _wan_image_size(profile, payload),
+    }
+    reference_result: dict[str, object] = {
+        "reference_image_used": True,
+        "reference_image_mode": "haodeya_wan_image_edits",
+        "reference_image_count": len(reference_images),
+        "native_image_edit_used": True,
+        "native_image_edit_endpoint": "images.edits",
+        "native_image_edit_provider": profile.provider_name,
+        **_image_generation_result_fields(profile, payload),
+    }
+    if requested_capability != effective_capability:
+        reference_result["native_image_edit_fallback_from"] = requested_capability
+
+    return ImageRequestPlan(
+        endpoint_path="/images/edits",
+        body=body,
+        headers={"Authorization": f"Bearer {profile.api_key}"},
+        reference_result=reference_result,
+        adapter_mode="openai",
+        effective_capability=effective_capability,
+        strategy=OPENAI_IMAGE_EDITS_STRATEGY,
+        multipart_files=(("image", filename, image_bytes, content_type),),
     )
 
 
@@ -1484,6 +1528,76 @@ def _reference_image_to_model_url(reference_image: str) -> str:
     return f"data:{mime_type};base64,{encoded}"
 
 
+def _load_reference_image_bytes(reference_image: str) -> tuple[bytes, str, str]:
+    """Return (bytes, filename, content_type) for multipart image uploads."""
+    normalized = reference_image.strip()
+    if not normalized:
+        raise ValueError("Reference image path is empty")
+
+    if normalized.startswith("data:image/"):
+        header, _, encoded = normalized.partition(",")
+        if not encoded:
+            raise ValueError("Invalid data-URL reference image")
+        mime_type = "image/png"
+        meta = header.removeprefix("data:")
+        if ";" in meta:
+            mime_type = meta.split(";", 1)[0].strip() or mime_type
+        elif meta:
+            mime_type = meta.strip() or mime_type
+        extension = mimetypes.guess_extension(mime_type, strict=False) or ".png"
+        if extension == ".jpe":
+            extension = ".jpg"
+        return b64decode(encoded), f"image{extension}", mime_type
+
+    if normalized.startswith(("http://", "https://")):
+        image_bytes, content_type = _download_generated_image(normalized, timeout_seconds=60.0)
+        mime_type = (content_type or "image/png").split(";", 1)[0].strip() or "image/png"
+        extension = _extension_for_downloaded_image(normalized, content_type, "png")
+        return image_bytes, f"image.{extension}", mime_type
+
+    try:
+        image_bytes = read_binary_asset(normalized)
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(f"Reference image file not found: {reference_image}") from exc
+
+    media_prefix = settings.media_url_prefix.rstrip("/")
+    if normalized.startswith(f"{media_prefix}/"):
+        relative_path = normalized.removeprefix(f"{media_prefix}/")
+    else:
+        relative_path = normalized.lstrip("/")
+    filename = Path(relative_path).name or "image.png"
+    mime_type = mimetypes.guess_type(filename)[0] or "image/png"
+    return image_bytes, filename, mime_type
+
+
+def _encode_multipart_form(
+    fields: dict[str, object],
+    files: tuple[tuple[str, str, bytes, str], ...],
+) -> tuple[bytes, str]:
+    boundary = f"----QMDHFormBoundary{uuid.uuid4().hex}"
+    chunks: list[bytes] = []
+    for name, value in fields.items():
+        if value is None:
+            continue
+        chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+        chunks.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"))
+        chunks.append(f"{value}\r\n".encode("utf-8"))
+    for field_name, filename, content, content_type in files:
+        safe_name = filename.replace('"', "")
+        chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+        chunks.append(
+            (
+                f'Content-Disposition: form-data; name="{field_name}"; '
+                f'filename="{safe_name}"\r\n'
+            ).encode("utf-8")
+        )
+        chunks.append(f"Content-Type: {content_type or 'application/octet-stream'}\r\n\r\n".encode("utf-8"))
+        chunks.append(content)
+        chunks.append(b"\r\n")
+    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
+
+
 def _extract_chat_message_content(response_payload: dict) -> str:
     choices = response_payload.get("choices")
     if not isinstance(choices, list) or not choices:
@@ -1540,11 +1654,22 @@ def _submit_image_generation_request(
     headers: dict[str, str],
     timeout_seconds: float,
     endpoint_path: str = "/images/generations",
+    multipart_files: tuple[tuple[str, str, bytes, str], ...] = (),
 ) -> dict:
+    request_headers = dict(headers)
+    if multipart_files:
+        data, content_type = _encode_multipart_form(body, multipart_files)
+        request_headers.pop("Content-Type", None)
+        request_headers.pop("content-type", None)
+        request_headers["Content-Type"] = content_type
+    else:
+        data = json.dumps(body).encode("utf-8")
+        request_headers.setdefault("Content-Type", "application/json")
+
     request = Request(
         url=f"{base_url.rstrip('/')}{endpoint_path}",
-        data=json.dumps(body).encode("utf-8"),
-        headers=headers,
+        data=data,
+        headers=request_headers,
         method="POST",
     )
 
@@ -1553,7 +1678,9 @@ def _submit_image_generation_request(
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")
-        raise ValueError(f"Image generation failed with HTTP {exc.code}: {detail}") from exc
+        raise ValueError(
+            f"Image generation failed with HTTP {exc.code} path={endpoint_path}: {detail}"
+        ) from exc
     except URLError as exc:
         raise ValueError(f"Image generation request failed: {exc.reason}") from exc
 

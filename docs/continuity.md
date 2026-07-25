@@ -16,15 +16,16 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Current Baseline
 
-- **Active development sequence**：① 套壳 Codex 工程 harness + 跨对话记忆 + B2 生成助手 → ② 部署 gov（若生产仍缺）→ ③ 开设计助手 UI（产品就绪后）
-- Current branch: **`main`**（以 `git rev-parse HEAD` 为准；约 **`736b800`** 含 gov-001）
-- Production: **`https://cityusbdisk.cn`** — 上次大包约 `3ff220b`，前端热更约 `cb85fc6`；**gov (`l3m4n5o6p7q8`) 可能尚未上生产**（以服务器 `git rev-parse` / alembic 为准）
-- Alembic head：**`n5o6p7q8r9s0`**（`agent_skill_catalog`；记忆=`m4n5o6p7q8r9`；gov=`l3m4n5o6p7q8`）
+- **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
+- Current branch: **`main`**（以 `git rev-parse HEAD` 为准；冷启动核对目标 **`8809239`**）
+- Production: **`https://cityusbdisk.cn`** — Git **`8809239`**，与 `origin/main` 对齐（2026-07-25 核实）
+- Alembic head：**`o6p7q8r9s0t1`**（skill bundle；catalog=`n5o6p7q8r9s0`；记忆=`m4n5o6p7q8r9`；gov=`l3m4n5o6p7q8`）
 - **Chat Agent（重要）**：
-  - **B1 已合 main**：只读 tools + SSE；**UI 默认隐藏**（`VITE_CHAT_AGENT_UI_ENABLED`）
-  - **gov-001 已合 main**：release / override / Admin 可观测
+  - **B1 / gov / harness / memory** 已合 main 并已上生产
+  - **「设计助手」UI 默认开启**（`VITE_CHAT_AGENT_UI_ENABLED !== "false"`）
   - **产品定调**：QMDH UI 壳 + Codex **风格 harness**（非换 GPT）+ Admin Skill 发版 + 跨对话记忆 + HITL 生图/视频
-  - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**（勿整包 merge）；从中切片 B2 / memory
+  - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**（勿整包 merge）
+- **Admin 用量日志**：默认「按任务汇总」单行（`task.finalized`）；展示能力、输入参数摘要、输出张数/段数；取消勾选可看 provider_call 明细
 - Local dev URLs:
   - frontend: `http://127.0.0.1:18080`
   - backend: `http://127.0.0.1:18010`
@@ -106,6 +107,9 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Key Recent Changes
 
+- **`8809239` / `abf2e19` (2026-07-25, deployed):** admin usage logs default to one row per task; capability + input/output summaries on `task.finalized`; see `docs/archive/deploy-2026-07-25-usage-logs-summary.md`.
+- **`f057dff` / `aff7bda` (2026-07-24, deployed):** Studio↔Canvas linkage module; image-edit「遵循原图」omits upstream `aspect_ratio`.
+- **`377bd7e` / `3e83811` / `eff67a3` (2026-07-23/24, deployed):** compare preview, annotate regions, canvas copy/batch run, compare slider edge-to-edge; Chat agent UI default on.
 - WIP: continued splitting the Studio generate surface into focused modules:
   - `GenerateStudioShell` is now only the auth/login/authenticated-shell entrypoint
   - `StudioCanvasView` is now a thin composition layer over `StudioHistoryCanvas` and `StudioComposerCanvas`
@@ -203,11 +207,11 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Domain: `cityusbdisk.cn`（京ICP备14011242号-4，已备案）
 - Deploy path: `/www/wwwroot/qmdh-web`
 - Deployment model: Docker Compose（**worker ×3**）
-- **Production Git: `3ff220b`** — images rebuilt 2026-07-20
-- **GitHub `main`:** aligned with production @ `3ff220b`
-- Alembic: **`k2l3m4n5o6p7` (head)**
-- Latest session archive: `docs/handoff.md` → `[2026-07-20] 生产部署`
-- **Deploy archive:** `docs/archive/deploy-2026-07-20-main-canvas-chat-b1.md`
+- **Production Git: `8809239`** — frontend/backend/worker rebuilt 2026-07-25
+- **GitHub `main`:** aligned with production @ `8809239`
+- Alembic: **`o6p7q8r9s0t1` (head)**
+- Latest session archive: `docs/handoff.md` → `[2026-07-25] 用量日志单行 + 能力/参数展示`
+- **Deploy archive:** `docs/archive/deploy-2026-07-25-usage-logs-summary.md`（此前大包见 `deploy-2026-07-20-main-canvas-chat-b1.md`）
 - Gemini CPA doc: `docs/cpa-gemini-image-integration.md`（含 2K 验收表）
 - Verified runtime after latest deploy:
   - `docker compose ps`：backend healthy + worker-1/2/3 + frontend
@@ -218,7 +222,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - `QMDH_STORAGE_BACKEND` 仍为 **local**（OSS 试用已开，业务未切）
 - Current deployment note:
   - GitHub deploy key is healthy on server `admin` user
-  - `git pull` fails only when run as `root`; use `sudo -u admin git -C /www/wwwroot/qmdh-web pull origin main`
+  - `git pull` fails only when run as `root`; use `sudo -u admin git -C /www/wwwroot/qmdh-web pull --ff-only origin main`
+  - 开发请从 **GitHub** 拉代码，勿把服务器当源仓；服务器上可能有若干未跟踪 `.env.bak*`
 
 ## Known Risks And Follow-Up
 
@@ -238,16 +243,18 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 1. Run `git status --short` first.
 2. Expect current local residuals to be:
-   - `storage/`
-   - `tmp/`
+   - `storage/` / `tmp/`
+   - `assets/`（本地截图，勿提交）
+   - 可选未跟踪：`docs/archive/handoff-2026-07-21-canvas-copy-run-wip.md`
 3. Read the latest entry in `docs/handoff.md`.
 4. Reconfirm:
    - local head
    - GitHub head
    - server head
-   - server health
+   - server health / alembic current
 5. If the task involves deploy, remember:
    - server git pull must run as `admin`
+   - push 完成后再 pull，勿并行
    - fallback via local `git bundle` remains known-good
 6. If touching studio UX again, re-check:
    - template picker cards and hover preview
@@ -256,12 +263,13 @@ This file is the fast handoff baseline for the next agent. Read these first:
    - composer auto-collapse / expand behavior near the bottom of the history pane
    - history card image readability after compact layout
    - branded rail / login / favicon rendering
+   - Studio↔Canvas linkage via `studioCanvasLinkage.ts`
 7. Do not commit or deploy `tmp/`, `.env`, `backend/app.db`, `storage/`, `frontend/dist/`, or `node_modules/`.
 
 ## Near-Term Suggested Next Steps
 
-1. When owner approves deploy: `sudo -u admin git pull` on server → rebuild frontend + backend/worker; do not touch `.env` or run migrations unless instructed.
-2. Rebuild backend/worker Docker images to bake in Gemini code and drop hotpatch drift.
+1. Cold-start: `git pull` from GitHub → confirm HEAD `8809239`（或更新后的 main）→ 读最新 `docs/handoff.md`.
+2. When owner approves deploy: `sudo -u admin git pull --ff-only` → rebuild affected images（改了 `usage_ledger` / task 路径则含 worker）；勿动 `.env`；无新迁移则不必 alembic.
 3. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.
-4. Optional: smoke CPA `gemini-3.1-flash-image` in Studio after deploy.
+4. Optional: smoke CPA `gemini-3.1-flash-image` in Studio；用量日志抽查 `/admin/usage-logs`.
 5. Grok rollout reference: `docs/archive/handoff-2026-06-12-grok-video-production.md`.

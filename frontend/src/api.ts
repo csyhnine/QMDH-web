@@ -300,6 +300,8 @@ export type UsageLogRecord = {
   cached_input_tokens: number;
   total_tokens: number;
   output_count: number;
+  input_summary: string;
+  output_summary: string;
   cost: number;
   cost_currency: string;
   billing_unit: string;

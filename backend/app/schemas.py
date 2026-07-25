@@ -229,6 +229,8 @@ class UsageLogRecord(BaseModel):
     cached_input_tokens: int = 0
     total_tokens: int = 0
     output_count: int = 0
+    input_summary: str = ""
+    output_summary: str = ""
     cost: float = 0.0
     cost_currency: str = "CNY"
     billing_unit: str = ""

@@ -79,9 +79,20 @@ function groupLabel(groupName: string): string {
 function capabilityLabel(value: string): string {
   if (value === "image.generate") return "图片生成";
   if (value === "image.edit") return "图片编辑";
+  if (value === "image.upscale") return "图片放大";
   if (value === "video.generate") return "视频生成";
   if (value === "chat.completions") return "对话";
   return value || "—";
+}
+
+function formatUsageInput(record: UsageLogRecord): string {
+  if (record.input_summary?.trim()) return record.input_summary.trim();
+  return formatTokenCount(record.input_tokens);
+}
+
+function formatUsageOutput(record: UsageLogRecord): string {
+  if (record.output_summary?.trim()) return record.output_summary.trim();
+  return formatTokenCount(record.output_tokens);
 }
 
 function usageKindClass(kind: string): string {
@@ -381,8 +392,8 @@ export default function UsageLogsPage() {
                 <strong>{formatLatency(record.latency_ms)}</strong>
                 {record.entry_type === "chat.message.completed" ? <small>流式</small> : null}
               </span>
-              <span>{formatTokenCount(record.input_tokens)}</span>
-              <span>{formatTokenCount(record.output_tokens)}</span>
+              <span>{formatUsageInput(record)}</span>
+              <span>{formatUsageOutput(record)}</span>
               <span>
                 <strong>{formatCost(record)}</strong>
                 {record.cached_input_tokens > 0 ? <small>缓存 {formatTokenCount(record.cached_input_tokens)}</small> : null}

@@ -50,6 +50,122 @@ def _task_output_count(task: Task) -> int:
         return 0
 
 
+def _reference_image_count(payload: dict) -> int:
+    for key in ("reference_images", "images", "image_urls"):
+        raw = payload.get(key)
+        if isinstance(raw, list):
+            return len([item for item in raw if str(item or "").strip()])
+    for key in ("reference_image", "source_image", "image"):
+        if str(payload.get(key) or "").strip():
+            return 1
+    try:
+        return max(int(payload.get("reference_image_count") or 0), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def compose_task_input_summary(
+    *,
+    capability: str = "",
+    aspect_ratio: str = "",
+    resolution: str = "",
+    size: str = "",
+    duration: str = "",
+    reference_count: int = 0,
+    upscale_style: str = "",
+) -> str:
+    parts: list[str] = []
+    ratio = str(aspect_ratio or "").strip()
+    if ratio in {"", "smart", "auto", "source", "遵循原图"}:
+        if (capability or "").startswith("image.edit") or ratio in {"source", "遵循原图"}:
+            parts.append("遵循原图")
+    elif ratio:
+        parts.append(ratio)
+
+    res = str(resolution or "").strip()
+    if res:
+        parts.append(res.upper() if res.lower() in {"1k", "2k", "4k"} else res)
+
+    size_value = str(size or "").strip()
+    if size_value and size_value not in parts:
+        parts.append(size_value)
+
+    duration_value = str(duration or "").strip()
+    if duration_value:
+        parts.append(duration_value if duration_value.endswith("s") else f"{duration_value}s")
+
+    if reference_count > 0:
+        parts.append(f"参考图 {reference_count}")
+
+    style = str(upscale_style or "").strip()
+    if style:
+        parts.append(style)
+
+    return " · ".join(parts)
+
+
+def build_task_input_usage_payload(payload: dict | None, *, capability: str = "") -> dict:
+    raw = payload if isinstance(payload, dict) else {}
+    aspect_ratio = str(raw.get("aspect_ratio") or "").strip()
+    resolution = str(raw.get("resolution") or "").strip()
+    size = str(raw.get("size") or "").strip()
+    duration = str(raw.get("duration") or raw.get("seconds") or "").strip()
+    upscale_style = str(raw.get("upscale_style") or "").strip()
+    reference_count = _reference_image_count(raw)
+    summary = compose_task_input_summary(
+        capability=capability,
+        aspect_ratio=aspect_ratio,
+        resolution=resolution,
+        size=size,
+        duration=duration,
+        reference_count=reference_count,
+        upscale_style=upscale_style,
+    )
+    data: dict[str, object] = {}
+    if aspect_ratio:
+        data["aspect_ratio"] = aspect_ratio
+    if resolution:
+        data["resolution"] = resolution
+    if size:
+        data["size"] = size
+    if duration:
+        data["duration"] = duration
+    if reference_count:
+        data["reference_count"] = reference_count
+    if upscale_style:
+        data["upscale_style"] = upscale_style
+    if summary:
+        data["input_summary"] = summary
+    return data
+
+
+def resolve_task_usage_meta(
+    task: Task,
+    provider_calls: list[ProviderCall] | None = None,
+) -> tuple[str, str, str, dict]:
+    calls = list(provider_calls if provider_calls is not None else getattr(task, "provider_calls", []) or [])
+    capability = ""
+    model_name = ""
+    provider_name = ""
+    for call in calls:
+        if not capability and str(getattr(call, "capability", "") or "").strip():
+            capability = str(call.capability).strip()
+        if not model_name and str(getattr(call, "model_name", "") or "").strip():
+            model_name = str(call.model_name).strip()
+        if not provider_name and str(getattr(call, "provider_name", "") or "").strip():
+            provider_name = str(call.provider_name).strip()
+
+    if not capability:
+        workflow = getattr(task, "workflow", None)
+        capability = str(getattr(workflow, "provider_capability", "") or "").strip()
+
+    usage_payload = build_task_input_usage_payload(
+        task.payload if isinstance(task.payload, dict) else {},
+        capability=capability,
+    )
+    return capability, model_name, provider_name, usage_payload
+
+
 def ensure_usage_ledger_for_task(
     db: Session,
     task: Task,
@@ -76,6 +192,11 @@ def ensure_usage_ledger_for_task(
     result = task.result if isinstance(task.result, dict) else {}
     error_code = str(result.get("error_code") or "").strip()
     error_summary = str(result.get("error_summary") or result.get("error") or "").strip()
+
+    provider_calls = db.scalars(
+        select(ProviderCall).where(ProviderCall.task_id == task.id).order_by(ProviderCall.id.asc())
+    ).all()
+    capability, model_name, provider_name, usage_payload = resolve_task_usage_meta(task, provider_calls)
 
     task_entry = db.scalar(
         select(UsageLedger).where(
@@ -105,9 +226,9 @@ def ensure_usage_ledger_for_task(
     task_entry.user_id = user_id
     task_entry.user_name = user_name
     task_entry.requested_provider = requested_provider
-    task_entry.provider_name = ""
-    task_entry.model_name = ""
-    task_entry.capability = ""
+    task_entry.provider_name = provider_name
+    task_entry.model_name = model_name
+    task_entry.capability = capability
     task_entry.classification = classification
     task_entry.task_status = task_status
     task_entry.cost = cost
@@ -122,16 +243,13 @@ def ensure_usage_ledger_for_task(
     task_entry.output_tokens = 0
     task_entry.cached_input_tokens = 0
     task_entry.uncached_input_tokens = 0
-    task_entry.usage_payload = {}
+    task_entry.usage_payload = usage_payload
     task_entry.latency_ms = latency_ms
     task_entry.error_code = error_code
     task_entry.error_summary = error_summary
     task_entry.source_deleted_at = source_deleted_at
     task_entry.recorded_at = recorded_at or task.created_at or task.updated_at or task_entry.recorded_at or _now()
 
-    provider_calls = db.scalars(
-        select(ProviderCall).where(ProviderCall.task_id == task.id).order_by(ProviderCall.id.asc())
-    ).all()
     archived_provider_calls: dict[int, ProviderCallArchive] = {}
     if current_archive:
         archived_provider_calls = {

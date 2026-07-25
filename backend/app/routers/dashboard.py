@@ -4,12 +4,12 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.auth import get_current_auth_user, require_ops_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import AuditLog, TaskStatus, UsageLedger, User, Workflow
+from app.models import AuditLog, ProviderCall, Task, TaskStatus, UsageLedger, User, Workflow
 from app.schemas import (
     DashboardAccountUsage,
     DashboardCurrencySpend,
@@ -20,6 +20,10 @@ from app.schemas import (
     DashboardStats,
     UsageLogPage,
     UsageLogRecord,
+)
+from app.services.usage_ledger import (
+    compose_task_input_summary,
+    resolve_task_usage_meta,
 )
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -652,26 +656,76 @@ def _usage_log_is_success(entry: UsageLedger) -> bool:
     return True
 
 
-def _usage_log_model_name(entry: UsageLedger) -> str:
-    model = (entry.model_name or "").strip()
+def _usage_log_model_name(entry: UsageLedger, *, model_name: str = "", provider_name: str = "") -> str:
+    model = (model_name or entry.model_name or "").strip()
     if model:
         return model
     requested = (entry.requested_provider or "").strip()
     if requested:
         return requested
-    provider = (entry.provider_name or "").strip()
+    provider = (provider_name or entry.provider_name or "").strip()
     return provider
 
 
-def _usage_log_detail_text(entry: UsageLedger) -> str:
+def _usage_payload_dict(value: object | None) -> dict:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _usage_log_input_summary(
+    entry: UsageLedger,
+    *,
+    capability: str = "",
+    usage_payload: dict | None = None,
+) -> str:
+    payload = _usage_payload_dict(usage_payload if usage_payload is not None else entry.usage_payload)
+    summary = str(payload.get("input_summary") or "").strip()
+    if summary:
+        return summary
+
+    composed = compose_task_input_summary(
+        capability=capability or entry.capability or "",
+        aspect_ratio=str(payload.get("aspect_ratio") or ""),
+        resolution=str(payload.get("resolution") or ""),
+        size=str(payload.get("size") or ""),
+        duration=str(payload.get("duration") or ""),
+        reference_count=int(payload.get("reference_count") or 0),
+        upscale_style=str(payload.get("upscale_style") or ""),
+    )
+    return composed
+
+
+def _usage_log_output_summary(entry: UsageLedger, *, capability: str = "") -> str:
+    resolved_capability = (capability or entry.capability or "").strip()
+    count = int(entry.output_count or 0)
+    if resolved_capability.startswith("image.") and count > 0:
+        return f"{count} 张"
+    if resolved_capability.startswith("video.") and count > 0:
+        return f"{count} 段"
+    if count > 0 and int(entry.output_tokens or entry.completion_tokens or 0) <= 0:
+        return f"{count} 个"
+    return ""
+
+
+def _usage_log_detail_text(
+    entry: UsageLedger,
+    *,
+    capability: str = "",
+    input_summary: str = "",
+    output_summary: str = "",
+) -> str:
     parts: list[str] = []
-    if entry.capability:
-        parts.append(f"能力: {entry.capability}")
+    resolved_capability = (capability or entry.capability or "").strip()
+    if resolved_capability:
+        parts.append(f"能力: {resolved_capability}")
     if entry.billing_unit:
         parts.append(f"计费单位: {entry.billing_unit}")
     if entry.billable_units:
         parts.append(f"计费量: {entry.billable_units}")
-    if entry.output_count:
+    if input_summary:
+        parts.append(f"参数: {input_summary}")
+    if output_summary and "产出" not in output_summary:
+        parts.append(f"产出: {output_summary}")
+    elif entry.output_count and not output_summary:
         parts.append(f"产出数: {entry.output_count}")
     if entry.project_name and entry.project_code != "__chat__":
         parts.append(f"项目: {entry.project_name} ({entry.project_code})")
@@ -682,7 +736,48 @@ def _usage_log_detail_text(entry: UsageLedger) -> str:
     return " · ".join(parts)
 
 
-def _usage_log_record(entry: UsageLedger, group_name: str, display_name: str) -> UsageLogRecord:
+def _load_task_usage_enrichment(db: Session, entries: list[UsageLedger]) -> dict[int, dict]:
+    task_ids = {
+        int(entry.task_id)
+        for entry in entries
+        if entry.entry_type == "task.finalized"
+        and entry.task_id
+        and (not (entry.capability or "").strip() or not _usage_payload_dict(entry.usage_payload))
+    }
+    if not task_ids:
+        return {}
+
+    tasks = db.scalars(
+        select(Task)
+        .options(selectinload(Task.workflow), selectinload(Task.provider_calls))
+        .where(Task.id.in_(task_ids))
+    ).all()
+    enrichment: dict[int, dict] = {}
+    for task in tasks:
+        capability, model_name, provider_name, usage_payload = resolve_task_usage_meta(task, list(task.provider_calls))
+        enrichment[int(task.id)] = {
+            "capability": capability,
+            "model_name": model_name,
+            "provider_name": provider_name,
+            "usage_payload": usage_payload,
+        }
+    return enrichment
+
+
+def _usage_log_record(
+    entry: UsageLedger,
+    group_name: str,
+    display_name: str,
+    *,
+    enrichment: dict | None = None,
+) -> UsageLogRecord:
+    meta = enrichment or {}
+    capability = (entry.capability or meta.get("capability") or "").strip()
+    model_name = (entry.model_name or meta.get("model_name") or "").strip()
+    provider_name = (entry.provider_name or meta.get("provider_name") or "").strip()
+    usage_payload = _usage_payload_dict(entry.usage_payload) or _usage_payload_dict(meta.get("usage_payload"))
+    input_summary = _usage_log_input_summary(entry, capability=capability, usage_payload=usage_payload)
+    output_summary = _usage_log_output_summary(entry, capability=capability)
     return UsageLogRecord(
         id=entry.id,
         recorded_at=entry.recorded_at,
@@ -692,10 +787,10 @@ def _usage_log_record(entry: UsageLedger, group_name: str, display_name: str) ->
         entry_type=entry.entry_type,
         usage_kind=_usage_log_kind(entry),
         is_success=_usage_log_is_success(entry),
-        model_name=_usage_log_model_name(entry),
-        provider_name=entry.provider_name or "",
+        model_name=_usage_log_model_name(entry, model_name=model_name, provider_name=provider_name),
+        provider_name=provider_name,
         requested_provider=entry.requested_provider or "",
-        capability=entry.capability or "",
+        capability=capability,
         project_code=entry.project_code or "",
         project_name=entry.project_name or "",
         task_id=entry.task_id,
@@ -706,6 +801,8 @@ def _usage_log_record(entry: UsageLedger, group_name: str, display_name: str) ->
         cached_input_tokens=int(entry.cached_input_tokens or 0),
         total_tokens=int(entry.total_tokens or 0),
         output_count=int(entry.output_count or 0),
+        input_summary=input_summary,
+        output_summary=output_summary,
         cost=_round(float(entry.cost or 0.0)),
         cost_currency=str(entry.cost_currency or "CNY").upper(),
         billing_unit=entry.billing_unit or "",
@@ -714,7 +811,12 @@ def _usage_log_record(entry: UsageLedger, group_name: str, display_name: str) ->
         error_summary=entry.error_summary or "",
         source_table=entry.source_table,
         source_id=entry.source_id,
-        detail_text=_usage_log_detail_text(entry),
+        detail_text=_usage_log_detail_text(
+            entry,
+            capability=capability,
+            input_summary=input_summary,
+            output_summary=output_summary,
+        ),
     )
 
 
@@ -772,7 +874,26 @@ def list_usage_logs(
             (UsageLedger.provider_name.ilike(keyword)) | (UsageLedger.requested_provider.ilike(keyword))
         )
     if capability:
-        filters.append(UsageLedger.capability == capability.strip())
+        capability_value = capability.strip()
+        filters.append(
+            (UsageLedger.capability == capability_value)
+            | (
+                (UsageLedger.entry_type == "task.finalized")
+                & ((UsageLedger.capability == "") | UsageLedger.capability.is_(None))
+                & UsageLedger.task_id.in_(
+                    select(ProviderCall.task_id).where(ProviderCall.capability == capability_value)
+                )
+            )
+            | (
+                (UsageLedger.entry_type == "task.finalized")
+                & ((UsageLedger.capability == "") | UsageLedger.capability.is_(None))
+                & UsageLedger.task_id.in_(
+                    select(Task.id)
+                    .join(Workflow, Task.workflow_id == Workflow.id)
+                    .where(Workflow.provider_capability == capability_value)
+                )
+            )
+        )
     if group_name:
         filters.append(User.group_name.ilike(f"%{group_name.strip()}%"))
     if status == "success":
@@ -807,9 +928,18 @@ def list_usage_logs(
     rows = db.execute(
         base_query.order_by(UsageLedger.recorded_at.desc(), UsageLedger.id.desc()).offset(offset).limit(page_size)
     ).all()
+    enrichment_by_task_id = _load_task_usage_enrichment(db, [entry for entry, _, _ in rows])
 
     return UsageLogPage(
-        items=[_usage_log_record(entry, group_name or "", display_name or "") for entry, group_name, display_name in rows],
+        items=[
+            _usage_log_record(
+                entry,
+                group_name or "",
+                display_name or "",
+                enrichment=enrichment_by_task_id.get(int(entry.task_id)) if entry.task_id else None,
+            )
+            for entry, group_name, display_name in rows
+        ],
         page=safe_page,
         page_size=page_size,
         total=int(total),

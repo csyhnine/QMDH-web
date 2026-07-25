@@ -1,4 +1,9 @@
-import { resolutionOptions, isSourceAspectRatio } from "./studioConstants";
+import {
+  resolutionOptions,
+  isSourceAspectRatio,
+  normalizeStudioResolution,
+  studioResolutionLabel,
+} from "./studioConstants";
 import {
   aspectRatioOptionsFor,
   defaultAspectRatioFor,
@@ -52,13 +57,24 @@ export function buildStudioComposerCanvasProps({
 
   const handleProviderSelect = (providerName: string) => {
     const provider = availableProviders.find((item) => item.provider_name === providerName);
-    setStudioForm((current) => ({
-      ...current,
-      requestedProvider: providerName,
-      grokVideoSku: isHappyHorseProvider(provider)
-        ? happyHorseVideoSkuForProviderSelection(provider, current.grokVideoSku)
-        : grokVideoSkuForProviderSelection(provider, current.grokVideoSku),
-    }));
+    const isWanPro =
+      Boolean(provider?.model_name?.toLowerCase().includes("wan2.7-image-pro")) ||
+      Boolean(provider?.provider_name?.toLowerCase().includes("wan2.7-image-pro"));
+    setStudioForm((current) => {
+      const supports4k = isWanPro && current.creationMode === "generate";
+      const nextResolution =
+        !supports4k && normalizeStudioResolution(current.resolution) === "4k"
+          ? "2k"
+          : current.resolution;
+      return {
+        ...current,
+        requestedProvider: providerName,
+        resolution: nextResolution,
+        grokVideoSku: isHappyHorseProvider(provider)
+          ? happyHorseVideoSkuForProviderSelection(provider, current.grokVideoSku)
+          : grokVideoSkuForProviderSelection(provider, current.grokVideoSku),
+      };
+    });
     setActiveComposerMenu(null);
   };
 
@@ -96,7 +112,9 @@ export function buildStudioComposerCanvasProps({
     selectedGrokSkuLabel: grokSkuConfig?.label ?? happyHorseSkuConfig?.label ?? null,
     selectedProviderModelName: selectedProvider?.display_name ?? selectedProvider?.model_name ?? null,
     selectedResolutionLabel:
-      isGrokVideo || isHappyHorseVideo ? "720p（固定）" : selectedResolution?.label ?? null,
+      isGrokVideo || isHappyHorseVideo
+        ? "720p（固定）"
+        : studioResolutionLabel(studioForm.resolution) || selectedResolution?.label || null,
     sharedTemplates: studioTemplates.sharedTemplates,
     showComposer: activeViewIsStudio,
     studioForm,
@@ -144,6 +162,10 @@ export function buildStudioComposerCanvasProps({
           ...current,
           creationMode: mode,
           aspectRatio: nextAspectRatio,
+          resolution:
+            mode !== "generate" && normalizeStudioResolution(current.resolution) === "4k"
+              ? "2k"
+              : current.resolution,
           grokVideoSku: nextGrokSku,
         };
       });

@@ -1,9 +1,12 @@
+import { useState } from "react";
+
 import type { Asset, Task } from "../../api";
 import StudioAssetTile from "./StudioAssetTile";
 import StudioFeedGalleryUpscaleMenu from "./StudioFeedGalleryUpscaleMenu";
+import { downloadMediaUrl } from "./studioMediaDownload";
 import { canUpscaleAsset } from "./studioUpscaleActions";
 import type { UpscaleOptions } from "./studioUpscaleOptions";
-import { taskResultString } from "./studioUtils";
+import { getRenderableUrl, taskResultString } from "./studioUtils";
 
 type StudioFeedGalleryProps = {
   assets: Asset[];
@@ -28,14 +31,20 @@ export default function StudioFeedGallery({
   onUseAssetAsReference,
   onReuse,
 }: StudioFeedGalleryProps) {
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
+
   if (assets.length === 0) return null;
 
   return (
     <div className="feed-gallery">
       {assets.map((asset, index) => {
+        const assetKey = `${task.id}:${asset.id}`;
         const showUpscale = upscaleEnabled && canUpscaleAsset(asset) && Boolean(onUpscaleAsset);
         const showUseReference = canUpscaleAsset(asset) && Boolean(onUseAssetAsReference);
-        const isUpscaling = upscalingAssetKey === `${task.id}:${asset.id}`;
+        const mediaUrl = getRenderableUrl(asset);
+        const showDownload = Boolean(mediaUrl);
+        const isUpscaling = upscalingAssetKey === assetKey;
+        const isDownloading = downloadingKey === assetKey;
 
         return (
           <div key={asset.id} className="feed-gallery-item">
@@ -58,7 +67,7 @@ export default function StudioFeedGallery({
                 preserveFullImage
               />
             </button>
-            {showUseReference || showUpscale ? (
+            {showUseReference || showUpscale || showDownload ? (
               <div className="feed-gallery-actions">
                 {showUseReference ? (
                   <button
@@ -78,6 +87,26 @@ export default function StudioFeedGallery({
                     isUpscaling={isUpscaling}
                     onSubmit={(selectedAsset, options) => onUpscaleAsset?.(selectedAsset, options)}
                   />
+                ) : null}
+                {showDownload && mediaUrl ? (
+                  <button
+                    type="button"
+                    className="feed-gallery-download-button"
+                    disabled={isDownloading}
+                    aria-label="下载"
+                    onClick={() => {
+                      if (isDownloading) return;
+                      setDownloadingKey(assetKey);
+                      void downloadMediaUrl(
+                        mediaUrl,
+                        asset.name || (asset.asset_type === "video" ? "generated-video.mp4" : "generated-image.png")
+                      ).finally(() => {
+                        setDownloadingKey((current) => (current === assetKey ? null : current));
+                      });
+                    }}
+                  >
+                    {isDownloading ? "…" : "下载"}
+                  </button>
                 ) : null}
               </div>
             ) : null}

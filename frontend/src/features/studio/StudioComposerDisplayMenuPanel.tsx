@@ -15,12 +15,15 @@ export default function StudioComposerDisplayMenuPanel({
 }: StudioComposerDisplayMenuPanelProps) {
   const isVideoMode = studioForm.creationMode === "video";
   const isEditMode = studioForm.creationMode === "edit";
+  const isGenerateMode = studioForm.creationMode === "generate";
   const isFixed720pVideo =
     isVideoMode && (isGrokHaodeyaProvider(selectedProvider) || isHappyHorseProvider(selectedProvider));
   const isWanPro =
     Boolean(selectedProvider?.model_name?.toLowerCase().includes("wan2.7-image-pro")) ||
     Boolean(selectedProvider?.provider_name?.toLowerCase().includes("wan2.7-image-pro"));
-  const visibleResolutionOptions = isWanPro
+  // wan2.7-image-pro: 4K is text-to-image only; edit / img2img max out at 2K.
+  const supports4k = isWanPro && isGenerateMode;
+  const visibleResolutionOptions = supports4k
     ? [...resolutionOptions, { id: "4k", label: "超清 4K" }]
     : resolutionOptions;
   const editDefaultLabel = linkForCreationMode("edit").defaultAspectRatio || SOURCE_ASPECT_RATIO_LABEL;
@@ -35,7 +38,7 @@ export default function StudioComposerDisplayMenuPanel({
       />
       {isEditMode ? (
         <p className="composer-menu-note">
-          选择「{editDefaultLabel}」时不向模型传宽高比，输出跟参考图一致。
+          「{editDefaultLabel}」只影响比例（不传宽高比）；下方分辨率 1K/2K 仍会传给模型。
         </p>
       ) : null}
 
@@ -49,7 +52,7 @@ export default function StudioComposerDisplayMenuPanel({
       ) : (
         <StudioComposerOptionGroup
           activeId={normalizeStudioResolution(studioForm.resolution)}
-          gridClassName={isWanPro ? "composer-chip-grid" : "composer-chip-grid composer-chip-grid-two"}
+          gridClassName={supports4k ? "composer-chip-grid" : "composer-chip-grid composer-chip-grid-two"}
           options={visibleResolutionOptions}
           title="分辨率"
           onSelect={onResolutionSelect}

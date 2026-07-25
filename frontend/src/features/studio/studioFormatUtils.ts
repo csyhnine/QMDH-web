@@ -3,10 +3,10 @@ import { formatChinaMonthDayTime } from "../../lib/datetime";
 import { studioResolutionLabel } from "./studioConstants";
 import { taskResultString } from "./studioTaskProgressUtils";
 export function formatFeedCardResolutionLabel(task: Task): string {
-  const imageSize = taskResultString(task, "image_size").trim();
-  if (imageSize) return imageSize;
   const resolution = taskResultString(task, "resolution");
   if (resolution) return studioResolutionLabel(resolution);
+  const imageSize = taskResultString(task, "image_size").trim();
+  if (imageSize) return studioResolutionLabel(imageSize) || imageSize;
   return "";
 }
 

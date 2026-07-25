@@ -2355,7 +2355,8 @@ button {
 }
 
 .feed-gallery-use-ref-button,
-.feed-gallery-upscale-button {
+.feed-gallery-upscale-button,
+.feed-gallery-download-button {
   position: relative;
   top: auto;
   right: auto;
@@ -2372,12 +2373,14 @@ button {
 }
 
 .feed-gallery-use-ref-button:hover:not(:disabled),
-.feed-gallery-upscale-button:hover:not(:disabled) {
+.feed-gallery-upscale-button:hover:not(:disabled),
+.feed-gallery-download-button:hover:not(:disabled) {
   background: rgba(37, 99, 235, 0.92);
 }
 
 .feed-gallery-use-ref-button:disabled,
-.feed-gallery-upscale-button:disabled {
+.feed-gallery-upscale-button:disabled,
+.feed-gallery-download-button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -2472,7 +2475,8 @@ button {
 }
 
 .feed-card-compact .feed-gallery-use-ref-button,
-.feed-card-compact .feed-gallery-upscale-button {
+.feed-card-compact .feed-gallery-upscale-button,
+.feed-card-compact .feed-gallery-download-button {
   padding: 5px 8px;
   font-size: 0.68rem;
 }

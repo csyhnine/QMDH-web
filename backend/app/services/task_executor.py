@@ -584,6 +584,54 @@ def _literal_image_size_tier(payload: dict) -> str:
     return {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
 
 
+_WAN_TIER_LONG_EDGE = {"1k": 1024, "2k": 2048, "4k": 4096}
+
+
+def _wan_pixel_size_for_aspect(aspect_ratio: str, resolution: str) -> str | None:
+    """Map aspect + resolution tier to Wan Method-2 WxH (literal 1K/2K/4K is always square)."""
+    raw = str(aspect_ratio or "").strip()
+    if not raw or ":" not in raw:
+        return None
+    if raw in SMART_RATIO_LABELS or raw in SOURCE_ASPECT_RATIO_LABELS:
+        return None
+    try:
+        width_text, height_text = raw.split(":", 1)
+        ratio_w = float(width_text.strip())
+        ratio_h = float(height_text.strip())
+    except ValueError:
+        return None
+    if ratio_w <= 0 or ratio_h <= 0:
+        return None
+    long_edge = _WAN_TIER_LONG_EDGE.get(resolution, _WAN_TIER_LONG_EDGE["1k"])
+    if ratio_w >= ratio_h:
+        width = long_edge
+        height = max(64, int(round(long_edge * ratio_h / ratio_w / 16) * 16))
+    else:
+        height = long_edge
+        width = max(64, int(round(long_edge * ratio_w / ratio_h / 16) * 16))
+    return f"{width}x{height}"
+
+
+def _wan_image_size(profile: ImageProviderProfile, payload: dict) -> str:
+    """Wan size: follow-source / smart → literal tier; concrete ratio → WxH at that tier."""
+    resolution = _normalize_image_resolution(payload)
+    # 4K is text-to-image only on wan2.7-image-pro; editing caps at 2K.
+    if resolution == "4k" and _extract_reference_images(payload):
+        resolution = "2k"
+        payload = {**payload, "resolution": "2k"}
+
+    if _should_omit_upstream_aspect_ratio(payload):
+        return {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
+
+    requested = str(payload.get("aspect_ratio") or "").strip()
+    if not requested or requested in SMART_RATIO_LABELS:
+        return {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
+
+    resolved = _resolved_image_aspect_ratio(profile, payload)
+    pixel = _wan_pixel_size_for_aspect(resolved, resolution)
+    return pixel or {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
+
+
 def _uses_haodeya_async_image_gateway(profile: ImageProviderProfile) -> bool:
     adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
     flavor = str(adapter_config.get("provider_flavor") or "").strip().lower()
@@ -885,10 +933,12 @@ def _build_upstream_image_config(profile: ImageProviderProfile, payload: dict) -
 def _image_generation_result_fields(profile: ImageProviderProfile, payload: dict) -> dict[str, str]:
     fields = _aspect_ratio_result_fields(profile, payload)
     resolution = _normalize_image_resolution(payload)
+    if _uses_haodeya_wan_image(profile) and resolution == "4k" and _extract_reference_images(payload):
+        resolution = "2k"
     fields["resolution"] = resolution
     fields["image_model_resolved"] = _resolve_image_model_name(profile, payload)
     if _uses_haodeya_wan_image(profile):
-        fields["image_size"] = _literal_image_size_tier(payload)
+        fields["image_size"] = _wan_image_size(profile, payload)
     elif resolution == "2k":
         fields["image_size"] = "2K"
     return fields
@@ -904,7 +954,7 @@ def _openai_image_request_body(
         body: dict[str, object] = {
             "model": _resolve_image_model_name(profile, payload),
             "prompt": prompt,
-            "size": _literal_image_size_tier(payload),
+            "size": _wan_image_size(profile, payload),
             "n": max(1, int(payload.get("image_count") or payload.get("n") or 1)),
         }
         detail = str(payload.get("prompt_supplement") or "").strip()

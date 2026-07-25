@@ -313,7 +313,7 @@ export default function UsageLogsPage() {
                 setFilters((current) => ({ ...current, includeTaskSummary: event.target.checked }))
               }
             />
-            <span>含任务汇总行</span>
+            <span>按任务汇总</span>
           </label>
           <button type="button" className="admin-primary-button" onClick={applyFilters}>
             查询

@@ -743,9 +743,13 @@ def list_usage_logs(
     start_utc = _with_utc(resolved_start)
     end_utc = _with_utc(resolved_end)
 
-    allowed_entry_types = list(USAGE_LOG_DEFAULT_ENTRY_TYPES)
-    if not include_task_summary:
-        allowed_entry_types = [item for item in allowed_entry_types if item != "task.finalized"]
+    allowed_entry_types = list(
+        _usage_log_billable_entry_types(
+            include_task_summary=include_task_summary,
+            entry_type=entry_type,
+            allowed_entry_types=list(USAGE_LOG_DEFAULT_ENTRY_TYPES),
+        )
+    )
 
     filters = [
         UsageLedger.recorded_at >= start_utc,
@@ -753,8 +757,6 @@ def list_usage_logs(
         UsageLedger.entry_type.in_(allowed_entry_types),
     ]
 
-    if entry_type and entry_type != "all":
-        filters.append(UsageLedger.entry_type == entry_type)
     if user_name:
         filters.append(UsageLedger.user_name.ilike(f"%{user_name.strip()}%"))
     if model_name:
@@ -795,20 +797,10 @@ def list_usage_logs(
     safe_page = min(page, total_pages) if total_pages else 1
     offset = (safe_page - 1) * page_size
 
-    cost_entry_types = _usage_log_billable_entry_types(
-        include_task_summary=include_task_summary,
-        entry_type=entry_type,
-        allowed_entry_types=allowed_entry_types,
-    )
-    cost_filters = [
-        *filters,
-        UsageLedger.entry_type.in_(cost_entry_types),
-    ]
-
     cost_rows = db.execute(
         select(UsageLedger.cost_currency, func.sum(UsageLedger.cost))
         .outerjoin(User, UsageLedger.user_id == User.id)
-        .where(*cost_filters)
+        .where(*filters)
         .group_by(UsageLedger.cost_currency)
     ).all()
 

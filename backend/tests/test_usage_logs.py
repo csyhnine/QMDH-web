@@ -37,6 +37,15 @@ class UsageLogBillingTests(unittest.TestCase):
             ("provider_call.recorded",),
         )
 
+    def test_summary_mode_excludes_provider_calls_to_avoid_double_rows(self) -> None:
+        types = _usage_log_billable_entry_types(
+            include_task_summary=True,
+            entry_type=None,
+            allowed_entry_types=list(USAGE_LOG_DEFAULT_ENTRY_TYPES),
+        )
+        self.assertIn("task.finalized", types)
+        self.assertNotIn("provider_call.recorded", types)
+
 
 if __name__ == "__main__":
     unittest.main()

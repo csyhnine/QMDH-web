@@ -14,6 +14,7 @@ import { api, type CanvasTemplateSummary, type Provider } from "../../api";
 import MediaCompareSlider from "../../components/shared/MediaCompareSlider";
 import { useAuth } from "../../context/AuthContext";
 import { isRuntimeUpscaleProvider, publicProviderDisplayName } from "../studio/modelAdminUtils";
+import { downloadMediaUrl } from "../studio/studioMediaDownload";
 import { firstCanvasProviderName } from "./canvasProviderGroups";
 import { prepareReferenceUploadFiles, uploadReferenceFiles } from "../studio/studioReferenceUtils";
 import { exportAnnotatedDataUrl } from "./annotateDraw";
@@ -925,6 +926,25 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
                 <img src={mediaPreview.url} alt="" />
               )}
             </div>
+            <footer className="media-lightbox-foot">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() =>
+                  void downloadMediaUrl(
+                    mediaPreview.url,
+                    /\.(mp4|webm|mov)(\?|$)/i.test(mediaPreview.url)
+                      ? "generated-video.mp4"
+                      : "generated-image.png"
+                  )
+                }
+              >
+                {/\.(mp4|webm|mov)(\?|$)/i.test(mediaPreview.url) ? "下载视频" : "下载生成图"}
+              </button>
+              <button type="button" className="submit-button" onClick={() => setMediaPreview(null)}>
+                关闭
+              </button>
+            </footer>
           </div>
         </div>
       ) : null}

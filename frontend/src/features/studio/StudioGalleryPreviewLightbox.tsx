@@ -1,5 +1,8 @@
+import { useState } from "react";
+
 import MediaCompareSlider from "../../components/shared/MediaCompareSlider";
 import { resolveStudioCompareOriginalUrl } from "./studioCompareUtils";
+import { downloadMediaUrl } from "./studioMediaDownload";
 import type { StudioGalleryPreviewLightboxProps } from "./studioMediaLightboxTypes";
 import { isVideoAsset } from "./studioUtils";
 
@@ -10,11 +13,25 @@ export default function StudioGalleryPreviewLightbox({
   onUseAsReference,
   onClose,
 }: StudioGalleryPreviewLightboxProps) {
+  const [downloading, setDownloading] = useState(false);
   const videoAsset = isVideoAsset(galleryPreview.asset);
   const canUseAsReference = !videoAsset && Boolean(onUseAsReference);
   const compareUrl =
     !videoAsset ? resolveStudioCompareOriginalUrl(galleryPreview.task, previewUrl) : null;
   const showCompare = Boolean(compareUrl);
+
+  const handleDownload = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const hint =
+        galleryPreview.asset.name ||
+        (videoAsset ? "generated-video.mp4" : "generated-image.png");
+      await downloadMediaUrl(previewUrl, hint);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div
@@ -46,6 +63,14 @@ export default function StudioGalleryPreviewLightbox({
           )}
         </div>
         <footer className="media-lightbox-foot">
+          <button
+            type="button"
+            className="ghost-button"
+            disabled={downloading}
+            onClick={() => void handleDownload()}
+          >
+            {downloading ? "下载中…" : videoAsset ? "下载视频" : "下载生成图"}
+          </button>
           <button
             type="button"
             className="ghost-button"

@@ -12,10 +12,12 @@
 
 ## Latest Handoffs
 
-### [2026-07-25] HappyHorse 对齐 Grok「单模型 + 档位菜单」— **待部署**
-- 问题：HappyHorse 6 个 SKU 曾作为独立模型出现在列表里
-- 修复：统一 `haodeya_happyhorse` 入口 + Studio 档位菜单（文生/图生/参考 × 5s/10s），散装 SKU profile 停用
-- Safe to hand off: **部署后 Yes**
+### [2026-07-25] HappyHorse 对齐 Grok「单模型 + 档位菜单」— **已上生产**
+- Git：**`8ffce24`**
+- 统一入口：`haodeya_happyhorse`（HappyHorse 1.1 Video）；6 个散装 SKU profile 已停用
+- Studio：选中后出现「HappyHorse 视频档位」菜单（文生/图生/参考 × 5s/10s），交互对齐 Grok
+- 部署：frontend + backend + worker；health 200
+- Safe to hand off: **Yes**
 
 ### [2026-07-25] Haodeya 新模型分流（chat / wan2.7 / HappyHorse）— **已上生产**
 - Git：**`47890dc`**（产品）；文档基线至 `d73966b`

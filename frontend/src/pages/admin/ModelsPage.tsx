@@ -58,6 +58,14 @@ type DiscoveredModelAssignment = {
   generate: boolean;
   edit: boolean;
   chat: boolean;
+  video: boolean;
+};
+
+const EMPTY_DISCOVERED_ASSIGNMENT: DiscoveredModelAssignment = {
+  generate: false,
+  edit: false,
+  chat: false,
+  video: false,
 };
 
 type ModelFilterState = {
@@ -82,6 +90,16 @@ type AdapterOption = {
   support: SupportLevel;
   note: string;
 };
+
+type ModelPreset = {
+  id: string;
+  label: string;
+  category: string;
+  description: string;
+  draft: Partial<ProviderProfileDraft>;
+};
+
+type DetailPanelTab = "model" | "chat-billing";
 
 
 /* ─── Constants ─── */
@@ -147,22 +165,146 @@ const MANAGED_ADAPTER_CONFIG_KEYS = [
   ...UPSTREAM_VIDEO_SKU_ADAPTER_KEYS,
 ] as const;
 
+const HAODEYA_BASE_URL = "https://newapi.haodeya.xyz/v1";
+
 const capabilityDefinitions: CapabilityDefinition[] = [
-  { key: "chat.completions", label: "Chat", description: "分配到 Chat 页面", support: "ready" },
-  { key: "image.generate", label: "生成页", description: "分配到图像生成页面", support: "ready" },
-  { key: "image.edit", label: "图像编辑", description: "保留图像编辑能力", support: "ready" },
-  { key: "video.generate", label: "视频生成", description: "用于 Kling / 即梦 / Seedance 等视频链路", support: "partial" },
+  { key: "chat.completions", label: "Chat", description: "出现在对话页", support: "ready" },
+  { key: "image.generate", label: "生成页", description: "出现在文生图", support: "ready" },
+  { key: "image.edit", label: "图像编辑", description: "出现在图像编辑", support: "ready" },
+  { key: "video.generate", label: "视频生成", description: "出现在视频模式", support: "partial" },
 ];
 
 const adapterOptions: AdapterOption[] = [
-  { key: "haodeya_grok", label: "Grok 视频", support: "partial", note: "单条 profile 即可；model_name 可用 grok-imagine-video，四档 SKU 在 Studio 视频模式内切换。" },
-  { key: "volcengine_ark", label: "Volcengine Ark Video", support: "partial", note: "Supports Seedance / Ark content generation tasks; probe will not create a live video." },
-  { key: "openai_compatible", label: "OpenAI Compatible", support: "ready", note: "当前后端已支持这一适配器的 Chat、图像生成和图像编辑。" },
-  { key: "dashscope_native", label: "DashScope Video", support: "partial", note: "支持 Wan / HappyHorse 的 DashScope 异步视频任务；探测不会创建真实视频。" },
-  { key: "anthropic_native", label: "Anthropic Native", support: "planned", note: "可以先保存配置，但后端还没有 Claude 原生 adapter。" },
-  { key: "kling_native", label: "Kling Native", support: "partial", note: "适合快手 Kling 系列；当前仅保留配置结构，视频执行 adapter 待补。" },
-  { key: "jimeng_native", label: "Jimeng CV Native", support: "partial", note: "Supports Volcengine CV signed video tasks; probe will not create a live video." },
-  { key: "custom_http", label: "Custom HTTP", support: "planned", note: "用于后续接入非标准厂商接口，当前前后端都还没有通用执行器。" },
+  { key: "haodeya_grok", label: "Haodeya 视频（Grok / HappyHorse）", support: "partial", note: "一条 profile + Studio 档位菜单；请求体由后端 adapter 按 SKU 组装，探测不会创建真实视频。" },
+  { key: "volcengine_ark", label: "Volcengine Ark 视频", support: "partial", note: "Seedance / Ark 异步任务；探测不会创建真实视频。" },
+  { key: "openai_compatible", label: "OpenAI 兼容", support: "ready", note: "Chat、生图、图像编辑的默认适配器；具体走哪条 strategy 看下方 Strategies。" },
+  { key: "dashscope_native", label: "DashScope 原生视频", support: "partial", note: "阿里云 Wan 等异步视频；探测不会创建真实视频。" },
+  { key: "anthropic_native", label: "Anthropic Native", support: "planned", note: "可先保存，后端尚无 Claude 原生执行器。" },
+  { key: "kling_native", label: "Kling Native", support: "partial", note: "仅保留配置结构，视频执行 adapter 待补。" },
+  { key: "jimeng_native", label: "即梦 CV Native", support: "partial", note: "火山 CV 签名视频任务；需填 API Secret；探测不会创建真实视频。" },
+  { key: "custom_http", label: "Custom HTTP", support: "planned", note: "预留非标准厂商接口，当前无通用执行器。" },
+];
+
+const modelPresets: ModelPreset[] = [
+  {
+    id: "haodeya-gemini-image",
+    label: "Gemini 生图（CPA）",
+    category: "生图",
+    description: "Haodeya chat/completions 出图；按 1K/2K 分档计费。",
+    draft: {
+      providerName: "haodeya_gemini_flash",
+      displayName: "Nano Banana PRO",
+      baseUrl: HAODEYA_BASE_URL,
+      modelName: "gemini-3.1-flash-image",
+      adapterKind: "openai_compatible",
+      capabilities: "image.generate, image.edit",
+      strategies: JSON.stringify(
+        {
+          "image.generate": "chat_completions_image",
+          "image.edit": "chat_completions_image_edit",
+        },
+        null,
+        2
+      ),
+      adapterConfig: "",
+      pricingCurrency: "CNY",
+      pricingUnit: "per_image",
+      outputFormat: "png",
+      timeoutSeconds: 300,
+      referenceMode: "disabled",
+    },
+  },
+  {
+    id: "haodeya-wan-image",
+    label: "Wan 2.7 生图",
+    category: "生图",
+    description: "无参考图 generations；有参考图 edits multipart。",
+    draft: {
+      providerName: "haodeya_wan27",
+      displayName: "Wan 2.7 Image",
+      baseUrl: HAODEYA_BASE_URL,
+      modelName: "wan2.7-image",
+      adapterKind: "openai_compatible",
+      capabilities: "image.generate, image.edit",
+      strategies: JSON.stringify(
+        {
+          "image.generate": "openai_images",
+          "image.edit": "openai_image_edits",
+        },
+        null,
+        2
+      ),
+      adapterConfig: JSON.stringify({ provider_flavor: "haodeya_wan_image", image_size_mode: "literal_tier" }, null, 2),
+      pricingCurrency: "CNY",
+      pricingUnit: "per_image",
+      outputFormat: "png",
+      timeoutSeconds: 300,
+      referenceMode: "disabled",
+    },
+  },
+  {
+    id: "haodeya-happyhorse-video",
+    label: "HappyHorse 视频",
+    category: "视频",
+    description: "单模型 + Studio 档位；后端按 metadata.input.media 组装。",
+    draft: {
+      providerName: "haodeya_happyhorse",
+      displayName: "HappyHorse 1.1 Video",
+      baseUrl: HAODEYA_BASE_URL,
+      modelName: "happyhorse-1.1",
+      adapterKind: "haodeya_grok",
+      capabilities: "video.generate",
+      strategies: JSON.stringify({ "video.generate": "haodeya_grok_video" }, null, 2),
+      adapterConfig: "",
+      pricingCurrency: "CNY",
+      pricingUnit: "per_video",
+      outputFormat: "mp4",
+      timeoutSeconds: 900,
+      referenceMode: "disabled",
+    },
+  },
+  {
+    id: "haodeya-grok-video",
+    label: "Grok 视频",
+    category: "视频",
+    description: "单模型 + Studio 四档 SKU；按 5s/10s 计费。",
+    draft: {
+      providerName: "haodeya_grok",
+      displayName: "Grok Imagine Video",
+      baseUrl: HAODEYA_BASE_URL,
+      modelName: "grok-imagine-video",
+      adapterKind: "haodeya_grok",
+      capabilities: "video.generate",
+      strategies: JSON.stringify({ "video.generate": "haodeya_grok_video" }, null, 2),
+      adapterConfig: "",
+      pricingCurrency: "CNY",
+      pricingUnit: "per_video",
+      outputFormat: "mp4",
+      timeoutSeconds: 900,
+      referenceMode: "disabled",
+    },
+  },
+  {
+    id: "haodeya-chat",
+    label: "Chat 对话",
+    category: "Chat",
+    description: "OpenAI 兼容 chat/completions；单价在「Chat 计费」页配置。",
+    draft: {
+      providerName: "haodeya_chat",
+      displayName: "Qwen Chat",
+      baseUrl: HAODEYA_BASE_URL,
+      modelName: "qwen3.8-max-preview",
+      adapterKind: "openai_compatible",
+      capabilities: "chat.completions",
+      strategies: JSON.stringify({ chat: "openai_chat" }, null, 2),
+      adapterConfig: "",
+      pricingCurrency: "CNY",
+      pricingUnit: "per_request",
+      outputFormat: "png",
+      timeoutSeconds: 120,
+      referenceMode: "disabled",
+    },
+  },
 ];
 
 
@@ -290,9 +432,28 @@ function toProviderProfilePayload(draft: ProviderProfileDraft): ProviderProfileC
   };
 }
 
+function modelLooksLikeVideo(modelId: string, ownedBy: string): boolean {
+  const lower = `${modelId} ${ownedBy}`.toLowerCase();
+  return (
+    lower.includes("video") ||
+    lower.includes("i2v") ||
+    lower.includes("t2v") ||
+    lower.includes("r2v") ||
+    lower.includes("happyhorse") ||
+    lower.includes("seedance") ||
+    lower.includes("kling") ||
+    lower.includes("jimeng") ||
+    lower.includes("grok-imagine-video") ||
+    lower.includes("wan2.1") ||
+    lower.includes("wanx2") ||
+    /\bwan[-_]?v?\d/.test(lower)
+  );
+}
+
 function modelLooksLikeImageGeneration(modelId: string, ownedBy: string, baseUrl: string): boolean {
   const lower = modelId.toLowerCase();
   const ownerLower = ownedBy.toLowerCase();
+  if (modelLooksLikeVideo(modelId, ownedBy)) return false;
   if (lower.includes("flux") || lower.includes("image") || lower.includes("dall")) return true;
   if (ownerLower.includes("black-forest") || ownerLower.includes("stabilityai")) return true;
   if (baseUrl.includes("modelscope.cn") && (lower.includes("wanx") || lower.includes("cogview"))) return true;
@@ -302,6 +463,7 @@ function modelLooksLikeImageGeneration(modelId: string, ownedBy: string, baseUrl
 function modelLooksLikeImageEdit(modelId: string, ownedBy: string): boolean {
   const lower = modelId.toLowerCase();
   const ownerLower = ownedBy.toLowerCase();
+  if (modelLooksLikeVideo(modelId, ownedBy)) return false;
   return (
     lower.includes("image-edit") ||
     lower.includes("img-edit") ||
@@ -314,9 +476,16 @@ function modelLooksLikeImageEdit(modelId: string, ownedBy: string): boolean {
 }
 
 function guessDiscoveredModelAssignment(modelId: string, ownedBy: string, baseUrl: string): DiscoveredModelAssignment {
-  if (modelLooksLikeImageEdit(modelId, ownedBy)) return { generate: false, edit: true, chat: false };
-  if (modelLooksLikeImageGeneration(modelId, ownedBy, baseUrl)) return { generate: true, edit: false, chat: false };
-  return { generate: false, edit: false, chat: true };
+  if (modelLooksLikeVideo(modelId, ownedBy)) {
+    return { ...EMPTY_DISCOVERED_ASSIGNMENT, video: true };
+  }
+  if (modelLooksLikeImageEdit(modelId, ownedBy)) {
+    return { ...EMPTY_DISCOVERED_ASSIGNMENT, edit: true };
+  }
+  if (modelLooksLikeImageGeneration(modelId, ownedBy, baseUrl)) {
+    return { ...EMPTY_DISCOVERED_ASSIGNMENT, generate: true };
+  }
+  return { ...EMPTY_DISCOVERED_ASSIGNMENT, chat: true };
 }
 
 function assignmentToCapabilities(modelId: string, ownedBy: string, assignment: DiscoveredModelAssignment): string[] {
@@ -324,11 +493,13 @@ function assignmentToCapabilities(modelId: string, ownedBy: string, assignment: 
   if (assignment.generate) caps.push("image.generate");
   if (assignment.edit) caps.push("image.edit");
   if (assignment.chat) caps.push("chat.completions");
+  if (assignment.video) caps.push("video.generate");
   if (caps.length === 0) {
     const guess = guessDiscoveredModelAssignment(modelId, ownedBy, "");
     if (guess.generate) caps.push("image.generate");
     if (guess.edit) caps.push("image.edit");
     if (guess.chat) caps.push("chat.completions");
+    if (guess.video) caps.push("video.generate");
   }
   return caps;
 }
@@ -338,7 +509,53 @@ function assignmentLabel(assignment: DiscoveredModelAssignment): string {
   if (assignment.generate) parts.push("生成页");
   if (assignment.edit) parts.push("图像编辑");
   if (assignment.chat) parts.push("Chat");
+  if (assignment.video) parts.push("视频");
   return parts.length > 0 ? parts.join(" + ") : "未分配";
+}
+
+function resolveDiscoverImportTransport(
+  modelId: string,
+  baseUrl: string,
+  capabilities: string[]
+): { adapter_kind: string; strategies: Record<string, string>; reference_mode: string } {
+  if (!capabilities.includes("video.generate")) {
+    return {
+      adapter_kind: "openai_compatible",
+      strategies: {},
+      reference_mode: capabilities.includes("image.generate") && baseUrl.includes("modelscope.cn") ? "caption_prompt" : "disabled",
+    };
+  }
+
+  const identity = `${modelId} ${baseUrl}`.toLowerCase();
+  if (identity.includes("jimeng") || (identity.includes("cv") && identity.includes("volc"))) {
+    return {
+      adapter_kind: "jimeng_native",
+      strategies: { "video.generate": "volcengine_cv_jimeng_video" },
+      reference_mode: "disabled",
+    };
+  }
+  if (identity.includes("ark") || identity.includes("seedance") || identity.includes("volces.com")) {
+    return {
+      adapter_kind: "volcengine_ark",
+      strategies: { "video.generate": "volcengine_ark_video_tasks" },
+      reference_mode: "disabled",
+    };
+  }
+  if (
+    (identity.includes("dashscope") || identity.includes("aliyuncs.com")) &&
+    !identity.includes("haodeya")
+  ) {
+    return {
+      adapter_kind: "dashscope_native",
+      strategies: { "video.generate": "dashscope_async_video" },
+      reference_mode: "disabled",
+    };
+  }
+  return {
+    adapter_kind: "haodeya_grok",
+    strategies: { "video.generate": "haodeya_grok_video" },
+    reference_mode: "disabled",
+  };
 }
 
 function formatPricingUnitLabel(unit: string): string {
@@ -437,28 +654,6 @@ function profileUsesVideoTierPricing(capabilities: string[], adapterKind: string
   return profileHasVideoBilling(capabilities) || adapterKind === "haodeya_grok";
 }
 
-function tierPriceFieldLabels(capabilities: string[], adapterKind: string): { first: string; second: string; help: string } {
-  if (profileUsesVideoTierPricing(capabilities, adapterKind) && !profileHasImageBilling(capabilities)) {
-    return {
-      first: "5s 单价",
-      second: "10s 单价",
-      help: "Grok 视频按 SKU 时长分档计费，5s 写入 1K 档、10s 写入 2K 档，与生图共用同一 adapter_config 字段。",
-    };
-  }
-  if (profileUsesVideoTierPricing(capabilities, adapterKind) && profileHasImageBilling(capabilities)) {
-    return {
-      first: "1K / 5s 单价",
-      second: "2K / 10s 单价",
-      help: "生图按 Studio 分辨率计费；Grok 视频 5s 用 1K 档、10s 用 2K 档。",
-    };
-  }
-  return {
-    first: "1K 单价",
-    second: "2K 单价",
-    help: "生图任务按 Studio 档位写入日志成本：1K 用 1K 价，2K 用 2K 价；未填 2K 时会回退到 1K 价。",
-  };
-}
-
 function profileHasImageBilling(capabilities: string[]): boolean {
   return capabilities.some((capability) => capability === "image.generate" || capability === "image.edit");
 }
@@ -516,7 +711,13 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
   const [probeResults, setProbeResults] = useState<Record<number, ProviderProfileProbeResult>>({});
   const [modelFilters, setModelFilters] = useState<ModelFilterState>({ search: "", capability: "all", adapterKind: "all", status: "all" });
   const [discoverPanelOpen, setDiscoverPanelOpen] = useState(false);
-  const [discoverBaseUrl, setDiscoverBaseUrl] = useState("");
+  const [discoverBaseUrl, setDiscoverBaseUrl] = useState(() => {
+    try {
+      return localStorage.getItem("qmdh.discover.baseUrl") ?? "";
+    } catch {
+      return "";
+    }
+  });
   const [discoverApiKey, setDiscoverApiKey] = useState("");
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discoverError, setDiscoverError] = useState("");
@@ -527,6 +728,11 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
   const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
   const [importingModels, setImportingModels] = useState(false);
   const [importResult, setImportResult] = useState<{ created: string[]; skipped: string[] } | null>(null);
+  const [discoverListFilter, setDiscoverListFilter] = useState<"new" | "all" | "exists">("new");
+  const [discoverSearch, setDiscoverSearch] = useState("");
+  const [detailPanelTab, setDetailPanelTab] = useState<DetailPanelTab>("model");
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
 
   const enabledProviderProfiles = providerProfiles.filter((p) => p.enabled);
   const disabledProviderProfiles = providerProfiles.filter((p) => !p.enabled);
@@ -537,6 +743,18 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
     const support = summarizeProfileSupport(p.adapter_kind, p.capabilities);
     return support !== "ready" || p.capabilities.includes("video.generate");
   }).length;
+  const knownDiscoverBaseUrls = Array.from(
+    new Set(providerProfiles.map((profile) => profile.base_url.trim()).filter(Boolean))
+  ).slice(0, 8);
+  const discoveredNewCount = discoveredModels.filter((model) => !model.already_exists).length;
+  const discoveredExistsCount = discoveredModels.length - discoveredNewCount;
+  const filteredDiscoveredModels = discoveredModels.filter((model) => {
+    if (discoverListFilter === "new" && model.already_exists) return false;
+    if (discoverListFilter === "exists" && !model.already_exists) return false;
+    const query = discoverSearch.trim().toLowerCase();
+    if (!query) return true;
+    return `${model.model_id} ${model.owned_by}`.toLowerCase().includes(query);
+  });
 
   useEffect(() => {
     if (pricingRuleDraft.providerProfileId || chatProviderProfiles.length === 0) return;
@@ -550,7 +768,9 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
   const draftHasImageBilling = profileHasImageBilling(draftCapabilities);
   const draftHasVideoBilling = profileUsesVideoTierPricing(draftCapabilities, providerDraft.adapterKind);
   const draftHasTierBilling = draftHasImageBilling || draftHasVideoBilling;
-  const tierPriceLabels = tierPriceFieldLabels(draftCapabilities, providerDraft.adapterKind);
+  const draftHasChatCapability = draftCapabilities.includes("chat.completions");
+  const draftNeedsApiSecret = providerDraft.adapterKind === "jimeng_native";
+  const showPresets = editingProviderProfileId === null;
 
   const filteredProviderProfiles = providerProfiles.filter((profile) => {
     const searchText = `${profile.display_name} ${profile.provider_name} ${profile.model_name}`.toLowerCase();
@@ -620,6 +840,30 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
   function resetProviderProfileDraft() {
     setEditingProviderProfileId(null);
     setProviderDraft(defaultProviderProfileDraft);
+    setSelectedPresetId(null);
+    setMoreOptionsOpen(false);
+    setDetailPanelTab("model");
+  }
+
+  function applyModelPreset(presetId: string) {
+    const preset = modelPresets.find((item) => item.id === presetId);
+    if (!preset) {
+      setSelectedPresetId(null);
+      return;
+    }
+    setProviderDraft((current) => ({
+      ...defaultProviderProfileDraft,
+      ...preset.draft,
+      apiKey: current.apiKey,
+      apiSecret: current.apiSecret,
+      enabled: current.enabled,
+      unitPrice1k: current.unitPrice1k,
+      unitPrice2k: current.unitPrice2k,
+      unitPrice4k: current.unitPrice4k,
+    }));
+    setSelectedPresetId(preset.id);
+    setMoreOptionsOpen(false);
+    setDetailPanelTab("model");
   }
 
   function resetPricingRuleDraft(profileId?: number | null) {
@@ -639,12 +883,16 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
   function handleEditProviderProfile(profile: ProviderProfileRecord) {
     setEditingProviderProfileId(profile.id);
     setProviderDraft(toProviderProfileDraft(profile));
+    setSelectedPresetId(null);
+    setMoreOptionsOpen(false);
     setPricingRuleDraft((current) => ({ ...current, providerProfileId: String(profile.id) }));
+    setDetailPanelTab("model");
   }
 
   function handleEditPricingRule(rule: ProviderPricingRuleRecord) {
     setEditingPricingRuleId(rule.id);
     setPricingRuleDraft(toPricingRuleDraft(rule));
+    setDetailPanelTab("chat-billing");
   }
 
   async function handleSaveProviderProfile(event: FormEvent<HTMLFormElement>) {
@@ -766,27 +1014,70 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
 
   async function handleDiscoverModels(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setDiscoverError(""); setDiscoveredModels([]); setDiscoveredAssignments({}); setSelectedModelIds(new Set()); setImportResult(null); setDiscoverLoading(true);
+    setDiscoverError("");
+    setDiscoveredModels([]);
+    setDiscoveredAssignments({});
+    setSelectedModelIds(new Set());
+    setImportResult(null);
+    setDiscoverSearch("");
+    setDiscoverListFilter("new");
+    setDiscoverLoading(true);
     try {
-      const result = await api.discoverProviderModels(discoverBaseUrl.trim(), discoverApiKey.trim());
+      const trimmedUrl = discoverBaseUrl.trim();
+      const result = await api.discoverProviderModels(trimmedUrl, discoverApiKey.trim());
       setDiscoveredModels(result.models);
-      setDiscoveredAssignments(Object.fromEntries(result.models.map((m) => [m.model_id, guessDiscoveredModelAssignment(m.model_id, m.owned_by, result.base_url)])));
+      setDiscoveredAssignments(
+        Object.fromEntries(
+          result.models.map((m) => [m.model_id, guessDiscoveredModelAssignment(m.model_id, m.owned_by, result.base_url)])
+        )
+      );
       setDiscoverBaseUrlForImport(result.base_url);
       setDiscoverApiKeyForImport(discoverApiKey.trim());
+      setDiscoverBaseUrl(result.base_url);
+      try {
+        localStorage.setItem("qmdh.discover.baseUrl", result.base_url);
+      } catch {
+        /* ignore */
+      }
       setSelectedModelIds(new Set(result.models.filter((m) => !m.already_exists).map((m) => m.model_id)));
-    } catch (err) { setDiscoverError(err instanceof Error ? err.message : "探测失败"); }
-    finally { setDiscoverLoading(false); }
+    } catch (err) {
+      setDiscoverError(err instanceof Error ? err.message : "探测失败");
+    } finally {
+      setDiscoverLoading(false);
+    }
   }
 
   function toggleModelSelection(modelId: string) {
-    setSelectedModelIds((current) => { const next = new Set(current); if (next.has(modelId)) next.delete(modelId); else next.add(modelId); return next; });
+    setSelectedModelIds((current) => {
+      const next = new Set(current);
+      if (next.has(modelId)) next.delete(modelId);
+      else next.add(modelId);
+      return next;
+    });
+  }
+
+  function selectVisibleNewModels() {
+    setSelectedModelIds(
+      new Set(filteredDiscoveredModels.filter((model) => !model.already_exists).map((model) => model.model_id))
+    );
   }
 
   function updateDiscoveredAssignment(modelId: string, patch: Partial<DiscoveredModelAssignment>) {
     setDiscoveredAssignments((current) => ({
       ...current,
-      [modelId]: { ...(current[modelId] ?? { generate: false, edit: false, chat: false }), ...patch },
+      [modelId]: { ...(current[modelId] ?? EMPTY_DISCOVERED_ASSIGNMENT), ...patch },
     }));
+  }
+
+  function applyAssignmentToSelected(assignment: DiscoveredModelAssignment) {
+    if (selectedModelIds.size === 0) return;
+    setDiscoveredAssignments((current) => {
+      const next = { ...current };
+      for (const modelId of selectedModelIds) {
+        next[modelId] = { ...assignment };
+      }
+      return next;
+    });
   }
 
   function buildProviderName(baseUrl: string, modelId: string): string {
@@ -796,18 +1087,52 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
 
   async function handleBulkImport() {
     if (selectedModelIds.size === 0) return;
-    setImportingModels(true); setImportResult(null);
+    setImportingModels(true);
+    setImportResult(null);
     try {
-      const items: ProviderBulkImportItem[] = discoveredModels.filter((m) => selectedModelIds.has(m.model_id)).map((m) => {
-        const assignment = discoveredAssignments[m.model_id] ?? { generate: false, edit: false, chat: false };
-        return { model_id: m.model_id, provider_name: buildProviderName(discoverBaseUrlForImport, m.model_id), display_name: m.model_id, capabilities: assignmentToCapabilities(m.model_id, m.owned_by, assignment), adapter_kind: "openai_compatible", reference_mode: assignment.generate && discoverBaseUrlForImport.includes("modelscope.cn") ? "caption_prompt" : "disabled" };
-      });
+      const items: ProviderBulkImportItem[] = discoveredModels
+        .filter((m) => selectedModelIds.has(m.model_id) && !m.already_exists)
+        .map((m) => {
+          const assignment = discoveredAssignments[m.model_id] ?? EMPTY_DISCOVERED_ASSIGNMENT;
+          const capabilities = assignmentToCapabilities(m.model_id, m.owned_by, assignment);
+          const transport = resolveDiscoverImportTransport(m.model_id, discoverBaseUrlForImport, capabilities);
+          return {
+            model_id: m.model_id,
+            provider_name: buildProviderName(discoverBaseUrlForImport, m.model_id),
+            display_name: m.model_id,
+            capabilities,
+            adapter_kind: transport.adapter_kind,
+            reference_mode: transport.reference_mode,
+            strategies: transport.strategies,
+          };
+        });
       const unassigned = items.filter((item) => item.capabilities.length === 0).map((item) => item.model_id);
-      if (unassigned.length > 0) { setDiscoverError(`以下模型尚未分配：${unassigned.join(", ")}`); setImportingModels(false); return; }
-      const result = await api.bulkImportProviderProfiles({ base_url: discoverBaseUrlForImport, api_key: discoverApiKeyForImport, models: items });
-      setImportResult(result); setSelectedModelIds(new Set()); onRefresh();
-    } catch (err) { setDiscoverError(err instanceof Error ? err.message : "批量导入失败"); }
-    finally { setImportingModels(false); }
+      if (unassigned.length > 0) {
+        setDiscoverError(`以下模型尚未分配：${unassigned.join(", ")}`);
+        setImportingModels(false);
+        return;
+      }
+      const result = await api.bulkImportProviderProfiles({
+        base_url: discoverBaseUrlForImport,
+        api_key: discoverApiKeyForImport,
+        models: items,
+      });
+      setImportResult(result);
+      const createdSet = new Set(result.created);
+      setDiscoveredModels((current) =>
+        current.map((model) =>
+          createdSet.has(model.model_id) || result.skipped.includes(model.model_id)
+            ? { ...model, already_exists: true }
+            : model
+        )
+      );
+      setSelectedModelIds(new Set());
+      onRefresh();
+    } catch (err) {
+      setDiscoverError(err instanceof Error ? err.message : "批量导入失败");
+    } finally {
+      setImportingModels(false);
+    }
   }
 
   return (
@@ -833,44 +1158,228 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
         <section className="discover-panel">
           <form className="discover-form" autoComplete="off" onSubmit={(e) => void handleDiscoverModels(e)}>
             <h3>探测模型列表</h3>
-            <p className="discover-hint">填入 Base URL 和 API Key，自动拉取该服务支持的模型列表。</p>
+            <p className="discover-hint">重复探测同一上游时，默认只看「未导入」；勾选后可批量设分类再导入。</p>
+            {knownDiscoverBaseUrls.length > 0 ? (
+              <div className="discover-known-urls">
+                <span>已用过的地址：</span>
+                {knownDiscoverBaseUrls.map((url) => (
+                  <button
+                    key={url}
+                    type="button"
+                    className={`discover-url-chip${discoverBaseUrl === url ? " is-on" : ""}`}
+                    onClick={() => setDiscoverBaseUrl(url)}
+                    title={url}
+                  >
+                    {url.replace(/^https?:\/\//, "").slice(0, 42)}
+                    {url.replace(/^https?:\/\//, "").length > 42 ? "…" : ""}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <div className="discover-form-row">
-              <label className="composer-menu-field discover-url-field"><span>Base URL</span><input value={discoverBaseUrl} onChange={(e) => setDiscoverBaseUrl(e.target.value)} placeholder="https://api-inference.modelscope.cn/v1" autoComplete="off" required /></label>
-              <label className="composer-menu-field discover-key-field"><span>API Key</span><input type="password" value={discoverApiKey} onChange={(e) => setDiscoverApiKey(e.target.value)} placeholder="sk-..." autoComplete="new-password" required /></label>
-              <button type="submit" className="submit-button discover-submit-btn" disabled={discoverLoading}>{discoverLoading ? "探测中..." : "探测"}</button>
+              <label className="composer-menu-field discover-url-field">
+                <span>Base URL</span>
+                <input
+                  value={discoverBaseUrl}
+                  onChange={(e) => setDiscoverBaseUrl(e.target.value)}
+                  placeholder="https://newapi.haodeya.xyz/v1"
+                  autoComplete="off"
+                  required
+                />
+              </label>
+              <label className="composer-menu-field discover-key-field">
+                <span>API Key</span>
+                <input
+                  type="password"
+                  value={discoverApiKey}
+                  onChange={(e) => setDiscoverApiKey(e.target.value)}
+                  placeholder="sk-..."
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
+              <button type="submit" className="submit-button discover-submit-btn" disabled={discoverLoading}>
+                {discoverLoading ? "探测中..." : "探测"}
+              </button>
             </div>
             {discoverError ? <p className="discover-error">{discoverError}</p> : null}
           </form>
           {discoveredModels.length > 0 ? (
             <div className="discover-results">
               <div className="discover-results-head">
-                <span>共发现 {discoveredModels.length} 个模型，已选 {selectedModelIds.size} 个</span>
+                <span>
+                  共 {discoveredModels.length} · 未导入 {discoveredNewCount} · 已导入 {discoveredExistsCount} · 已选{" "}
+                  {selectedModelIds.size}
+                </span>
                 <div className="discover-results-actions">
-                  <button type="button" className="ghost-button" onClick={() => setSelectedModelIds(new Set(discoveredModels.filter((m) => !m.already_exists).map((m) => m.model_id)))}>全选未导入</button>
-                  <button type="button" className="ghost-button" onClick={() => setSelectedModelIds(new Set())}>取消全选</button>
-                  <button type="button" className="submit-button" disabled={selectedModelIds.size === 0 || importingModels} onClick={() => void handleBulkImport()}>{importingModels ? "导入中..." : `导入选中 (${selectedModelIds.size})`}</button>
+                  <button type="button" className="ghost-button" onClick={selectVisibleNewModels}>
+                    全选当前未导入
+                  </button>
+                  <button type="button" className="ghost-button" onClick={() => setSelectedModelIds(new Set())}>
+                    取消全选
+                  </button>
+                  <button
+                    type="button"
+                    className="submit-button"
+                    disabled={selectedModelIds.size === 0 || importingModels}
+                    onClick={() => void handleBulkImport()}
+                  >
+                    {importingModels ? "导入中..." : `导入选中 (${selectedModelIds.size})`}
+                  </button>
                 </div>
               </div>
-              {importResult ? <p className="discover-import-result">✓ 已导入 {importResult.created.length} 个：{importResult.created.join(", ") || "无"}{importResult.skipped.length > 0 ? `；跳过已存在 ${importResult.skipped.length} 个` : ""}</p> : null}
+              <div className="discover-toolbar">
+                <div className="discover-filter-tabs" role="tablist" aria-label="探测结果筛选">
+                  <button
+                    type="button"
+                    className={discoverListFilter === "new" ? "is-active" : ""}
+                    onClick={() => setDiscoverListFilter("new")}
+                  >
+                    未导入 ({discoveredNewCount})
+                  </button>
+                  <button
+                    type="button"
+                    className={discoverListFilter === "all" ? "is-active" : ""}
+                    onClick={() => setDiscoverListFilter("all")}
+                  >
+                    全部 ({discoveredModels.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={discoverListFilter === "exists" ? "is-active" : ""}
+                    onClick={() => setDiscoverListFilter("exists")}
+                  >
+                    已导入 ({discoveredExistsCount})
+                  </button>
+                </div>
+                <input
+                  className="discover-search"
+                  aria-label="搜索探测结果"
+                  placeholder="搜索 model id…"
+                  value={discoverSearch}
+                  onChange={(e) => setDiscoverSearch(e.target.value)}
+                />
+              </div>
+              <div className="discover-bulk-assign">
+                <span>对已选批量设分类：</span>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={selectedModelIds.size === 0}
+                  onClick={() => applyAssignmentToSelected({ ...EMPTY_DISCOVERED_ASSIGNMENT, chat: true })}
+                >
+                  Chat
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={selectedModelIds.size === 0}
+                  onClick={() => applyAssignmentToSelected({ ...EMPTY_DISCOVERED_ASSIGNMENT, generate: true })}
+                >
+                  生成页
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={selectedModelIds.size === 0}
+                  onClick={() => applyAssignmentToSelected({ ...EMPTY_DISCOVERED_ASSIGNMENT, edit: true })}
+                >
+                  图像编辑
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={selectedModelIds.size === 0}
+                  onClick={() =>
+                    applyAssignmentToSelected({ ...EMPTY_DISCOVERED_ASSIGNMENT, generate: true, edit: true })
+                  }
+                >
+                  生成+编辑
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={selectedModelIds.size === 0}
+                  onClick={() => applyAssignmentToSelected({ ...EMPTY_DISCOVERED_ASSIGNMENT, video: true })}
+                >
+                  视频
+                </button>
+              </div>
+              {importResult ? (
+                <p className="discover-import-result">
+                  ✓ 已导入 {importResult.created.length} 个
+                  {importResult.created.length > 0 ? `：${importResult.created.slice(0, 8).join(", ")}${importResult.created.length > 8 ? "…" : ""}` : ""}
+                  {importResult.skipped.length > 0 ? `；跳过已存在 ${importResult.skipped.length} 个` : ""}
+                </p>
+              ) : null}
               <div className="discover-model-list">
-                {discoveredModels.map((model) => (
-                  <div key={model.model_id} className={`discover-model-item${model.already_exists ? " discover-model-exists" : ""}`}>
-                    <input type="checkbox" checked={selectedModelIds.has(model.model_id)} disabled={model.already_exists} onChange={() => toggleModelSelection(model.model_id)} />
-                    <div className="discover-model-main">
-                      <span className="discover-model-id">{model.model_id}</span>
-                      <div className="discover-model-meta">
-                        {model.owned_by ? <span className="discover-model-owner">{model.owned_by}</span> : null}
-                        <span className="discover-model-tag discover-model-tag-assignment">分配：{assignmentLabel(discoveredAssignments[model.model_id] ?? { generate: false, edit: false, chat: false })}</span>
-                        {model.already_exists ? <em className="discover-model-tag">已导入</em> : null}
+                {filteredDiscoveredModels.length > 0 ? (
+                  filteredDiscoveredModels.map((model) => (
+                    <div
+                      key={model.model_id}
+                      className={`discover-model-item${model.already_exists ? " discover-model-exists" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedModelIds.has(model.model_id)}
+                        disabled={model.already_exists}
+                        onChange={() => toggleModelSelection(model.model_id)}
+                      />
+                      <div className="discover-model-main">
+                        <span className="discover-model-id">{model.model_id}</span>
+                        <div className="discover-model-meta">
+                          {model.owned_by ? <span className="discover-model-owner">{model.owned_by}</span> : null}
+                          <span className="discover-model-tag discover-model-tag-assignment">
+                            {assignmentLabel(discoveredAssignments[model.model_id] ?? EMPTY_DISCOVERED_ASSIGNMENT)}
+                          </span>
+                          {model.already_exists ? <em className="discover-model-tag">已导入</em> : null}
+                        </div>
                       </div>
+                      {!model.already_exists ? (
+                        <div className="discover-assignment" onClick={(e) => e.stopPropagation()}>
+                          <label className="discover-assignment-option">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(discoveredAssignments[model.model_id]?.generate)}
+                              onChange={(e) => updateDiscoveredAssignment(model.model_id, { generate: e.target.checked })}
+                            />
+                            <span>生成</span>
+                          </label>
+                          <label className="discover-assignment-option">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(discoveredAssignments[model.model_id]?.edit)}
+                              onChange={(e) => updateDiscoveredAssignment(model.model_id, { edit: e.target.checked })}
+                            />
+                            <span>编辑</span>
+                          </label>
+                          <label className="discover-assignment-option">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(discoveredAssignments[model.model_id]?.chat)}
+                              onChange={(e) => updateDiscoveredAssignment(model.model_id, { chat: e.target.checked })}
+                            />
+                            <span>Chat</span>
+                          </label>
+                          <label className="discover-assignment-option">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(discoveredAssignments[model.model_id]?.video)}
+                              onChange={(e) => updateDiscoveredAssignment(model.model_id, { video: e.target.checked })}
+                            />
+                            <span>视频</span>
+                          </label>
+                        </div>
+                      ) : null}
                     </div>
-                    <div className="discover-assignment" onClick={(e) => e.stopPropagation()}>
-                      <label className="discover-assignment-option"><input type="checkbox" checked={Boolean(discoveredAssignments[model.model_id]?.generate)} disabled={model.already_exists} onChange={(e) => updateDiscoveredAssignment(model.model_id, { generate: e.target.checked })} /><span>生成页</span></label>
-                      <label className="discover-assignment-option"><input type="checkbox" checked={Boolean(discoveredAssignments[model.model_id]?.edit)} disabled={model.already_exists} onChange={(e) => updateDiscoveredAssignment(model.model_id, { edit: e.target.checked })} /><span>图像编辑</span></label>
-                      <label className="discover-assignment-option"><input type="checkbox" checked={Boolean(discoveredAssignments[model.model_id]?.chat)} disabled={model.already_exists} onChange={(e) => updateDiscoveredAssignment(model.model_id, { chat: e.target.checked })} /><span>Chat</span></label>
-                    </div>
+                  ))
+                ) : (
+                  <div className="template-empty">
+                    {discoverListFilter === "new"
+                      ? "没有未导入模型（或被搜索过滤掉了）。可切到「全部」查看。"
+                      : "当前筛选下没有匹配模型。"}
                   </div>
-                ))}
+                )}
               </div>
             </div>
           ) : null}
@@ -923,207 +1432,527 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
           </div>
         </section>
 
-        <aside className="admin-detail-panel">
-          <form className="admin-side-form" autoComplete="off" onSubmit={handleSaveProviderProfile}>
-            <div className="admin-detail-head"><h2>{editingProviderProfileId === null ? "新增模型配置" : "编辑模型配置"}</h2><p>保存后会按 capabilities 出现在对应页面中。</p></div>
-            <div className="model-form-grid model-form-grid-tight">
-              <label className="composer-menu-field"><span>Provider</span><input value={providerDraft.providerName} disabled={editingProviderProfileId !== null} onChange={(e) => setProviderDraft((c) => ({ ...c, providerName: e.target.value }))} placeholder="modelscope_arch" autoComplete="off" /></label>
-              <label className="composer-menu-field"><span>显示名</span><input value={providerDraft.displayName} onChange={(e) => setProviderDraft((c) => ({ ...c, displayName: e.target.value }))} placeholder="例如：Gemini 快速生图" autoComplete="off" /></label>
-              <label className="composer-menu-field"><span>Model</span><input value={providerDraft.modelName} onChange={(e) => setProviderDraft((c) => ({ ...c, modelName: e.target.value }))} placeholder="gpt-image-2-vip" autoComplete="off" /></label>
-              <label className="composer-menu-field composer-menu-field-full"><span>Adapter</span><select value={providerDraft.adapterKind} onChange={(e) => setProviderDraft((c) => ({ ...c, adapterKind: e.target.value }))}>{adapterOptions.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select></label>
-              <label className="composer-menu-field composer-menu-field-full"><span>Base URL</span><input name="provider-base-url" value={providerDraft.baseUrl} onChange={(e) => setProviderDraft((c) => ({ ...c, baseUrl: e.target.value }))} placeholder="https://api-inference.modelscope.cn/v1" autoComplete="off" /></label>
-              <label className="composer-menu-field composer-menu-field-full"><span>API Key</span><input name="provider-api-key" type="password" value={providerDraft.apiKey} autoComplete="new-password" onChange={(e) => setProviderDraft((c) => ({ ...c, apiKey: e.target.value }))} placeholder={editingProviderProfileId === null ? "新增时必填" : "留空则保留已保存 key"} /></label>
-              <label className="composer-menu-field composer-menu-field-full"><span>API Secret</span><input name="provider-api-secret" type="password" value={providerDraft.apiSecret} autoComplete="new-password" onChange={(e) => setProviderDraft((c) => ({ ...c, apiSecret: e.target.value }))} placeholder="Jimeng native only; leave blank to keep saved secret" /></label>
-              <label className="composer-menu-field"><span>Capabilities</span>
-                <div className="capability-toggle-list">
-                  {capabilityDefinitions.map((def) => (
-                    <label key={def.key} className="capability-toggle"><input type="checkbox" checked={hasCapability(providerDraft.capabilities, def.key)} onChange={(e) => setProviderDraft((c) => ({ ...c, capabilities: toggleCapability(c.capabilities, def.key, e.target.checked) }))} /><span>{def.label}</span></label>
-                  ))}
-                </div>
-                <input value={providerDraft.capabilities} onChange={(e) => setProviderDraft((c) => ({ ...c, capabilities: e.target.value }))} placeholder="image.generate, chat.completions" />
-              </label>
-              <label className="composer-menu-field composer-menu-field-full"><span>Strategies</span><textarea rows={5} value={providerDraft.strategies} onChange={(e) => setProviderDraft((c) => ({ ...c, strategies: e.target.value }))} placeholder={'{\n  "chat": "openai_chat",\n  "image.generate": "chat_modalities_image",\n  "image.edit": "chat_modalities_image_edit",\n  "video.generate": "haodeya_grok_video"\n}'} /></label>
-              <label className="composer-menu-field composer-menu-field-full"><span>Adapter Config</span><textarea rows={5} value={providerDraft.adapterConfig} onChange={(e) => setProviderDraft((c) => ({ ...c, adapterConfig: e.target.value }))} placeholder={'{\n  "provider_flavor": "haodeya_async_image"\n}'} /><small>{adapterConfigHelpText(draftHasImageBilling, draftHasVideoBilling)}</small></label>
-              <label className="composer-menu-field"><span>Quality</span><input value={providerDraft.quality} onChange={(e) => setProviderDraft((c) => ({ ...c, quality: e.target.value }))} placeholder="medium" /></label>
-              <label className="composer-menu-field"><span>Format</span><select value={providerDraft.outputFormat} onChange={(e) => setProviderDraft((c) => ({ ...c, outputFormat: e.target.value }))}><option value="png">png</option><option value="jpeg">jpeg</option><option value="webp">webp</option><option value="mp4">mp4</option></select></label>
-              <label className="composer-menu-field"><span>Timeout</span><input type="number" min="30" value={providerDraft.timeoutSeconds} onChange={(e) => setProviderDraft((c) => ({ ...c, timeoutSeconds: Number(e.target.value) || 300 }))} /></label>
-              <p className="admin-form-help">建议图片任务从 300 秒起步；视频任务可按上游建议调整到 600-900 秒。</p>
-              {draftHasTierBilling ? (
-                <>
-                  <label className="composer-menu-field"><span>计费币种</span><input value={providerDraft.pricingCurrency} onChange={(e) => setProviderDraft((c) => ({ ...c, pricingCurrency: e.target.value }))} placeholder="CNY" /></label>
-                  <label className="composer-menu-field"><span>计费单位</span><select value={providerDraft.pricingUnit} onChange={(e) => setProviderDraft((c) => ({ ...c, pricingUnit: e.target.value }))}><option value="per_image">按张图片</option><option value="per_video">按条视频</option><option value="per_request">按次请求</option></select></label>
-                  <label className="composer-menu-field"><span>{tierPriceLabels.first}</span><input type="number" min="0" step="0.0001" value={providerDraft.unitPrice1k} onChange={(e) => setProviderDraft((c) => ({ ...c, unitPrice1k: e.target.value }))} placeholder="0" /></label>
-                  <label className="composer-menu-field"><span>{tierPriceLabels.second}</span><input type="number" min="0" step="0.0001" value={providerDraft.unitPrice2k} onChange={(e) => setProviderDraft((c) => ({ ...c, unitPrice2k: e.target.value }))} placeholder="0" /></label>
-                  {draftHasImageBilling ? (
-                    <label className="composer-menu-field"><span>4K 单价</span><input type="number" min="0" step="0.0001" value={providerDraft.unitPrice4k} onChange={(e) => setProviderDraft((c) => ({ ...c, unitPrice4k: e.target.value }))} placeholder="预留，可留空" /></label>
-                  ) : null}
-                  <p className="admin-form-help composer-menu-field-full">{tierPriceLabels.help}</p>
-                  {draftHasImageBilling ? (
-                    <>
-                      <label className="composer-menu-field"><span>1K 上游模型</span><input value={providerDraft.upstreamModel1k} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamModel1k: e.target.value }))} placeholder="留空=用上方 Model" autoComplete="off" /></label>
-                      <label className="composer-menu-field"><span>2K 上游模型</span><input value={providerDraft.upstreamModel2k} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamModel2k: e.target.value }))} placeholder="例如 gpt-image-2-vip-2k" autoComplete="off" /></label>
-                      <label className="composer-menu-field"><span>4K 上游模型</span><input value={providerDraft.upstreamModel4k} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamModel4k: e.target.value }))} placeholder="例如 gpt-image-2-vip-4k（Studio 暂未开 4K）" autoComplete="off" /></label>
-                      <p className="admin-form-help composer-menu-field-full">
-                        生图专用：Studio 选分辨率档位后，实际发给上游的 model 名（计费按 model 名分档）。
-                        VIP：1K=`gpt-image-2-vip`，2K=`gpt-image-2-vip-2k`；OR GPT 2K=`openai/gpt-5.4-image-2-2k`；
-                        OR Gemini 2K=`…preview-2k`；CPA 2K=`gemini-3.1-flash-image-2k`。留空走代码默认。
-                      </p>
-                    </>
-                  ) : null}
-                  {draftHasVideoBilling ? (
-                    <>
-                      <label className="composer-menu-field"><span>起始图 5s SKU</span><input value={providerDraft.upstreamSkuI2v5s} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamSkuI2v5s: e.target.value }))} placeholder="留空=Studio 默认 SKU" autoComplete="off" /></label>
-                      <label className="composer-menu-field"><span>起始图 10s SKU</span><input value={providerDraft.upstreamSkuI2v10s} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamSkuI2v10s: e.target.value }))} placeholder="留空=Studio 默认 SKU" autoComplete="off" /></label>
-                      <label className="composer-menu-field"><span>多图参考 5s SKU</span><input value={providerDraft.upstreamSkuRef5s} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamSkuRef5s: e.target.value }))} placeholder="留空=Studio 默认 SKU" autoComplete="off" /></label>
-                      <label className="composer-menu-field"><span>多图参考 10s SKU</span><input value={providerDraft.upstreamSkuRef10s} onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamSkuRef10s: e.target.value }))} placeholder="留空=Studio 默认 SKU" autoComplete="off" /></label>
-                      <p className="admin-form-help composer-menu-field-full">
-                        视频专用（与生图 1K/2K 无关）：Studio 选档位后可在此覆盖实际上游 SKU。
-                        默认分别为 `x-ai/grok-imagine-video-i2v`、`…-i2v-10s`、`…-ref`、`…-ref-10s`。
-                        留空则用 Studio 所选 SKU，不影响现有视频渠道。
-                      </p>
-                    </>
-                  ) : null}
-                </>
-              ) : null}
-              <label className="composer-menu-field"><span>Reference</span><select value={providerDraft.referenceMode} onChange={(e) => setProviderDraft((c) => ({ ...c, referenceMode: e.target.value }))}><option value="disabled">disabled</option><option value="caption_prompt">caption_prompt</option></select></label>
-              <label className="composer-menu-field"><span>Caption Model</span><input value={providerDraft.referenceCaptionModel} onChange={(e) => setProviderDraft((c) => ({ ...c, referenceCaptionModel: e.target.value }))} placeholder="Qwen/Qwen3-VL-8B-Instruct" /></label>
-            </div>
-            <div className={`model-runtime-note support-${activeProviderSupport}`}><strong>{activeAdapterOption.label} · {supportLevelLabel(activeProviderSupport)}</strong><p>{activeAdapterOption.note}</p></div>
-            <label className="model-toggle"><input type="checkbox" checked={providerDraft.enabled} onChange={(e) => setProviderDraft((c) => ({ ...c, enabled: e.target.checked }))} /><span>启用这个模型配置</span></label>
-            <div className="template-editor-actions">
-              <button type="submit" className="submit-button" disabled={savingProviderProfile}>{savingProviderProfile ? "保存中..." : editingProviderProfileId === null ? "保存配置" : "更新配置"}</button>
-              {editingProviderProfileId !== null ? <button type="button" className="ghost-button" onClick={resetProviderProfileDraft}>取消编辑</button> : null}
-            </div>
-            <div className="template-editor" style={{ marginTop: 24 }}>
-              <div className="template-section-head">
-                <strong>Chat Token 计费规则</strong>
-                <span>仅用于 Chat 对话；生图 / 视频任务按上方分档单价计费。</span>
+        <aside className="admin-detail-panel admin-model-detail-panel">
+          <div className="admin-detail-tabs" role="tablist" aria-label="模型配置面板">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={detailPanelTab === "model"}
+              className={detailPanelTab === "model" ? "is-active" : ""}
+              onClick={() => setDetailPanelTab("model")}
+            >
+              模型配置
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={detailPanelTab === "chat-billing"}
+              className={detailPanelTab === "chat-billing" ? "is-active" : ""}
+              onClick={() => setDetailPanelTab("chat-billing")}
+            >
+              Chat 计费
+            </button>
+          </div>
+
+          {detailPanelTab === "model" ? (
+            <form className="admin-side-form model-compact-form" autoComplete="off" onSubmit={handleSaveProviderProfile}>
+              <div className="admin-detail-head admin-detail-head-compact">
+                <h2>{editingProviderProfileId === null ? "新增模型" : "编辑模型"}</h2>
               </div>
-              <div className="template-empty">
-                Chat 按每百万 tokens 计价，支持输入 tokens、输出 tokens、缓存命中 tokens。
-                若某个 Chat 模型还没配置规则，调用仍可继续，但成本会记为 0，且不会回补历史账单。
-              </div>
-              {chatProviderProfiles.length === 0 ? (
-                <div className="template-empty">当前还没有启用 Chat 能力的模型，无需配置 token 规则。</div>
-              ) : (
-                <>
-              <div className="template-list admin-template-list">
-                {filteredPricingRules.length > 0 ? filteredPricingRules.map((rule) => (
-                  <div key={rule.id} className="template-list-item">
-                    <button type="button" className="template-card template-card-main" onClick={() => handleEditPricingRule(rule)}>
-                      <strong>chat.completions</strong>
-                      <span>{formatPricingMetricLabel(rule.metric)}</span>
-                      <small>{`${rule.unit_price} ${rule.currency} / ${rule.unit_size}`}</small>
-                    </button>
-                    <div className="template-card-actions">
-                      <button type="button" className="template-action-button" onClick={() => handleEditPricingRule(rule)}>
-                        编辑
-                      </button>
-                      <button
-                        type="button"
-                        className="template-action-button"
-                        onClick={() => void handleDeletePricingRule(rule.id, rule.provider_profile_id)}
-                      >
-                        删除
-                      </button>
-                    </div>
-                  </div>
-                )) : <div className="template-empty">当前 Chat 模型还没有 token 计费规则。</div>}
-              </div>
-              <div className="admin-side-form">
-                <div className="template-editor-row template-editor-row-3">
-                  <label className="composer-menu-field">
-                    <span>Chat 模型</span>
+
+              <div className="model-form-grid model-form-grid-compact">
+                {showPresets ? (
+                  <label className="composer-menu-field composer-menu-field-full">
+                    <span>预设</span>
                     <select
-                      value={selectedPricingProfileId}
-                      onChange={(e) =>
-                        setPricingRuleDraft((current) => ({ ...current, providerProfileId: e.target.value }))
-                      }
+                      value={selectedPresetId ?? ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (!value) {
+                          setSelectedPresetId(null);
+                          return;
+                        }
+                        applyModelPreset(value);
+                      }}
                     >
-                      {chatProviderProfiles.map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.provider_name}
+                      <option value="">自选 / 空白</option>
+                      {modelPresets.map((preset) => (
+                        <option key={preset.id} value={preset.id}>
+                          {preset.category} · {preset.label}
                         </option>
                       ))}
                     </select>
                   </label>
+                ) : null}
+
+                <label className="composer-menu-field">
+                  <span>显示名</span>
+                  <input
+                    value={providerDraft.displayName}
+                    onChange={(e) => setProviderDraft((c) => ({ ...c, displayName: e.target.value }))}
+                    placeholder="HappyHorse 1.1"
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="composer-menu-field">
+                  <span>Provider 标识</span>
+                  <input
+                    value={providerDraft.providerName}
+                    disabled={editingProviderProfileId !== null}
+                    onChange={(e) => setProviderDraft((c) => ({ ...c, providerName: e.target.value }))}
+                    placeholder="haodeya_happyhorse"
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="composer-menu-field">
+                  <span>上游 Model</span>
+                  <input
+                    value={providerDraft.modelName}
+                    onChange={(e) => setProviderDraft((c) => ({ ...c, modelName: e.target.value }))}
+                    placeholder="happyhorse-1.1"
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="composer-menu-field">
+                  <span>Adapter</span>
+                  <select
+                    value={providerDraft.adapterKind}
+                    onChange={(e) => setProviderDraft((c) => ({ ...c, adapterKind: e.target.value }))}
+                  >
+                    {adapterOptions.map((o) => (
+                      <option key={o.key} value={o.key}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="composer-menu-field composer-menu-field-full">
+                  <span>Base URL</span>
+                  <input
+                    name="provider-base-url"
+                    value={providerDraft.baseUrl}
+                    onChange={(e) => setProviderDraft((c) => ({ ...c, baseUrl: e.target.value }))}
+                    placeholder="https://newapi.haodeya.xyz/v1"
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="composer-menu-field composer-menu-field-full">
+                  <span>API Key</span>
+                  <input
+                    name="provider-api-key"
+                    type="password"
+                    value={providerDraft.apiKey}
+                    autoComplete="new-password"
+                    onChange={(e) => setProviderDraft((c) => ({ ...c, apiKey: e.target.value }))}
+                    placeholder={editingProviderProfileId === null ? "必填" : "留空保留原 Key"}
+                  />
+                </label>
+
+                <div className="composer-menu-field composer-menu-field-full">
+                  <span>出现在</span>
+                  <div className="capability-chip-row">
+                    {capabilityDefinitions.map((def) => {
+                      const checked = hasCapability(providerDraft.capabilities, def.key);
+                      return (
+                        <button
+                          key={def.key}
+                          type="button"
+                          className={`capability-chip${checked ? " is-on" : ""}`}
+                          onClick={() =>
+                            setProviderDraft((c) => ({
+                              ...c,
+                              capabilities: toggleCapability(c.capabilities, def.key, !checked),
+                            }))
+                          }
+                        >
+                          {def.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {draftHasTierBilling ? (
+                  <>
+                    <label className="composer-menu-field">
+                      <span>{draftHasImageBilling && !draftHasVideoBilling ? "1K 单价" : draftHasVideoBilling && !draftHasImageBilling ? "5s 单价" : "1K/5s 单价"}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.0001"
+                        value={providerDraft.unitPrice1k}
+                        onChange={(e) => setProviderDraft((c) => ({ ...c, unitPrice1k: e.target.value }))}
+                        placeholder="0"
+                      />
+                    </label>
+                    <label className="composer-menu-field">
+                      <span>{draftHasImageBilling && !draftHasVideoBilling ? "2K 单价" : draftHasVideoBilling && !draftHasImageBilling ? "10s 单价" : "2K/10s 单价"}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.0001"
+                        value={providerDraft.unitPrice2k}
+                        onChange={(e) => setProviderDraft((c) => ({ ...c, unitPrice2k: e.target.value }))}
+                        placeholder="0"
+                      />
+                    </label>
+                    {draftHasImageBilling ? (
+                      <label className="composer-menu-field">
+                        <span>4K 单价</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.0001"
+                          value={providerDraft.unitPrice4k}
+                          onChange={(e) => setProviderDraft((c) => ({ ...c, unitPrice4k: e.target.value }))}
+                          placeholder="可空"
+                        />
+                      </label>
+                    ) : null}
+                    <label className="composer-menu-field">
+                      <span>币种</span>
+                      <input
+                        value={providerDraft.pricingCurrency}
+                        onChange={(e) => setProviderDraft((c) => ({ ...c, pricingCurrency: e.target.value }))}
+                        placeholder="CNY"
+                      />
+                    </label>
+                  </>
+                ) : draftHasChatCapability ? (
+                  <p className="admin-form-help composer-menu-field-full">Chat 单价请切到「Chat 计费」页。</p>
+                ) : null}
+              </div>
+
+              <button
+                type="button"
+                className="model-more-toggle"
+                aria-expanded={moreOptionsOpen}
+                onClick={() => setMoreOptionsOpen((v) => !v)}
+              >
+                {moreOptionsOpen ? "收起更多选项" : "更多选项（Adapter / Strategies / 超时…）"}
+              </button>
+
+              {moreOptionsOpen ? (
+                <div className="model-form-grid model-form-grid-compact model-more-panel">
+                  {draftNeedsApiSecret ? (
+                    <label className="composer-menu-field composer-menu-field-full">
+                      <span>API Secret</span>
+                      <input
+                        name="provider-api-secret"
+                        type="password"
+                        value={providerDraft.apiSecret}
+                        autoComplete="new-password"
+                        onChange={(e) => setProviderDraft((c) => ({ ...c, apiSecret: e.target.value }))}
+                        placeholder="留空保留原 secret"
+                      />
+                    </label>
+                  ) : null}
                   <label className="composer-menu-field">
-                    <span>指标</span>
+                    <span>计费单位</span>
                     <select
-                      value={pricingRuleDraft.metric}
-                      onChange={(e) => setPricingRuleDraft((current) => ({ ...current, metric: e.target.value }))}
+                      value={providerDraft.pricingUnit}
+                      onChange={(e) => setProviderDraft((c) => ({ ...c, pricingUnit: e.target.value }))}
                     >
-                      <option value="input_tokens">input_tokens</option>
-                      <option value="output_tokens">output_tokens</option>
-                      <option value="cached_input_tokens">cached_input_tokens</option>
+                      <option value="per_image">按张图片</option>
+                      <option value="per_video">按条视频</option>
+                      <option value="per_request">按次请求</option>
                     </select>
                   </label>
-                </div>
-                <div className="template-editor-row template-editor-row-3">
                   <label className="composer-menu-field">
-                    <span>单位大小</span>
+                    <span>超时（秒）</span>
                     <input
                       type="number"
-                      min="0.0001"
-                      step="0.0001"
-                      value={pricingRuleDraft.unitSize}
-                      onChange={(e) => setPricingRuleDraft((current) => ({ ...current, unitSize: e.target.value }))}
+                      min="30"
+                      value={providerDraft.timeoutSeconds}
+                      onChange={(e) =>
+                        setProviderDraft((c) => ({ ...c, timeoutSeconds: Number(e.target.value) || 300 }))
+                      }
                     />
                   </label>
                   <label className="composer-menu-field">
-                    <span>单价</span>
+                    <span>Quality</span>
                     <input
-                      type="number"
-                      min="0"
-                      step="0.0001"
-                      value={pricingRuleDraft.unitPrice}
-                      onChange={(e) => setPricingRuleDraft((current) => ({ ...current, unitPrice: e.target.value }))}
+                      value={providerDraft.quality}
+                      onChange={(e) => setProviderDraft((c) => ({ ...c, quality: e.target.value }))}
+                      placeholder="medium"
                     />
                   </label>
                   <label className="composer-menu-field">
-                    <span>币种</span>
+                    <span>输出格式</span>
+                    <select
+                      value={providerDraft.outputFormat}
+                      onChange={(e) => setProviderDraft((c) => ({ ...c, outputFormat: e.target.value }))}
+                    >
+                      <option value="png">png</option>
+                      <option value="jpeg">jpeg</option>
+                      <option value="webp">webp</option>
+                      <option value="mp4">mp4</option>
+                    </select>
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>参考图模式</span>
+                    <select
+                      value={providerDraft.referenceMode}
+                      onChange={(e) => setProviderDraft((c) => ({ ...c, referenceMode: e.target.value }))}
+                    >
+                      <option value="disabled">disabled</option>
+                      <option value="caption_prompt">caption_prompt</option>
+                    </select>
+                  </label>
+                  <label className="composer-menu-field">
+                    <span>Caption 模型</span>
                     <input
-                      value={pricingRuleDraft.currency}
-                      onChange={(e) => setPricingRuleDraft((current) => ({ ...current, currency: e.target.value }))}
-                      placeholder="CNY"
+                      value={providerDraft.referenceCaptionModel}
+                      onChange={(e) => setProviderDraft((c) => ({ ...c, referenceCaptionModel: e.target.value }))}
+                      placeholder="可选"
                     />
                   </label>
+                  <label className="composer-menu-field composer-menu-field-full">
+                    <span>Strategies</span>
+                    <textarea
+                      rows={3}
+                      value={providerDraft.strategies}
+                      onChange={(e) => setProviderDraft((c) => ({ ...c, strategies: e.target.value }))}
+                      placeholder={'{"video.generate":"haodeya_grok_video"}'}
+                    />
+                  </label>
+                  <label className="composer-menu-field composer-menu-field-full">
+                    <span>Adapter Config</span>
+                    <textarea
+                      rows={3}
+                      value={providerDraft.adapterConfig}
+                      onChange={(e) => setProviderDraft((c) => ({ ...c, adapterConfig: e.target.value }))}
+                      placeholder="{}"
+                    />
+                    <small>{adapterConfigHelpText(draftHasImageBilling, draftHasVideoBilling)}</small>
+                  </label>
+                  {draftHasImageBilling ? (
+                    <>
+                      <label className="composer-menu-field">
+                        <span>1K 上游模型</span>
+                        <input
+                          value={providerDraft.upstreamModel1k}
+                          onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamModel1k: e.target.value }))}
+                          placeholder="留空=Model"
+                          autoComplete="off"
+                        />
+                      </label>
+                      <label className="composer-menu-field">
+                        <span>2K 上游模型</span>
+                        <input
+                          value={providerDraft.upstreamModel2k}
+                          onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamModel2k: e.target.value }))}
+                          placeholder="可选"
+                          autoComplete="off"
+                        />
+                      </label>
+                      <label className="composer-menu-field">
+                        <span>4K 上游模型</span>
+                        <input
+                          value={providerDraft.upstreamModel4k}
+                          onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamModel4k: e.target.value }))}
+                          placeholder="可选"
+                          autoComplete="off"
+                        />
+                      </label>
+                    </>
+                  ) : null}
+                  {draftHasVideoBilling ? (
+                    <>
+                      <label className="composer-menu-field">
+                        <span>i2v 5s SKU</span>
+                        <input
+                          value={providerDraft.upstreamSkuI2v5s}
+                          onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamSkuI2v5s: e.target.value }))}
+                          placeholder="可选"
+                          autoComplete="off"
+                        />
+                      </label>
+                      <label className="composer-menu-field">
+                        <span>i2v 10s SKU</span>
+                        <input
+                          value={providerDraft.upstreamSkuI2v10s}
+                          onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamSkuI2v10s: e.target.value }))}
+                          placeholder="可选"
+                          autoComplete="off"
+                        />
+                      </label>
+                      <label className="composer-menu-field">
+                        <span>ref 5s SKU</span>
+                        <input
+                          value={providerDraft.upstreamSkuRef5s}
+                          onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamSkuRef5s: e.target.value }))}
+                          placeholder="可选"
+                          autoComplete="off"
+                        />
+                      </label>
+                      <label className="composer-menu-field">
+                        <span>ref 10s SKU</span>
+                        <input
+                          value={providerDraft.upstreamSkuRef10s}
+                          onChange={(e) => setProviderDraft((c) => ({ ...c, upstreamSkuRef10s: e.target.value }))}
+                          placeholder="可选"
+                          autoComplete="off"
+                        />
+                      </label>
+                    </>
+                  ) : null}
+                  <p className="admin-form-help composer-menu-field-full">
+                    {activeAdapterOption.label} · {supportLevelLabel(activeProviderSupport)} — {activeAdapterOption.note}
+                  </p>
                 </div>
-                <label className="model-toggle">
-                  <input
-                    type="checkbox"
-                    checked={pricingRuleDraft.isActive}
-                    onChange={(e) => setPricingRuleDraft((current) => ({ ...current, isActive: e.target.checked }))}
-                  />
-                  <span>启用这条计费规则</span>
-                </label>
-                <div className="template-editor-actions">
-                  <button
-                    type="button"
-                    className="submit-button"
-                    disabled={savingPricingRule || chatProviderProfiles.length === 0}
-                    onClick={() => void handleSavePricingRule()}
-                  >
-                    {savingPricingRule ? "保存中..." : editingPricingRuleId === null ? "新增规则" : "更新规则"}
+              ) : null}
+
+              <label className="model-toggle">
+                <input
+                  type="checkbox"
+                  checked={providerDraft.enabled}
+                  onChange={(e) => setProviderDraft((c) => ({ ...c, enabled: e.target.checked }))}
+                />
+                <span>启用</span>
+              </label>
+              <div className="template-editor-actions">
+                <button type="submit" className="submit-button" disabled={savingProviderProfile}>
+                  {savingProviderProfile ? "保存中..." : editingProviderProfileId === null ? "保存" : "更新"}
+                </button>
+                {editingProviderProfileId !== null ? (
+                  <button type="button" className="ghost-button" onClick={resetProviderProfileDraft}>
+                    取消
                   </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() =>
-                      resetPricingRuleDraft(
-                        selectedPricingProfileId ? Number(selectedPricingProfileId) : chatProviderProfiles[0]?.id ?? null
-                      )
-                    }
-                  >
-                    {editingPricingRuleId === null ? "重置表单" : "取消编辑"}
-                  </button>
-                </div>
+                ) : null}
               </div>
+            </form>
+          ) : (
+            <div className="admin-side-form model-chat-billing-panel">
+              <div className="admin-detail-head admin-detail-head-compact">
+                <h2>Chat Token 计费</h2>
+              </div>
+              <p className="admin-form-help">只影响对话。生图/视频在「模型配置」填分档价。</p>
+              {chatProviderProfiles.length === 0 ? (
+                <div className="template-empty">还没有 Chat 模型，先在模型配置勾选 Chat 并保存。</div>
+              ) : (
+                <>
+                  <div className="template-list admin-template-list">
+                    {filteredPricingRules.length > 0 ? (
+                      filteredPricingRules.map((rule) => (
+                        <div key={rule.id} className="template-list-item">
+                          <button type="button" className="template-card template-card-main" onClick={() => handleEditPricingRule(rule)}>
+                            <strong>chat.completions</strong>
+                            <span>{formatPricingMetricLabel(rule.metric)}</span>
+                            <small>{`${rule.unit_price} ${rule.currency} / ${rule.unit_size}`}</small>
+                          </button>
+                          <div className="template-card-actions">
+                            <button type="button" className="template-action-button" onClick={() => handleEditPricingRule(rule)}>
+                              编辑
+                            </button>
+                            <button
+                              type="button"
+                              className="template-action-button"
+                              onClick={() => void handleDeletePricingRule(rule.id, rule.provider_profile_id)}
+                            >
+                              删除
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="template-empty">当前 Chat 模型还没有 token 规则。</div>
+                    )}
+                  </div>
+                  <div className="template-editor-row template-editor-row-3">
+                    <label className="composer-menu-field">
+                      <span>Chat 模型</span>
+                      <select
+                        value={selectedPricingProfileId}
+                        onChange={(e) =>
+                          setPricingRuleDraft((current) => ({ ...current, providerProfileId: e.target.value }))
+                        }
+                      >
+                        {chatProviderProfiles.map((profile) => (
+                          <option key={profile.id} value={profile.id}>
+                            {profile.display_name || profile.provider_name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="composer-menu-field">
+                      <span>指标</span>
+                      <select
+                        value={pricingRuleDraft.metric}
+                        onChange={(e) => setPricingRuleDraft((current) => ({ ...current, metric: e.target.value }))}
+                      >
+                        <option value="input_tokens">input_tokens</option>
+                        <option value="output_tokens">output_tokens</option>
+                        <option value="cached_input_tokens">cached_input_tokens</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="template-editor-row template-editor-row-3">
+                    <label className="composer-menu-field">
+                      <span>单位大小</span>
+                      <input
+                        type="number"
+                        min="0.0001"
+                        step="0.0001"
+                        value={pricingRuleDraft.unitSize}
+                        onChange={(e) => setPricingRuleDraft((current) => ({ ...current, unitSize: e.target.value }))}
+                      />
+                    </label>
+                    <label className="composer-menu-field">
+                      <span>单价</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.0001"
+                        value={pricingRuleDraft.unitPrice}
+                        onChange={(e) => setPricingRuleDraft((current) => ({ ...current, unitPrice: e.target.value }))}
+                      />
+                    </label>
+                    <label className="composer-menu-field">
+                      <span>币种</span>
+                      <input
+                        value={pricingRuleDraft.currency}
+                        onChange={(e) => setPricingRuleDraft((current) => ({ ...current, currency: e.target.value }))}
+                        placeholder="CNY"
+                      />
+                    </label>
+                  </div>
+                  <label className="model-toggle">
+                    <input
+                      type="checkbox"
+                      checked={pricingRuleDraft.isActive}
+                      onChange={(e) => setPricingRuleDraft((current) => ({ ...current, isActive: e.target.checked }))}
+                    />
+                    <span>启用这条规则</span>
+                  </label>
+                  <div className="template-editor-actions">
+                    <button
+                      type="button"
+                      className="submit-button"
+                      disabled={savingPricingRule || chatProviderProfiles.length === 0}
+                      onClick={() => void handleSavePricingRule()}
+                    >
+                      {savingPricingRule ? "保存中..." : editingPricingRuleId === null ? "新增规则" : "更新规则"}
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() =>
+                        resetPricingRuleDraft(
+                          selectedPricingProfileId ? Number(selectedPricingProfileId) : chatProviderProfiles[0]?.id ?? null
+                        )
+                      }
+                    >
+                      {editingPricingRuleId === null ? "重置" : "取消"}
+                    </button>
+                  </div>
                 </>
               )}
             </div>
-          </form>
+          )}
         </aside>
+
+
       </div>
     </section>
   );

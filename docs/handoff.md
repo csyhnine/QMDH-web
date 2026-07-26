@@ -12,6 +12,11 @@
 
 ## Latest Handoffs
 
+### [2026-07-26] Admin 模型配置 UX — **已上生产**
+- ModelsPage：预设下拉、模型/Chat 计费 Tab、更多选项折叠；探测默认未导入 + 批量分类（含视频）
+- `providers.py`：视频能力导入默认 `mp4` / `900s` / `per_video`
+- Safe to hand off: **Yes**
+
 ### [2026-07-26] HappyHorse size 1280*720 — **已上生产**
 - Git：**`6dedbf2`** — `fix(video): set HappyHorse top-level size to 1280*720`
 - 生产：pull + rebuild backend/worker；health 200；运行时 `size=1280*720`，`parameters.resolution=720P`
@@ -24,11 +29,5 @@
 - 已随 `6dedbf2` 部署 size 适配
 - 归档：`docs/archive/handoff-2026-07-25-happyhorse-i2v-media-quota.md`
 - Safe to hand off: **Yes**
-
-### [2026-07-25] Admin 模型配置 UX 第一刀 — **本地完成（未 commit/deploy）**
-- 目标：一人运维时侧栏更短、更可读；不改后端合同
-- 已改：`ModelsPage.tsx` + `styles.css`（+ `providers.py` 视频导入）
-- 未做：commit/部署
-- Safe to hand off: **Yes（勿 push/deploy 除非用户批准）**
 
 <!-- 更早条目见 docs/archive；含 HappyHorse 单模型档位、用量日志等 -->

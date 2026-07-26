@@ -17,8 +17,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`6dedbf2`**（生产同；本地另有未提交 Admin Models UX）
-- Production: **`https://cityusbdisk.cn`** — Git **`6dedbf2`**（HappyHorse `metadata.input.media` + 顶层 `size: 1280*720`）
+- Current branch: **`main`**（Admin Models UX + HappyHorse size 均已上生产；见最新 handoff）
+- Production: **`https://cityusbdisk.cn`** — HappyHorse `metadata.input.media` + 顶层 `size: 1280*720`；Admin 模型页 UX 已部署
 - Alembic head：**`o6p7q8r9s0t1`**（skill bundle；catalog=`n5o6p7q8r9s0`；记忆=`m4n5o6p7q8r9`；gov=`l3m4n5o6p7q8`）
 - **Haodeya 新模型（2026-07-25）**：
   - 网关 `https://newapi.haodeya.xyz/v1`

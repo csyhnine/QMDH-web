@@ -17,8 +17,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`9fff78f`**（与 `origin/main` / 生产对齐；工作区干净）
-- Production: **`https://cityusbdisk.cn`** — Git **`9fff78f`**
+- Current branch: **`main`** @ **`1d55c27`**（功能基线生产 **`9fff78f`**）；本地有 **agent-memory-002 WIP**（未 commit）
+- Production: **`https://cityusbdisk.cn`** — 功能 Git **`9fff78f`**
 - Alembic head：**`o6p7q8r9s0t1`**（skill bundle；catalog=`n5o6p7q8r9s0`；记忆=`m4n5o6p7q8r9`；gov=`l3m4n5o6p7q8`）
 - **Haodeya 新模型（2026-07-25 / 通线 2026-07-26）**：
   - 网关 `https://newapi.haodeya.xyz/v1`
@@ -32,6 +32,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - **B1 / gov / harness / memory** 已合 main 并已上生产
   - **「设计助手」UI 默认开启**（`VITE_CHAT_AGENT_UI_ENABLED !== "false"`）
   - **产品定调**：QMDH UI 壳 + Codex **风格 harness**（非换 GPT）+ Admin Skill 发版 + 跨对话记忆 + HITL 生图/视频
+  - **记忆写入策略（本地 WIP `agent-memory-002`）**：不再每轮落 turn summary；长期记忆含 preference/feedback/thought/fact/**experience（项目经验）**；会话 compact；存量 scrub 脚本
   - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**（勿整包 merge）
 - **Admin 用量日志**：默认「按任务汇总」单行（`task.finalized`）；展示能力、输入参数摘要、输出张数/段数；取消勾选可看 provider_call 明细
 - **Admin Models UX**：预设 + 模型/Chat 计费 Tab + 探测优化（含视频分类）已上生产（`4c32d90`）
@@ -277,8 +278,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Near-Term Suggested Next Steps
 
-1. **优先**：配额重置（约 2026-07-26 01:34 UTC+8）后执行 `hh-i2v-001`（固定 i2v 最小样例 ≤2 次）→ 再 `hh-i2v-002` deploy。归档见 `docs/archive/handoff-2026-07-25-happyhorse-i2v-media-quota.md`。
-2. Cold-start: `git pull` → 读最新 `docs/handoff.md` / `docs/tasks.md` Active Blockers。
-3. When owner approves deploy: `sudo -u admin git pull --ff-only` → rebuild affected images；勿动 `.env`；无新迁移则不必 alembic.
-4. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.
-5. Optional: smoke CPA `gemini-3.1-flash-image`；用量日志抽查 `/admin/usage-logs`.
+1. **本轮**：用户确认后 commit `agent-memory-002` → deploy backend → 生产记忆 scrub（先 `--dry-run` 再 `--apply`）。
+2. Cold-start: 读最新 `docs/handoff.md` / `docs/tasks.md` Active Blockers。
+3. When owner approves deploy: `sudo -u admin git pull --ff-only` → rebuild **backend/worker**；勿动 `.env`；无新迁移则不必 alembic.
+4. Optional follow-up：LLM 提炼长期记忆。
+5. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.

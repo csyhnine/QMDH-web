@@ -7,7 +7,7 @@ type ChatAgentMemoryDrawerProps = {
   onClose: () => void;
 };
 
-const LONG_TERM_TYPES = new Set(["preference", "feedback", "thought", "fact"]);
+const LONG_TERM_TYPES = new Set(["preference", "feedback", "thought", "fact", "experience"]);
 
 function memoryTypeLabel(memoryType: string): string {
   switch (memoryType) {
@@ -19,6 +19,8 @@ function memoryTypeLabel(memoryType: string): string {
       return "想法";
     case "fact":
       return "事实";
+    case "experience":
+      return "项目经验";
     case "summary":
       return "摘要";
     default:

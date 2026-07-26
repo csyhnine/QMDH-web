@@ -34,7 +34,7 @@
 
 ---
 
-## Active Blockers / Near-term TODO（2026-07-26 收束）
+## Active Blockers / Near-term TODO（2026-07-26）
 
 | ID | 事项 | 状态 | 说明 |
 |----|------|------|------|
@@ -44,6 +44,7 @@
 | **hh-i2v-004** |（可选）试错 Key 与线网 Key 分离 / 多 Key | TODO | 正式量上来后 |
 | **admin-models-ux-001** | Admin 模型配置侧栏 UX | **DONE** | `4c32d90` |
 | **studio-defaults-001** | 图像默认 1K；视频默认 HappyHorse | **DONE** | `9fff78f` |
+| **agent-memory-002** | 记忆写入筛选 + 会话摘要压缩 | **DONE（本地未 commit）** | 停写每轮 turn summary；长期记忆收紧+distill；会话 compact；另附存量 scrub 脚本（dry-run/apply） |
 
 **纪律**：禁止再扫 HappyHorse 请求体变体；未经用户同意禁止 push/deploy。
 
@@ -166,9 +167,22 @@
 - Next：生产 upgrade + rebuild（若尚未）
 
 ### Task: [agent-memory-001] 跨对话记忆 MVP
-- 状态：**IN PROGRESS**（本迭代 Slice 4）
+- 状态：**DONE（MVP 已上生产）**；写入质量由 **`agent-memory-002`** 收紧（本地 WIP）
 - 范围：用户级 `agent_memory_entries`、注入 agent_mode、设计师查看/删除/暂停；会话内 compact 加强
 - 来源：从 WIP 瘦身，勿整包
+
+### Task: [agent-memory-002] 记忆写入筛选 + 会话摘要压缩
+- 状态：**DONE（本地未 commit）**
+- 目标：停止「每轮全文入库」；长期记忆只收可复用短事实；会话摘要周期压缩
+- 边界：`backend/app/services/agent_memory_service.py` + 对应单测；不改 schema / 不 deploy
+- 完成说明：
+  - `write_turn_memory` 只 upsert 一条 `session_summary`，不再 `add_memory_entry` 每轮 summary
+  - `classify_user_memory_signal` 收紧 feedback/thought；新增 `experience`（项目锚点+结果/客户要求）；`distill` ≤160 字，经验类尽量带 `【项目名】`
+  - `compact_session_summary_content`：≥5 轮或 ≥1400 字时折叠为「要点 + 近几轮」
+  - **存量清理**：`scrub_legacy_agent_memories` + `python -m app.scripts.scrub_agent_memory_legacy --dry-run|--apply`
+- 验收：普通闲聊只留 session summary；偏好类写入短句；多轮后会话摘要含要点块
+- 文档：`docs/handoff.md` / `docs/tasks.md` / `docs/continuity.md`
+- Next：commit → 部署 backend → 生产先 `--dry-run` 再 `--apply`（需用户批准）
 
 ### Task: [chat-b2-001] Chat → 生图/视频 HITL
 - 状态：**IN PROGRESS**（本迭代 Slice 3）

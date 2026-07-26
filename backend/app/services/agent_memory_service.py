@@ -318,6 +318,47 @@ def delete_memory_entry(db: Session, *, user_id: int, memory_id: int) -> bool:
     return True
 
 
+def detach_conversation_memories(db: Session, *, user_id: int, conversation_id: int) -> dict[str, int]:
+    """Prepare memory rows so a conversation can be deleted without FK errors.
+
+    - Delete conversation-scoped summaries (session + legacy turn summaries).
+    - Keep durable long-term memories, but clear ``conversation_id``.
+    """
+    rows = list(
+        db.scalars(
+            select(AgentMemoryEntry).where(
+                AgentMemoryEntry.user_id == user_id,
+                AgentMemoryEntry.conversation_id == conversation_id,
+            )
+        ).all()
+    )
+    deleted_summaries = 0
+    detached_durable = 0
+    for entry in rows:
+        if entry.memory_type == "summary" or _is_session_summary(entry):
+            memory_id = entry.id
+            db.delete(entry)
+            deleted_summaries += 1
+            try:
+                from app.integrations.search.agent_memory_index import delete_agent_memory_entry
+
+                if memory_id is not None:
+                    delete_agent_memory_entry(memory_id)
+            except Exception:
+                pass
+            continue
+        entry.conversation_id = None
+        detached_durable += 1
+        try:
+            from app.integrations.search.agent_memory_index import index_agent_memory_entry
+
+            index_agent_memory_entry(entry)
+        except Exception:
+            pass
+    db.flush()
+    return {"deleted_summaries": deleted_summaries, "detached_durable": detached_durable}
+
+
 def _rank_memory_entries(entries: list[AgentMemoryEntry], *, query: str) -> list[AgentMemoryEntry]:
     tokens = [t for t in re.split(r"[\s,，。！？、]+", (query or "").strip().lower()) if len(t) >= 2]
 

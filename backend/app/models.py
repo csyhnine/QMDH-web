@@ -481,7 +481,11 @@ class AgentMemoryEntry(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    conversation_id: Mapped[int | None] = mapped_column(ForeignKey("conversations.id"), nullable=True, index=True)
+    conversation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     memory_type: Mapped[str] = mapped_column(String(30), default="summary")
     content: Mapped[str] = mapped_column(Text, default="")
     source_turn_ref: Mapped[str] = mapped_column(String(120), default="")

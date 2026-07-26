@@ -67,6 +67,7 @@ from app.services.agent_harness_service import run_chat_agent_harness_isolated
 from app.services.agent_memory_service import (
     build_compacted_memory_context,
     delete_memory_entry,
+    detach_conversation_memories,
     list_memory_entries,
     record_chat_turn_memory,
     set_memory_paused,
@@ -473,6 +474,9 @@ def delete_conversation(
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> Response:
     conversation = _verify_owner(db, conversation_id, auth_user.user_id)
+    # Memory rows keep a FK to conversations; detach/delete them first.
+    if auth_user.user_id is not None:
+        detach_conversation_memories(db, user_id=auth_user.user_id, conversation_id=conversation_id)
     db.delete(conversation)
     db.commit()
     return Response(status_code=204)

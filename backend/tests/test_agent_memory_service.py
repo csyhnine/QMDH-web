@@ -228,6 +228,35 @@ class MemoryLibraryTests(unittest.TestCase):
             self.assertTrue(experiences[0].content.startswith("【滨江】"))
             self.assertIn("暖色", experiences[0].content)
 
+    def test_detach_conversation_keeps_durable_and_drops_summary(self) -> None:
+        from app.services.agent_memory_service import add_memory_entry, detach_conversation_memories
+
+        with self.SessionLocal() as db:
+            add_memory_entry(
+                db,
+                user_id=7,
+                conversation_id=88,
+                memory_type="summary",
+                content="[chat] 用户:会话摘要 | 助手:ok",
+                source_turn_ref="conv:88:session_summary",
+            )
+            pref, _ = store_memory_entry(
+                db,
+                user_id=7,
+                content="默认使用 16:9",
+                memory_type="preference",
+                conversation_id=88,
+            )
+            db.commit()
+            stats = detach_conversation_memories(db, user_id=7, conversation_id=88)
+            db.commit()
+            self.assertEqual(stats["deleted_summaries"], 1)
+            self.assertEqual(stats["detached_durable"], 1)
+            remaining = list(db.scalars(select(AgentMemoryEntry).where(AgentMemoryEntry.user_id == 7)).all())
+            self.assertEqual(len(remaining), 1)
+            self.assertEqual(remaining[0].id, pref.id)
+            self.assertIsNone(remaining[0].conversation_id)
+
     def test_scrub_legacy_deletes_turn_summaries_and_noise(self) -> None:
         from app.services.agent_memory_service import add_memory_entry, scrub_legacy_agent_memories
 

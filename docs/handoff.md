@@ -12,15 +12,15 @@
 
 ## Latest Handoffs
 
-### [2026-07-26] Agent 记忆筛选/经验 — **已上生产**
-- GitHub / 生产：**`ab5ac6e`**（功能 `56e9d64`）
-- Deploy：frontend + backend rebuild；health OK
-- Scrub apply：删 8 条 turn summary；压缩 4 条 session summary（scanned=12）
-- 归档：`docs/archive/deploy-2026-07-26-agent-memory.md`
-- Safe to hand off: **Yes**
+### [2026-07-26] 修删除对话 FK 冲突 — **待部署**
+- 原因：`agent_memory_entries.conversation_id` 仍引用会话，DELETE conversations → 500
+- 修复：删会话前 detach（删 session summary，长期记忆清空 conversation_id）+ FK `ON DELETE SET NULL`
+- Safe to hand off: after deploy
 
-### [2026-07-26] 会话收束 — HappyHorse / Admin / Studio 默认
-- 功能基线曾生产 **`9fff78f`**
+### [2026-07-26] Agent 记忆筛选/经验 — **已上生产**
+- GitHub / 生产：**`8955e61`**
+- Scrub：删 8 turn summary；压 4 session
+- 归档：`docs/archive/deploy-2026-07-26-agent-memory.md`
 - Safe to hand off: **Yes**
 
 ### [2026-07-26] Studio 默认 1K + HappyHorse — **已上生产**

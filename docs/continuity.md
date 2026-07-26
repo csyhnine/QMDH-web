@@ -17,15 +17,15 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`d2a0c98`**（生产同；本地另有未提交 `size: 1280*720` 适配）
-- Production: **`https://cityusbdisk.cn`** — Git **`d2a0c98`**（HappyHorse `metadata.input.media`；顶层 size 仍为旧值 `720P`，待复测后改）
+- Current branch: **`main`** @ **`6dedbf2`**（生产同；本地另有未提交 Admin Models UX）
+- Production: **`https://cityusbdisk.cn`** — Git **`6dedbf2`**（HappyHorse `metadata.input.media` + 顶层 `size: 1280*720`）
 - Alembic head：**`o6p7q8r9s0t1`**（skill bundle；catalog=`n5o6p7q8r9s0`；记忆=`m4n5o6p7q8r9`；gov=`l3m4n5o6p7q8`）
 - **Haodeya 新模型（2026-07-25）**：
   - 网关 `https://newapi.haodeya.xyz/v1`
   - Chat：生产启用 `qwen3.8-max-preview`（其它 qwen 档位停用）
   - 生图：`wan2.7-image` / `wan2.7-image-pro` → 无参考图 `/images/generations`；有参考图 `/images/edits` multipart；size 字面 `1K/2K/4K`（4K 仅 pro 文生图）
   - 视频：HappyHorse 单模型 + 档位菜单；合同：`/v1/videos` + `metadata.input.media`（i2v=`first_frame`，r2v=`reference_image`）；顶层 `size`=`1280*720`，档位在 `parameters.resolution`
-  - **i2v 复测已通（2026-07-26）**：`task_2ngmWnoNnI5ASioE3folcgheW7yse92i` → completed；待用户批准后 commit/deploy 本地 `size: 1280*720`（`hh-i2v-002`）再 Studio smoke
+  - **i2v 复测已通并已部署（2026-07-26）**：`task_2ngmWnoNnI5ASioE3folcgheW7yse92i` → completed；`6dedbf2` 已上生产；待 Studio smoke（`hh-i2v-003`）
 - **Chat Agent（重要）**：
   - **B1 / gov / harness / memory** 已合 main 并已上生产
   - **「设计助手」UI 默认开启**（`VITE_CHAT_AGENT_UI_ENABLED !== "false"`）

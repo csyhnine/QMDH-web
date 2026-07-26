@@ -39,7 +39,7 @@
 | ID | 事项 | 状态 | 说明 |
 |----|------|------|------|
 | **hh-i2v-001** | HappyHorse i2v 固定样例复测 | **DONE** | 2026-07-26 生产直打：`task_2ngmWnoNnI5ASioE3folcgheW7yse92i` → **completed**；归档已更新 |
-| **hh-i2v-002** | commit/deploy `size: 1280*720` | TODO | media 已通；本地 `haodeya_grok_video.py` 已改；**等用户批准**再 commit/push/deploy |
+| **hh-i2v-002** | commit/deploy `size: 1280*720` | **DONE** | `6dedbf2` 已 push；生产 backend/worker 已重建；运行时校验 `size=1280*720` / `resolution=720P` |
 | **hh-i2v-003** | Studio 生产 smoke 一条 i2v | TODO | 依赖 hh-i2v-002 部署完成 |
 | **hh-i2v-004** |（可选）试错 Key 与线网 Key 分离 / 多 Key | TODO | 正式量上来后；避免探测打空线网配额 |
 | **admin-models-ux-001** | Admin 模型配置侧栏：预设 + 分区 + 计费拆页 | **DONE（本地）** | 前端-only：`ModelsPage` Tab（模型/Chat计费）、折叠分区、5 个 Haodeya 预设；未 commit/deploy |

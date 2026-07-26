@@ -17,21 +17,24 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`**（Admin Models UX + HappyHorse size 均已上生产；见最新 handoff）
-- Production: **`https://cityusbdisk.cn`** — HappyHorse `metadata.input.media` + 顶层 `size: 1280*720`；Admin 模型页 UX 已部署
+- Current branch: **`main`** @ **`9fff78f`**（与 `origin/main` / 生产对齐；工作区干净）
+- Production: **`https://cityusbdisk.cn`** — Git **`9fff78f`**
 - Alembic head：**`o6p7q8r9s0t1`**（skill bundle；catalog=`n5o6p7q8r9s0`；记忆=`m4n5o6p7q8r9`；gov=`l3m4n5o6p7q8`）
-- **Haodeya 新模型（2026-07-25）**：
+- **Haodeya 新模型（2026-07-25 / 通线 2026-07-26）**：
   - 网关 `https://newapi.haodeya.xyz/v1`
   - Chat：生产启用 `qwen3.8-max-preview`（其它 qwen 档位停用）
   - 生图：`wan2.7-image` / `wan2.7-image-pro` → 无参考图 `/images/generations`；有参考图 `/images/edits` multipart；size 字面 `1K/2K/4K`（4K 仅 pro 文生图）
   - 视频：HappyHorse 单模型 + 档位菜单；合同：`/v1/videos` + `metadata.input.media`（i2v=`first_frame`，r2v=`reference_image`）；顶层 `size`=`1280*720`，档位在 `parameters.resolution`
-  - **i2v 复测已通并已部署（2026-07-26）**：`task_2ngmWnoNnI5ASioE3folcgheW7yse92i` → completed；`6dedbf2` 已上生产；待 Studio smoke（`hh-i2v-003`）
+  - **i2v 已通并已部署**；复测 task `task_2ngmWnoNnI5ASioE3folcgheW7yse92i`
+  - **Studio 默认**：图像分辨率 **1K**；视频模型优先 **HappyHorse**（`9fff78f`）
+  - 归档：`docs/archive/handoff-2026-07-26-happyhorse-admin-defaults.md`
 - **Chat Agent（重要）**：
   - **B1 / gov / harness / memory** 已合 main 并已上生产
   - **「设计助手」UI 默认开启**（`VITE_CHAT_AGENT_UI_ENABLED !== "false"`）
   - **产品定调**：QMDH UI 壳 + Codex **风格 harness**（非换 GPT）+ Admin Skill 发版 + 跨对话记忆 + HITL 生图/视频
   - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**（勿整包 merge）
 - **Admin 用量日志**：默认「按任务汇总」单行（`task.finalized`）；展示能力、输入参数摘要、输出张数/段数；取消勾选可看 provider_call 明细
+- **Admin Models UX**：预设 + 模型/Chat 计费 Tab + 探测优化（含视频分类）已上生产（`4c32d90`）
 - Local dev URLs:
   - frontend: `http://127.0.0.1:18080`
   - backend: `http://127.0.0.1:18010`

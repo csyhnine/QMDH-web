@@ -34,17 +34,20 @@
 
 ---
 
-## Active Blockers / Near-term TODO（2026-07-26）
+## Active Blockers / Near-term TODO（2026-07-26 收束）
 
 | ID | 事项 | 状态 | 说明 |
 |----|------|------|------|
-| **hh-i2v-001** | HappyHorse i2v 固定样例复测 | **DONE** | 2026-07-26 生产直打：`task_2ngmWnoNnI5ASioE3folcgheW7yse92i` → **completed**；归档已更新 |
-| **hh-i2v-002** | commit/deploy `size: 1280*720` | **DONE** | `6dedbf2` 已 push；生产 backend/worker 已重建；运行时校验 `size=1280*720` / `resolution=720P` |
-| **hh-i2v-003** | Studio 生产 smoke 一条 i2v | TODO | 依赖 hh-i2v-002 部署完成 |
-| **hh-i2v-004** |（可选）试错 Key 与线网 Key 分离 / 多 Key | TODO | 正式量上来后；避免探测打空线网配额 |
-| **admin-models-ux-001** | Admin 模型配置侧栏：预设 + 分区 + 计费拆页 | **DONE** | 前端 ModelsPage + CSS；bulk-import 视频默认 mp4/900s/per_video；随本轮部署上生产 |
+| **hh-i2v-001** | HappyHorse i2v 固定样例复测 | **DONE** | `task_2ngmWnoNnI5ASioE3folcgheW7yse92i` → completed |
+| **hh-i2v-002** | commit/deploy `size: 1280*720` | **DONE** | `6dedbf2` |
+| **hh-i2v-003** | Studio / 生产可用性确认 | **DONE** | size 已部署；用户 2026-07-26 确认 OK（含默认项） |
+| **hh-i2v-004** |（可选）试错 Key 与线网 Key 分离 / 多 Key | TODO | 正式量上来后 |
+| **admin-models-ux-001** | Admin 模型配置侧栏 UX | **DONE** | `4c32d90` |
+| **studio-defaults-001** | 图像默认 1K；视频默认 HappyHorse | **DONE** | `9fff78f` |
 
-**纪律**：禁止再扫请求体变体；未经用户同意禁止 push/deploy。
+**纪律**：禁止再扫 HappyHorse 请求体变体；未经用户同意禁止 push/deploy。
+
+交接归档：`docs/archive/handoff-2026-07-26-happyhorse-admin-defaults.md`；最新 `docs/handoff.md`。
 
 ---
 

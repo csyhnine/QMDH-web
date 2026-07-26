@@ -44,7 +44,7 @@
 | **hh-i2v-004** |（可选）试错 Key 与线网 Key 分离 / 多 Key | TODO | 正式量上来后 |
 | **admin-models-ux-001** | Admin 模型配置侧栏 UX | **DONE** | `4c32d90` |
 | **studio-defaults-001** | 图像默认 1K；视频默认 HappyHorse | **DONE** | `9fff78f` |
-| **agent-memory-002** | 记忆写入筛选 + 会话摘要压缩 | **DONE（本地未 commit）** | 停写每轮 turn summary；长期记忆收紧+distill；会话 compact；另附存量 scrub 脚本（dry-run/apply） |
+| **agent-memory-002** | 记忆写入筛选 + 会话摘要压缩 | **DONE（已 push `56e9d64`；待生产部署）** | 见 `docs/archive/deploy-ready-2026-07-26-agent-memory.md` |
 
 **纪律**：禁止再扫 HappyHorse 请求体变体；未经用户同意禁止 push/deploy。
 

@@ -10,15 +10,19 @@ import {
   resolveAspectRatioForSurface,
 } from "./studioCanvasLinkage";
 import {
+  filterGrokVideoProviders,
   getSelectedGrokSkuConfig,
   grokVideoSkuForProviderSelection,
   isGrokHaodeyaProvider,
 } from "./grokVideoUtils";
 import {
+  filterHappyHorseVideoProviders,
   getSelectedHappyHorseSkuConfig,
   happyHorseVideoSkuForProviderSelection,
   isHappyHorseProvider,
 } from "./happyHorseVideoUtils";
+import { isRuntimeStudioProvider } from "./modelAdminUtils";
+import { pickPreferredStudioProvider } from "./studioProviderDefaults";
 import type { StudioVideoSku } from "./studioComposerGrokSkuMenuTypes";
 import type { StudioComposerCanvasProps } from "./studioComposerCanvasTypes";
 import type { StudioDesignerViewProps } from "./studioDesignerViewTypes";
@@ -40,7 +44,6 @@ export function buildStudioComposerCanvasProps({
   submissionProgress,
   taskActions,
 }: StudioDesignerViewProps): StudioComposerCanvasProps {
-  void state;
   const {
     activeProject,
     availableProviders,
@@ -64,7 +67,7 @@ export function buildStudioComposerCanvasProps({
       const supports4k = isWanPro && current.creationMode === "generate";
       const nextResolution =
         !supports4k && normalizeStudioResolution(current.resolution) === "4k"
-          ? "2k"
+          ? "1k"
           : current.resolution;
       return {
         ...current,
@@ -136,7 +139,28 @@ export function buildStudioComposerCanvasProps({
     onImageCountSelect: handleImageCountSelect,
     onModeChange: (mode) => {
       setStudioForm((current) => {
-        const provider = availableProviders.find((item) => item.provider_name === current.requestedProvider);
+        const providersForMode = filterHappyHorseVideoProviders(
+          filterGrokVideoProviders(
+            state.providers.filter(
+              (provider) =>
+                isRuntimeStudioProvider(provider, mode) &&
+                provider.capabilities.some((capability) => {
+                  if (mode === "video") return capability === "video.generate";
+                  if (mode === "edit") return capability === "image.edit";
+                  return capability === "image.generate";
+                })
+            )
+          )
+        );
+        const preferred = pickPreferredStudioProvider(providersForMode, mode);
+        const resolvedProviderName =
+          mode === "video"
+            ? preferred?.provider_name || current.requestedProvider
+            : providersForMode.some((item) => item.provider_name === current.requestedProvider)
+              ? current.requestedProvider
+              : preferred?.provider_name || current.requestedProvider;
+        const provider =
+          providersForMode.find((item) => item.provider_name === resolvedProviderName) || preferred;
         const nextGrokSku =
           mode === "video"
             ? isHappyHorseProvider(provider)
@@ -161,10 +185,11 @@ export function buildStudioComposerCanvasProps({
         return {
           ...current,
           creationMode: mode,
+          requestedProvider: resolvedProviderName,
           aspectRatio: nextAspectRatio,
           resolution:
             mode !== "generate" && normalizeStudioResolution(current.resolution) === "4k"
-              ? "2k"
+              ? "1k"
               : current.resolution,
           grokVideoSku: nextGrokSku,
         };

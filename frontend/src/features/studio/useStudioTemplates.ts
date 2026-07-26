@@ -24,6 +24,8 @@ type UseStudioTemplatesOptions = {
 
 type ApplyTemplateOptions = {
   closeMenu?: boolean;
+  /** Keep current form resolution (used for cold-start auto-apply so default stays 1K). */
+  preserveResolution?: boolean;
 };
 
 export type StudioTemplatesState = ReturnType<typeof useStudioTemplates>;
@@ -81,10 +83,14 @@ export function useStudioTemplates({
   }, [activeTemplate, syncCustomTemplateDraftWithCurrentForm]);
 
   const applyTemplate = useCallback((template: PromptTemplateRecord, options: ApplyTemplateOptions = {}) => {
-    const { closeMenu = true } = options;
+    const { closeMenu = true, preserveResolution = false } = options;
     const nextTemplate = toTemplateFormValue(template);
     clearFeedback();
-    setStudioForm((current) => applyTemplateToForm(nextTemplate, current));
+    setStudioForm((current) => {
+      const next = applyTemplateToForm(nextTemplate, current);
+      if (!preserveResolution) return next;
+      return { ...next, resolution: current.resolution };
+    });
     if (closeMenu) {
       setActiveComposerMenu(null);
     }

@@ -535,7 +535,7 @@ class PromptTemplate(Base):
     prompt: Mapped[str] = mapped_column(Text)
     style: Mapped[str] = mapped_column(String(50), default="modern")
     aspect_ratio: Mapped[str] = mapped_column(String(20), default="16:9")
-    resolution: Mapped[str] = mapped_column(String(20), default="2k")
+    resolution: Mapped[str] = mapped_column(String(20), default="1k")
     deliverable: Mapped[str] = mapped_column(String(100), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
     source_image_path: Mapped[str] = mapped_column(String(255), default="")

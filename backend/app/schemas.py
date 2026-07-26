@@ -544,7 +544,7 @@ class PromptTemplateBase(BaseModel):
     prompt: str = Field(min_length=1)
     style: str = "modern"
     aspect_ratio: str = "16:9"
-    resolution: str = "2k"
+    resolution: str = "1k"
     deliverable: str = ""
     notes: str = ""
     source_image_path: str = ""

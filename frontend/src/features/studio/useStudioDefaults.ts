@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
 
 import type { Project, PromptTemplateRecord, Provider } from "../../api";
+import { pickPreferredStudioProvider } from "./studioProviderDefaults";
 import type { StudioFormState } from "./studioTypes";
 
 type UseStudioDefaultsOptions = {
@@ -10,7 +11,10 @@ type UseStudioDefaultsOptions = {
   setStudioForm: Dispatch<SetStateAction<StudioFormState>>;
   sharedTemplates: PromptTemplateRecord[];
   studioForm: StudioFormState;
-  onApplyTemplate: (template: PromptTemplateRecord, options?: { closeMenu?: boolean }) => void;
+  onApplyTemplate: (
+    template: PromptTemplateRecord,
+    options?: { closeMenu?: boolean; preserveResolution?: boolean }
+  ) => void;
 };
 
 export function useStudioDefaults({
@@ -33,18 +37,26 @@ export function useStudioDefaults({
     if (hasAppliedInitialTemplateRef.current) return;
     if (studioForm.title.trim() || studioForm.prompt.trim()) return;
     hasAppliedInitialTemplateRef.current = true;
-    onApplyTemplate(sharedTemplates[0], { closeMenu: false });
+    // Keep product default resolution (1K); do not inherit template 2K on cold start.
+    onApplyTemplate(sharedTemplates[0], { closeMenu: false, preserveResolution: true });
   }, [onApplyTemplate, sharedTemplates, studioForm.prompt, studioForm.title]);
 
   useEffect(() => {
     if (availableProviders.length === 0) return;
     if (!availableProviders.some((provider) => provider.provider_name === studioForm.requestedProvider)) {
+      const preferred = pickPreferredStudioProvider(availableProviders, studioForm.creationMode);
+      if (!preferred) return;
       setStudioForm((current) => ({
         ...current,
-        requestedProvider: availableProviders[0].provider_name
+        requestedProvider: preferred.provider_name,
       }));
     }
-  }, [availableProviders, setStudioForm, studioForm.requestedProvider]);
+  }, [
+    availableProviders,
+    setStudioForm,
+    studioForm.creationMode,
+    studioForm.requestedProvider,
+  ]);
 
   useEffect(() => {
     if (projects.length === 0) return;

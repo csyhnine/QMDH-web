@@ -9,6 +9,7 @@ import {
   normalizeStudioResolution,
 } from "./studioConstants";
 import { defaultAspectRatioFor, resolveAspectRatioForSurface } from "./studioCanvasLinkage";
+import { pickPreferredStudioProvider } from "./studioProviderDefaults";
 import { inferStyleFromAsset } from "./studioAssetUtils";
 import { inferRequestedImageCount, taskReferenceImages, taskResultString } from "./studioTaskUtils";
 import type { ReferenceUploadItem, StudioFormState } from "./studioTypes";
@@ -36,7 +37,7 @@ export function resolveStudioProviderForForm(
   );
   return (
     compatibleProviders.find((provider) => provider.provider_name === form.requestedProvider) ??
-    compatibleProviders[0]
+    pickPreferredStudioProvider(compatibleProviders, form.creationMode)
   );
 }
 

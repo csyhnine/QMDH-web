@@ -3,6 +3,7 @@ import {
   isRuntimeUpscaleProvider,
   publicProviderDisplayName,
 } from "../studio/modelAdminUtils";
+import { isHappyHorseProvider } from "../studio/happyHorseVideoUtils";
 import {
   aspectRatioNeedsResetForSurface,
   defaultAspectRatioFor,
@@ -135,5 +136,10 @@ export function firstCanvasProviderName(
   providers: Provider[],
   group: CanvasProviderGroupKey
 ): string {
-  return providers.find((provider) => canvasProviderGroupKey(provider) === group)?.provider_name || "";
+  const matches = providers.filter((provider) => canvasProviderGroupKey(provider) === group);
+  if (group === "video") {
+    const happyHorse = matches.find((provider) => isHappyHorseProvider(provider));
+    if (happyHorse) return happyHorse.provider_name;
+  }
+  return matches[0]?.provider_name || "";
 }

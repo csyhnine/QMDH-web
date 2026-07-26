@@ -24,7 +24,10 @@ type UseStudioViewEffectsOptions = {
   studioForm: StudioFormState;
   submitting: boolean;
   uploadingReference: boolean;
-  onApplyTemplate: (template: PromptTemplateRecord, options?: { closeMenu?: boolean }) => void;
+  onApplyTemplate: (
+    template: PromptTemplateRecord,
+    options?: { closeMenu?: boolean; preserveResolution?: boolean }
+  ) => void;
 };
 
 export type StudioViewEffectsState = ReturnType<typeof useStudioViewEffects>;

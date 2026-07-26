@@ -17,9 +17,9 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`56e9d64`**（已 push `origin/main`）；**生产仍待 pull/rebuild**（本机无 SSH）
-- Production: **`https://cityusbdisk.cn`** — 部署前仍为功能基线 **`9fff78f`**；目标 **`56e9d64`**
-- 部署清单：`docs/archive/deploy-ready-2026-07-26-agent-memory.md`
+- Current branch: **`main`** @ **`ab5ac6e`**（与 `origin/main` / 生产对齐）
+- Production: **`https://cityusbdisk.cn`** — Git **`ab5ac6e`**
+- 部署归档：`docs/archive/deploy-2026-07-26-agent-memory.md`
 - Alembic head：**`o6p7q8r9s0t1`**（skill bundle；catalog=`n5o6p7q8r9s0`；记忆=`m4n5o6p7q8r9`；gov=`l3m4n5o6p7q8`）
 - **Haodeya 新模型（2026-07-25 / 通线 2026-07-26）**：
   - 网关 `https://newapi.haodeya.xyz/v1`
@@ -279,7 +279,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Near-Term Suggested Next Steps
 
-1. **阻塞**：本机无 SSH；有人在服务器执行 `docs/archive/deploy-ready-2026-07-26-agent-memory.md`（pull → rebuild frontend/backend → scrub）。
-2. Cold-start: 读最新 `docs/handoff.md` / `docs/tasks.md` Active Blockers。
-3. Optional follow-up：`project_code` 挂钩、LLM 提炼长期记忆。
-4. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.
+1. Cold-start: 读最新 `docs/handoff.md` / `docs/tasks.md` Active Blockers。
+2. Optional follow-up：`project_code` 挂钩、LLM 提炼长期记忆。
+3. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.
+4. 安全：若曾在控制台重置并泄露 root 密码，建议改回密钥登录并轮换密码。

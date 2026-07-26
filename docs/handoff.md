@@ -12,14 +12,15 @@
 
 ## Latest Handoffs
 
-### [2026-07-26] Agent 记忆筛选/经验 — **已 push，待服务器部署**
-- GitHub：**`56e9d64`**（`main` 已推送）
-- 本机无 SSH → **生产尚未 rebuild**；步骤见 `docs/archive/deploy-ready-2026-07-26-agent-memory.md`
-- Deploy：pull → build `frontend`+`backend` → scrub dry-run → apply
-- Safe to hand off: **Yes（代码已上 GitHub；部署待有 SSH 的人执行）**
+### [2026-07-26] Agent 记忆筛选/经验 — **已上生产**
+- GitHub / 生产：**`ab5ac6e`**（功能 `56e9d64`）
+- Deploy：frontend + backend rebuild；health OK
+- Scrub apply：删 8 条 turn summary；压缩 4 条 session summary（scanned=12）
+- 归档：`docs/archive/deploy-2026-07-26-agent-memory.md`
+- Safe to hand off: **Yes**
 
 ### [2026-07-26] 会话收束 — HappyHorse / Admin / Studio 默认
-- 功能基线曾生产 **`9fff78f`**；文档 `1d55c27`
+- 功能基线曾生产 **`9fff78f`**
 - Safe to hand off: **Yes**
 
 ### [2026-07-26] Studio 默认 1K + HappyHorse — **已上生产**

@@ -17,14 +17,15 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`4edaaec`**
-- Production: **`https://cityusbdisk.cn`** — Git **`4edaaec`**（2026-07-25 历史卡片下载 + wan aspect-aware size 已部署）
+- Current branch: **`main`** @ **`d2a0c98`**（生产同；本地另有未提交 `size: 1280*720` 适配）
+- Production: **`https://cityusbdisk.cn`** — Git **`d2a0c98`**（HappyHorse `metadata.input.media`；顶层 size 仍为旧值 `720P`，待复测后改）
 - Alembic head：**`o6p7q8r9s0t1`**（skill bundle；catalog=`n5o6p7q8r9s0`；记忆=`m4n5o6p7q8r9`；gov=`l3m4n5o6p7q8`）
 - **Haodeya 新模型（2026-07-25）**：
   - 网关 `https://newapi.haodeya.xyz/v1`
   - Chat：生产启用 `qwen3.8-max-preview`（其它 qwen 档位停用）
   - 生图：`wan2.7-image` / `wan2.7-image-pro` → 无参考图 `/images/generations`；有参考图 `/images/edits` multipart；size 字面 `1K/2K/4K`（4K 仅 pro 文生图）
-  - 视频：HappyHorse 单模型 + 档位菜单；请求体 `media`（i2v=`first_frame`，r2v=`reference_image` 1～9）+ duration 与 SKU 一致
+  - 视频：HappyHorse 单模型 + 档位菜单；合同：`/v1/videos` + `metadata.input.media`（i2v=`first_frame`，r2v=`reference_image`）；顶层 `size`=`1280*720`，档位在 `parameters.resolution`
+  - **i2v 复测已通（2026-07-26）**：`task_2ngmWnoNnI5ASioE3folcgheW7yse92i` → completed；待用户批准后 commit/deploy 本地 `size: 1280*720`（`hh-i2v-002`）再 Studio smoke
 - **Chat Agent（重要）**：
   - **B1 / gov / harness / memory** 已合 main 并已上生产
   - **「设计助手」UI 默认开启**（`VITE_CHAT_AGENT_UI_ENABLED !== "false"`）
@@ -273,8 +274,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Near-Term Suggested Next Steps
 
-1. Cold-start: `git pull` from GitHub → confirm HEAD `4edaaec`（或更新后的 main）→ 读最新 `docs/handoff.md`.
-2. When owner approves deploy: `sudo -u admin git pull --ff-only` → rebuild affected images（改了 `usage_ledger` / task 路径则含 worker）；勿动 `.env`；无新迁移则不必 alembic.
-3. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.
-4. Optional: smoke CPA `gemini-3.1-flash-image` in Studio；用量日志抽查 `/admin/usage-logs`.
-5. Grok rollout reference: `docs/archive/handoff-2026-06-12-grok-video-production.md`.
+1. **优先**：配额重置（约 2026-07-26 01:34 UTC+8）后执行 `hh-i2v-001`（固定 i2v 最小样例 ≤2 次）→ 再 `hh-i2v-002` deploy。归档见 `docs/archive/handoff-2026-07-25-happyhorse-i2v-media-quota.md`。
+2. Cold-start: `git pull` → 读最新 `docs/handoff.md` / `docs/tasks.md` Active Blockers。
+3. When owner approves deploy: `sudo -u admin git pull --ff-only` → rebuild affected images；勿动 `.env`；无新迁移则不必 alembic.
+4. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.
+5. Optional: smoke CPA `gemini-3.1-flash-image`；用量日志抽查 `/admin/usage-logs`.

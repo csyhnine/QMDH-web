@@ -381,7 +381,7 @@ class HappyHorseVideoBodyTests(unittest.TestCase):
         )
         self.assertEqual(body["model"], "happyhorse-1.1-t2v-5s")
         self.assertEqual(body["duration"], 5)
-        self.assertEqual(body["size"], "720P")
+        self.assertEqual(body["size"], "1280*720")
         self.assertEqual(
             body["metadata"],
             {
@@ -417,7 +417,7 @@ class HappyHorseVideoBodyTests(unittest.TestCase):
                     "start_image_url": "https://cdn.example.com/first.png",
                 },
             )
-        self.assertEqual(body["size"], "720P")
+        self.assertEqual(body["size"], "1280*720")
         self.assertEqual(
             body["metadata"],
             {

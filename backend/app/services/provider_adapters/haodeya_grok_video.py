@@ -301,8 +301,8 @@ def _build_happyhorse_request_body(sku: str, prompt: str, payload: dict) -> dict
             f"HappyHorse duration must be {duration} for SKU {sku}; got {payload_duration}"
         )
 
-    # Upstream: size at top level; reference images live under metadata.input.media
-    # (not Grok frame_images, and not top-level input/parameters).
+    # Upstream Haodeya /v1/videos: top-level size is WxH; resolution tier is in
+    # metadata.parameters.resolution. Reference images live under metadata.input.media.
     input_block: dict[str, object] = {"prompt": prompt}
     metadata: dict[str, object] = {
         "input": input_block,
@@ -315,7 +315,7 @@ def _build_happyhorse_request_body(sku: str, prompt: str, payload: dict) -> dict
         "model": sku,
         "prompt": prompt,
         "duration": duration,
-        "size": "720P",
+        "size": "1280*720",
         "metadata": metadata,
     }
 

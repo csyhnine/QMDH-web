@@ -12,14 +12,14 @@
 
 ## Latest Handoffs
 
-### [2026-07-26] 修删除对话 FK 冲突 — **待部署**
-- 原因：`agent_memory_entries.conversation_id` 仍引用会话，DELETE conversations → 500
-- 修复：删会话前 detach（删 session summary，长期记忆清空 conversation_id）+ FK `ON DELETE SET NULL`
-- Safe to hand off: after deploy
+### [2026-07-26] 修删除对话 FK 冲突 — **已上生产**
+- 原因：记忆表 `conversation_id` 引用会话，删对话 → FK 500
+- 修复：`83d52be` detach + migration `p7q8r9s0t1u2`（ON DELETE SET NULL）
+- 生产：HEAD `83d52be`；alembic `p7q8r9s0t1u2`；health OK
+- Safe to hand off: **Yes**
 
 ### [2026-07-26] Agent 记忆筛选/经验 — **已上生产**
-- GitHub / 生产：**`8955e61`**
-- Scrub：删 8 turn summary；压 4 session
+- Git：**`8955e61`**；scrub 已执行
 - 归档：`docs/archive/deploy-2026-07-26-agent-memory.md`
 - Safe to hand off: **Yes**
 

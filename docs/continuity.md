@@ -17,9 +17,10 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`ab5ac6e`**（与 `origin/main` / 生产对齐）
-- Production: **`https://cityusbdisk.cn`** — Git **`ab5ac6e`**
-- 部署归档：`docs/archive/deploy-2026-07-26-agent-memory.md`
+- Current branch: **`main`** @ **`83d52be`**（与 `origin/main` / 生产对齐）
+- Production: **`https://cityusbdisk.cn`** — Git **`83d52be`**
+- Alembic head：**`p7q8r9s0t1u2`**（agent_memory conversation ON DELETE SET NULL；此前 skill=`o6p7q8r9s0t1`）
+- 部署归档：`docs/archive/deploy-2026-07-26-agent-memory.md`；删对话修复随 `83d52be`
 - Alembic head：**`o6p7q8r9s0t1`**（skill bundle；catalog=`n5o6p7q8r9s0`；记忆=`m4n5o6p7q8r9`；gov=`l3m4n5o6p7q8`）
 - **Haodeya 新模型（2026-07-25 / 通线 2026-07-26）**：
   - 网关 `https://newapi.haodeya.xyz/v1`

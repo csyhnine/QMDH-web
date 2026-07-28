@@ -34,7 +34,7 @@ docker compose exec -T postgres pg_dump -U qmdh qmdh | gzip > /root/qmdh-pg-$(da
 sudo -u admin git -C /www/wwwroot/qmdh-web fetch origin main
 sudo -u admin git -C /www/wwwroot/qmdh-web pull --ff-only origin main
 sudo -u admin git -C /www/wwwroot/qmdh-web rev-parse --short HEAD
-# 期望：65738c2
+sudo -u admin git -C /www/wwwroot/qmdh-web merge-base --is-ancestor 63f2e0a HEAD && echo "feature commit present"
 
 cd /www/wwwroot/qmdh-web
 docker compose run --rm backend alembic upgrade head

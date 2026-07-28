@@ -691,3 +691,45 @@ class CanvasTemplate(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     created_by: Mapped[User | None] = relationship()
+
+
+class SiteAnnouncement(Base):
+    """Time-windowed site announcement shown as a modal on the generate page."""
+
+    __tablename__ = "site_announcements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(150))
+    body: Mapped[str] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+    created_by: Mapped[User | None] = relationship()
+
+
+class AiTool(Base):
+    """Curated AI tool / product directory entry for the studio nav page."""
+
+    __tablename__ = "ai_tools"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(150))
+    description: Mapped[str] = mapped_column(Text, default="")
+    url: Mapped[str] = mapped_column(String(500))
+    category: Mapped[str] = mapped_column(String(80), default="", index=True)
+    cover_image_path: Mapped[str] = mapped_column(String(255), default="")
+    is_featured: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+    created_by: Mapped[User | None] = relationship()

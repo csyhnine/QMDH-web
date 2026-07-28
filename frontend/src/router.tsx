@@ -13,6 +13,8 @@ import {
   type ManagedUser,
   type PromptTemplateRecord,
   type CanvasTemplateRecord,
+  type SiteAnnouncementRecord,
+  type AiToolRecord,
   type Project,
   type Provider,
   type ProviderPricingRuleRecord,
@@ -32,6 +34,9 @@ const UsersPage = lazy(() => import("./pages/admin/UsersPage"));
 const ModelsPage = lazy(() => import("./pages/admin/ModelsPage"));
 const PromptTemplatesPage = lazy(() => import("./pages/admin/PromptTemplatesPage"));
 const CanvasTemplatesPage = lazy(() => import("./pages/admin/CanvasTemplatesPage"));
+const AnnouncementsPage = lazy(() => import("./pages/admin/AnnouncementsPage"));
+const AiToolsAdminPage = lazy(() => import("./pages/admin/AiToolsAdminPage"));
+const AiToolsNavPage = lazy(() => import("./pages/studio/AiToolsNavPage"));
 const CanvasWorkspace = lazy(() => import("./features/canvas/CanvasWorkspace"));
 const AgentOpsPage = lazy(() => import("./pages/admin/AgentOpsPage"));
 const FeedbackOpsPage = lazy(() => import("./pages/admin/FeedbackOpsPage"));
@@ -319,6 +324,94 @@ function CanvasTemplatesRoute() {
   );
 }
 
+function AnnouncementsRoute() {
+  const [announcements, setAnnouncements] = useState<SiteAnnouncementRecord[]>([]);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    try {
+      setAnnouncements(await api.adminAnnouncements());
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "加载公告失败");
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  return (
+    <AppShell kind="admin" active="announcements">
+      <AnnouncementsPage
+        announcements={announcements}
+        error={error}
+        onRefresh={() => void refresh()}
+        onSetError={setError}
+      />
+    </AppShell>
+  );
+}
+
+function AiToolsNavRoute() {
+  const [tools, setTools] = useState<AiToolRecord[]>([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api
+      .aiTools()
+      .then((rows) => {
+        if (cancelled) return;
+        setTools(rows);
+        setError("");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setTools([]);
+        setError(err instanceof Error ? err.message : "加载工具导航失败");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <AppShell kind="studio" active="nav">
+      <AiToolsNavPage tools={tools} loading={loading} error={error} />
+    </AppShell>
+  );
+}
+
+function AiToolsAdminRoute() {
+  const [tools, setTools] = useState<AiToolRecord[]>([]);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    try {
+      setTools(await api.adminAiTools());
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "加载工具导航失败");
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  return (
+    <AppShell kind="admin" active="ai-tools">
+      <AiToolsAdminPage tools={tools} error={error} onRefresh={() => void refresh()} onSetError={setError} />
+    </AppShell>
+  );
+}
+
 function CanvasTemplateEditRoute() {
   const navigate = useNavigate();
   const params = useParams();
@@ -450,6 +543,7 @@ export default function AppRouter() {
           <Route path="/studio/generate" element={<ProtectedRoute><GeneratePage /></ProtectedRoute>} />
           <Route path="/studio/inspiration" element={<ProtectedRoute><InspirationRoute /></ProtectedRoute>} />
           <Route path="/studio/feedback" element={<ProtectedRoute><StudioFeedbackRoute /></ProtectedRoute>} />
+          <Route path="/studio/nav" element={<ProtectedRoute><AiToolsNavRoute /></ProtectedRoute>} />
           <Route
             path="/studio/chat"
             element={
@@ -490,6 +584,8 @@ export default function AppRouter() {
           <Route path="/admin/templates" element={<ProtectedRoute><AdminModuleRoute module="templates"><PromptTemplatesRoute /></AdminModuleRoute></ProtectedRoute>} />
           <Route path="/admin/canvas-templates" element={<ProtectedRoute><AdminModuleRoute module="canvas-templates"><CanvasTemplatesRoute /></AdminModuleRoute></ProtectedRoute>} />
           <Route path="/admin/canvas-templates/:templateId/edit" element={<ProtectedRoute><AdminModuleRoute module="canvas-templates"><CanvasTemplateEditRoute /></AdminModuleRoute></ProtectedRoute>} />
+          <Route path="/admin/announcements" element={<ProtectedRoute><AdminModuleRoute module="announcements"><AnnouncementsRoute /></AdminModuleRoute></ProtectedRoute>} />
+          <Route path="/admin/ai-tools" element={<ProtectedRoute><AdminModuleRoute module="ai-tools"><AiToolsAdminRoute /></AdminModuleRoute></ProtectedRoute>} />
           <Route path="/admin/feedback" element={<ProtectedRoute><AdminModuleRoute module="feedback"><AdminFeedbackRoute /></AdminModuleRoute></ProtectedRoute>} />
           <Route path="/admin/agents" element={<ProtectedRoute><AdminOnlyRoute><AgentsRoute /></AdminOnlyRoute></ProtectedRoute>} />
           <Route path="/admin/inspiration" element={<ProtectedRoute><AdminModuleRoute module="inspiration"><AdminInspirationRoute /></AdminModuleRoute></ProtectedRoute>} />

@@ -1,6 +1,7 @@
 import StudioAuthenticatedShell from "./StudioAuthenticatedShell";
 import StudioLoginView from "./StudioLoginView";
 import GuestLoginBanner from "./GuestLoginBanner";
+import SiteAnnouncementModal from "./SiteAnnouncementModal";
 import { useAuth } from "../../context/AuthContext";
 import { GUEST_USER } from "../access/guestMode";
 import { useGenerateStudioController } from "./useGenerateStudioController";
@@ -31,10 +32,12 @@ export default function GenerateStudioShell() {
   }
 
   const shellUser = currentUser ?? GUEST_USER;
+  const showAnnouncement = Boolean(currentUser) && !isGuest;
 
   return (
     <div className={isGuest ? "studio-guest-layout" : undefined}>
       {isGuest ? <GuestLoginBanner /> : null}
+      {showAnnouncement ? <SiteAnnouncementModal /> : null}
       <StudioAuthenticatedShell currentUser={shellUser} studio={studio} />
     </div>
   );

@@ -16,7 +16,13 @@ import { collectUpstreamDeliverables } from "./canvasGraphUtils";
 import type { CanvasFlowNode, GenerateNodeData } from "./canvasTypes";
 import { isGenerateNode } from "./canvasTypes";
 
-type PatchNode = (nodeId: string, patch: Partial<GenerateNodeData>) => void;
+export type PatchNodeOptions = { recordHistory?: boolean };
+
+export type PatchNode = (
+  nodeId: string,
+  patch: Partial<GenerateNodeData>,
+  options?: PatchNodeOptions
+) => void;
 
 const activePollKeys = new Set<string>();
 

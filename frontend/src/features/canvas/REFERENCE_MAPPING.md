@@ -9,6 +9,6 @@ Reference clone (outside repo): `e:\projects\ref-infinite-canvas`
 | Image / text / generate-config nodes | Single `generate` node (+ result image in same node) |
 | `canvas-prompt-library` / prompts rail | 画布左侧改为 `CanvasProjectLibrary`（项目库 / 工作流），与生成页模板库不通用 |
 | Node generate via browser OpenAI | `api.createTask` + poll assets |
-| Undo/redo, plugins, agent, video | Out of scope |
+| Undo/redo, plugins, agent, video | `Ctrl+Z` / `Ctrl+Shift+Z`（客户端 15 步；视口与任务轮询不入栈）；plugins/agent 仍 Out of scope |
 
 Key refs inspected: `web/src/components/canvas/infinite-canvas.tsx`, `canvas-node.tsx`, `canvas-prompt-library.tsx`, `docs/content/docs/canvas/*`

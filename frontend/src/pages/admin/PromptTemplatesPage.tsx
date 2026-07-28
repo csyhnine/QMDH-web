@@ -1,6 +1,14 @@
 import { type ChangeEvent, type DragEvent, type FormEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, type PromptTemplateCreatePayload, type PromptTemplateRecord } from "../../api";
+import {
+  buildSharedTemplateCategories,
+  filterSharedTemplates,
+} from "../../features/studio/studioTemplateBrowserUtils";
+import {
+  templatePrimaryCategory,
+  templateSecondaryCategory,
+} from "../../features/studio/studioTemplateUtils";
 import { formatUploadSize, MAX_REFERENCE_UPLOAD_BYTES, validateReferenceImageSize } from "../../utils/uploads";
 
 type PromptTemplateDraft = PromptTemplateCreatePayload;
@@ -40,6 +48,14 @@ function imageCoverageLabel(template: Pick<PromptTemplateRecord, "source_image_p
   if (template.preview_image_path) return "仅配置最终图";
   if (template.source_image_path) return "仅配置原图";
   return "未配置展示图";
+}
+
+function countInCategory(templates: PromptTemplateRecord[], category: string, subcategory = "all"): number {
+  return templates.filter((template) => {
+    if (templatePrimaryCategory(template) !== category) return false;
+    if (subcategory === "all") return true;
+    return templateSecondaryCategory(template) === subcategory;
+  }).length;
 }
 
 type ImageUploaderProps = {
@@ -124,6 +140,10 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
   const [deleting, setDeleting] = useState(false);
   const [uploadingField, setUploadingField] = useState<UploadField | null>(null);
   const [draggingField, setDraggingField] = useState<UploadField | null>(null);
+  const [listSearch, setListSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [activeSubcategory, setActiveSubcategory] = useState("all");
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(() => new Set());
   const sourceInputRef = useRef<HTMLInputElement | null>(null);
   const resultInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -137,6 +157,46 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
     () => templates.reduce((total, item) => total + item.recent_apply_count, 0),
     [templates]
   );
+
+  const categoryGroups = useMemo(() => buildSharedTemplateCategories(templates), [templates]);
+  const filteredTemplates = useMemo(
+    () =>
+      filterSharedTemplates(templates, {
+        activeCategory,
+        activeSubcategory,
+        quickFilter: "all",
+        search: listSearch,
+      }),
+    [activeCategory, activeSubcategory, listSearch, templates]
+  );
+
+  const categoryOptions = useMemo(
+    () =>
+      Array.from(new Set(templates.map((item) => item.category.trim()).filter(Boolean))).sort((left, right) =>
+        left.localeCompare(right, "zh-CN")
+      ),
+    [templates]
+  );
+
+  const subcategoryOptions = useMemo(() => {
+    const primary = draft.category.trim();
+    const values = templates
+      .filter((item) => !primary || item.category.trim() === primary)
+      .map((item) => item.subcategory.trim())
+      .filter(Boolean);
+    return Array.from(new Set(values)).sort((left, right) => left.localeCompare(right, "zh-CN"));
+  }, [draft.category, templates]);
+
+  useEffect(() => {
+    if (!selectedTemplate) return;
+    const primary = templatePrimaryCategory(selectedTemplate);
+    setExpandedCategories((current) => {
+      if (current.has(primary)) return current;
+      const next = new Set(current);
+      next.add(primary);
+      return next;
+    });
+  }, [selectedTemplate]);
 
   useEffect(() => {
     if (!selectedTemplate) {
@@ -166,6 +226,27 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
     setSelectedId(null);
     setDraft(defaultDraft);
     onSetError("");
+  }
+
+  function selectCategoryFilter(category: string, subcategory = "all") {
+    setActiveCategory(category);
+    setActiveSubcategory(subcategory);
+    if (category !== "all") {
+      setExpandedCategories((current) => {
+        const next = new Set(current);
+        next.add(category);
+        return next;
+      });
+    }
+  }
+
+  function toggleCategoryExpanded(category: string) {
+    setExpandedCategories((current) => {
+      const next = new Set(current);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
   }
 
   async function uploadTemplateImage(field: UploadField, file: File) {
@@ -333,30 +414,118 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
           <div className="agent-ops-section-head">
             <div>
               <h2>共享模板列表</h2>
-              <p>左侧选模板，右侧维护分类、推荐状态和展示图。</p>
+              <p>按一级 / 二级分类筛选后选择模板；右侧维护内容与展示图。</p>
             </div>
           </div>
-          {templates.length > 0 ? (
-            <div className="template-list admin-template-list">
-              {templates.map((template) => (
-                <button
-                  key={template.id}
-                  type="button"
-                  className={selectedTemplate?.id === template.id ? "template-card is-active" : "template-card"}
-                  onClick={() => setSelectedId(template.id)}
-                >
-                  <strong>{template.label}</strong>
-                  <span>{template.title}</span>
-                  <small className="admin-template-meta">
-                    {categoryPath(template)} · {template.is_featured ? "热门" : "普通"} · {imageCoverageLabel(template)}
-                  </small>
-                  <small className="admin-template-meta">
-                    {`热度 ${template.popularity_score.toFixed(1)} · 应用 ${template.recent_apply_count} · 成功提交 ${template.recent_submit_success_count}`}
-                  </small>
-                  <small className="admin-template-meta">最近更新 {formatDate(template.updated_at)}</small>
-                </button>
-              ))}
+
+          <div className="admin-prompt-taxonomy">
+            <label className="admin-prompt-taxonomy-search">
+              <input
+                value={listSearch}
+                onChange={(event) => setListSearch(event.target.value)}
+                placeholder="搜索名称、标题、分类…"
+                aria-label="搜索模板"
+              />
+            </label>
+
+            <div className="admin-prompt-taxonomy-tree" role="tree">
+              <button
+                type="button"
+                className={
+                  activeCategory === "all"
+                    ? "admin-prompt-taxonomy-node is-active"
+                    : "admin-prompt-taxonomy-node"
+                }
+                onClick={() => selectCategoryFilter("all")}
+              >
+                <span>全部</span>
+                <small>{templates.length}</small>
+              </button>
+
+              {categoryGroups.map((group) => {
+                const expanded = expandedCategories.has(group.category);
+                const categoryCount = countInCategory(templates, group.category);
+                const categoryActive =
+                  activeCategory === group.category && activeSubcategory === "all";
+                return (
+                  <div key={group.category} className="admin-prompt-taxonomy-group">
+                    <div className="admin-prompt-taxonomy-l1">
+                      <button
+                        type="button"
+                        className="admin-prompt-taxonomy-toggle"
+                        aria-expanded={expanded}
+                        onClick={() => toggleCategoryExpanded(group.category)}
+                      >
+                        {expanded ? "▾" : "▸"}
+                      </button>
+                      <button
+                        type="button"
+                        className={
+                          categoryActive
+                            ? "admin-prompt-taxonomy-node is-active"
+                            : "admin-prompt-taxonomy-node"
+                        }
+                        onClick={() => selectCategoryFilter(group.category, "all")}
+                      >
+                        <span>{group.category}</span>
+                        <small>{categoryCount}</small>
+                      </button>
+                    </div>
+                    {expanded ? (
+                      <div className="admin-prompt-taxonomy-l2">
+                        {group.subcategories.map((subcategory) => {
+                          const subActive =
+                            activeCategory === group.category &&
+                            activeSubcategory === subcategory;
+                          return (
+                            <button
+                              key={`${group.category}:${subcategory}`}
+                              type="button"
+                              className={
+                                subActive
+                                  ? "admin-prompt-taxonomy-node is-child is-active"
+                                  : "admin-prompt-taxonomy-node is-child"
+                              }
+                              onClick={() => selectCategoryFilter(group.category, subcategory)}
+                            >
+                              <span>{subcategory}</span>
+                              <small>{countInCategory(templates, group.category, subcategory)}</small>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
+          </div>
+
+          {templates.length > 0 ? (
+            filteredTemplates.length > 0 ? (
+              <div className="template-list admin-template-list">
+                {filteredTemplates.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    className={selectedTemplate?.id === template.id ? "template-card is-active" : "template-card"}
+                    onClick={() => setSelectedId(template.id)}
+                  >
+                    <strong>{template.label}</strong>
+                    <span>{template.title}</span>
+                    <small className="admin-template-meta">
+                      {categoryPath(template)} · {template.is_featured ? "热门" : "普通"} · {imageCoverageLabel(template)}
+                    </small>
+                    <small className="admin-template-meta">
+                      {`热度 ${template.popularity_score.toFixed(1)} · 应用 ${template.recent_apply_count} · 成功提交 ${template.recent_submit_success_count}`}
+                    </small>
+                    <small className="admin-template-meta">最近更新 {formatDate(template.updated_at)}</small>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="template-empty">当前分类或搜索下没有模板。</div>
+            )
           ) : (
             <div className="template-empty">还没有共享模板。先新建一条，设计师工作台里才会出现新的模板项。</div>
           )}
@@ -388,11 +557,31 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
               <div className="template-editor-row template-editor-row-3">
                 <label className="composer-menu-field">
                   <span>一级分类</span>
-                  <input value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} placeholder="例如：效果渲染" />
+                  <input
+                    list="admin-prompt-category-options"
+                    value={draft.category}
+                    onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}
+                    placeholder="例如：效果渲染"
+                  />
+                  <datalist id="admin-prompt-category-options">
+                    {categoryOptions.map((item) => (
+                      <option key={item} value={item} />
+                    ))}
+                  </datalist>
                 </label>
                 <label className="composer-menu-field">
                   <span>二级分类</span>
-                  <input value={draft.subcategory} onChange={(event) => setDraft((current) => ({ ...current, subcategory: event.target.value }))} placeholder="例如：建筑渲染" />
+                  <input
+                    list="admin-prompt-subcategory-options"
+                    value={draft.subcategory}
+                    onChange={(event) => setDraft((current) => ({ ...current, subcategory: event.target.value }))}
+                    placeholder="例如：建筑渲染"
+                  />
+                  <datalist id="admin-prompt-subcategory-options">
+                    {subcategoryOptions.map((item) => (
+                      <option key={item} value={item} />
+                    ))}
+                  </datalist>
                 </label>
                 <label className="composer-menu-field">
                   <span>热度推荐</span>

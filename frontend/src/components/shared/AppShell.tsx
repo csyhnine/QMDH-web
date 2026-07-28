@@ -6,7 +6,7 @@ import GuestLoginBanner from "../../features/studio/GuestLoginBanner";
 import { BrandIcon } from "./Brand";
 import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from "../../features/access/roleAccess";
 
-type StudioTab = "generate" | "inspiration" | "feedback" | "chat" | "canvas";
+type StudioTab = "generate" | "inspiration" | "feedback" | "chat" | "canvas" | "nav";
 type AdminTab = AdminModuleKey;
 
 type AppShellProps =
@@ -32,6 +32,8 @@ const adminNavItems: Array<{ key: AdminTab; label: string; path: string }> = [
   { key: "models", label: "模型", path: "/admin/models" },
   { key: "templates", label: "模板", path: "/admin/templates" },
   { key: "canvas-templates", label: "画布模板", path: "/admin/canvas-templates" },
+  { key: "announcements", label: "公告", path: "/admin/announcements" },
+  { key: "ai-tools", label: "工具导航", path: "/admin/ai-tools" },
   { key: "agents", label: "助手能力", path: "/admin/agents" },
   { key: "users", label: "账号", path: "/admin/users" },
   { key: "settings", label: "设置", path: "/admin/settings" },
@@ -44,6 +46,7 @@ const studioNavItems: Array<{ key: Exclude<StudioTab, "generate"> | "generate"; 
   ...(isStudioCanvasEnabled
     ? ([{ key: "canvas" as const, label: "无限画布", path: "/studio/canvas" }] as const)
     : []),
+  { key: "nav", label: "导航", path: "/studio/nav" },
   { key: "chat", label: "对话", path: "/studio/chat" },
 ];
 

@@ -588,6 +588,56 @@ export type CanvasTemplateCreatePayload = {
 
 export type CanvasTemplateUpdatePayload = Partial<CanvasTemplateCreatePayload>;
 
+export type SiteAnnouncementRecord = {
+  id: number;
+  title: string;
+  body: string;
+  is_active: boolean;
+  starts_at: string;
+  ends_at: string;
+  priority: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SiteAnnouncementCreatePayload = {
+  title: string;
+  body: string;
+  is_active?: boolean;
+  starts_at: string;
+  ends_at: string;
+  priority?: number;
+};
+
+export type SiteAnnouncementUpdatePayload = Partial<SiteAnnouncementCreatePayload>;
+
+export type AiToolRecord = {
+  id: number;
+  name: string;
+  description: string;
+  url: string;
+  category: string;
+  cover_image_path: string;
+  is_featured: boolean;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AiToolCreatePayload = {
+  name: string;
+  description?: string;
+  url: string;
+  category?: string;
+  cover_image_path?: string;
+  is_featured?: boolean;
+  sort_order?: number;
+  is_active?: boolean;
+};
+
+export type AiToolUpdatePayload = Partial<AiToolCreatePayload>;
+
 export type PromptTemplateCreatePayload = {
   category: string;
   subcategory: string;
@@ -1174,6 +1224,21 @@ export const api = {
     patchJson<CanvasTemplateRecord>(`/canvas-templates/admin/${templateId}`, payload),
   deleteAdminCanvasTemplate: (templateId: number) =>
     deleteRequest(`/canvas-templates/admin/${templateId}`),
+  activeAnnouncement: () => request<SiteAnnouncementRecord | null>("/announcements/active"),
+  adminAnnouncements: () => request<SiteAnnouncementRecord[]>("/announcements/admin"),
+  createAdminAnnouncement: (payload: SiteAnnouncementCreatePayload) =>
+    postJson<SiteAnnouncementRecord>("/announcements/admin", payload),
+  updateAdminAnnouncement: (announcementId: number, payload: SiteAnnouncementUpdatePayload) =>
+    patchJson<SiteAnnouncementRecord>(`/announcements/admin/${announcementId}`, payload),
+  deleteAdminAnnouncement: (announcementId: number) =>
+    deleteRequest(`/announcements/admin/${announcementId}`),
+  aiTools: () => request<AiToolRecord[]>("/ai-tools"),
+  adminAiTools: () => request<AiToolRecord[]>("/ai-tools/admin"),
+  createAdminAiTool: (payload: AiToolCreatePayload) =>
+    postJson<AiToolRecord>("/ai-tools/admin", payload),
+  updateAdminAiTool: (toolId: number, payload: AiToolUpdatePayload) =>
+    patchJson<AiToolRecord>(`/ai-tools/admin/${toolId}`, payload),
+  deleteAdminAiTool: (toolId: number) => deleteRequest(`/ai-tools/admin/${toolId}`),
   providers: () => request<Provider[]>("/providers"),
   providerProfiles: () => request<ProviderProfileRecord[]>("/providers/profiles"),
   providerPricingRules: () => request<ProviderPricingRuleRecord[]>("/providers/pricing-rules"),

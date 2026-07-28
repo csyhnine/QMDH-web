@@ -8,11 +8,20 @@ export type AdminModuleKey =
   | "models"
   | "templates"
   | "canvas-templates"
+  | "announcements"
+  | "ai-tools"
   | "agents"
   | "users"
   | "settings";
 
-const OPS_ALLOWED_MODULES = new Set<AdminModuleKey>(["inspiration", "feedback", "templates", "canvas-templates"]);
+const OPS_ALLOWED_MODULES = new Set<AdminModuleKey>([
+  "inspiration",
+  "feedback",
+  "templates",
+  "canvas-templates",
+  "announcements",
+  "ai-tools",
+]);
 
 export function normalizeUserRole(role: string | undefined | null): UserRole {
   const normalized = (role || "").trim().toLowerCase();

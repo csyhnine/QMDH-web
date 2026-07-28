@@ -23,7 +23,9 @@ import "@xyflow/react/dist/style.css";
 import GenerateNode from "./GenerateNode";
 import GroupNode from "./GroupNode";
 import NoteNode from "./NoteNode";
+import CanvasEdge from "./CanvasEdge";
 import CanvasContextMenu from "./CanvasContextMenu";
+import { CanvasEdgeInteractionProvider } from "./canvasEdgeContext";
 import {
   createBlankGenerateNode,
   createBlankNoteNode,
@@ -35,6 +37,10 @@ const nodeTypes = {
   generate: GenerateNode,
   group: GroupNode,
   note: NoteNode,
+};
+
+const edgeTypes = {
+  default: CanvasEdge,
 };
 
 type ConnectFrom = {
@@ -282,40 +288,44 @@ function CanvasBoardInner({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <ReactFlow
-        key={boardKey}
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        onNodesChange={disabled ? undefined : onNodesChange}
-        onEdgesChange={disabled ? undefined : onEdgesChange}
-        onConnect={disabled ? undefined : onConnect}
-        onConnectEnd={disabled ? undefined : onConnectEnd}
-        onMoveEnd={onMoveEnd}
-        onSelectionChange={onSelectionChange}
-        onPaneContextMenu={onPaneContextMenu}
-        onPaneClick={onPaneClick}
-        onDoubleClick={onPaneDoubleClick}
-        defaultViewport={defaultViewport}
-        minZoom={0.2}
-        maxZoom={2}
-        deleteKeyCode={disabled ? null : "Delete"}
-        multiSelectionKeyCode={disabled ? null : ["Meta", "Control"]}
-        selectionOnDrag={!disabled}
-        selectionMode={SelectionMode.Partial}
-        panOnDrag={disabled ? true : [1, 2]}
-        panOnScroll
-        zoomOnDoubleClick={false}
-        nodesDraggable={!disabled}
-        nodesConnectable={!disabled}
-        elementsSelectable={!disabled}
-        proOptions={{ hideAttribution: true }}
-        style={{ width: "100%", height: "100%" }}
-      >
-        <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
-        <Controls showInteractive={!disabled} />
-        <MiniMap pannable zoomable />
-      </ReactFlow>
+      <CanvasEdgeInteractionProvider disabled={Boolean(disabled)}>
+        <ReactFlow
+          key={boardKey}
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onNodesChange={disabled ? undefined : onNodesChange}
+          onEdgesChange={disabled ? undefined : onEdgesChange}
+          onConnect={disabled ? undefined : onConnect}
+          onConnectEnd={disabled ? undefined : onConnectEnd}
+          onMoveEnd={onMoveEnd}
+          onSelectionChange={onSelectionChange}
+          onPaneContextMenu={onPaneContextMenu}
+          onPaneClick={onPaneClick}
+          onDoubleClick={onPaneDoubleClick}
+          defaultViewport={defaultViewport}
+          minZoom={0.2}
+          maxZoom={2}
+          deleteKeyCode={disabled ? null : "Delete"}
+          multiSelectionKeyCode={disabled ? null : ["Meta", "Control"]}
+          selectionOnDrag={!disabled}
+          selectionMode={SelectionMode.Partial}
+          panOnDrag={disabled ? true : [1, 2]}
+          panOnScroll
+          zoomOnDoubleClick={false}
+          nodesDraggable={!disabled}
+          nodesConnectable={!disabled}
+          elementsSelectable={!disabled}
+          edgesFocusable={!disabled}
+          proOptions={{ hideAttribution: true }}
+          style={{ width: "100%", height: "100%" }}
+        >
+          <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
+          <Controls showInteractive={!disabled} />
+          <MiniMap pannable zoomable />
+        </ReactFlow>
+      </CanvasEdgeInteractionProvider>
       {dragOver ? <div className="qmdh-canvas-drop-overlay">松开以创建「上传图片」节点</div> : null}
       {menu ? (
         <CanvasContextMenu

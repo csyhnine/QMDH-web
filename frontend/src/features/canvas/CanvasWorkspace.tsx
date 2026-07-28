@@ -10,7 +10,7 @@ import {
   type Viewport,
 } from "@xyflow/react";
 
-import { api, type CanvasTemplateSummary, type Provider } from "../../api";
+import { api, type CanvasGraphJson, type CanvasTemplateSummary, type Provider } from "../../api";
 import MediaCompareSlider from "../../components/shared/MediaCompareSlider";
 import { useAuth } from "../../context/AuthContext";
 import { isRuntimeUpscaleProvider, publicProviderDisplayName } from "../studio/modelAdminUtils";
@@ -45,7 +45,47 @@ import type {
 import { isGenerateNode, isGroupNode } from "./canvasTypes";
 import { graphFromActiveProject, useCanvasProject } from "./useCanvasProject";
 import { graphFromTemplate, useCanvasTemplateEditor } from "./useCanvasTemplateEditor";
-import { resumeCanvasNodeTaskPolls, syncCanvasNodeTask, useCanvasNodeGenerate, isResumableCanvasNodeTask } from "./useCanvasNodeGenerate";
+import {
+  resumeCanvasNodeTaskPolls,
+  syncCanvasNodeTask,
+  useCanvasNodeGenerate,
+  isResumableCanvasNodeTask,
+  type PatchNodeOptions,
+} from "./useCanvasNodeGenerate";
+import { cloneCanvasSnapshot, useCanvasHistory } from "./useCanvasHistory";
+import PublishCanvasTemplateDialog from "./PublishCanvasTemplateDialog";
+
+const CONTENT_HISTORY_DEBOUNCE_MS = 400;
+
+const DEBOUNCED_GENERATE_KEYS = new Set<keyof GenerateNodeData>([
+  "prompt",
+  "style",
+  "aspectRatio",
+  "resolution",
+  "label",
+  "classification",
+  "creationMode",
+  "requestedProvider",
+  "projectCode",
+  "upscaleStyle",
+  "upscaleNoise",
+  "upscaleScale",
+  "annotationTool",
+  "annotationColor",
+  "annotationWidth",
+  "annotationOpacity",
+]);
+
+function isDebouncedGeneratePatch(patch: Partial<GenerateNodeData>): boolean {
+  const keys = Object.keys(patch) as (keyof GenerateNodeData)[];
+  return keys.length > 0 && keys.every((key) => DEBOUNCED_GENERATE_KEYS.has(key));
+}
+
+function isStatusOnlyGeneratePatch(patch: Partial<GenerateNodeData>): boolean {
+  const keys = Object.keys(patch);
+  if (keys.length === 0) return false;
+  return keys.every((key) => key === "status" || key === "errorMessage" || key === "taskId");
+}
 
 type CanvasWorkspaceProps = {
   editTemplateId?: number;
@@ -66,7 +106,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   const [templates, setTemplates] = useState<CanvasTemplateSummary[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [applyingTemplateId, setApplyingTemplateId] = useState<number | null>(null);
-  const [publishingTemplate, setPublishingTemplate] = useState(false);
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [bannerOk, setBannerOk] = useState("");
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [bannerError, setBannerError] = useState("");
@@ -77,6 +117,13 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   const [runningAll, setRunningAll] = useState(false);
   const clipboardRef = useRef<{ nodes: CanvasFlowNode[]; edges: Edge[] } | null>(null);
   const runningAllRef = useRef(false);
+  const history = useCanvasHistory();
+  const interactionBaselineRef = useRef<ReturnType<typeof cloneCanvasSnapshot> | null>(null);
+  const contentHistoryArmedRef = useRef(false);
+  const contentHistoryTimerRef = useRef<number | null>(null);
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  const viewportRef = useRef(viewport);
 
   const sessionLoading = isTemplateMode ? templateEditor.loading : canvas.loading;
   const sessionSaving = isTemplateMode ? templateEditor.saving : canvas.saving;
@@ -89,8 +136,19 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     : canvas.activeProject?.title || "无限画布";
 
   useEffect(() => {
+    if (contentHistoryTimerRef.current != null) {
+      window.clearTimeout(contentHistoryTimerRef.current);
+      contentHistoryTimerRef.current = null;
+    }
+    contentHistoryArmedRef.current = false;
+    interactionBaselineRef.current = null;
+    history.clear();
+
     if (isTemplateMode) {
       const graph = graphFromTemplate(templateEditor.template);
+      nodesRef.current = graph.nodes;
+      edgesRef.current = graph.edges;
+      viewportRef.current = graph.viewport;
       setNodes(graph.nodes);
       setEdges(graph.edges);
       setViewport(graph.viewport);
@@ -98,11 +156,14 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
       return;
     }
     const graph = graphFromActiveProject(canvas.activeProject);
+    nodesRef.current = graph.nodes;
+    edgesRef.current = graph.edges;
+    viewportRef.current = graph.viewport;
     setNodes(graph.nodes);
     setEdges(graph.edges);
     setViewport(graph.viewport);
     setSelectedNodeIds([]);
-  }, [isTemplateMode, canvas.activeProject?.id, templateEditor.template?.id]);
+  }, [isTemplateMode, canvas.activeProject?.id, templateEditor.template?.id, history.clear]);
 
   useEffect(() => {
     if (isGuest) return;
@@ -142,101 +203,242 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     [canvas.queueSaveGraph, isTemplateMode, templateEditor.queueSaveGraph]
   );
 
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
+  useEffect(() => {
+    viewportRef.current = viewport;
+  }, [viewport]);
+
+  const flushContentHistorySession = useCallback(() => {
+    contentHistoryArmedRef.current = false;
+    if (contentHistoryTimerRef.current != null) {
+      window.clearTimeout(contentHistoryTimerRef.current);
+      contentHistoryTimerRef.current = null;
+    }
+  }, []);
+
+  const armContentHistory = useCallback(() => {
+    if (!contentHistoryArmedRef.current) {
+      history.push(nodesRef.current, edgesRef.current);
+      contentHistoryArmedRef.current = true;
+    }
+    if (contentHistoryTimerRef.current != null) {
+      window.clearTimeout(contentHistoryTimerRef.current);
+    }
+    contentHistoryTimerRef.current = window.setTimeout(() => {
+      contentHistoryArmedRef.current = false;
+      contentHistoryTimerRef.current = null;
+    }, CONTENT_HISTORY_DEBOUNCE_MS);
+  }, [history]);
+
+  const applyGraph = useCallback(
+    (
+      nextNodes: CanvasFlowNode[],
+      nextEdges: Edge[],
+      options?: { recordHistory?: boolean }
+    ) => {
+      const recordHistory = options?.recordHistory !== false;
+      if (recordHistory) {
+        flushContentHistorySession();
+        history.push(nodesRef.current, edgesRef.current);
+      }
+      nodesRef.current = nextNodes;
+      edgesRef.current = nextEdges;
+      setNodes(nextNodes);
+      setEdges(nextEdges);
+      persistGraph(nextNodes, nextEdges, viewportRef.current);
+    },
+    [flushContentHistorySession, history, persistGraph]
+  );
+
+  const restoreGraph = useCallback(
+    (snapshot: { nodes: CanvasFlowNode[]; edges: Edge[] }) => {
+      history.isRestoringRef.current = true;
+      flushContentHistorySession();
+      interactionBaselineRef.current = null;
+      nodesRef.current = snapshot.nodes;
+      edgesRef.current = snapshot.edges;
+      setNodes(snapshot.nodes);
+      setEdges(snapshot.edges);
+      persistGraph(snapshot.nodes, snapshot.edges, viewportRef.current);
+      queueMicrotask(() => {
+        history.isRestoringRef.current = false;
+      });
+    },
+    [flushContentHistorySession, history, persistGraph]
+  );
+
+  const onUndo = useCallback(() => {
+    if (sessionLoading || runningAllRef.current) return;
+    const previous = history.undo({ nodes: nodesRef.current, edges: edgesRef.current });
+    if (!previous) return;
+    restoreGraph(previous);
+  }, [history, restoreGraph, sessionLoading]);
+
+  const onRedo = useCallback(() => {
+    if (sessionLoading || runningAllRef.current) return;
+    const next = history.redo({ nodes: nodesRef.current, edges: edgesRef.current });
+    if (!next) return;
+    restoreGraph(next);
+  }, [history, restoreGraph, sessionLoading]);
+
   const onNodesChange = useCallback(
     (changes: NodeChange<CanvasFlowNode>[]) => {
+      const onlySelect = changes.length > 0 && changes.every((change) => change.type === "select");
+      const startingDrag = changes.some(
+        (change) => change.type === "position" && change.dragging === true
+      );
+      const endingDrag = changes.some(
+        (change) => change.type === "position" && change.dragging === false
+      );
+      const startingResize = changes.some(
+        (change) => change.type === "dimensions" && change.resizing === true
+      );
+      const endingResize = changes.some(
+        (change) => change.type === "dimensions" && change.resizing === false
+      );
+      const structural = changes.some(
+        (change) => change.type === "remove" || change.type === "add" || change.type === "replace"
+      );
+
       setNodes((current) => {
+        if ((startingDrag || startingResize) && !interactionBaselineRef.current) {
+          interactionBaselineRef.current = cloneCanvasSnapshot(current, edgesRef.current);
+        }
+
         const next = applyNodeChanges(changes, current);
-        persistGraph(next, edges, viewport);
+
+        if (onlySelect) {
+          nodesRef.current = next;
+          persistGraph(next, edgesRef.current, viewportRef.current);
+          return next;
+        }
+
+        if (endingDrag || endingResize) {
+          if (interactionBaselineRef.current) {
+            flushContentHistorySession();
+            history.pushSnapshot(interactionBaselineRef.current);
+            interactionBaselineRef.current = null;
+          }
+          nodesRef.current = next;
+          persistGraph(next, edgesRef.current, viewportRef.current);
+          return next;
+        }
+
+        if (interactionBaselineRef.current) {
+          nodesRef.current = next;
+          persistGraph(next, edgesRef.current, viewportRef.current);
+          return next;
+        }
+
+        if (structural) {
+          flushContentHistorySession();
+          history.push(current, edgesRef.current);
+        }
+
+        nodesRef.current = next;
+        persistGraph(next, edgesRef.current, viewportRef.current);
         return next;
       });
     },
-    [edges, persistGraph, viewport]
+    [flushContentHistorySession, history, persistGraph]
   );
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
+      const meaningful = changes.some((change) => change.type !== "select");
       setEdges((current) => {
         const next = applyEdgeChanges(changes, current);
-        persistGraph(nodes, next, viewport);
+        if (meaningful) {
+          flushContentHistorySession();
+          history.push(nodesRef.current, current);
+        }
+        edgesRef.current = next;
+        persistGraph(nodesRef.current, next, viewportRef.current);
         return next;
       });
     },
-    [nodes, persistGraph, viewport]
+    [flushContentHistorySession, history, persistGraph]
   );
 
   const onEdgesReplace = useCallback(
     (next: Edge[]) => {
-      setEdges(next);
-      persistGraph(nodes, next, viewport);
+      applyGraph(nodesRef.current, next);
     },
-    [nodes, persistGraph, viewport]
+    [applyGraph]
   );
 
   const onAddNode = useCallback(
     (node: CanvasFlowNode) => {
-      setNodes((current) => {
-        const next = current.concat(node);
-        persistGraph(next, edges, viewport);
-        return next;
-      });
+      applyGraph(nodesRef.current.concat(node), edgesRef.current);
       setSelectedNodeIds([node.id]);
     },
-    [edges, persistGraph, viewport]
+    [applyGraph]
   );
 
   const onAddConnectedNode = useCallback(
     (node: CanvasFlowNode, connection: { source: string; target: string }) => {
-      setNodes((currentNodes) => {
-        const nextNodes = currentNodes.concat(node);
-        setEdges((currentEdges) => {
-          const nextEdges = addEdge(
-            {
-              ...connection,
-              id: `e-${connection.source}-${connection.target}-${Date.now()}`,
-            },
-            currentEdges
-          );
-          persistGraph(nextNodes, nextEdges, viewport);
-          return nextEdges;
-        });
-        return nextNodes;
-      });
+      const nextNodes = nodesRef.current.concat(node);
+      const nextEdges = addEdge(
+        {
+          ...connection,
+          id: `e-${connection.source}-${connection.target}-${Date.now()}`,
+        },
+        edgesRef.current
+      );
+      applyGraph(nextNodes, nextEdges);
       setSelectedNodeIds([node.id]);
     },
-    [persistGraph, viewport]
+    [applyGraph]
   );
 
   const onViewportChange = useCallback(
     (next: Viewport) => {
+      viewportRef.current = next;
       setViewport(next);
-      persistGraph(nodes, edges, next);
+      persistGraph(nodesRef.current, edgesRef.current, next);
     },
-    [edges, nodes, persistGraph]
+    [persistGraph]
   );
 
   const patchNode = useCallback(
-    (nodeId: string, patch: Partial<GenerateNodeData>) => {
+    (nodeId: string, patch: Partial<GenerateNodeData>, options?: PatchNodeOptions) => {
+      const recordHistory = options?.recordHistory !== false;
+      if (recordHistory) {
+        if (isDebouncedGeneratePatch(patch)) {
+          armContentHistory();
+        } else if (!isStatusOnlyGeneratePatch(patch)) {
+          flushContentHistorySession();
+          history.push(nodesRef.current, edgesRef.current);
+        }
+      }
+
       setNodes((current) => {
         const next = current.map((node) =>
           node.id === nodeId && isGenerateNode(node)
             ? { ...node, data: { ...node.data, ...patch } }
             : node
         );
-        persistGraph(next, edges, viewport);
+        nodesRef.current = next;
+        persistGraph(next, edgesRef.current, viewportRef.current);
         return next;
       });
     },
-    [edges, persistGraph, viewport]
+    [armContentHistory, flushContentHistorySession, history, persistGraph]
   );
 
   const patchNodeRef = useRef(patchNode);
-  const nodesRef = useRef(nodes);
   useEffect(() => {
     patchNodeRef.current = patchNode;
   }, [patchNode]);
-  useEffect(() => {
-    nodesRef.current = nodes;
-  }, [nodes]);
+
+  const patchNodeSilent = useCallback((nodeId: string, patch: Partial<GenerateNodeData>) => {
+    patchNodeRef.current(nodeId, patch, { recordHistory: false });
+  }, []);
 
   const pendingTaskFingerprint = useMemo(
     () =>
@@ -252,22 +454,33 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   // Leaving canvas unmounts the page and kills in-flight pollers; resume any stuck tasks.
   useEffect(() => {
     if (sessionLoading) return;
-    resumeCanvasNodeTaskPolls(nodesRef.current, (nodeId, patch) => patchNodeRef.current(nodeId, patch));
-  }, [boardKey, sessionLoading, pendingTaskFingerprint]);
+    resumeCanvasNodeTaskPolls(nodesRef.current, patchNodeSilent);
+  }, [boardKey, sessionLoading, pendingTaskFingerprint, patchNodeSilent]);
 
   const patchNoteNode = useCallback(
-    (nodeId: string, patch: Partial<NoteNodeData>) => {
+    (nodeId: string, patch: Partial<NoteNodeData>, options?: PatchNodeOptions) => {
+      const recordHistory = options?.recordHistory !== false;
+      if (recordHistory) {
+        if (Object.keys(patch).every((key) => key === "text")) {
+          armContentHistory();
+        } else {
+          flushContentHistorySession();
+          history.push(nodesRef.current, edgesRef.current);
+        }
+      }
+
       setNodes((current) => {
         const next = current.map((node) =>
           node.id === nodeId && node.type === "note"
             ? { ...node, data: { ...node.data, ...patch } }
             : node
         );
-        persistGraph(next, edges, viewport);
+        nodesRef.current = next;
+        persistGraph(next, edgesRef.current, viewportRef.current);
         return next;
       });
     },
-    [edges, persistGraph, viewport]
+    [armContentHistory, flushContentHistorySession, history, persistGraph]
   );
 
   const canGroup = useMemo(() => {
@@ -283,63 +496,54 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   }, [nodes, selectedNodeIds]);
 
   const onGroupSelection = useCallback(() => {
-    setNodes((current) => {
-      const next = groupSelectedNodes(current, selectedNodeIds);
-      if (!next) return current;
-      persistGraph(next, edges, viewport);
-      const group = next.find((node) => isGroupNode(node) && !current.some((item) => item.id === node.id));
-      if (group) setSelectedNodeIds([group.id]);
-      return next;
-    });
-  }, [edges, persistGraph, selectedNodeIds, viewport]);
+    const current = nodesRef.current;
+    const next = groupSelectedNodes(current, selectedNodeIds);
+    if (!next) return;
+    applyGraph(next, edgesRef.current);
+    const group = next.find((node) => isGroupNode(node) && !current.some((item) => item.id === node.id));
+    if (group) setSelectedNodeIds([group.id]);
+  }, [applyGraph, selectedNodeIds]);
 
   const onUngroupSelection = useCallback(() => {
-    setNodes((current) => {
-      const next = ungroupSelectedNodes(current, selectedNodeIds);
-      if (!next) return current;
-      persistGraph(next, edges, viewport);
-      return next;
-    });
-  }, [edges, persistGraph, selectedNodeIds, viewport]);
+    const next = ungroupSelectedNodes(nodesRef.current, selectedNodeIds);
+    if (!next) return;
+    applyGraph(next, edgesRef.current);
+  }, [applyGraph, selectedNodeIds]);
 
   const canDuplicate = selectedNodeIds.length > 0;
 
   const onDuplicateSelection = useCallback(() => {
     if (sessionLoading || selectedNodeIds.length === 0) return;
-    const result = duplicateCanvasSelection(nodes, edges, selectedNodeIds);
+    const result = duplicateCanvasSelection(nodesRef.current, edgesRef.current, selectedNodeIds);
     if (!result) return;
-    setNodes(result.nodes);
-    setEdges(result.edges);
+    applyGraph(result.nodes, result.edges);
     setSelectedNodeIds(result.createdIds);
-    persistGraph(result.nodes, result.edges, viewport);
     setBannerError("");
     setBannerOk(`已复制 ${result.createdIds.length} 个节点`);
-  }, [edges, nodes, persistGraph, selectedNodeIds, sessionLoading, viewport]);
+  }, [applyGraph, selectedNodeIds, sessionLoading]);
 
   const onCopySelection = useCallback(() => {
     if (selectedNodeIds.length === 0) return;
-    const snapshot = snapshotCanvasSelection(nodes, edges, selectedNodeIds);
+    const snapshot = snapshotCanvasSelection(nodesRef.current, edgesRef.current, selectedNodeIds);
     if (!snapshot) return;
     clipboardRef.current = snapshot;
     setBannerOk(`已复制 ${snapshot.nodes.length} 个节点（Ctrl+V 粘贴）`);
     setBannerError("");
-  }, [edges, nodes, selectedNodeIds]);
+  }, [selectedNodeIds]);
 
   const onPasteSelection = useCallback(() => {
     if (sessionLoading || !clipboardRef.current) return;
-    const result = pasteCanvasSnapshot(nodes, edges, clipboardRef.current);
+    const result = pasteCanvasSnapshot(nodesRef.current, edgesRef.current, clipboardRef.current);
     if (!result) return;
-    setNodes(result.nodes);
-    setEdges(result.edges);
+    applyGraph(result.nodes, result.edges);
     setSelectedNodeIds(result.createdIds);
-    persistGraph(result.nodes, result.edges, viewport);
     setBannerError("");
     setBannerOk(`已粘贴 ${result.createdIds.length} 个节点`);
-  }, [edges, nodes, persistGraph, sessionLoading, viewport]);
+  }, [applyGraph, sessionLoading]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (sessionLoading) return;
+      if (sessionLoading || runningAllRef.current) return;
       const meta = event.metaKey || event.ctrlKey;
       if (!meta) return;
       const target = event.target as HTMLElement | null;
@@ -347,7 +551,16 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
         return;
       }
       const key = event.key.toLowerCase();
-      if (key === "g" && event.shiftKey) {
+      if (key === "z" && event.shiftKey) {
+        event.preventDefault();
+        onRedo();
+      } else if (key === "z") {
+        event.preventDefault();
+        onUndo();
+      } else if (key === "y") {
+        event.preventDefault();
+        onRedo();
+      } else if (key === "g" && event.shiftKey) {
         event.preventDefault();
         onUngroupSelection();
       } else if (key === "g") {
@@ -372,6 +585,8 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     onDuplicateSelection,
     onGroupSelection,
     onPasteSelection,
+    onRedo,
+    onUndo,
     onUngroupSelection,
   ]);
 
@@ -384,35 +599,45 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
       }
       const accepted = acceptedFiles[0];
       if (!accepted) return;
-      patchNode(nodeId, { status: "submitting", errorMessage: undefined });
+      flushContentHistorySession();
+      history.push(nodesRef.current, edgesRef.current);
+      patchNode(nodeId, { status: "submitting", errorMessage: undefined }, { recordHistory: false });
       try {
         const uploaded = await uploadReferenceFiles([accepted], api.uploadReferenceImage);
         const path = uploaded[0]?.storagePath;
         if (!path) throw new Error("上传失败");
-        patchNode(nodeId, {
-          status: "completed",
-          referenceImages: [path],
-          assetUrls: [path],
-          previewImagePath: path,
-          errorMessage: undefined,
-          ...(uploaded[0]?.fileName ? { label: `上传 · ${uploaded[0].fileName}` } : {}),
-        });
+        patchNode(
+          nodeId,
+          {
+            status: "completed",
+            referenceImages: [path],
+            assetUrls: [path],
+            previewImagePath: path,
+            errorMessage: undefined,
+            ...(uploaded[0]?.fileName ? { label: `上传 · ${uploaded[0].fileName}` } : {}),
+          },
+          { recordHistory: false }
+        );
         setBannerError("");
       } catch (err) {
-        patchNode(nodeId, {
-          status: "failed",
-          errorMessage: err instanceof Error ? err.message : "上传失败",
-        });
+        patchNode(
+          nodeId,
+          {
+            status: "failed",
+            errorMessage: err instanceof Error ? err.message : "上传失败",
+          },
+          { recordHistory: false }
+        );
       }
     },
-    [patchNode]
+    [flushContentHistorySession, history, patchNode]
   );
 
   const saveAnnotation = useCallback(
     async (nodeId: string) => {
-      const node = nodes.find((item) => item.id === nodeId);
-      if (!node || node.data.nodeKind !== "annotate") return;
-      const upstream = collectUpstreamDeliverables(nodeId, nodes, edges);
+      const node = nodesRef.current.find((item) => item.id === nodeId);
+      if (!node || !isGenerateNode(node) || node.data.nodeKind !== "annotate") return;
+      const upstream = collectUpstreamDeliverables(nodeId, nodesRef.current, edgesRef.current);
       const baseUrl =
         upstream.images[0] ||
         node.data.referenceImages[0] ||
@@ -427,28 +652,38 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
         patchNode(nodeId, { status: "failed", errorMessage: "请先在图上添加标注。" });
         return;
       }
-      patchNode(nodeId, { status: "submitting", errorMessage: undefined });
+      flushContentHistorySession();
+      history.push(nodesRef.current, edgesRef.current);
+      patchNode(nodeId, { status: "submitting", errorMessage: undefined }, { recordHistory: false });
       try {
         const dataUrlResult = await exportAnnotatedDataUrl(baseUrl, node.data.annotationStrokes);
         const uploaded = await api.uploadReferenceImage({
           file_name: dataUrlResult.fileName,
           data_url: dataUrlResult.dataUrl,
         });
-        patchNode(nodeId, {
-          status: "completed",
-          assetUrls: [uploaded.storage_path],
-          previewImagePath: uploaded.storage_path,
-          errorMessage: undefined,
-        });
+        patchNode(
+          nodeId,
+          {
+            status: "completed",
+            assetUrls: [uploaded.storage_path],
+            previewImagePath: uploaded.storage_path,
+            errorMessage: undefined,
+          },
+          { recordHistory: false }
+        );
         setBannerError("");
       } catch (err) {
-        patchNode(nodeId, {
-          status: "failed",
-          errorMessage: err instanceof Error ? err.message : "保存标注失败",
-        });
+        patchNode(
+          nodeId,
+          {
+            status: "failed",
+            errorMessage: err instanceof Error ? err.message : "保存标注失败",
+          },
+          { recordHistory: false }
+        );
       }
     },
-    [edges, nodes, patchNode]
+    [flushContentHistorySession, history, patchNode]
   );
 
   const onDropImages = useCallback(
@@ -470,21 +705,17 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
             )
           );
         });
-        setNodes((current) => {
-          const next = current.concat(created);
-          persistGraph(next, edges, viewport);
-          return next;
-        });
+        applyGraph(nodesRef.current.concat(created), edgesRef.current);
         if (created[0]) setSelectedNodeIds([created[0].id]);
         setBannerError("");
       } catch (err) {
         setBannerError(err instanceof Error ? err.message : "图片上传失败");
       }
     },
-    [edges, nodeDefaults, persistGraph, viewport]
+    [applyGraph, nodeDefaults]
   );
 
-  const runGenerate = useCanvasNodeGenerate(providers, nodes, edges, patchNode);
+  const runGenerate = useCanvasNodeGenerate(providers, nodes, edges, patchNodeSilent);
 
   const handleGenerate = useCallback(
     async (nodeId: string, data: GenerateNodeData) => {
@@ -505,9 +736,9 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
 
   const handleSyncNodeTask = useCallback(
     (nodeId: string, data: GenerateNodeData) => {
-      void syncCanvasNodeTask(nodeId, data, patchNode);
+      void syncCanvasNodeTask(nodeId, data, patchNodeSilent);
     },
-    [patchNode]
+    [patchNodeSilent]
   );
 
   const runnableCount = useMemo(
@@ -692,31 +923,15 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
 
   async function handlePublishAsTemplate() {
     if (!canvas.activeProject) return;
-    const title =
-      window.prompt("发布为模板的标题", canvas.activeProject.title)?.trim() ||
-      canvas.activeProject.title;
-    const category = window.prompt("分类（可留空）", "")?.trim() || "";
-    setPublishingTemplate(true);
     setBannerOk("");
-    try {
-      const graph_json = serializeCanvasGraph(nodes, edges, viewport);
-      const created = await api.createAdminCanvasTemplate({
-        title,
-        category,
-        description: "",
-        is_featured: false,
-        graph_json,
-        preview_image_path: "",
-      });
-      setBannerOk(`已发布模板「${title}」，正在打开模板画布…`);
-      setBannerError("");
-      navigate(`/admin/canvas-templates/${created.id}/edit`);
-    } catch (err) {
-      setBannerError(err instanceof Error ? err.message : "发布模板失败");
-    } finally {
-      setPublishingTemplate(false);
-    }
+    setBannerError("");
+    setPublishDialogOpen(true);
   }
+
+  const publishGraphJson = useMemo(
+    () => serializeCanvasGraph(nodes, edges, viewport) as CanvasGraphJson,
+    [edges, nodes, viewport]
+  );
 
   if (isGuest) {
     return (
@@ -742,7 +957,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
           </div>
           <div className="qmdh-canvas-toolbar-center">
             <span className="qmdh-canvas-toolbar-hint">
-              右键添加 · 框选 · Ctrl+C/V 复制粘贴 · Ctrl+D 原地复制 · Ctrl+G 编组 · 选中后可「运行所选」
+              右键添加 · 框选 · 悬停连线可断开 · Ctrl+Z 撤销 · Ctrl+C/V 复制粘贴 · Ctrl+D 原地复制 · Ctrl+G 编组 · 选中后可「运行所选」
             </span>
           </div>
           <div className="qmdh-canvas-toolbar-right">
@@ -779,10 +994,10 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
             {!isTemplateMode && canUseOpsViews ? (
               <button
                 type="button"
-                disabled={!canvas.activeProject || sessionLoading || publishingTemplate || runningAll}
+                disabled={!canvas.activeProject || sessionLoading || publishDialogOpen || runningAll}
                 onClick={() => void handlePublishAsTemplate()}
               >
-                {publishingTemplate ? "发布中…" : "发布为模板"}
+                发布为模板
               </button>
             ) : null}
             <button type="button" disabled={!canGroup || sessionLoading || runningAll} onClick={onGroupSelection}>
@@ -947,6 +1162,27 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
             </footer>
           </div>
         </div>
+      ) : null}
+      {!isTemplateMode && canUseOpsViews && canvas.activeProject ? (
+        <PublishCanvasTemplateDialog
+          open={publishDialogOpen}
+          defaultTitle={canvas.activeProject.title || "未命名工作流"}
+          graphJson={publishGraphJson}
+          onClose={() => setPublishDialogOpen(false)}
+          onCreated={(template) => {
+            setBannerOk(`已发布模板「${template.title}」，正在打开模板画布…`);
+            setBannerError("");
+            navigate(`/admin/canvas-templates/${template.id}/edit`);
+          }}
+          onUpdated={(template) => {
+            setBannerOk(`已覆盖更新模板「${template.title}」`);
+            setBannerError("");
+          }}
+          onError={(message) => {
+            setBannerError(message);
+            setBannerOk("");
+          }}
+        />
       ) : null}
     </CanvasNodeActionsProvider>
   );

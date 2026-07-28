@@ -1,7 +1,7 @@
 # 部署就绪 — 2026-07-28 画布 / 公告 / AI 工具导航
 
 Date: **2026-07-28**  
-GitHub `main`：**`65738c2`**（功能 `63f2e0a` + 本部署清单）  
+功能 commit：**`63f2e0a`**（拉取 `origin/main` 最新 tip 即可，须包含该 commit）  
 本机：**已 commit + push**；本工作站 **无 SSH 密钥**，无法直连 `120.79.227.11`，需在服务器执行下方命令。
 
 ## 上线内容（勿遗漏）
@@ -34,7 +34,7 @@ docker compose exec -T postgres pg_dump -U qmdh qmdh | gzip > /root/qmdh-pg-$(da
 sudo -u admin git -C /www/wwwroot/qmdh-web fetch origin main
 sudo -u admin git -C /www/wwwroot/qmdh-web pull --ff-only origin main
 sudo -u admin git -C /www/wwwroot/qmdh-web rev-parse --short HEAD
-# 期望：63f2e0a
+# 期望：65738c2
 
 cd /www/wwwroot/qmdh-web
 docker compose run --rm backend alembic upgrade head

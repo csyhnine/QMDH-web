@@ -38,12 +38,20 @@ export default function AiToolsNavPage({ tools, loading, error }: AiToolsNavPage
 
   return (
     <section className="qmdh-ai-tools-page">
+      <div className="qmdh-ai-tools-decor" aria-hidden="true" />
+
       <header className="qmdh-ai-tools-head">
-        <div>
+        <div className="qmdh-ai-tools-head-copy">
           <h1>导航</h1>
           <p>精选各类优秀 AI 工具与产品，点击卡片即可打开官网。</p>
         </div>
         <label className="qmdh-ai-tools-search">
+          <span className="qmdh-ai-tools-search-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+            </svg>
+          </span>
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -96,10 +104,13 @@ export default function AiToolsNavPage({ tools, loading, error }: AiToolsNavPage
                 ) : (
                   <span>{tool.name.slice(0, 1)}</span>
                 )}
-                {tool.is_featured ? <em className="qmdh-ai-tool-badge">精选</em> : null}
+                <em className="qmdh-ai-tool-badge">官网</em>
               </div>
               <div className="qmdh-ai-tool-body">
-                <strong>{tool.name}</strong>
+                <div className="qmdh-ai-tool-title-row">
+                  <strong>{tool.name}</strong>
+                  {tool.is_featured ? <span className="qmdh-ai-tool-featured">精选</span> : null}
+                </div>
                 <small>{categoryLabel(tool.category)}</small>
                 <p>{tool.description.trim() || "暂无简介"}</p>
               </div>

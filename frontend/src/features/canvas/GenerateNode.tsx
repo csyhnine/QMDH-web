@@ -14,6 +14,7 @@ import { CanvasDraftInput, CanvasDraftTextarea } from "./CanvasDraftField";
 import CanvasModelSelect from "./CanvasModelSelect";
 import { useCanvasNodeActions } from "./canvasNodeContext";
 import { NODE_KIND_LABEL, type GenerateNodeData } from "./canvasTypes";
+import { resolveCanvasCompareOriginalUrls } from "./canvasGraphUtils";
 import { canSyncCanvasNodeTask } from "./useCanvasNodeGenerate";
 
 type GenerateNodeProps = NodeProps<Node<GenerateNodeData, "generate">>;
@@ -58,20 +59,12 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
   const busy = data.status === "submitting" || data.status === "pending" || data.status === "running";
   const canSync = canSyncCanvasNodeTask(data);
   const resultUrl = data.assetUrls[0] || "";
-  const originalUrl =
-    data.referenceImages.find((path) => path && path !== resultUrl) ||
-    upstream.images.find((path) => path && path !== resultUrl) ||
-    "";
+  const compareUrls = resolveCanvasCompareOriginalUrls(data.referenceImages, upstream.images, resultUrl);
 
   function openPreview(url: string) {
     const isVideo = /\.(mp4|webm|mov)(\?|$)/i.test(url);
-    const canCompare =
-      !isVideo &&
-      Boolean(resultUrl) &&
-      url === resultUrl &&
-      Boolean(originalUrl) &&
-      originalUrl !== resultUrl;
-    previewMedia(url, canCompare ? originalUrl : null);
+    const canCompare = !isVideo && Boolean(resultUrl) && url === resultUrl && compareUrls.length > 0;
+    previewMedia(url, canCompare ? compareUrls : null);
   }
   const needsInput = data.nodeKind === "img2img" || isUpscale || isAnnotate;
   const hasUpstreamMedia = upstream.images.length > 0 || upstream.videos.length > 0;

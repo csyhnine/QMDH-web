@@ -1,7 +1,7 @@
 import { useState } from "react";
 
-import MediaCompareSlider from "../../components/shared/MediaCompareSlider";
-import { resolveStudioCompareOriginalUrl } from "./studioCompareUtils";
+import MediaComparePanel from "../../components/shared/MediaComparePanel";
+import { listStudioCompareOriginalUrls } from "./studioCompareUtils";
 import { downloadMediaUrl } from "./studioMediaDownload";
 import type { StudioGalleryPreviewLightboxProps } from "./studioMediaLightboxTypes";
 import { isVideoAsset } from "./studioUtils";
@@ -16,9 +16,10 @@ export default function StudioGalleryPreviewLightbox({
   const [downloading, setDownloading] = useState(false);
   const videoAsset = isVideoAsset(galleryPreview.asset);
   const canUseAsReference = !videoAsset && Boolean(onUseAsReference);
-  const compareUrl =
-    !videoAsset ? resolveStudioCompareOriginalUrl(galleryPreview.task, previewUrl) : null;
-  const showCompare = Boolean(compareUrl);
+  const compareUrls = !videoAsset
+    ? listStudioCompareOriginalUrls(galleryPreview.task, previewUrl)
+    : [];
+  const showCompare = compareUrls.length > 0;
 
   const handleDownload = async () => {
     if (downloading) return;
@@ -56,8 +57,8 @@ export default function StudioGalleryPreviewLightbox({
         <div className={`media-lightbox-body${showCompare ? " is-compare" : ""}`}>
           {videoAsset ? (
             <video src={previewUrl} controls autoPlay playsInline />
-          ) : showCompare && compareUrl ? (
-            <MediaCompareSlider leftSrc={previewUrl} rightSrc={compareUrl} />
+          ) : showCompare ? (
+            <MediaComparePanel leftSrc={previewUrl} rightSrcs={compareUrls} />
           ) : (
             <img src={previewUrl} alt="" />
           )}

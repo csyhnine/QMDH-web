@@ -17,6 +17,7 @@ import {
   type OnMoveEnd,
   type OnSelectionChangeFunc,
   type Viewport,
+  type XYPosition,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -32,6 +33,9 @@ import {
   type CanvasNodeDefaults,
 } from "./canvasGraphUtils";
 import type { CanvasFlowNode, CanvasNodeKind } from "./canvasTypes";
+
+const FIT_VIEW_OPTIONS = { padding: 0.2, duration: 240 } as const;
+const MIDDLE_DOUBLE_MS = 380;
 
 const nodeTypes = {
   generate: GenerateNode,
@@ -109,9 +113,11 @@ function CanvasBoardInner({
   onViewportChange,
   onSelectedNodeIdsChange,
 }: CanvasBoardProps) {
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView, setCenter, getZoom, getNodes } = useReactFlow();
+  const boardInnerRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<BoardMenu | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const lastMiddleClickRef = useRef(0);
 
   useEffect(() => {
     if (!menu) return;
@@ -122,6 +128,51 @@ function CanvasBoardInner({
     return () => window.removeEventListener("keydown", onKey);
   }, [menu]);
 
+  const fitToNodes = useCallback(() => {
+    if (getNodes().length === 0) return;
+    void fitView(FIT_VIEW_OPTIONS);
+  }, [fitView, getNodes]);
+
+  /** Board remount (enter project/template): center viewport on nodes. */
+  const onFlowInit = useCallback(() => {
+    window.setTimeout(() => fitToNodes(), 40);
+  }, [fitToNodes]);
+
+  /** Double middle-click on the pane triggers the fit-view control. */
+  useEffect(() => {
+    const root = boardInnerRef.current;
+    if (!root) return;
+
+    function onPointerDown(event: PointerEvent) {
+      if (event.button !== 1) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(".react-flow__minimap, .react-flow__controls, .qmdh-canvas-context-menu")
+      ) {
+        return;
+      }
+      const now = Date.now();
+      if (now - lastMiddleClickRef.current < MIDDLE_DOUBLE_MS) {
+        event.preventDefault();
+        event.stopPropagation();
+        lastMiddleClickRef.current = 0;
+        fitToNodes();
+        return;
+      }
+      lastMiddleClickRef.current = now;
+    }
+
+    root.addEventListener("pointerdown", onPointerDown, true);
+    return () => root.removeEventListener("pointerdown", onPointerDown, true);
+  }, [fitToNodes]);
+
+  const onMiniMapClick = useCallback(
+    (_event: ReactMouseEvent, position: XYPosition) => {
+      setCenter(position.x, position.y, { zoom: getZoom(), duration: 160 });
+    },
+    [getZoom, setCenter]
+  );
   const onConnect = useCallback(
     (connection: Connection) => {
       onEdgesReplace(
@@ -283,6 +334,7 @@ function CanvasBoardInner({
 
   return (
     <div
+      ref={boardInnerRef}
       className={`qmdh-canvas-board-inner${dragOver ? " is-file-drag" : ""}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -304,6 +356,7 @@ function CanvasBoardInner({
           onPaneContextMenu={onPaneContextMenu}
           onPaneClick={onPaneClick}
           onDoubleClick={onPaneDoubleClick}
+          onInit={onFlowInit}
           defaultViewport={defaultViewport}
           minZoom={0.2}
           maxZoom={2}
@@ -322,8 +375,19 @@ function CanvasBoardInner({
           style={{ width: "100%", height: "100%" }}
         >
           <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
-          <Controls showInteractive={!disabled} />
-          <MiniMap pannable zoomable />
+          <Controls showInteractive={!disabled} fitViewOptions={FIT_VIEW_OPTIONS} />
+          <MiniMap
+            className="qmdh-canvas-minimap"
+            pannable
+            zoomable
+            ariaLabel="画布缩略图，拖拽或点击可移动视角"
+            onClick={onMiniMapClick}
+            maskColor="rgba(15, 23, 42, 0.18)"
+            maskStrokeColor="rgba(37, 99, 235, 0.9)"
+            maskStrokeWidth={2}
+            nodeStrokeWidth={2}
+            style={{ width: 176, height: 128 }}
+          />
         </ReactFlow>
       </CanvasEdgeInteractionProvider>
       {dragOver ? <div className="qmdh-canvas-drop-overlay">松开以创建「上传图片」节点</div> : null}

@@ -12,7 +12,7 @@ import { findUpscaleProvider } from "../studio/studioUpscaleActions";
 import { resolveStudioProviderForForm } from "../studio/studioTaskFormUtils";
 import { buildTaskSubmissionPayload } from "../studio/studioTaskSubmissionActions";
 import type { StudioFormState } from "../studio/studioTypes";
-import { collectUpstreamDeliverables } from "./canvasGraphUtils";
+import { collectUpstreamDeliverables, resolveCanvasInputReferenceImages } from "./canvasGraphUtils";
 import type { CanvasFlowNode, GenerateNodeData } from "./canvasTypes";
 import { isGenerateNode } from "./canvasTypes";
 
@@ -301,9 +301,7 @@ export function useCanvasNodeGenerate(
       const patch = patchNodeRef.current;
 
       const upstream = collectUpstreamDeliverables(nodeId, currentNodes, currentEdges);
-      const referenceImages = Array.from(
-        new Set([...data.referenceImages, ...upstream.images].filter(Boolean))
-      );
+      const referenceImages = resolveCanvasInputReferenceImages(data.referenceImages, upstream.images);
 
       if (data.nodeKind === "img2img" && referenceImages.length === 0) {
         patch(nodeId, {

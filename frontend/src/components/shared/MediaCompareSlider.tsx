@@ -10,9 +10,36 @@ export type MediaCompareSliderProps = {
   className?: string;
 };
 
+type NatSize = { w: number; h: number };
+
+function loadImageSize(src: string): Promise<NatSize | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve({
+        w: Math.max(1, img.naturalWidth),
+        h: Math.max(1, img.naturalHeight),
+      });
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+function fitInto(maxW: number, maxH: number, natW: number, natH: number): NatSize {
+  const scale = Math.min(maxW / natW, maxH / natH);
+  return {
+    w: Math.max(240, Math.round(natW * scale)),
+    h: Math.max(160, Math.round(natH * scale)),
+  };
+}
+
 /**
  * Before/after style compare: left of the handle shows the generated image,
  * right of the handle shows the original. Drag the center handle to reveal.
+ *
+ * Viewport is sized to the generated image so it fills the stage; the original
+ * shares that frame with object-fit:contain (may letterbox if aspect differs).
  */
 export default function MediaCompareSlider({
   leftSrc,
@@ -24,7 +51,7 @@ export default function MediaCompareSlider({
   const rootRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const [position, setPosition] = useState(50);
-  const [boxSize, setBoxSize] = useState<{ w: number; h: number } | null>(null);
+  const [boxSize, setBoxSize] = useState<NatSize | null>(null);
 
   const updateFromClientX = useCallback((clientX: number) => {
     const root = rootRef.current;
@@ -37,27 +64,31 @@ export default function MediaCompareSlider({
 
   useEffect(() => {
     let cancelled = false;
-    const img = new Image();
-    img.onload = () => {
-      if (cancelled) return;
-      const natW = Math.max(1, img.naturalWidth);
-      const natH = Math.max(1, img.naturalHeight);
+    setBoxSize(null);
+
+    void (async () => {
       const maxW = Math.min(1200, typeof window !== "undefined" ? window.innerWidth - 96 : 1200);
-      const maxH = Math.min(780, typeof window !== "undefined" ? window.innerHeight * 0.72 : 780);
-      const scale = Math.min(1, maxW / natW, maxH / natH);
-      setBoxSize({
-        w: Math.max(240, Math.round(natW * scale)),
-        h: Math.max(160, Math.round(natH * scale)),
-      });
-    };
-    img.onerror = () => {
-      if (!cancelled) setBoxSize({ w: 960, h: 540 });
-    };
-    img.src = leftSrc;
+      const maxH = Math.min(680, typeof window !== "undefined" ? window.innerHeight * 0.62 : 680);
+      // Prefer generated image for stage size so the result fills the compare frame.
+      const left = await loadImageSize(leftSrc);
+      if (cancelled) return;
+      if (left) {
+        setBoxSize(fitInto(maxW, maxH, left.w, left.h));
+        return;
+      }
+      const right = await loadImageSize(rightSrc);
+      if (cancelled) return;
+      if (right) {
+        setBoxSize(fitInto(maxW, maxH, right.w, right.h));
+        return;
+      }
+      setBoxSize({ w: 960, h: 540 });
+    })();
+
     return () => {
       cancelled = true;
     };
-  }, [leftSrc]);
+  }, [leftSrc, rightSrc]);
 
   useEffect(() => {
     function onPointerMove(event: PointerEvent) {
@@ -86,7 +117,7 @@ export default function MediaCompareSlider({
       style={
         boxSize
           ? { width: boxSize.w, height: boxSize.h }
-          : { width: "min(96vw, 1200px)", aspectRatio: "16 / 9", maxHeight: "72vh" }
+          : { width: "min(96vw, 1200px)", aspectRatio: "1 / 1", maxHeight: "62vh" }
       }
       onPointerDown={(event) => {
         if (event.button !== 0) return;

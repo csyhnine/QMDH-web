@@ -394,6 +394,47 @@ function looksLikeVideoUrl(url: string): boolean {
   return /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url);
 }
 
+function uniqueImagePaths(paths: Iterable<string>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const path of paths) {
+    const trimmed = path.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
+}
+
+/**
+ * Resolve images used as generation input.
+ * When upstream edges deliver images, prefer those over stale node-local
+ * `referenceImages` left from a previous run (e.g. reconnect 3→2 after 1→2).
+ */
+export function resolveCanvasInputReferenceImages(
+  localReferenceImages: string[],
+  upstreamImages: string[]
+): string[] {
+  const upstream = uniqueImagePaths(upstreamImages);
+  if (upstream.length > 0) return upstream;
+  return uniqueImagePaths(localReferenceImages);
+}
+
+/**
+ * Originals for compare preview: prefer the snapshot baked into the node at
+ * generation time so reconnecting upstream without re-run does not rewrite history.
+ */
+export function resolveCanvasCompareOriginalUrls(
+  localReferenceImages: string[],
+  upstreamImages: string[],
+  resultUrl: string
+): string[] {
+  const skip = resultUrl.trim();
+  const preferred = uniqueImagePaths(localReferenceImages).filter((path) => path !== skip);
+  if (preferred.length > 0) return preferred;
+  return uniqueImagePaths(upstreamImages).filter((path) => path !== skip);
+}
+
 /** Collect image/video deliverables from immediate upstream nodes. */
 export function collectUpstreamDeliverables(
   nodeId: string,

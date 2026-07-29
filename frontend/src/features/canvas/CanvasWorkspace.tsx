@@ -11,10 +11,11 @@ import {
 } from "@xyflow/react";
 
 import { api, type CanvasGraphJson, type CanvasTemplateSummary, type Provider } from "../../api";
-import MediaCompareSlider from "../../components/shared/MediaCompareSlider";
+import MediaComparePanel from "../../components/shared/MediaComparePanel";
 import { useAuth } from "../../context/AuthContext";
 import { isRuntimeUpscaleProvider, publicProviderDisplayName } from "../studio/modelAdminUtils";
 import { downloadMediaUrl } from "../studio/studioMediaDownload";
+import { uniqueMediaPaths } from "../studio/studioCompareUtils";
 import { firstCanvasProviderName } from "./canvasProviderGroups";
 import { prepareReferenceUploadFiles, uploadReferenceFiles } from "../studio/studioReferenceUtils";
 import { exportAnnotatedDataUrl } from "./annotateDraw";
@@ -112,7 +113,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   const [bannerError, setBannerError] = useState("");
   const [mediaPreview, setMediaPreview] = useState<{
     url: string;
-    compareUrl?: string | null;
+    compareUrls?: string[];
   } | null>(null);
   const [runningAll, setRunningAll] = useState(false);
   const clipboardRef = useRef<{ nodes: CanvasFlowNode[]; edges: Edge[] } | null>(null);
@@ -863,8 +864,14 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
       uploadNodeImage,
       saveAnnotation,
       getUpstreamDeliverables,
-      previewMedia: (url: string, compareUrl?: string | null) =>
-        setMediaPreview({ url, compareUrl: compareUrl || null }),
+      previewMedia: (url: string, compareUrls?: string | string[] | null) => {
+        const list = Array.isArray(compareUrls)
+          ? uniqueMediaPaths(compareUrls)
+          : compareUrls
+            ? [compareUrls.trim()].filter(Boolean)
+            : [];
+        setMediaPreview({ url, compareUrls: list });
+      },
     }),
     [
       sessionLoading,
@@ -957,7 +964,8 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
           </div>
           <div className="qmdh-canvas-toolbar-center">
             <span className="qmdh-canvas-toolbar-hint">
-              右键添加 · 框选 · 悬停连线可断开 · Ctrl+Z 撤销 · Ctrl+C/V 复制粘贴 · Ctrl+D 原地复制 · Ctrl+G 编组 · 选中后可「运行所选」
+              右键添加 · 框选 · 中键双击适应视图 · 缩略图拖拽移动 · 悬停连线可断开 · Ctrl+Z 撤销 · Ctrl+C/V
+              复制粘贴 · Ctrl+D 原地复制 · Ctrl+G 编组 · 选中后可「运行所选」
             </span>
           </div>
           <div className="qmdh-canvas-toolbar-right">
@@ -1112,16 +1120,24 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
           className="media-lightbox"
           role="dialog"
           aria-modal="true"
-          aria-label={mediaPreview.compareUrl ? "画布媒体对比预览" : "画布媒体预览"}
+          aria-label={
+            mediaPreview.compareUrls && mediaPreview.compareUrls.length > 0
+              ? "画布媒体对比预览"
+              : "画布媒体预览"
+          }
           onClick={() => setMediaPreview(null)}
         >
           <div
-            className={`media-lightbox-surface${mediaPreview.compareUrl ? " is-compare" : ""}`}
+            className={`media-lightbox-surface${
+              mediaPreview.compareUrls && mediaPreview.compareUrls.length > 0 ? " is-compare" : ""
+            }`}
             onClick={(event) => event.stopPropagation()}
           >
             <header className="media-lightbox-head">
               <span className="media-lightbox-title">
-                {mediaPreview.compareUrl ? "生成图 · 原图对比" : "预览"}
+                {mediaPreview.compareUrls && mediaPreview.compareUrls.length > 0
+                  ? "生成图 · 原图对比"
+                  : "预览"}
               </span>
               <button
                 type="button"
@@ -1132,11 +1148,15 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
                 ×
               </button>
             </header>
-            <div className={`media-lightbox-body${mediaPreview.compareUrl ? " is-compare" : ""}`}>
+            <div
+              className={`media-lightbox-body${
+                mediaPreview.compareUrls && mediaPreview.compareUrls.length > 0 ? " is-compare" : ""
+              }`}
+            >
               {/\.(mp4|webm|mov)(\?|$)/i.test(mediaPreview.url) ? (
                 <video src={mediaPreview.url} controls autoPlay playsInline />
-              ) : mediaPreview.compareUrl ? (
-                <MediaCompareSlider leftSrc={mediaPreview.url} rightSrc={mediaPreview.compareUrl} />
+              ) : mediaPreview.compareUrls && mediaPreview.compareUrls.length > 0 ? (
+                <MediaComparePanel leftSrc={mediaPreview.url} rightSrcs={mediaPreview.compareUrls} />
               ) : (
                 <img src={mediaPreview.url} alt="" />
               )}

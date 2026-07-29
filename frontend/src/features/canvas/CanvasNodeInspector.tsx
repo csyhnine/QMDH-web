@@ -12,6 +12,7 @@ import CanvasModelSelect from "./CanvasModelSelect";
 import type { UpstreamDeliverables } from "./canvasNodeContext";
 import { useCanvasNodeActions } from "./canvasNodeContext";
 import { NODE_KIND_LABEL, type CanvasGenerateNode, type GenerateNodeData } from "./canvasTypes";
+import { resolveCanvasCompareOriginalUrls } from "./canvasGraphUtils";
 import { canSyncCanvasNodeTask } from "./useCanvasNodeGenerate";
 
 type CanvasNodeInspectorProps = {
@@ -82,7 +83,7 @@ export default function CanvasNodeInspector({
           </>
         ) : (
           <p>
-            左键框选节点，中键平移画布。双击空白可加备注；右键添加生成 / 标注等节点。选中编组或多项后可批量运行。
+            左键框选节点，中键平移画布；中键双击适应全部节点。双击空白可加备注；右键添加生成 / 标注等节点。选中编组或多项后可批量运行。
           </p>
         )}
       </aside>
@@ -93,11 +94,10 @@ export default function CanvasNodeInspector({
   const busy = data.status === "submitting" || data.status === "pending" || data.status === "running";
   const canSync = canSyncCanvasNodeTask(data);
   const resultPreview = data.assetUrls[0] || data.previewImagePath || data.referenceImages[0] || "";
-  const compareOriginal =
-    data.assetUrls[0] &&
-    (data.referenceImages.find((path) => path && path !== data.assetUrls[0]) ||
-      upstream.images.find((path) => path && path !== data.assetUrls[0]) ||
-      "");
+  const resultUrl = data.assetUrls[0] || "";
+  const compareUrls = resultUrl
+    ? resolveCanvasCompareOriginalUrls(data.referenceImages, upstream.images, resultUrl)
+    : [];
   const isUpload = data.nodeKind === "upload";
   const isUpscale = data.nodeKind === "upscale";
   const isAnnotate = data.nodeKind === "annotate";
@@ -367,10 +367,7 @@ export default function CanvasNodeInspector({
                   type="button"
                   className="qmdh-canvas-inspector-preview-hit"
                   onClick={() =>
-                    previewMedia(
-                      resultPreview,
-                      data.assetUrls[0] && compareOriginal ? compareOriginal : null
-                    )
+                    previewMedia(resultPreview, resultUrl && compareUrls.length > 0 ? compareUrls : null)
                   }
                 >
                   <img src={resultPreview} alt="" />

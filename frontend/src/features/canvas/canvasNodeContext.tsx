@@ -8,7 +8,8 @@ export type UpstreamDeliverables = { images: string[]; videos: string[] };
 
 export type CanvasMediaPreview = {
   url: string;
-  compareUrl?: string | null;
+  /** One or more original / reference images available for before/after compare. */
+  compareUrls?: string[];
   title?: string;
 };
 
@@ -30,7 +31,7 @@ export type CanvasNodeActions = {
   uploadNodeImage: (nodeId: string, file: File) => Promise<void>;
   saveAnnotation: (nodeId: string) => Promise<void>;
   getUpstreamDeliverables: (nodeId: string) => UpstreamDeliverables;
-  previewMedia: (url: string, compareUrl?: string | null) => void;
+  previewMedia: (url: string, compareUrls?: string | string[] | null) => void;
 };
 
 

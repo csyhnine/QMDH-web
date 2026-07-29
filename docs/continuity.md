@@ -17,11 +17,16 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`83d52be`**（与 `origin/main` / 生产对齐）
-- Production: **`https://cityusbdisk.cn`** — Git **`83d52be`**
-- Alembic head：**`p7q8r9s0t1u2`**（agent_memory conversation ON DELETE SET NULL；此前 skill=`o6p7q8r9s0t1`）
-- 部署归档：`docs/archive/deploy-2026-07-26-agent-memory.md`；删对话修复随 `83d52be`
-- Alembic head：**`o6p7q8r9s0t1`**（skill bundle；catalog=`n5o6p7q8r9s0`；记忆=`m4n5o6p7q8r9`；gov=`l3m4n5o6p7q8`）
+- Current branch: **`main`** @ **`90e1a82`**（与 `origin/main` / 生产对齐）
+- Production: **`https://cityusbdisk.cn`** — Git **`90e1a82`**
+- Alembic head：**`r9s0t1u2v3w4`**（`ai_tools`；前序 `q8r9s0t1u2v3`=`site_announcements`；更早删对话 FK=`p7q8r9s0t1u2`）
+- 最新交接：`docs/handoff.md` → `[2026-07-29] 画布撤销断线 / 公告 / AI 导航`；详档 `docs/archive/handoff-2026-07-29-canvas-announcements-nav.md`
+- 部署归档：`docs/archive/deploy-2026-07-28-canvas-announcements-ai-tools.md`（功能底仓 `63f2e0a`；前端 tip `90e1a82`）
+- **2026-07-28～29 已上生产（摘要）**：
+  - 画布：`Ctrl+Z` 撤销、悬停连线断开、模板发布新建/覆盖
+  - 站点公告：Admin + 生成页弹窗
+  - Studio「导航」`/studio/nav` + Admin「工具导航」；生产 `ai_tools` 已种子约 24 条（DB 非 Git）
+  - 导航页 `nav-shell` 全高背景，避免分类筛选后上下割裂
 - **Haodeya 新模型（2026-07-25 / 通线 2026-07-26）**：
   - 网关 `https://newapi.haodeya.xyz/v1`
   - Chat：生产启用 `qwen3.8-max-preview`（其它 qwen 档位停用）
@@ -34,7 +39,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - **B1 / gov / harness / memory** 已合 main 并已上生产
   - **「设计助手」UI 默认开启**（`VITE_CHAT_AGENT_UI_ENABLED !== "false"`）
   - **产品定调**：QMDH UI 壳 + Codex **风格 harness**（非换 GPT）+ Admin Skill 发版 + 跨对话记忆 + HITL 生图/视频
-  - **记忆写入策略（本地 WIP `agent-memory-002`）**：不再每轮落 turn summary；长期记忆含 preference/feedback/thought/fact/**experience（项目经验）**；会话 compact；存量 scrub 脚本
+  - **记忆写入策略**：停写每轮 turn summary；长期记忆含 preference/feedback/thought/fact/**experience**；会话 compact；存量 scrub 已在生产执行
   - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**（勿整包 merge）
 - **Admin 用量日志**：默认「按任务汇总」单行（`task.finalized`）；展示能力、输入参数摘要、输出张数/段数；取消勾选可看 provider_call 明细
 - **Admin Models UX**：预设 + 模型/Chat 计费 Tab + 探测优化（含视频分类）已上生产（`4c32d90`）
@@ -219,11 +224,10 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Domain: `cityusbdisk.cn`（京ICP备14011242号-4，已备案）
 - Deploy path: `/www/wwwroot/qmdh-web`
 - Deployment model: Docker Compose（**worker ×3**）
-- **Production Git: `4edaaec`** — frontend/backend/worker rebuilt 2026-07-25（gallery download + wan WxH）
-- **GitHub `main`:** aligned with production @ `4edaaec`
-- Alembic: **`o6p7q8r9s0t1` (head)**
-- Latest session archive: `docs/handoff.md` → `[2026-07-25] 用量日志单行 + 能力/参数展示`
-- **Deploy archive:** `docs/archive/deploy-2026-07-25-usage-logs-summary.md`（此前大包见 `deploy-2026-07-20-main-canvas-chat-b1.md`）
+- **Production Git: `90e1a82`** — 与 GitHub `main` 对齐（2026-07-29 导航 UI 修复）
+- Alembic: **`r9s0t1u2v3w4` (head)**
+- Latest session archive: `docs/handoff.md` → `[2026-07-29] 画布撤销断线 / 公告 / AI 导航`
+- **Deploy archive:** `docs/archive/deploy-2026-07-28-canvas-announcements-ai-tools.md`；详档 `docs/archive/handoff-2026-07-29-canvas-announcements-nav.md`
 - Gemini CPA doc: `docs/cpa-gemini-image-integration.md`（含 2K 验收表）
 - Verified runtime after latest deploy:
   - `docker compose ps`：backend healthy + worker-1/2/3 + frontend
@@ -236,6 +240,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - GitHub deploy key is healthy on server `admin` user
   - `git pull` fails only when run as `root`; use `sudo -u admin git -C /www/wwwroot/qmdh-web pull --ff-only origin main`
   - 开发请从 **GitHub** 拉代码，勿把服务器当源仓；服务器上可能有若干未跟踪 `.env.bak*`
+  - AI 工具目录内容在 DB `ai_tools`，不随 Git 种子文件版本化
 
 ## Known Risks And Follow-Up
 
@@ -280,7 +285,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Near-Term Suggested Next Steps
 
-1. Cold-start: 读最新 `docs/handoff.md` / `docs/tasks.md` Active Blockers。
-2. Optional follow-up：`project_code` 挂钩、LLM 提炼长期记忆。
-3. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`.
-4. 安全：若曾在控制台重置并泄露 root 密码，建议改回密钥登录并轮换密码。
+1. Cold-start: 读最新 `docs/handoff.md`（2026-07-29）与 `docs/archive/handoff-2026-07-29-canvas-announcements-nav.md`。
+2. Optional：导航工具换正式 logo（Admin 封面上传）；root SSH 改密钥并轮换密码。
+3. Optional follow-up：`project_code` 挂钩、LLM 提炼长期记忆。
+4. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`。
+5. 安全：若曾在控制台重置并泄露 root 密码，建议改回密钥登录并轮换密码。

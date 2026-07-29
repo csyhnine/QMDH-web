@@ -17,10 +17,11 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`90e1a82`**（与 `origin/main` / 生产对齐）
-- Production: **`https://cityusbdisk.cn`** — Git **`90e1a82`**
+- Current branch: **`main`** @ **`1f5e0fc`**（与 `origin/main` 对齐；运行时功能 tip **`90e1a82`**）
+- Production: **`https://cityusbdisk.cn`** — 代码至少含 **`90e1a82`**；文档 tip **`1f5e0fc`**（可按需 pull）
 - Alembic head：**`r9s0t1u2v3w4`**（`ai_tools`；前序 `q8r9s0t1u2v3`=`site_announcements`；更早删对话 FK=`p7q8r9s0t1u2`）
 - 最新交接：`docs/handoff.md` → `[2026-07-29] 画布撤销断线 / 公告 / AI 导航`；详档 `docs/archive/handoff-2026-07-29-canvas-announcements-nav.md`
+- **对话收束（2026-07-29）**：无代码 WIP；可换新对话继续开发
 - 部署归档：`docs/archive/deploy-2026-07-28-canvas-announcements-ai-tools.md`（功能底仓 `63f2e0a`；前端 tip `90e1a82`）
 - **2026-07-28～29 已上生产（摘要）**：
   - 画布：`Ctrl+Z` 撤销、悬停连线断开、模板发布新建/覆盖

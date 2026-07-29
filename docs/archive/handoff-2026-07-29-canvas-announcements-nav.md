@@ -2,10 +2,10 @@
 
 Date: **2026-07-29**  
 Branch: **`main`**  
-Local / GitHub tip: **`90e1a82`**  
-Production: **`https://cityusbdisk.cn`** — Git **`90e1a82`**（前端导航 UI 修复已 rebuild）  
+Local / GitHub tip: **`1f5e0fc`**（交接文档）；运行时功能 tip：**`90e1a82`**  
+Production: **`https://cityusbdisk.cn`** — 至少含 **`90e1a82`**  
 Alembic: **`r9s0t1u2v3w4`**（`site_announcements` → `ai_tools`）  
-Safe to hand off: **Yes**（干净可开新对话；无代码 WIP）
+Safe to hand off: **Yes**（干净可开新对话；无代码 WIP；本对话 2026-07-29 收束）
 
 ## 一句话
 

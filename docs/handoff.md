@@ -13,9 +13,10 @@
 ## Latest Handoffs
 
 ### [2026-07-29] 画布撤销断线 / 公告 / AI 导航 — **已上生产**
-- Git：**`90e1a82`**；Alembic：**`r9s0t1u2v3w4`**
+- Git tip：**`1f5e0fc`**（交接文档）；运行时功能底仓 **`90e1a82`**；Alembic：**`r9s0t1u2v3w4`**
 - 画布：历史栈撤销、悬停连线断开、模板新建/覆盖；公告弹窗；Studio「导航」+ Admin 工具目录 + 生产种子约 24 条（含 Dify）；导航 UI 与筛选背景割裂修复
 - 归档：`docs/archive/handoff-2026-07-29-canvas-announcements-nav.md`
+- 本对话收束：无未提交代码；未跟踪仅 `assets/` 截图与旧 handoff 草稿（勿提交）
 - Safe to hand off: **Yes**
 
 ### [2026-07-26] 修删除对话 FK 冲突 — **已上生产**

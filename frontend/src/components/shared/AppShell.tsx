@@ -64,7 +64,9 @@ export default function AppShell(props: AppShellProps) {
         ? "studio-shell chat-shell"
         : props.active === "canvas"
           ? "studio-shell canvas-shell"
-          : "studio-shell inspiration-shell";
+          : props.active === "nav"
+            ? "studio-shell inspiration-shell nav-shell"
+            : "studio-shell inspiration-shell";
 
   const mainClassName =
     props.kind === "admin"
@@ -75,7 +77,9 @@ export default function AppShell(props: AppShellProps) {
         ? "canvas-area canvas-chat-layout"
         : props.active === "canvas"
           ? "canvas-area canvas-infinite-layout"
-          : "canvas-area";
+          : props.active === "nav"
+            ? "canvas-area canvas-nav-layout"
+            : "canvas-area";
 
   async function handleLogout() {
     await logout();

@@ -191,6 +191,32 @@ button {
   grid-template-columns: 136px minmax(0, 1fr);
 }
 
+.studio-shell.nav-shell {
+  min-height: 100dvh;
+  height: 100dvh;
+  max-height: 100dvh;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.studio-shell.nav-shell > .global-rail {
+  align-self: stretch;
+  height: auto;
+  max-height: none;
+}
+
+.canvas-area.canvas-nav-layout {
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: auto;
+  background: #eef2f7;
+}
+
 .chat-shell {
   grid-template-columns: 136px minmax(0, 1fr);
 }
@@ -11813,28 +11839,32 @@ textarea:focus-visible {
   position: relative;
   display: grid;
   gap: 20px;
-  padding: 28px 32px 40px;
+  align-content: start;
+  flex: 1 0 auto;
+  width: 100%;
   min-height: 100%;
+  padding: 28px 32px 48px;
   isolation: isolate;
+  box-sizing: border-box;
   background:
-    radial-gradient(ellipse 70% 50% at 100% -10%, rgba(96, 165, 250, 0.18), transparent 55%),
-    radial-gradient(ellipse 45% 35% at 0% 0%, rgba(191, 219, 254, 0.22), transparent 50%),
-    linear-gradient(180deg, #f4f7fb 0%, #eef2f7 100%);
+    radial-gradient(ellipse 65% 42% at 100% 0%, rgba(96, 165, 250, 0.2), transparent 58%),
+    radial-gradient(ellipse 42% 28% at 0% 0%, rgba(191, 219, 254, 0.22), transparent 55%),
+    #eef2f7;
 }
 
 .qmdh-ai-tools-decor {
   position: absolute;
-  top: -40px;
-  right: -20px;
+  top: -48px;
+  right: -24px;
   width: min(420px, 42vw);
-  height: 220px;
+  height: 240px;
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(ellipse 60% 70% at 70% 40%, rgba(59, 130, 246, 0.35), transparent 70%),
-    radial-gradient(ellipse 50% 55% at 40% 60%, rgba(147, 197, 253, 0.45), transparent 72%);
+    radial-gradient(ellipse 60% 70% at 70% 40%, rgba(59, 130, 246, 0.32), transparent 72%),
+    radial-gradient(ellipse 50% 55% at 40% 60%, rgba(147, 197, 253, 0.4), transparent 74%);
   filter: blur(2px);
-  opacity: 0.9;
+  opacity: 0.85;
   transform: rotate(-8deg);
 }
 

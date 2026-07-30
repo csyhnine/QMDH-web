@@ -17,16 +17,21 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`1f5e0fc`**（与 `origin/main` 对齐；运行时功能 tip **`90e1a82`**）
-- Production: **`https://cityusbdisk.cn`** — 代码至少含 **`90e1a82`**；文档 tip **`1f5e0fc`**（可按需 pull）
+- Current branch: **`main`** @ **`79f4814`**（与 `origin/main` 对齐）
+- Production: **`https://cityusbdisk.cn`** — 代码 **`79f4814`**
 - Alembic head：**`r9s0t1u2v3w4`**（`ai_tools`；前序 `q8r9s0t1u2v3`=`site_announcements`；更早删对话 FK=`p7q8r9s0t1u2`）
-- 最新交接：`docs/handoff.md` → `[2026-07-29] 画布撤销断线 / 公告 / AI 导航`；详档 `docs/archive/handoff-2026-07-29-canvas-announcements-nav.md`
-- **对话收束（2026-07-29）**：无代码 WIP；可换新对话继续开发
-- 部署归档：`docs/archive/deploy-2026-07-28-canvas-announcements-ai-tools.md`（功能底仓 `63f2e0a`；前端 tip `90e1a82`）
+- 最新交接：`docs/handoff.md` → `[2026-07-30] 对比多原图 / 画布导航 / 上游参考`；详档 `docs/archive/handoff-2026-07-30-compare-canvas-upstream.md`
+- **对话收束（2026-07-30）**：无代码 WIP；可换新对话继续开发
+- **已取消专项**：算力费用 / 对外简历运营数据收集（一次性核对已结束，勿当后续任务）
+- 部署归档：`docs/archive/deploy-2026-07-29-compare-canvas-upstream.md`；前序 `docs/archive/deploy-2026-07-28-canvas-announcements-ai-tools.md`
+- **2026-07-29～30 已上生产（摘要）**：
+  - 对比：多原图可选、灯箱滑杆铺满修复（`MediaComparePanel`）
+  - 画布：进场 fitView、中键双击适应视图、缩略图拖拽/点击跳转
+  - 图生图：换上游后生成与对比优先当前上游，不再沿用旧 `referenceImages`
 - **2026-07-28～29 已上生产（摘要）**：
   - 画布：`Ctrl+Z` 撤销、悬停连线断开、模板发布新建/覆盖
   - 站点公告：Admin + 生成页弹窗
-  - Studio「导航」`/studio/nav` + Admin「工具导航」；生产 `ai_tools` 已种子约 24 条（DB 非 Git）
+  - Studio「导航」`/studio/nav` + Admin「工具导航」；`ai_tools` 在 DB（非 Git），条目数以生产为准
   - 导航页 `nav-shell` 全高背景，避免分类筛选后上下割裂
 - **Haodeya 新模型（2026-07-25 / 通线 2026-07-26）**：
   - 网关 `https://newapi.haodeya.xyz/v1`
@@ -51,7 +56,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - startup: `cmd /c start-dev.cmd`
   - build: `npm run build`
   - smoke: `npm run smoke:studio`, `npm run smoke:chat`
-- Do not commit: `storage/`, `tmp/`, `.env`, `backend/app.db`, `frontend/dist/`, `node_modules/`, `assets/` 本地截图
+- Do not commit: `storage/`, `tmp/`、`.env`、`backend/app.db`、`frontend/dist/`、`node_modules/`、`assets/` 本地截图
 - Hard rule: **未经用户明确同意，禁止 git push / 生产部署**
 
 ## Current Product Reality
@@ -225,10 +230,10 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - Domain: `cityusbdisk.cn`（京ICP备14011242号-4，已备案）
 - Deploy path: `/www/wwwroot/qmdh-web`
 - Deployment model: Docker Compose（**worker ×3**）
-- **Production Git: `90e1a82`** — 与 GitHub `main` 对齐（2026-07-29 导航 UI 修复）
+- **Production Git: `79f4814`** — 与 GitHub `main` 对齐（2026-07-29 对比/画布/上游修复）
 - Alembic: **`r9s0t1u2v3w4` (head)**
-- Latest session archive: `docs/handoff.md` → `[2026-07-29] 画布撤销断线 / 公告 / AI 导航`
-- **Deploy archive:** `docs/archive/deploy-2026-07-28-canvas-announcements-ai-tools.md`；详档 `docs/archive/handoff-2026-07-29-canvas-announcements-nav.md`
+- Latest session archive: `docs/handoff.md` → `[2026-07-30] 对比多原图 / 画布导航 / 上游参考`
+- **Deploy archive:** `docs/archive/deploy-2026-07-29-compare-canvas-upstream.md`；详档 `docs/archive/handoff-2026-07-30-compare-canvas-upstream.md`
 - Gemini CPA doc: `docs/cpa-gemini-image-integration.md`（含 2K 验收表）
 - Verified runtime after latest deploy:
   - `docker compose ps`：backend healthy + worker-1/2/3 + frontend
@@ -242,6 +247,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - `git pull` fails only when run as `root`; use `sudo -u admin git -C /www/wwwroot/qmdh-web pull --ff-only origin main`
   - 开发请从 **GitHub** 拉代码，勿把服务器当源仓；服务器上可能有若干未跟踪 `.env.bak*`
   - AI 工具目录内容在 DB `ai_tools`，不随 Git 种子文件版本化
+  - 若曾用控制台重置 root 密码：建议尽快改密钥登录并轮换密码
 
 ## Known Risks And Follow-Up
 

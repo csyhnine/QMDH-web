@@ -29,9 +29,14 @@ from app.services.agent_policy_service import (
     resolve_effective_chat_policy,
 )
 
+# OpenRouter/Haodeya pre-authorize by max_tokens; leaving it unset often advertises
+# the model ceiling (e.g. 65536) and returns HTTP 402 even when the account has balance.
+STUDIO_AGENT_MAX_TOKENS = 4096
+
 try:
     from pydantic_ai import Agent, RunContext
     from pydantic_ai.providers.openai import OpenAIProvider
+    from pydantic_ai.settings import ModelSettings
 
     try:
         from pydantic_ai.models.openai import OpenAIChatModel as OpenAICompatibleModel
@@ -45,6 +50,7 @@ except ImportError:
     RunContext = None  # type: ignore[misc, assignment]
     OpenAIProvider = None  # type: ignore[misc, assignment]
     OpenAICompatibleModel = None  # type: ignore[misc, assignment]
+    ModelSettings = None  # type: ignore[misc, assignment]
 
 
 class StudioAgentUnavailableError(RuntimeError):
@@ -536,11 +542,13 @@ def run_studio_agent(
         provider.model_name,
         provider=OpenAIProvider(base_url=provider.base_url.rstrip("/"), api_key=api_key),
     )
+    model_settings = ModelSettings(max_tokens=STUDIO_AGENT_MAX_TOKENS)
     agent = Agent(
         model,
         deps_type=StudioToolContext,
         system_prompt=policy.system_prompt,
         retries=4,
+        model_settings=model_settings,
     )
     _register_chat_tools(
         agent,
@@ -563,7 +571,7 @@ def run_studio_agent(
         status="running",
     )
     try:
-        result = agent.run_sync(composed_message, deps=tool_ctx)
+        result = agent.run_sync(composed_message, deps=tool_ctx, model_settings=model_settings)
     except Exception as exc:
         detail = str(exc).strip()
         if "max retries" in detail.lower():

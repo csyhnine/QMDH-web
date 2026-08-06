@@ -105,6 +105,17 @@ def _format_agent_run_error(exc: Exception) -> tuple[str, str]:
         )
     if "provider not found" in lowered:
         return ("未找到指定的生图模型，请先列出可用模型后再试。", detail[:320])
+    if (
+        "402" in detail
+        or "max_tokens" in lowered
+        or "openrouter_credits" in lowered
+        or "requires more credits" in lowered
+    ):
+        return (
+            "上游按过大的 max_tokens 预扣费失败（常见于未限制输出上限）。"
+            "请稍后重试；若仍失败，检查 Admin 里该 Chat 模型的网关额度或换模型。",
+            detail[:480],
+        )
     return ("助手调用失败，请稍后重试。", detail[:320])
 
 

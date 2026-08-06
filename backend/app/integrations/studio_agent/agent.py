@@ -31,7 +31,8 @@ from app.services.agent_policy_service import (
 
 # OpenRouter/Haodeya pre-authorize by max_tokens; leaving it unset often advertises
 # the model ceiling (e.g. 65536) and returns HTTP 402 even when the account has balance.
-STUDIO_AGENT_MAX_TOKENS = 4096
+# Keep under tight OpenRouter pre-auth ceilings (seen: "can only afford 1047").
+STUDIO_AGENT_MAX_TOKENS = 1024
 
 try:
     from pydantic_ai import Agent, RunContext

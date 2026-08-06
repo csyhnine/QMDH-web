@@ -406,3 +406,84 @@ def record_chat_usage_ledger(
     ledger.recorded_at = recorded_at or message.created_at or ledger.recorded_at or _now()
 
     return ledger
+
+
+def record_chat_compaction_usage_ledger(
+    db: Session,
+    *,
+    conversation: Conversation,
+    until_message_id: int,
+    provider: ProviderProfile | None,
+    provider_profile_id: int | None = None,
+    user_id: int | None = None,
+    user_name: str | None = None,
+    usage_payload: dict | None = None,
+) -> UsageLedger | None:
+    """Record LLM cost for ordinary-chat context summarization (side call, no ChatMessage)."""
+    if until_message_id <= 0:
+        return None
+    usage = normalize_chat_usage(usage_payload or {})
+    if usage.total_tokens <= 0 and usage.input_tokens <= 0 and usage.output_tokens <= 0:
+        return None
+
+    ledger = db.scalar(
+        select(UsageLedger).where(
+            UsageLedger.source_table == "chat_context_compactions",
+            UsageLedger.source_id == until_message_id,
+        )
+    )
+    if not ledger:
+        ledger = UsageLedger(
+            entry_type="chat.message.completed",
+            source_table="chat_context_compactions",
+            source_id=until_message_id,
+            ledger_source="chat.context_compact",
+            recorded_at=_now(),
+        )
+        db.add(ledger)
+
+    resolved_user_id = user_id if user_id is not None else conversation.user_id
+    resolved_provider_name = (provider.provider_name if provider is not None else "") or ""
+    resolved_model_name = (provider.model_name if provider is not None else "") or ""
+    profile_id = provider_profile_id if provider_profile_id is not None else (provider.id if provider is not None else None)
+
+    billing = calculate_chat_billing(db, provider_profile_id=profile_id, usage=usage)
+    ledger.task_id = None
+    ledger.task_archive_id = None
+    ledger.provider_call_id = None
+    ledger.provider_call_archive_id = None
+    ledger.project_id = None
+    ledger.project_code = "__chat__"
+    ledger.project_name = "Chat"
+    ledger.workflow_key = "chat.context_compact"
+    ledger.workflow_name = "Chat Context Compact"
+    ledger.user_id = resolved_user_id
+    ledger.user_name = user_name or ""
+    ledger.requested_provider = resolved_provider_name
+    ledger.provider_name = resolved_provider_name
+    ledger.model_name = resolved_model_name
+    ledger.capability = "chat.completions"
+    ledger.classification = DataClassification.b
+    ledger.task_status = None
+    ledger.cost = float(billing["cost"])
+    ledger.cost_currency = str(billing["currency"] or "CNY").upper()
+    ledger.billable_units = float(billing.get("billable_units") or 0.0)
+    ledger.billing_unit = "chat_tokens"
+    ledger.output_count = 1
+    ledger.prompt_tokens = usage.prompt_tokens
+    ledger.completion_tokens = usage.completion_tokens
+    ledger.total_tokens = usage.total_tokens
+    ledger.input_tokens = usage.input_tokens
+    ledger.output_tokens = usage.output_tokens
+    ledger.cached_input_tokens = usage.cached_input_tokens
+    ledger.uncached_input_tokens = usage.uncached_input_tokens
+    payload = dict(usage.usage_payload)
+    payload.setdefault("source", "chat_context_compact")
+    payload["conversation_id"] = conversation.id
+    ledger.usage_payload = payload
+    ledger.latency_ms = 0
+    ledger.error_code = ""
+    ledger.error_summary = ""
+    ledger.source_deleted_at = None
+    ledger.recorded_at = _now()
+    return ledger

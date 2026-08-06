@@ -121,7 +121,7 @@ class ChatContextUnitTests(unittest.IsolatedAsyncioTestCase):
             patch(
                 "app.services.chat_context.summarize_chat_history",
                 new_callable=AsyncMock,
-                return_value="用户讨论了建筑效果图与风格偏好。",
+                return_value=("用户讨论了建筑效果图与风格偏好。", {"prompt_tokens": 80, "completion_tokens": 40, "total_tokens": 120}),
             ) as summarize,
         ):
             packed = await pack_chat_context(
@@ -140,6 +140,20 @@ class ChatContextUnitTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(conversation.context_summary_until_message_id)
         self.assertEqual(packed.api_messages[0]["role"], "system")
         self.assertIn("压缩摘要", str(packed.api_messages[0]["content"]))
+
+        from app.models import UsageLedger
+        from sqlalchemy import select
+
+        ledger = self.db.scalar(
+            select(UsageLedger).where(
+                UsageLedger.source_table == "chat_context_compactions",
+                UsageLedger.source_id == conversation.context_summary_until_message_id,
+            )
+        )
+        self.assertIsNotNone(ledger)
+        assert ledger is not None
+        self.assertEqual(ledger.total_tokens, 120)
+        self.assertEqual(ledger.workflow_key, "chat.context_compact")
 
     async def test_incremental_summary_only_compresses_uncovered(self) -> None:
         conversation = self._conversation()
@@ -166,7 +180,7 @@ class ChatContextUnitTests(unittest.IsolatedAsyncioTestCase):
             patch(
                 "app.services.chat_context.summarize_chat_history",
                 new_callable=AsyncMock,
-                return_value="合并后的摘要",
+                return_value=("合并后的摘要", {"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70}),
             ) as summarize,
         ):
             await pack_chat_context(

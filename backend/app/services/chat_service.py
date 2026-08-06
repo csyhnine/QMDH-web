@@ -185,8 +185,11 @@ async def complete_chat_once(
     messages: list[dict],
     *,
     max_tokens: int = 900,
-) -> str:
-    """Non-streaming chat completion used for context summarization."""
+) -> tuple[str, dict[str, object]]:
+    """Non-streaming chat completion used for context summarization.
+
+    Returns (text, usage_payload) so callers can write usage ledgers.
+    """
     api_key = decrypt_value_or_raise(provider.api_key)
     url = f"{provider.base_url.rstrip('/')}/chat/completions"
     headers = {
@@ -214,7 +217,10 @@ async def complete_chat_once(
         text = str(content or "").strip()
         if not text:
             raise RuntimeError("summarize upstream returned empty content")
-        return text
+        raw_usage = data.get("usage") if isinstance(data, dict) else None
+        usage_payload: dict[str, object] = dict(raw_usage) if isinstance(raw_usage, dict) else {}
+        usage_payload.setdefault("source", "chat_context_compact")
+        return text, usage_payload
 
 
 async def stream_chat_completion(

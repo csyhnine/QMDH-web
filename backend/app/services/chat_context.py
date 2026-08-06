@@ -9,9 +9,10 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models import ChatMessage, Conversation, ProviderProfile
+from app.models import ChatMessage, Conversation, ProviderProfile, User
 from app.services.chat_message_content import build_provider_messages
 from app.services.chat_service import ChatProviderConfig, complete_chat_once
+from app.services.usage_ledger import record_chat_compaction_usage_ledger
 
 logger = logging.getLogger(__name__)
 
@@ -191,10 +192,10 @@ async def summarize_chat_history(
     provider: ChatProviderConfig,
     existing_summary: str,
     messages_to_compress: list[ChatMessage],
-) -> str:
+) -> tuple[str, dict[str, object]]:
     digest = _messages_to_digest(messages_to_compress)
     if not digest.strip():
-        return existing_summary.strip()
+        return existing_summary.strip(), {}
 
     prompt_messages: list[dict[str, object]] = [
         {
@@ -214,7 +215,8 @@ async def summarize_chat_history(
             ),
         },
     ]
-    return (await complete_chat_once(provider, prompt_messages, max_tokens=900)).strip()
+    text, usage_payload = await complete_chat_once(provider, prompt_messages, max_tokens=900)
+    return text.strip(), usage_payload
 
 
 def _trim_api_messages_to_budget(
@@ -349,18 +351,34 @@ async def pack_chat_context(
             if hasattr(maybe, "__await__"):
                 await maybe  # type: ignore[misc]
         try:
-            new_summary = await summarize_chat_history(
+            new_summary, compact_usage = await summarize_chat_history(
                 provider=provider_config,
                 existing_summary=existing_summary,
                 messages_to_compress=uncovered,
             )
             if new_summary:
-                conversation.context_summary = new_summary
-                conversation.context_summary_until_message_id = max(
+                until_id_value = max(
                     message.id for message in uncovered if message.id is not None
                 )
+                conversation.context_summary = new_summary
+                conversation.context_summary_until_message_id = until_id_value
                 conversation.context_summary_updated_at = datetime.now(timezone.utc)
                 db.add(conversation)
+                user_name = ""
+                if conversation.user_id is not None:
+                    owner = db.get(User, conversation.user_id)
+                    if owner is not None:
+                        user_name = owner.display_name or owner.name or ""
+                record_chat_compaction_usage_ledger(
+                    db,
+                    conversation=conversation,
+                    until_message_id=until_id_value,
+                    provider=provider_profile,
+                    provider_profile_id=provider_profile.id if provider_profile is not None else None,
+                    user_id=conversation.user_id,
+                    user_name=user_name,
+                    usage_payload=compact_usage,
+                )
                 db.commit()
                 db.refresh(conversation)
                 existing_summary = new_summary.strip()

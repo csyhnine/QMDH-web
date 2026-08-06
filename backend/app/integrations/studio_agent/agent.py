@@ -88,6 +88,54 @@ class StudioAgentReply:
     tool_calls: tuple[ChatAgentToolCall, ...] = ()
     task_proposals: tuple[dict[str, object], ...] = ()
     policy_version: str = "code-default"
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cached_input_tokens: int = 0
+    usage_payload: dict[str, object] | None = None
+
+
+def _usage_fields_from_run_result(result: object) -> dict[str, object]:
+    """Map pydantic-ai Usage into chat ledger fields."""
+    empty: dict[str, object] = {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "cached_input_tokens": 0,
+        "usage_payload": {"source": "chat_agent"},
+    }
+    usage_fn = getattr(result, "usage", None)
+    if not callable(usage_fn):
+        return empty
+    try:
+        usage = usage_fn()
+    except Exception:
+        return empty
+
+    request_tokens = int(getattr(usage, "request_tokens", None) or 0)
+    response_tokens = int(getattr(usage, "response_tokens", None) or 0)
+    total_tokens = int(getattr(usage, "total_tokens", None) or 0)
+    if total_tokens <= 0:
+        total_tokens = request_tokens + response_tokens
+    details_raw = getattr(usage, "details", None)
+    details = dict(details_raw) if isinstance(details_raw, dict) else {}
+    cached = int(
+        details.get("cache_read_input_tokens")
+        or details.get("cached_tokens")
+        or details.get("cached_input_tokens")
+        or 0
+    )
+    return {
+        "prompt_tokens": max(request_tokens, 0),
+        "completion_tokens": max(response_tokens, 0),
+        "total_tokens": max(total_tokens, 0),
+        "cached_input_tokens": max(cached, 0),
+        "usage_payload": {
+            "source": "chat_agent",
+            "requests": int(getattr(usage, "requests", None) or 0),
+            "details": details,
+        },
+    }
 
 
 CHAT_AGENT_SYSTEM_PROMPT = CHAT_AGENT_BASELINE_PROMPT
@@ -596,13 +644,24 @@ def run_studio_agent(
         detail="回复已生成",
         status="done",
     )
+    usage_fields = _usage_fields_from_run_result(result)
+    output_text = getattr(result, "output", None)
+    if output_text is None:
+        output_text = getattr(result, "data", "")
     return StudioAgentReply(
-        text=str(result.output).strip(),
+        text=str(output_text).strip(),
         provider_name=provider.provider_name,
         model_name=provider.model_name,
         tool_calls=tuple(tool_call_recorder),
         task_proposals=tuple(task_proposal_recorder),
         policy_version=policy.policy_version,
+        prompt_tokens=int(usage_fields["prompt_tokens"] or 0),
+        completion_tokens=int(usage_fields["completion_tokens"] or 0),
+        total_tokens=int(usage_fields["total_tokens"] or 0),
+        cached_input_tokens=int(usage_fields["cached_input_tokens"] or 0),
+        usage_payload=dict(usage_fields["usage_payload"])
+        if isinstance(usage_fields["usage_payload"], dict)
+        else {"source": "chat_agent"},
     )
 
 

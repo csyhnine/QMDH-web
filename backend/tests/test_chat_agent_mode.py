@@ -83,14 +83,31 @@ class ChatAgentModeTests(unittest.TestCase):
         token = response.json()["token"]
         return {"Authorization": f"Bearer {token}"}
 
-    @patch("app.routers.chat.run_studio_agent_isolated")
+    @patch("app.routers.chat.run_chat_agent_harness_isolated")
     def test_agent_mode_persists_reply_before_stream_done(self, mock_run_studio_agent) -> None:
-        mock_run_studio_agent.return_value = StudioAgentReply(
-            text="已找到 2 个商业综合体相关模板。",
-            provider_name="ms_zhipuai_glm-5",
-            model_name="ZhipuAI/GLM-5",
-            tool_calls=(ChatAgentToolCall(name="search_shared_templates", summary="找到 2 个共享模板"),),
-            policy_version="qmdh-chat-prod",
+        from app.services.agent_harness_service import HarnessAgentResult, HarnessTrace
+
+        mock_run_studio_agent.return_value = HarnessAgentResult(
+            reply=StudioAgentReply(
+                text="已找到 2 个商业综合体相关模板。",
+                provider_name="ms_zhipuai_glm-5",
+                model_name="ZhipuAI/GLM-5",
+                tool_calls=(ChatAgentToolCall(name="search_shared_templates", summary="找到 2 个共享模板"),),
+                policy_version="qmdh-chat-prod",
+                prompt_tokens=120,
+                completion_tokens=40,
+                total_tokens=160,
+                cached_input_tokens=0,
+                usage_payload={"source": "chat_agent", "prompt_tokens": 120, "completion_tokens": 40, "total_tokens": 160},
+            ),
+            trace=HarnessTrace(
+                harness_mode="single_agent",
+                memory_hit_count=0,
+                session_summary_used=False,
+                policy_version="qmdh-chat-prod",
+                tool_hint_count=0,
+            ),
+            audit_details={},
         )
 
         headers = self._login()
@@ -127,9 +144,24 @@ class ChatAgentModeTests(unittest.TestCase):
         self.assertIn("已找到 2 个商业综合体相关模板。", body)
         mock_run_studio_agent.assert_called_once()
 
+        from app.models import UsageLedger
+
+        with self.SessionLocal() as db:
+            ledger = db.scalar(
+                select(UsageLedger).where(
+                    UsageLedger.entry_type == "chat.message.completed",
+                    UsageLedger.workflow_key == "chat.completions",
+                )
+            )
+            self.assertIsNotNone(ledger)
+            assert ledger is not None
+            self.assertEqual(ledger.total_tokens, 160)
+            self.assertEqual(ledger.prompt_tokens, 120)
+            self.assertEqual(ledger.completion_tokens, 40)
+
     @patch("app.routers.chat.pack_chat_context")
     @patch("app.routers.chat.stream_chat_completion")
-    @patch("app.routers.chat.run_studio_agent_isolated")
+    @patch("app.routers.chat.run_chat_agent_harness_isolated")
     def test_agent_mode_false_uses_plain_chat_stream(
         self,
         mock_run_studio_agent,

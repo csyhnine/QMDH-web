@@ -129,7 +129,8 @@ def _persist_agent_assistant_message(
     task_proposals: tuple | list | None = None,
     thinking_steps: tuple | list | None = None,
     policy_version: str = "code-default",
-) -> None:
+    token_count: int = 0,
+) -> ChatMessage:
     stored_content = embed_agent_message_meta(
         content,
         tool_calls=tool_calls or (),
@@ -141,11 +142,13 @@ def _persist_agent_assistant_message(
         conversation_id=conversation_id,
         role="assistant",
         content=stored_content,
-        token_count=0,
+        token_count=max(int(token_count or 0), 0),
     )
     db.add(assistant_message)
     conversation.updated_at = datetime.now(timezone.utc)
     db.commit()
+    db.refresh(assistant_message)
+    return assistant_message
 
 
 def _serialize_chat_message_out(message: ChatMessage) -> ChatMessageOut:
@@ -738,7 +741,7 @@ async def send_message(
             )
 
             full_content = agent_reply.text.strip() or "助手未返回内容，请重试。"
-            _persist_agent_assistant_message(
+            assistant_message = _persist_agent_assistant_message(
                 db,
                 conversation,
                 conversation_id,
@@ -747,7 +750,33 @@ async def send_message(
                 task_proposals=agent_reply.task_proposals,
                 thinking_steps=collected_thinking_steps,
                 policy_version=agent_reply.policy_version,
+                token_count=agent_reply.total_tokens,
             )
+            provider_for_ledger = db.get(ProviderProfile, provider_profile_id)
+            if provider_for_ledger is not None:
+                usage_payload = dict(agent_reply.usage_payload or {"source": "chat_agent"})
+                usage_payload.setdefault("prompt_tokens", agent_reply.prompt_tokens)
+                usage_payload.setdefault("completion_tokens", agent_reply.completion_tokens)
+                usage_payload.setdefault("total_tokens", agent_reply.total_tokens)
+                usage_payload.setdefault("input_tokens", agent_reply.prompt_tokens)
+                usage_payload.setdefault("output_tokens", agent_reply.completion_tokens)
+                usage_payload.setdefault("cached_input_tokens", agent_reply.cached_input_tokens)
+                record_chat_usage_ledger(
+                    db,
+                    message=assistant_message,
+                    conversation=conversation,
+                    provider=provider_for_ledger,
+                    provider_profile_id=provider_profile_id,
+                    user_id=auth_user.user_id,
+                    user_name=auth_user.name,
+                    provider_name=agent_reply.provider_name or provider_for_ledger.provider_name,
+                    model_name=agent_reply.model_name or provider_for_ledger.model_name,
+                    prompt_tokens=agent_reply.prompt_tokens,
+                    completion_tokens=agent_reply.completion_tokens,
+                    total_tokens=agent_reply.total_tokens,
+                    usage_payload=usage_payload,
+                )
+                db.commit()
 
             async for chunk in stream_chat_agent_sse(agent_reply):
                 yield chunk

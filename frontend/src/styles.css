@@ -5212,6 +5212,14 @@ button {
   font-size: 0.86rem;
 }
 
+.ops-task-series-day .ops-task-series-sub {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.7rem;
+  font-style: normal;
+  line-height: 1;
+}
+
 .ops-task-series-day small {
   color: var(--muted);
   font-family: "IBM Plex Mono", monospace;
@@ -5240,6 +5248,72 @@ button {
 .ops-token-series {
   display: grid;
   gap: 12px;
+}
+
+.ops-model-list {
+  display: grid;
+  gap: 10px;
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.ops-model-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.ops-model-row-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  grid-column: 1 / 2;
+}
+
+.ops-model-row-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+}
+
+.ops-model-row-main span {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.ops-model-row-bar {
+  grid-column: 1 / 2;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.ops-model-row-bar b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #93c5fd 0%, #2563eb 100%);
+}
+
+.ops-model-row em {
+  grid-column: 2 / 3;
+  grid-row: 1 / 3;
+  justify-self: end;
+  align-self: center;
+  font-family: "IBM Plex Mono", monospace;
+  font-style: normal;
+  font-size: 0.8rem;
+  color: var(--text);
 }
 
 .ops-token-row {
@@ -5285,7 +5359,7 @@ button {
 .ops-execution-head,
 .ops-execution-body {
   display: grid;
-  grid-template-columns: minmax(200px, 1.3fr) repeat(5, minmax(56px, 0.5fr)) minmax(132px, 0.9fr);
+  grid-template-columns: minmax(180px, 1.2fr) repeat(6, minmax(52px, 0.45fr)) minmax(120px, 0.85fr);
   gap: 12px;
   align-items: center;
   min-width: 100%;
@@ -5354,9 +5428,9 @@ button {
 .ops-execution-table-account .ops-execution-body {
   grid-template-columns:
     minmax(180px, 1.15fr)
-    minmax(120px, 0.8fr)
-    repeat(5, minmax(54px, 0.4fr))
-    minmax(190px, 1.15fr)
+    minmax(110px, 0.75fr)
+    repeat(6, minmax(50px, 0.38fr))
+    minmax(180px, 1.1fr)
     minmax(110px, 0.72fr);
 }
 
@@ -9393,17 +9467,17 @@ textarea:focus-visible {
 
   .ops-execution-head,
   .ops-execution-body {
-    grid-template-columns: minmax(180px, 1.2fr) repeat(5, minmax(48px, 0.48fr)) minmax(120px, 0.85fr);
+    grid-template-columns: minmax(160px, 1.15fr) repeat(6, minmax(44px, 0.42fr)) minmax(110px, 0.8fr);
   }
 
   .ops-execution-table-account .ops-execution-head,
   .ops-execution-table-account .ops-execution-body {
     grid-template-columns:
-      minmax(180px, 1.1fr)
-      minmax(110px, 0.72fr)
-      repeat(5, minmax(48px, 0.4fr))
-      minmax(180px, 1.05fr)
-      minmax(100px, 0.7fr);
+      minmax(160px, 1.05fr)
+      minmax(100px, 0.68fr)
+      repeat(6, minmax(44px, 0.36fr))
+      minmax(170px, 1fr)
+      minmax(100px, 0.68fr);
   }
 }
 

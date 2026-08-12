@@ -8,6 +8,7 @@ import {
   type ProviderPricingRuleRecord,
   type ProviderProfileCreatePayload,
   type ProviderProfileProbeResult,
+  type ProviderProfilePreviewRequestResult,
   type ProviderProfileRecord,
 } from "../../api";
 
@@ -32,6 +33,9 @@ type ProviderProfileDraft = {
   unitPrice1k: string;
   unitPrice2k: string;
   unitPrice4k: string;
+  supportedResolution1k: boolean;
+  supportedResolution2k: boolean;
+  supportedResolution4k: boolean;
   upstreamModel1k: string;
   upstreamModel2k: string;
   upstreamModel4k: string;
@@ -123,6 +127,9 @@ const defaultProviderProfileDraft: ProviderProfileDraft = {
   unitPrice1k: "",
   unitPrice2k: "",
   unitPrice4k: "",
+  supportedResolution1k: true,
+  supportedResolution2k: true,
+  supportedResolution4k: false,
   upstreamModel1k: "",
   upstreamModel2k: "",
   upstreamModel4k: "",
@@ -163,6 +170,7 @@ const MANAGED_ADAPTER_CONFIG_KEYS = [
   ...PRICING_TIER_ADAPTER_KEYS,
   ...UPSTREAM_MODEL_ADAPTER_KEYS,
   ...UPSTREAM_VIDEO_SKU_ADAPTER_KEYS,
+  "supported_resolutions",
 ] as const;
 
 const HAODEYA_BASE_URL = "https://newapi.haodeya.xyz/v1";
@@ -173,6 +181,72 @@ const capabilityDefinitions: CapabilityDefinition[] = [
   { key: "image.edit", label: "图像编辑", description: "出现在图像编辑", support: "ready" },
   { key: "video.generate", label: "视频生成", description: "出现在视频模式", support: "partial" },
 ];
+
+type StrategyPresetOption = {
+  id: string;
+  label: string;
+  /** null = remove key (auto); string = strategy value; "__custom__" = free JSON */
+  strategy: string | null | "__custom__";
+  hint: string;
+};
+
+const IMAGE_STRATEGY_PRESETS: StrategyPresetOption[] = [
+  { id: "auto", label: "自动", strategy: null, hint: "按模型名/网关推断" },
+  {
+    id: "sync_short",
+    label: "同步短 body",
+    strategy: "haodeya_sync_image",
+    hint: "DeepKey count：size 用 1024x1024 等像素，勿用 1:1",
+  },
+  {
+    id: "async",
+    label: "异步短 body",
+    strategy: "haodeya_async_image",
+    hint: "VIP：size 用 1:1 / 16:9 比例，轮询",
+  },
+  {
+    id: "modalities",
+    label: "聊天多模态",
+    strategy: "chat_modalities_image",
+    hint: "messages / modalities / image_config",
+  },
+  {
+    id: "completions",
+    label: "Chat Completions",
+    strategy: "chat_completions_image",
+    hint: "CPA Gemini 等",
+  },
+  {
+    id: "openai",
+    label: "同步 /images",
+    strategy: "openai_images",
+    hint: "Wan literal size 等",
+  },
+  { id: "custom", label: "自定义", strategy: "__custom__", hint: "下方 JSON 手写" },
+];
+
+const VIDEO_STRATEGY_PRESETS: StrategyPresetOption[] = [
+  { id: "auto", label: "自动", strategy: null, hint: "按适配器/模型推断" },
+  { id: "grok", label: "Haodeya 视频", strategy: "haodeya_grok_video", hint: "Grok / HappyHorse" },
+  { id: "ark", label: "Ark 视频", strategy: "volcengine_ark_video_tasks", hint: "Seedance" },
+  { id: "dashscope", label: "DashScope 视频", strategy: "dashscope_async_video", hint: "Wan 视频" },
+  { id: "jimeng", label: "即梦视频", strategy: "volcengine_cv_jimeng_video", hint: "CV Native" },
+  { id: "custom", label: "自定义", strategy: "__custom__", hint: "下方 JSON 手写" },
+];
+
+const CHAT_STRATEGY_PRESETS: StrategyPresetOption[] = [
+  { id: "auto", label: "自动", strategy: null, hint: "默认 openai_chat" },
+  { id: "openai_chat", label: "OpenAI Chat", strategy: "openai_chat", hint: "/chat/completions" },
+  { id: "custom", label: "自定义", strategy: "__custom__", hint: "下方 JSON 手写" },
+];
+
+const IMAGE_EDIT_STRATEGY_FOR_GENERATE: Record<string, string> = {
+  haodeya_async_image: "haodeya_async_image",
+  haodeya_sync_image: "haodeya_sync_image",
+  chat_modalities_image: "chat_modalities_image_edit",
+  chat_completions_image: "chat_completions_image_edit",
+  openai_images: "openai_image_edits",
+};
 
 const adapterOptions: AdapterOption[] = [
   { key: "haodeya_grok", label: "Haodeya 视频（Grok / HappyHorse）", support: "partial", note: "一条 profile + Studio 档位菜单；请求体由后端 adapter 按 SKU 组装，探测不会创建真实视频。" },
@@ -323,6 +397,67 @@ function parseCapabilities(value: string): string[] {
   return value.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+function parseStrategiesObject(raw: string): Record<string, string> {
+  const trimmed = raw.trim();
+  if (!trimmed) return {};
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === "string" && value.trim()) out[key] = value.trim();
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function stringifyStrategiesObject(strategies: Record<string, string>): string {
+  if (Object.keys(strategies).length === 0) return "";
+  return JSON.stringify(strategies, null, 2);
+}
+
+function readStrategyValue(raw: string, capabilityKey: string): string | null {
+  const strategies = parseStrategiesObject(raw);
+  const value = strategies[capabilityKey];
+  return value && value.trim() ? value.trim() : null;
+}
+
+function matchStrategyPreset(
+  raw: string,
+  capabilityKey: string,
+  presets: StrategyPresetOption[]
+): string {
+  const current = readStrategyValue(raw, capabilityKey);
+  if (current === null) return "auto";
+  const matched = presets.find((item) => item.strategy === current);
+  return matched?.id ?? "custom";
+}
+
+function applyStrategyPreset(
+  raw: string,
+  capabilityKey: string,
+  preset: StrategyPresetOption,
+  options?: { syncImageEdit?: boolean }
+): string {
+  if (preset.strategy === "__custom__") return raw;
+  const next = { ...parseStrategiesObject(raw) };
+  if (preset.strategy === null) {
+    delete next[capabilityKey];
+    if (options?.syncImageEdit && capabilityKey === "image.generate") {
+      delete next["image.edit"];
+    }
+  } else {
+    next[capabilityKey] = preset.strategy;
+    if (options?.syncImageEdit && capabilityKey === "image.generate") {
+      const editStrategy = IMAGE_EDIT_STRATEGY_FOR_GENERATE[preset.strategy];
+      if (editStrategy) next["image.edit"] = editStrategy;
+    }
+  }
+  return stringifyStrategiesObject(next);
+}
+
 function formatCapabilities(value: string[]): string {
   return value.join(", ");
 }
@@ -363,12 +498,36 @@ function summarizeProfileSupport(adapterKind: string, capabilities: string[]): S
   return "ready";
 }
 
+function readSupportedResolutionFlags(adapterConfig: Record<string, unknown>): {
+  supportedResolution1k: boolean;
+  supportedResolution2k: boolean;
+  supportedResolution4k: boolean;
+} {
+  const raw = adapterConfig.supported_resolutions;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return {
+      supportedResolution1k: true,
+      supportedResolution2k: true,
+      supportedResolution4k: false,
+    };
+  }
+  const normalized = new Set(
+    raw.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean)
+  );
+  return {
+    supportedResolution1k: normalized.has("1k"),
+    supportedResolution2k: normalized.has("2k"),
+    supportedResolution4k: normalized.has("4k"),
+  };
+}
+
 function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfileDraft {
   const adapterConfig = profile.adapter_config ?? {};
   const unitPrice1k =
     readAdapterConfigPrice(adapterConfig, "unit_price_1k") ||
     readAdapterConfigPrice(adapterConfig, "unit_price_5s") ||
     String(profile.unit_price ?? "");
+  const supportedFlags = readSupportedResolutionFlags(adapterConfig);
   return {
     providerName: profile.provider_name,
     displayName: profile.display_name || profile.model_name,
@@ -390,6 +549,7 @@ function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfile
       readAdapterConfigPrice(adapterConfig, "unit_price_2k") ||
       readAdapterConfigPrice(adapterConfig, "unit_price_10s"),
     unitPrice4k: readAdapterConfigPrice(adapterConfig, "unit_price_4k"),
+    ...supportedFlags,
     upstreamModel1k: readAdapterConfigText(adapterConfig, "upstream_model_1k"),
     upstreamModel2k: readAdapterConfigText(adapterConfig, "upstream_model_2k"),
     upstreamModel4k: readAdapterConfigText(adapterConfig, "upstream_model_4k"),
@@ -622,11 +782,31 @@ function assignAdapterConfigPrice(config: Record<string, unknown>, key: string, 
   config[key] = Number(trimmed);
 }
 
+function assignSupportedResolutionsFromDraft(
+  config: Record<string, unknown>,
+  draft: ProviderProfileDraft
+): void {
+  const selected: string[] = [];
+  if (draft.supportedResolution1k) selected.push("1k");
+  if (draft.supportedResolution2k) selected.push("2k");
+  if (draft.supportedResolution4k) selected.push("4k");
+  if (selected.length > 0) {
+    config.supported_resolutions = selected;
+  } else {
+    delete config.supported_resolutions;
+  }
+}
+
 function buildAdapterConfigFromDraft(draft: ProviderProfileDraft): Record<string, unknown> {
   const config = stripManagedAdapterConfigKeys(parseAdapterConfigObject(draft.adapterConfig));
   assignAdapterConfigPrice(config, "unit_price_1k", draft.unitPrice1k);
   assignAdapterConfigPrice(config, "unit_price_2k", draft.unitPrice2k);
   assignAdapterConfigPrice(config, "unit_price_4k", draft.unitPrice4k);
+  if (profileHasImageBilling(parseCapabilities(draft.capabilities))) {
+    assignSupportedResolutionsFromDraft(config, draft);
+  } else {
+    delete config.supported_resolutions;
+  }
   assignAdapterConfigText(config, "upstream_model_1k", draft.upstreamModel1k);
   assignAdapterConfigText(config, "upstream_model_2k", draft.upstreamModel2k);
   assignAdapterConfigText(config, "upstream_model_4k", draft.upstreamModel4k);
@@ -709,6 +889,11 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
   const [probingProfileId, setProbingProfileId] = useState<number | null>(null);
   const [togglingProfileId, setTogglingProfileId] = useState<number | null>(null);
   const [probeResults, setProbeResults] = useState<Record<number, ProviderProfileProbeResult>>({});
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewResult, setPreviewResult] = useState<ProviderProfilePreviewRequestResult | null>(null);
+  const [previewResolution, setPreviewResolution] = useState("2k");
+  const [previewAspectRatio, setPreviewAspectRatio] = useState("1:1");
+  const [previewHasReference, setPreviewHasReference] = useState(false);
   const [modelFilters, setModelFilters] = useState<ModelFilterState>({ search: "", capability: "all", adapterKind: "all", status: "all" });
   const [discoverPanelOpen, setDiscoverPanelOpen] = useState(false);
   const [discoverBaseUrl, setDiscoverBaseUrl] = useState(() => {
@@ -768,9 +953,25 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
   const draftHasImageBilling = profileHasImageBilling(draftCapabilities);
   const draftHasVideoBilling = profileUsesVideoTierPricing(draftCapabilities, providerDraft.adapterKind);
   const draftHasTierBilling = draftHasImageBilling || draftHasVideoBilling;
+  const draftHasImageCapability =
+    draftCapabilities.includes("image.generate") || draftCapabilities.includes("image.edit");
+  const draftHasVideoCapability = draftCapabilities.includes("video.generate");
   const draftHasChatCapability = draftCapabilities.includes("chat.completions");
   const draftNeedsApiSecret = providerDraft.adapterKind === "jimeng_native";
   const showPresets = editingProviderProfileId === null;
+  const imageStrategyPresetId = matchStrategyPreset(
+    providerDraft.strategies,
+    "image.generate",
+    IMAGE_STRATEGY_PRESETS
+  );
+  const videoStrategyPresetId = matchStrategyPreset(
+    providerDraft.strategies,
+    "video.generate",
+    VIDEO_STRATEGY_PRESETS
+  );
+  const chatStrategyPresetId = matchStrategyPreset(providerDraft.strategies, "chat", CHAT_STRATEGY_PRESETS);
+  const showStrategiesEditor =
+    draftHasImageCapability || draftHasVideoCapability || draftHasChatCapability;
 
   const filteredProviderProfiles = providerProfiles.filter((profile) => {
     const searchText = `${profile.display_name} ${profile.provider_name} ${profile.model_name}`.toLowerCase();
@@ -885,6 +1086,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
     setProviderDraft(toProviderProfileDraft(profile));
     setSelectedPresetId(null);
     setMoreOptionsOpen(false);
+    setPreviewResult(null);
     setPricingRuleDraft((current) => ({ ...current, providerProfileId: String(profile.id) }));
     setDetailPanelTab("model");
   }
@@ -1003,6 +1205,30 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
       onSetError(err instanceof Error ? err.message : "校验模型连通性失败");
     } finally {
       setProbingProfileId(null);
+    }
+  }
+
+  async function handlePreviewProviderRequest() {
+    if (editingProviderProfileId === null) return;
+    setPreviewLoading(true);
+    try {
+      const result = await api.previewProviderProfileRequest(editingProviderProfileId, {
+        capability: draftHasImageBilling
+          ? draftCapabilities.includes("image.edit") && !draftCapabilities.includes("image.generate")
+            ? "image.edit"
+            : "image.generate"
+          : "image.generate",
+        resolution: previewResolution,
+        aspect_ratio: previewAspectRatio,
+        has_reference: previewHasReference,
+      });
+      setPreviewResult(result);
+      onSetError("");
+    } catch (err) {
+      setPreviewResult(null);
+      onSetError(err instanceof Error ? err.message : "预览请求体失败");
+    } finally {
+      setPreviewLoading(false);
     }
   }
 
@@ -1609,6 +1835,37 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                         />
                       </label>
                     ) : null}
+                    {draftHasImageBilling ? (
+                      <div className="composer-menu-field composer-menu-field-full">
+                        <span>支持档位</span>
+                        <div className="capability-chip-row">
+                          {(
+                            [
+                              ["supportedResolution1k", "1K"],
+                              ["supportedResolution2k", "2K"],
+                              ["supportedResolution4k", "4K"],
+                            ] as const
+                          ).map(([key, label]) => {
+                            const checked = providerDraft[key];
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                className={`capability-chip${checked ? " is-on" : ""}`}
+                                onClick={() =>
+                                  setProviderDraft((current) => ({ ...current, [key]: !current[key] }))
+                                }
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="admin-form-help">
+                          未勾选的档位不会出现在 Studio/Canvas；若全部取消则回退默认（通常 1K+2K）。
+                        </p>
+                      </div>
+                    ) : null}
                     <label className="composer-menu-field">
                       <span>币种</span>
                       <input
@@ -1623,13 +1880,123 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                 ) : null}
               </div>
 
+              {showStrategiesEditor ? (
+                <div className="model-form-grid model-form-grid-compact" style={{ marginTop: 12 }}>
+                  {draftHasImageCapability ? (
+                    <div className="composer-menu-field composer-menu-field-full">
+                      <span>生图策略</span>
+                      <div className="capability-chip-row">
+                        {IMAGE_STRATEGY_PRESETS.map((preset) => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            className={`capability-chip${imageStrategyPresetId === preset.id ? " is-on" : ""}`}
+                            title={preset.hint}
+                            onClick={() => {
+                              if (preset.strategy === "__custom__") {
+                                setMoreOptionsOpen(true);
+                                return;
+                              }
+                              setProviderDraft((current) => ({
+                                ...current,
+                                strategies: applyStrategyPreset(current.strategies, "image.generate", preset, {
+                                  syncImageEdit: true,
+                                }),
+                              }));
+                            }}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="admin-form-help">
+                        {IMAGE_STRATEGY_PRESETS.find((item) => item.id === imageStrategyPresetId)?.hint ??
+                          "自定义 JSON"}
+                        。VIP 用比例 size；DeepKey count 必须像素 size（如 1024x1024）。选「自动」按模型名推断。
+                      </p>
+                    </div>
+                  ) : null}
+                  {draftHasVideoCapability ? (
+                    <div className="composer-menu-field composer-menu-field-full">
+                      <span>视频策略</span>
+                      <div className="capability-chip-row">
+                        {VIDEO_STRATEGY_PRESETS.map((preset) => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            className={`capability-chip${videoStrategyPresetId === preset.id ? " is-on" : ""}`}
+                            title={preset.hint}
+                            onClick={() => {
+                              if (preset.strategy === "__custom__") {
+                                setMoreOptionsOpen(true);
+                                return;
+                              }
+                              setProviderDraft((current) => ({
+                                ...current,
+                                strategies: applyStrategyPreset(current.strategies, "video.generate", preset),
+                              }));
+                            }}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="admin-form-help">
+                        {VIDEO_STRATEGY_PRESETS.find((item) => item.id === videoStrategyPresetId)?.hint ??
+                          "自定义 JSON"}
+                      </p>
+                    </div>
+                  ) : null}
+                  {draftHasChatCapability ? (
+                    <div className="composer-menu-field composer-menu-field-full">
+                      <span>Chat 策略</span>
+                      <div className="capability-chip-row">
+                        {CHAT_STRATEGY_PRESETS.map((preset) => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            className={`capability-chip${chatStrategyPresetId === preset.id ? " is-on" : ""}`}
+                            title={preset.hint}
+                            onClick={() => {
+                              if (preset.strategy === "__custom__") {
+                                setMoreOptionsOpen(true);
+                                return;
+                              }
+                              setProviderDraft((current) => ({
+                                ...current,
+                                strategies: applyStrategyPreset(current.strategies, "chat", preset),
+                              }));
+                            }}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  <label className="composer-menu-field composer-menu-field-full">
+                    <span>Strategies（可自定义）</span>
+                    <textarea
+                      rows={3}
+                      value={providerDraft.strategies}
+                      onChange={(e) => setProviderDraft((c) => ({ ...c, strategies: e.target.value }))}
+                      placeholder={'{"image.generate":"haodeya_sync_image","image.edit":"haodeya_sync_image"}'}
+                    />
+                    <small>
+                      点上方芯片会写入这里；也可直接改 JSON。短 body 策略会同步 image.edit。
+                      不确定用下方「预览请求体」核对。
+                    </small>
+                  </label>
+                </div>
+              ) : null}
+
               <button
                 type="button"
                 className="model-more-toggle"
                 aria-expanded={moreOptionsOpen}
                 onClick={() => setMoreOptionsOpen((v) => !v)}
               >
-                {moreOptionsOpen ? "收起更多选项" : "更多选项（Adapter / Strategies / 超时…）"}
+                {moreOptionsOpen ? "收起更多选项" : "更多选项（Adapter / 超时…）"}
               </button>
 
               {moreOptionsOpen ? (
@@ -1705,15 +2072,6 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                       value={providerDraft.referenceCaptionModel}
                       onChange={(e) => setProviderDraft((c) => ({ ...c, referenceCaptionModel: e.target.value }))}
                       placeholder="可选"
-                    />
-                  </label>
-                  <label className="composer-menu-field composer-menu-field-full">
-                    <span>Strategies</span>
-                    <textarea
-                      rows={3}
-                      value={providerDraft.strategies}
-                      onChange={(e) => setProviderDraft((c) => ({ ...c, strategies: e.target.value }))}
-                      placeholder={'{"video.generate":"haodeya_grok_video"}'}
                     />
                   </label>
                   <label className="composer-menu-field composer-menu-field-full">
@@ -1801,6 +2159,113 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                     {activeAdapterOption.label} · {supportLevelLabel(activeProviderSupport)} — {activeAdapterOption.note}
                   </p>
                 </div>
+              ) : null}
+
+              {editingProviderProfileId !== null && draftHasImageBilling ? (
+                <div className="composer-menu-field composer-menu-field-full">
+                  <span>完整请求体预览</span>
+                  <div className="capability-chip-row" style={{ marginBottom: 8 }}>
+                    {(["1k", "2k", "4k"] as const).map((tier) => (
+                      <button
+                        key={tier}
+                        type="button"
+                        className={`capability-chip${previewResolution === tier ? " is-on" : ""}`}
+                        onClick={() => setPreviewResolution(tier)}
+                      >
+                        {tier.toUpperCase()}
+                      </button>
+                    ))}
+                    {(["1:1", "16:9", "9:16", "4:3"] as const).map((ratio) => (
+                      <button
+                        key={ratio}
+                        type="button"
+                        className={`capability-chip${previewAspectRatio === ratio ? " is-on" : ""}`}
+                        onClick={() => setPreviewAspectRatio(ratio)}
+                      >
+                        {ratio}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className={`capability-chip${previewHasReference ? " is-on" : ""}`}
+                      onClick={() => setPreviewHasReference((value) => !value)}
+                    >
+                      含参考图
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      disabled={previewLoading}
+                      onClick={() => void handlePreviewProviderRequest()}
+                    >
+                      {previewLoading ? "生成中..." : "预览请求体"}
+                    </button>
+                  </div>
+                  {previewResult ? (
+                    <>
+                      <div
+                        className="admin-form-help"
+                        style={{
+                          display: "grid",
+                          gap: 4,
+                          marginBottom: 8,
+                          padding: "10px 12px",
+                          borderRadius: 8,
+                          background: "rgba(37, 99, 235, 0.06)",
+                          border: "1px solid rgba(37, 99, 235, 0.18)",
+                        }}
+                      >
+                        <strong>{previewResult.strategy_label || previewResult.strategy || "未知策略"}</strong>
+                        <span>
+                          {previewResult.method} {previewResult.endpoint}
+                        </span>
+                        <span>
+                          strategy=<code>{previewResult.strategy || "-"}</code>
+                          {previewResult.adapter_mode ? (
+                            <>
+                              {" "}
+                              · adapter=<code>{previewResult.adapter_mode}</code>
+                            </>
+                          ) : null}
+                        </span>
+                        <span>body 字段：{previewResult.body_shape || Object.keys(previewResult.body || {}).join(", ") || "-"}</span>
+                        {previewResult.note ? <span>{previewResult.note}</span> : null}
+                      </div>
+                      <pre
+                        className="admin-json-preview"
+                        style={{
+                          maxHeight: 280,
+                          overflow: "auto",
+                          padding: 12,
+                          borderRadius: 8,
+                          background: "rgba(0,0,0,0.04)",
+                          fontSize: 12,
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {JSON.stringify(previewResult.body, null, 2)}
+                      </pre>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(
+                            JSON.stringify(previewResult.body, null, 2)
+                          );
+                        }}
+                      >
+                        复制 body
+                      </button>
+                    </>
+                  ) : (
+                    <p className="admin-form-help">
+                      按当前已保存配置生成与生产一致的上游 body（只读）。预览会标明策略类型：聊天多模态（长）vs 异步生图（短）。
+                    </p>
+                  )}
+                </div>
+              ) : editingProviderProfileId !== null && draftHasVideoBilling && !draftHasImageBilling ? (
+                <p className="admin-form-help composer-menu-field-full">视频能力本波仅支持图像请求体预览。</p>
               ) : null}
 
               <label className="model-toggle">

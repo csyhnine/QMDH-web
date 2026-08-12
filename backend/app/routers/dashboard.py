@@ -103,6 +103,31 @@ def _infer_task_capability(entry: UsageLedger, provider_entries: list[UsageLedge
     return "image.generate"
 
 
+def _is_image_capability(capability: str) -> bool:
+    return capability in {"image.generate", "image.edit", "image.upscale"}
+
+
+def _resolve_ledger_model_label(
+    entry: UsageLedger,
+    provider_entries_by_task: dict[int, list[UsageLedger]],
+) -> str:
+    for candidate in (
+        entry.model_name,
+        entry.provider_name,
+        entry.requested_provider,
+    ):
+        value = str(candidate or "").strip()
+        if value:
+            return value
+    if entry.task_id is not None:
+        for call in provider_entries_by_task.get(entry.task_id, []):
+            for candidate in (call.model_name, call.provider_name):
+                value = str(candidate or "").strip()
+                if value:
+                    return value
+    return "未标注模型"
+
+
 def _empty_execution_bucket() -> dict[str, int]:
     return {
         "image_generate_count": 0,
@@ -144,6 +169,7 @@ def _apply_chat_usage(bucket: dict[str, int], entry: UsageLedger) -> None:
 
 def _activity_sort_key(
     *,
+    image_output_count: int = 0,
     image_generate_count: int,
     image_edit_count: int,
     video_generate_count: int,
@@ -151,8 +177,9 @@ def _activity_sort_key(
     chat_total_tokens: int,
     last_activity_at: datetime | None,
     name: str,
-) -> tuple[int, int, datetime, str]:
+) -> tuple[int, int, int, datetime, str]:
     return (
+        image_output_count,
         image_generate_count + image_edit_count + video_generate_count + chat_turn_count,
         chat_total_tokens,
         last_activity_at or datetime.min.replace(tzinfo=timezone.utc),
@@ -267,11 +294,9 @@ def get_dashboard_stats(
     provider_counts = Counter(entry.requested_provider for entry in task_entries)
     failure_counts = Counter(_failure_reason(entry) for entry in task_entries if entry.task_status == TaskStatus.failed)
     model_counts: Counter[str] = Counter()
-    model_costs: Counter[str] = Counter()
     for entry in billable_provider_entries:
         model_name = entry.model_name or entry.provider_name
         model_counts[model_name] += 1
-        model_costs[model_name] += float(entry.cost or 0)
 
     provider_rows = []
     for name, count in provider_counts.most_common(10):
@@ -442,6 +467,7 @@ def get_dashboard_stats(
 
     account_usage.sort(
         key=lambda item: _activity_sort_key(
+            image_output_count=item.image_output_count,
             image_generate_count=item.image_generate_count,
             image_edit_count=item.image_edit_count,
             video_generate_count=item.video_generate_count,
@@ -516,11 +542,19 @@ def get_dashboard_stats(
 
     today_image_generate_count = 0
     week_image_generate_count = 0
+    today_image_output_count = 0
+    week_image_output_count = 0
     today_video_generate_count = 0
     week_video_generate_count = 0
     for entry in task_entries_all:
         capability = task_capability_by_task_id.get(entry.task_id or 0, "image.generate")
         entry_date = _shanghai_date(entry.recorded_at)
+        output_count = int(entry.output_count or 0)
+        if _is_image_capability(capability):
+            if entry_date == end_date:
+                today_image_output_count += output_count
+            if entry_date >= week_start:
+                week_image_output_count += output_count
         if capability == "image.generate":
             if entry_date == end_date:
                 today_image_generate_count += 1
@@ -531,6 +565,12 @@ def get_dashboard_stats(
                 today_video_generate_count += 1
             if entry_date >= week_start:
                 week_video_generate_count += 1
+
+    window_image_output_count = sum(
+        int(entry.output_count or 0)
+        for entry in task_entries
+        if _is_image_capability(task_capability_by_task_id.get(entry.task_id or 0, "image.generate"))
+    )
 
     execution_rankings = sorted(
         (
@@ -552,6 +592,7 @@ def get_dashboard_stats(
             for name, values in execution_rankings_map.items()
         ),
         key=lambda item: _activity_sort_key(
+            image_output_count=item.image_output_count,
             image_generate_count=item.image_generate_count,
             image_edit_count=item.image_edit_count,
             video_generate_count=item.video_generate_count,
@@ -562,6 +603,76 @@ def get_dashboard_stats(
         ),
         reverse=True,
     )
+
+    model_rows_map: dict[str, dict[str, object]] = {}
+
+    def ensure_model_row(name: str) -> dict[str, object]:
+        row = model_rows_map.get(name)
+        if row is None:
+            row = {
+                "name": name,
+                "count": 0,
+                "successful_tasks": 0,
+                "failed_tasks": 0,
+                "image_output_count": 0,
+                "video_task_count": 0,
+                "chat_turn_count": 0,
+                "chat_total_tokens": 0,
+                "total_cost": 0.0,
+                "cost_currency": primary_currency,
+            }
+            model_rows_map[name] = row
+        return row
+
+    for entry in task_entries:
+        model_name = _resolve_ledger_model_label(entry, provider_entries_by_task)
+        row = ensure_model_row(model_name)
+        row["count"] = int(row["count"]) + 1
+        if entry.task_status == TaskStatus.completed:
+            row["successful_tasks"] = int(row["successful_tasks"]) + 1
+        elif entry.task_status == TaskStatus.failed:
+            row["failed_tasks"] = int(row["failed_tasks"]) + 1
+        capability = task_capability_by_task_id.get(entry.task_id or 0, "image.generate")
+        if _is_image_capability(capability):
+            row["image_output_count"] = int(row["image_output_count"]) + int(entry.output_count or 0)
+        if capability == "video.generate":
+            row["video_task_count"] = int(row["video_task_count"]) + 1
+        if not _is_legacy_local_pricing_entry(entry):
+            row["total_cost"] = float(row["total_cost"]) + float(entry.cost or 0)
+
+    for entry in chat_entries:
+        model_name = str(entry.model_name or entry.provider_name or entry.requested_provider or "Chat").strip() or "Chat"
+        row = ensure_model_row(model_name)
+        row["chat_turn_count"] = int(row["chat_turn_count"]) + 1
+        row["chat_total_tokens"] = int(row["chat_total_tokens"]) + int(entry.total_tokens or 0)
+        if not _is_legacy_local_pricing_entry(entry):
+            row["total_cost"] = float(row["total_cost"]) + float(entry.cost or 0)
+
+    model_rankings = sorted(
+        (
+            {
+                "name": str(values["name"]),
+                "count": int(values["count"]),
+                "successful_tasks": int(values["successful_tasks"]),
+                "failed_tasks": int(values["failed_tasks"]),
+                "image_output_count": int(values["image_output_count"]),
+                "video_task_count": int(values["video_task_count"]),
+                "chat_turn_count": int(values["chat_turn_count"]),
+                "chat_total_tokens": int(values["chat_total_tokens"]),
+                "total_cost": _round(float(values["total_cost"])),
+                "cost_currency": str(values["cost_currency"] or primary_currency),
+                "success_rate": _success_rate(int(values["successful_tasks"]), int(values["count"])),
+            }
+            for values in model_rows_map.values()
+        ),
+        key=lambda item: (
+            int(item["image_output_count"]),
+            int(item["count"]),
+            int(item["chat_turn_count"]),
+            int(item["chat_total_tokens"]),
+        ),
+        reverse=True,
+    )[:12]
 
     return DashboardStats(
         active_workflows=active_workflows,
@@ -576,9 +687,11 @@ def get_dashboard_stats(
         total_cost=round(total_cost, 2),
         cost_unit=primary_currency if len(cost_by_currency_counter) <= 1 else "multiple currencies",
         cost_formula=(
-            "总成本按币种分别汇总：total_cost = sum(tasks.cost)。真实任务仍保留成本口径，但运营主视图已切换为按执行次数与 Chat token 观察活跃度。"
+            "总成本按币种分别汇总：total_cost = sum(tasks.cost)。运营主视图同时展示出图张数（output_count）与任务执行次数。"
         ),
         cost_notes=[
+            "真实出图张数来自任务结果 output_count，与素材落库张数对齐；一次任务可对应多张。",
+            "按模型面板聚合图像/视频任务与 Chat 轮次；汇总行缺模型名时回退到 requested_provider 或 provider_call。",
             "只有在模型配置里维护了 pricing_currency、pricing_unit 和 unit_price 后，成本才代表真实计费口径。",
             "旧版 gpt-image-2 的本地 CNY 历史已从当前运营支出口径中排除，原始记录仍保留在账本中。",
             "Chat token 统计仅从本次版本之后的新消息开始准确记录，历史消息不做回填。",
@@ -592,23 +705,16 @@ def get_dashboard_stats(
         user_rankings=[{"name": name, "count": count} for name, count in user_counts.most_common(10)],
         project_rankings=[{"code": code, "count": count} for code, count in project_counts.most_common(10)],
         provider_rankings=provider_rows,
-        model_rankings=[
-            {
-                "name": name,
-                "count": count,
-                "successful_tasks": count,
-                "failed_tasks": 0,
-                "total_cost": _round(model_costs.get(name, 0.0)),
-                "cost_currency": primary_currency,
-            }
-            for name, count in model_counts.most_common(10)
-        ],
+        model_rankings=model_rankings,
         failure_reasons=failure_rows,
         account_usage=account_usage,
         daily_series=daily_series,
         model_calls_by_day=model_calls_by_day,
         today_image_generate_count=today_image_generate_count,
         week_image_generate_count=week_image_generate_count,
+        today_image_output_count=today_image_output_count,
+        week_image_output_count=week_image_output_count,
+        window_image_output_count=window_image_output_count,
         today_video_generate_count=today_video_generate_count,
         week_video_generate_count=week_video_generate_count,
         window_chat_turn_count=len(chat_entries),

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditEventType, write_audit_log
 from app.core.auth import get_current_auth_user, has_admin_access, require_ops_access
-from app.core.config import AuthUserProfile, settings
+from app.core.config import AuthUserProfile, ImageProviderProfile, settings
 from app.core.encryption import (
     EncryptedValueDecodeError,
     EncryptionKeyUnavailableError,
@@ -28,11 +28,14 @@ from app.schemas import (
     ProviderPricingRuleOut,
     ProviderPricingRuleUpdate,
     ProviderProfileCreate,
+    ProviderProfilePreviewRequestIn,
+    ProviderProfilePreviewRequestOut,
     ProviderProfileProbeOut,
     ProviderProfileOut,
     ProviderProfileUpdate,
 )
-from app.services.model_registry import list_provider_capabilities
+from app.services.model_registry import ProviderDefinition, list_provider_capabilities
+from app.services.task_executor import _build_image_request_plan
 from app.services.provider_strategy import (
     CHAT_CAPABILITY,
     CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY,
@@ -45,6 +48,7 @@ from app.services.provider_strategy import (
     OPENAI_IMAGE_EDITS_STRATEGY,
     OPENAI_IMAGES_STRATEGY,
     HAODEYA_ASYNC_IMAGE_STRATEGY,
+    HAODEYA_SYNC_IMAGE_STRATEGY,
     VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
     VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
     normalize_provider_base_url,
@@ -74,6 +78,7 @@ def get_providers(db: Session = Depends(get_db)) -> list[ProviderCapability]:
             configurable=item.configurable,
             outbound=item.outbound,
             adapter_kind=item.adapter_kind,
+            supported_resolutions=list(item.supported_resolutions or ()),
         )
         for item in list_provider_capabilities(db, include_static=False)
     ]
@@ -155,6 +160,69 @@ def _to_pricing_rule_out(rule: ProviderPricingRule) -> ProviderPricingRuleOut:
     )
 
 
+def _image_profile_for_preview(profile: ProviderProfile) -> ImageProviderProfile:
+    """Build a runtime profile for dry-run request planning (no upstream call)."""
+    return ImageProviderProfile(
+        provider_name=profile.provider_name,
+        display_name=(profile.display_name or profile.model_name or profile.provider_name).strip(),
+        api_key="preview-key",
+        api_secret="",
+        base_url=profile.base_url.rstrip("/"),
+        model_name=profile.model_name,
+        timeout_seconds=float(profile.timeout_seconds or 300.0),
+        quality=profile.quality or "medium",
+        output_format=profile.output_format or "png",
+        pricing_currency=(profile.pricing_currency or "CNY").upper(),
+        pricing_unit=profile.pricing_unit or "per_image",
+        unit_price=float(profile.unit_price or 0.0),
+        adapter_kind=profile.adapter_kind or "openai_compatible",
+        capabilities=tuple(profile.capabilities or ["image.generate"]),
+        configurable=True,
+        outbound=True,
+        reference_mode=profile.reference_mode or "disabled",
+        reference_caption_model=profile.reference_caption_model,
+        strategies=normalize_strategies(profile.strategies or {}),
+        adapter_config=profile.adapter_config if isinstance(profile.adapter_config, dict) else {},
+    )
+
+
+def _redact_preview_headers(headers: dict[str, str]) -> dict[str, str]:
+    redacted: dict[str, str] = {}
+    for key, value in headers.items():
+        lower = key.lower()
+        if lower in {"authorization", "x-api-key", "api-key"} or "secret" in lower or "token" in lower:
+            redacted[key] = "[redacted]"
+        else:
+            redacted[key] = value
+    return redacted
+
+
+def _preview_strategy_label(strategy: str, adapter_mode: str, endpoint_path: str) -> str:
+    normalized = str(strategy or adapter_mode or "").strip().lower()
+    if "haodeya_async" in normalized or "toapis" in normalized:
+        return "异步生图（短 body：model + prompt + size）· VIP 轮询"
+    if "haodeya_sync" in normalized:
+        return "同步生图（短 body：model + prompt + WIDTHxHEIGHT）· DeepKey count"
+    if "chat_modalities" in normalized:
+        return "聊天多模态生图（长 body：messages / modalities / image_config）"
+    if "chat_completions" in normalized:
+        return "Chat Completions 生图（messages + image_config）"
+    if endpoint_path.endswith("/images/edits") or "image_edit" in normalized:
+        return "图像编辑（/images/edits）"
+    if endpoint_path.endswith("/images/generations") or normalized == "openai_images":
+        return "同步生图（/images/generations）"
+    return strategy or adapter_mode or "未知策略"
+
+
+def _preview_body_shape(body: dict[str, object], *, multipart: bool) -> str:
+    keys = [str(key) for key in body.keys()]
+    if multipart:
+        return "multipart + " + ", ".join(keys[:8])
+    if not keys:
+        return "(empty)"
+    return ", ".join(keys)
+
+
 def _build_probe_request(profile: ProviderProfile, api_key: str) -> tuple[str, str, dict[str, object], str]:
     base_url = profile.base_url.rstrip("/")
     headers = {
@@ -207,13 +275,24 @@ def _build_probe_request(profile: ProviderProfile, api_key: str) -> tuple[str, s
                     "model": profile.model_name,
                     "prompt": "ping",
                     "size": "1:1",
-                    "resolution": "1k",
-                    "quality": profile.quality or "high",
-                    "response_format": "url",
-                    "n": 1,
                 },
             },
             "Haodeya 异步生图接口可用，当前模型已通过最小请求校验。",
+        )
+
+    if strategy == HAODEYA_SYNC_IMAGE_STRATEGY:
+        return (
+            "POST",
+            f"{base_url}/images/generations",
+            {
+                "headers": headers,
+                "json": {
+                    "model": profile.model_name,
+                    "prompt": "ping",
+                    "size": "1024x1024",
+                },
+            },
+            "Haodeya 同步生图接口可用，当前模型已通过最小请求校验。",
         )
 
     if strategy == OPENAI_IMAGES_STRATEGY:
@@ -517,6 +596,89 @@ async def probe_provider_profile(
         detail=success_detail,
         checked_url=checked_url,
         checked_at=checked_at,
+    )
+
+
+@router.post("/profiles/{profile_id}/preview-request", response_model=ProviderProfilePreviewRequestOut)
+def preview_provider_profile_request(
+    profile_id: int,
+    payload: ProviderProfilePreviewRequestIn,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> ProviderProfilePreviewRequestOut:
+    require_ops_access(auth_user)
+    profile = db.get(ProviderProfile, profile_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Provider profile not found")
+
+    capability = payload.capability.strip() or "image.generate"
+    if capability not in {"image.generate", "image.edit"}:
+        return ProviderProfilePreviewRequestOut(
+            endpoint="",
+            body={},
+            note="本波仅支持图像能力预览（image.generate / image.edit）；视频请后续再接。",
+        )
+
+    profile_caps = set(profile.capabilities or [])
+    if capability not in profile_caps and not (
+        capability.startswith("image.") and any(item.startswith("image.") for item in profile_caps)
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=f"当前模型未配置能力 {capability}",
+        )
+
+    runtime_profile = _image_profile_for_preview(profile)
+    definition = ProviderDefinition(
+        provider_name=runtime_profile.provider_name,
+        model_name=runtime_profile.model_name,
+        capabilities=list(runtime_profile.capabilities),
+        display_name=runtime_profile.display_name,
+        configurable=True,
+        outbound=True,
+        adapter_kind=runtime_profile.adapter_kind,
+        runtime_profile_name=runtime_profile.provider_name,
+    )
+
+    sample_payload: dict[str, object] = {
+        "prompt": "preview prompt",
+        "resolution": payload.resolution,
+        "aspect_ratio": payload.aspect_ratio,
+        "image_count": 1,
+    }
+    if payload.has_reference or capability == "image.edit":
+        sample_payload["reference_image"] = _PROBE_IMAGE_DATA_URL
+
+    try:
+        plan = _build_image_request_plan(
+            profile=runtime_profile,
+            definition=definition,
+            capability=capability,
+            payload=sample_payload,
+            prompt=str(sample_payload["prompt"]),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return ProviderProfilePreviewRequestOut(
+        endpoint=f"{runtime_profile.base_url.rstrip('/')}{plan.endpoint_path}",
+        method="POST",
+        body=plan.body if isinstance(plan.body, dict) else {},
+        adapter_mode=plan.adapter_mode,
+        strategy=plan.strategy,
+        strategy_label=_preview_strategy_label(plan.strategy, plan.adapter_mode, plan.endpoint_path),
+        body_shape=_preview_body_shape(
+            plan.body if isinstance(plan.body, dict) else {},
+            multipart=bool(plan.multipart_files),
+        ),
+        effective_capability=plan.effective_capability,
+        headers_redacted=_redact_preview_headers(dict(plan.headers or {})),
+        multipart=bool(plan.multipart_files),
+        note=(
+            "只读预览；未发上游、未落账。"
+            + (" 含 multipart 附件。" if plan.multipart_files else "")
+            + " 若策略不符预期，请在 Strategies 显式指定（如 haodeya_async_image / haodeya_sync_image / chat_modalities_image）。"
+        ),
     )
 
 

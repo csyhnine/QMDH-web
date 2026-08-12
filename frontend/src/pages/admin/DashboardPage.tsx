@@ -161,15 +161,30 @@ export default function DashboardPage({
     );
   }
 
-  const maxDailyTaskCount = rowMax(dashboard.daily_series, (item) =>
-    item.image_generate_count + item.image_edit_count + item.video_generate_count,
+  const maxDailyImageOutputs = rowMax(dashboard.daily_series, (item) => item.image_output_count);
+  const modelRankingMax = rowMax(dashboard.model_rankings, (item) => {
+    const images = Number(item.image_output_count || 0);
+    const tasks = Number(item.count || 0);
+    const chatTurns = Number(item.chat_turn_count || 0);
+    return Math.max(images, tasks + chatTurns);
+  });
+  const executionMax = rowMax(
+    dashboard.execution_rankings,
+    (item) =>
+      item.image_output_count +
+      item.image_generate_count +
+      item.image_edit_count +
+      item.video_generate_count +
+      item.chat_turn_count,
   );
-  const maxChatTokens = rowMax(dashboard.daily_series, (item) => item.chat_total_tokens);
-  const executionMax = rowMax(dashboard.execution_rankings, (item) =>
-    item.image_generate_count + item.image_edit_count + item.video_generate_count + item.chat_turn_count,
-  );
-  const accountUsageMax = rowMax(dashboard.account_usage, (item) =>
-    item.image_generate_count + item.image_edit_count + item.video_generate_count + item.chat_turn_count,
+  const accountUsageMax = rowMax(
+    dashboard.account_usage,
+    (item) =>
+      item.image_output_count +
+      item.image_generate_count +
+      item.image_edit_count +
+      item.video_generate_count +
+      item.chat_turn_count,
   );
   const safeAccountUsagePage = Math.min(accountUsagePage, accountUsageTotalPages);
   const accountUsagePageStart = (safeAccountUsagePage - 1) * ACCOUNT_USAGE_PAGE_SIZE;
@@ -213,7 +228,7 @@ export default function DashboardPage({
       <header className="ops-dashboard-head">
         <div>
           <h1>运营看板</h1>
-          <p>以任务执行频次与 Chat token 为主，成本数据保留为次级参考。</p>
+          <p>以出图张数与任务执行频次为主，Chat token / 成本保留为次级参考。</p>
         </div>
         <div className="ops-toolbar">
           <div className="ops-segment">
@@ -240,11 +255,21 @@ export default function DashboardPage({
       <div className="ops-kpi-grid">
         <article className="ops-kpi-card ops-kpi-blue">
           <div>
-            <span>今日生图</span>
-            <strong>{formatCount(dashboard.today_image_generate_count)}</strong>
-            <small>{`本周 ${formatCount(dashboard.week_image_generate_count)} 次`}</small>
+            <span>窗口出图张数</span>
+            <strong>{formatCount(dashboard.window_image_output_count ?? 0)}</strong>
+            <small>
+              {`今日 ${formatCount(dashboard.today_image_output_count ?? 0)} · 本周 ${formatCount(dashboard.week_image_output_count ?? 0)} 张`}
+            </small>
           </div>
-          <i>图</i>
+          <i>张</i>
+        </article>
+        <article className="ops-kpi-card ops-kpi-red">
+          <div>
+            <span>任务成功率</span>
+            <strong>{dashboard.success_rate.toFixed(1)}%</strong>
+            <small>{`${formatCount(dashboard.successful_tasks)} 成功 / ${formatCount(dashboard.failed_tasks)} 失败`}</small>
+          </div>
+          <i>成</i>
         </article>
         <article className="ops-kpi-card ops-kpi-purple">
           <div>
@@ -270,81 +295,84 @@ export default function DashboardPage({
           </div>
           <i>T</i>
         </article>
-        <article className="ops-kpi-card ops-kpi-red">
-          <div>
-            <span>任务成功率</span>
-            <strong>{dashboard.success_rate.toFixed(1)}%</strong>
-            <small>{`${formatCount(dashboard.successful_tasks)} 成功 / ${formatCount(dashboard.failed_tasks)} 失败`}</small>
-          </div>
-          <i>成</i>
-        </article>
       </div>
 
       <div className="ops-dashboard-grid">
         <section className="ops-panel ops-panel-wide">
           <div className="ops-panel-head">
-            <h2>每日任务执行趋势</h2>
-            <span>按上海时间自然日统计</span>
+            <h2>每日出图趋势</h2>
+            <span>柱高按出图张数；下方括号为任务次数</span>
           </div>
           <div className="ops-task-series">
             {dashboard.daily_series.map((day) => {
               const taskCount = day.image_generate_count + day.image_edit_count + day.video_generate_count;
-              const taskHeight = maxDailyTaskCount === 0 ? 6 : Math.max(12, (taskCount / maxDailyTaskCount) * 100);
+              const imageOutputs = day.image_output_count;
+              const barHeight =
+                maxDailyImageOutputs === 0
+                  ? 6
+                  : Math.max(12, (imageOutputs / maxDailyImageOutputs) * 100);
               return (
                 <div key={day.date} className="ops-task-series-day">
                   <div className="ops-task-series-bars">
-                    <div className="ops-task-series-stack" style={{ height: `${taskHeight}%` }}>
-                      {day.image_generate_count > 0 ? (
-                        <span
-                          className="ops-task-series-segment image"
-                          style={{ height: `${(day.image_generate_count / Math.max(taskCount, 1)) * 100}%` }}
-                          title={`生图 ${day.image_generate_count}`}
-                        />
-                      ) : null}
-                      {day.image_edit_count > 0 ? (
-                        <span
-                          className="ops-task-series-segment edit"
-                          style={{ height: `${(day.image_edit_count / Math.max(taskCount, 1)) * 100}%` }}
-                          title={`修图 ${day.image_edit_count}`}
-                        />
-                      ) : null}
-                      {day.video_generate_count > 0 ? (
-                        <span
-                          className="ops-task-series-segment video"
-                          style={{ height: `${(day.video_generate_count / Math.max(taskCount, 1)) * 100}%` }}
-                          title={`视频 ${day.video_generate_count}`}
-                        />
-                      ) : null}
+                    <div
+                      className="ops-task-series-stack ops-task-series-stack-images"
+                      style={{ height: `${barHeight}%` }}
+                      title={`出图 ${imageOutputs} 张 · 任务 ${taskCount} 次（生图 ${day.image_generate_count} / 修图 ${day.image_edit_count} / 视频 ${day.video_generate_count}）`}
+                    >
+                      <span className="ops-task-series-segment image" style={{ height: "100%" }} />
                     </div>
                   </div>
-                  <strong>{taskCount}</strong>
+                  <strong>{formatCount(imageOutputs)}</strong>
+                  <em className="ops-task-series-sub">{`(${formatCount(taskCount)})`}</em>
                   <small>{formatDayLabel(day.date)}</small>
                 </div>
               );
             })}
           </div>
           <div className="ops-inline-legend">
-            <span><i className="ops-legend-chip image" />生图</span>
-            <span><i className="ops-legend-chip edit" />修图</span>
-            <span><i className="ops-legend-chip video" />视频</span>
+            <span><i className="ops-legend-chip image" />出图张数</span>
+            <span>括号内为当日任务次数</span>
           </div>
         </section>
 
         <section className="ops-panel">
           <div className="ops-panel-head">
-            <h2>每日 Chat Token</h2>
-            <span>窗口内消息使用量</span>
+            <h2>按模型</h2>
+            <span>窗口内出图 / 任务 / Chat（Top 12）</span>
           </div>
-          <div className="ops-token-series">
-            {dashboard.daily_series.map((day) => {
-              const barWidth = maxChatTokens === 0 ? 0 : (day.chat_total_tokens / maxChatTokens) * 100;
+          <div className="ops-model-list">
+            {(dashboard.model_rankings.length
+              ? dashboard.model_rankings
+              : [{ name: "暂无模型用量", count: 0, image_output_count: 0, successful_tasks: 0, failed_tasks: 0 }]
+            ).map((row) => {
+              const name = String(row.name || "未标注模型");
+              const images = Number(row.image_output_count || 0);
+              const tasks = Number(row.count || 0);
+              const success = Number(row.successful_tasks || 0);
+              const failed = Number(row.failed_tasks || 0);
+              const chatTurns = Number(row.chat_turn_count || 0);
+              const chatTokens = Number(row.chat_total_tokens || 0);
+              const videoTasks = Number(row.video_task_count || 0);
+              const barValue = Math.max(images, tasks + chatTurns);
+              const barWidth = modelRankingMax === 0 ? 0 : (barValue / modelRankingMax) * 100;
+              const detailParts = [
+                images > 0 ? `出图 ${formatCount(images)}` : null,
+                tasks > 0 ? `任务 ${formatCount(success)}/${formatCount(failed)}` : null,
+                videoTasks > 0 ? `视频 ${formatCount(videoTasks)}` : null,
+                chatTurns > 0
+                  ? `Chat ${formatCount(chatTurns)} · ${formatToken(chatTokens)}`
+                  : null,
+              ].filter(Boolean);
               return (
-                <div key={day.date} className="ops-token-row">
-                  <span>{formatDayLabel(day.date)}</span>
-                  <div>
+                <div key={name} className="ops-model-row">
+                  <div className="ops-model-row-main">
+                    <strong title={name}>{name}</strong>
+                    <span>{detailParts.length > 0 ? detailParts.join(" · ") : "无用量"}</span>
+                  </div>
+                  <div className="ops-model-row-bar">
                     <b style={{ width: `${barWidth}%` }} />
                   </div>
-                  <strong>{formatToken(day.chat_total_tokens)}</strong>
+                  <em>{images > 0 ? `${formatCount(images)} 张` : tasks > 0 ? `${formatCount(tasks)} 次` : formatToken(chatTokens)}</em>
                 </div>
               );
             })}
@@ -354,14 +382,15 @@ export default function DashboardPage({
         <section className="ops-panel ops-panel-wide">
           <div className="ops-panel-head">
             <h2>执行人排行</h2>
-            <span>按任务次数与 Chat 轮次综合排序</span>
+            <span>出图张数优先，任务次数为辅</span>
           </div>
           <div className="ops-execution-table">
             <div className="ops-execution-head">
               <span>执行人</span>
-              <span>生图</span>
-              <span>修图</span>
-              <span>视频</span>
+              <span>出图</span>
+              <span>生图次</span>
+              <span>修图次</span>
+              <span>视频次</span>
               <span>Chat 轮次</span>
               <span>Chat Token</span>
               <span>最近活动</span>
@@ -369,7 +398,11 @@ export default function DashboardPage({
             {dashboard.execution_rankings.length > 0 ? (
               dashboard.execution_rankings.map((row) => {
                 const activity =
-                  row.image_generate_count + row.image_edit_count + row.video_generate_count + row.chat_turn_count;
+                  row.image_output_count +
+                  row.image_generate_count +
+                  row.image_edit_count +
+                  row.video_generate_count +
+                  row.chat_turn_count;
                 const width = executionMax === 0 ? 0 : (activity / executionMax) * 100;
                 return (
                   <div key={row.user_name} className="ops-execution-body">
@@ -377,6 +410,7 @@ export default function DashboardPage({
                       <strong>{row.user_name}</strong>
                       <b style={{ width: `${width}%` }} />
                     </span>
+                    <span>{formatCount(row.image_output_count)}</span>
                     <span>{formatCount(row.image_generate_count)}</span>
                     <span>{formatCount(row.image_edit_count)}</span>
                     <span>{formatCount(row.video_generate_count)}</span>
@@ -567,9 +601,10 @@ export default function DashboardPage({
             <div className="ops-execution-head">
               <span>账号</span>
               <span>分组</span>
-              <span>生图</span>
-              <span>修图</span>
-              <span>视频</span>
+              <span>出图</span>
+              <span>生图次</span>
+              <span>修图次</span>
+              <span>视频次</span>
               <span>Chat 轮次</span>
               <span>Chat Token</span>
               <span>支出 / 配额</span>
@@ -578,6 +613,7 @@ export default function DashboardPage({
             {dashboard.account_usage.length > 0 ? (
               pagedAccountUsage.map((row) => {
                 const activityTotal =
+                  Number(row.image_output_count || 0) +
                   Number(row.image_generate_count || 0) +
                   Number(row.image_edit_count || 0) +
                   Number(row.video_generate_count || 0) +
@@ -599,6 +635,7 @@ export default function DashboardPage({
                       />
                     </span>
                     <span>{groupLabel(String(row.group_name || ""))}</span>
+                    <span>{formatCount(Number(row.image_output_count || 0))}</span>
                     <span>{formatCount(Number(row.image_generate_count || 0))}</span>
                     <span>{formatCount(Number(row.image_edit_count || 0))}</span>
                     <span>{formatCount(Number(row.video_generate_count || 0))}</span>

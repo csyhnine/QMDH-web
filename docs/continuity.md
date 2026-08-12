@@ -16,6 +16,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Current Baseline
 
+- **WIP（本波，未部署）**：模型可关 1K + Admin 请求体预览；看板出图张数/按模型面板；生图 size 分轨：`vip` 比例、`count` 像素、`seedream` 字面量 2K/4K（禁 1K/1024²）；Admin Strategies 可选预设 + 自定义 JSON
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
 - Current branch: **`main`** @ **`79f4814`**（与 `origin/main` 对齐）
 - Production: **`https://cityusbdisk.cn`** — 代码 **`79f4814`**
@@ -292,8 +293,10 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Near-Term Suggested Next Steps
 
-1. Cold-start: 读最新 `docs/handoff.md`（2026-07-29）与 `docs/archive/handoff-2026-07-29-canvas-announcements-nav.md`。
-2. Optional：导航工具换正式 logo（Admin 封面上传）；root SSH 改密钥并轮换密码。
-3. Optional follow-up：`project_code` 挂钩、LLM 提炼长期记忆。
-4. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`。
-5. 安全：若曾在控制台重置并泄露 root 密码，建议改回密钥登录并轮换密码。
+1. Cold-start: 读最新 `docs/handoff.md`（2026-07-30）与 `docs/archive/handoff-2026-07-30-compare-canvas-upstream.md`。
+2. **不要**继续算力/对外简历运营数据专项（已取消）。
+3. **设计助手 harness 厚度**：审计见 `docs/archive/audit-2026-08-agent-harness-thickness.md`；切片 A 本地未提交。**max_tokens 热修 `2e82e55` + Chat 用量补记 `b61c229` 已热补丁上生产**（设计助手回合 + 普通 Chat 上下文压缩侧调用入账）。
+4. Optional：画布模板草稿/发布门槛；导航工具换正式 logo；root SSH 改密钥并轮换密码。
+5. Optional follow-up：`project_code` 挂钩、LLM 提炼长期记忆。
+6. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`。
+7. 安全：若曾在控制台重置并泄露 root 密码，建议改回密钥登录并轮换密码。

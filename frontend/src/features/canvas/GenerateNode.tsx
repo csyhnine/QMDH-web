@@ -1,7 +1,7 @@
 import { Handle, Position, useUpdateNodeInternals, type Node, type NodeProps } from "@xyflow/react";
 import { useEffect, useMemo, useRef } from "react";
 
-import { resolutionOptions } from "../studio/studioConstants";
+import { resolveProviderResolutionOptions } from "../studio/studioConstants";
 import { aspectRatioOptionsFor } from "../studio/studioCanvasLinkage";
 import { isGrokHaodeyaProvider } from "../studio/grokVideoUtils";
 import {
@@ -50,6 +50,9 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
   const selectedProvider = providers.find((item) => item.provider_name === data.requestedProvider);
   const ratioOptions = aspectRatioOptionsFor(data.nodeKind, {
     grokVideo: data.nodeKind === "video" && isGrokHaodeyaProvider(selectedProvider),
+  });
+  const nodeResolutionOptions = resolveProviderResolutionOptions(selectedProvider, {
+    creationMode: data.creationMode,
   });
   const baseImage =
     upstream.images[0] || data.referenceImages[0] || data.previewImagePath || data.assetUrls[0] || "";
@@ -283,7 +286,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
                       disabled={disabled || busy}
                       onChange={(event) => patch({ resolution: event.target.value })}
                     >
-                      {resolutionOptions.map((option) => (
+                      {nodeResolutionOptions.map((option) => (
                         <option key={option.id} value={option.id}>
                           {option.label}
                         </option>

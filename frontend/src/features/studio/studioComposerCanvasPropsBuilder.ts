@@ -1,7 +1,8 @@
 import {
+  clampResolutionToOptions,
   resolutionOptions,
   isSourceAspectRatio,
-  normalizeStudioResolution,
+  resolveProviderResolutionOptions,
   studioResolutionLabel,
 } from "./studioConstants";
 import {
@@ -60,19 +61,14 @@ export function buildStudioComposerCanvasProps({
 
   const handleProviderSelect = (providerName: string) => {
     const provider = availableProviders.find((item) => item.provider_name === providerName);
-    const isWanPro =
-      Boolean(provider?.model_name?.toLowerCase().includes("wan2.7-image-pro")) ||
-      Boolean(provider?.provider_name?.toLowerCase().includes("wan2.7-image-pro"));
     setStudioForm((current) => {
-      const supports4k = isWanPro && current.creationMode === "generate";
-      const nextResolution =
-        !supports4k && normalizeStudioResolution(current.resolution) === "4k"
-          ? "1k"
-          : current.resolution;
+      const nextOptions = resolveProviderResolutionOptions(provider, {
+        creationMode: current.creationMode,
+      });
       return {
         ...current,
         requestedProvider: providerName,
-        resolution: nextResolution,
+        resolution: clampResolutionToOptions(current.resolution, nextOptions),
         grokVideoSku: isHappyHorseProvider(provider)
           ? happyHorseVideoSkuForProviderSelection(provider, current.grokVideoSku)
           : grokVideoSkuForProviderSelection(provider, current.grokVideoSku),
@@ -96,6 +92,9 @@ export function buildStudioComposerCanvasProps({
   const composerAspectRatioOptions = aspectRatioOptionsFor(studioForm.creationMode, {
     grokVideo: isGrokVideo || isHappyHorseVideo,
   });
+  const composerResolutionOptions = resolveProviderResolutionOptions(selectedProvider, {
+    creationMode: studioForm.creationMode,
+  });
 
   return {
     activeComposerMenu,
@@ -110,7 +109,7 @@ export function buildStudioComposerCanvasProps({
     hasActiveProject: Boolean(activeProject),
     providerGroups,
     referenceUploads: referenceUpload.referenceUploads,
-    resolutionOptions,
+    resolutionOptions: composerResolutionOptions.length > 0 ? composerResolutionOptions : resolutionOptions,
     selectedProvider,
     selectedGrokSkuLabel: grokSkuConfig?.label ?? happyHorseSkuConfig?.label ?? null,
     selectedProviderModelName: selectedProvider?.display_name ?? selectedProvider?.model_name ?? null,
@@ -182,15 +181,15 @@ export function buildStudioComposerCanvasProps({
             nextAspectRatio = defaultAspectRatioFor(mode);
           }
         }
+        const nextResolutionOptions = resolveProviderResolutionOptions(provider, {
+          creationMode: mode,
+        });
         return {
           ...current,
           creationMode: mode,
           requestedProvider: resolvedProviderName,
           aspectRatio: nextAspectRatio,
-          resolution:
-            mode !== "generate" && normalizeStudioResolution(current.resolution) === "4k"
-              ? "1k"
-              : current.resolution,
+          resolution: clampResolutionToOptions(current.resolution, nextResolutionOptions),
           grokVideoSku: nextGrokSku,
         };
       });

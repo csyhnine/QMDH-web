@@ -194,6 +194,9 @@ class DashboardStats(BaseModel):
     model_calls_by_day: list[DashboardDayModelCalls] = Field(default_factory=list)
     today_image_generate_count: int = 0
     week_image_generate_count: int = 0
+    today_image_output_count: int = 0
+    week_image_output_count: int = 0
+    window_image_output_count: int = 0
     today_video_generate_count: int = 0
     week_video_generate_count: int = 0
     window_chat_turn_count: int = 0
@@ -400,6 +403,7 @@ class ProviderCapability(BaseModel):
     configurable: bool
     outbound: bool
     adapter_kind: str
+    supported_resolutions: list[str] = Field(default_factory=list)
 
 
 class ProviderProfileBase(BaseModel):
@@ -462,6 +466,27 @@ class ProviderProfileProbeOut(BaseModel):
     detail: str
     checked_url: str | None = None
     checked_at: datetime
+
+
+class ProviderProfilePreviewRequestIn(BaseModel):
+    capability: str = Field(default="image.generate", min_length=1, max_length=50)
+    resolution: str = Field(default="2k", min_length=1, max_length=8)
+    aspect_ratio: str = Field(default="1:1", min_length=1, max_length=32)
+    has_reference: bool = False
+
+
+class ProviderProfilePreviewRequestOut(BaseModel):
+    endpoint: str
+    method: str = "POST"
+    body: dict[str, object] = Field(default_factory=dict)
+    adapter_mode: str = ""
+    strategy: str = ""
+    strategy_label: str = ""
+    body_shape: str = ""
+    effective_capability: str = ""
+    headers_redacted: dict[str, str] = Field(default_factory=dict)
+    multipart: bool = False
+    note: str | None = None
 
 
 class ProviderPricingRuleBase(BaseModel):

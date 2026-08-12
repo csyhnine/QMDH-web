@@ -9,6 +9,10 @@ import {
   defaultAspectRatioFor,
 } from "../studio/studioCanvasLinkage";
 import {
+  clampResolutionToOptions,
+  resolveProviderResolutionOptions,
+} from "../studio/studioConstants";
+import {
   NODE_KIND_LABEL,
   creationModeForNodeKind,
   type CanvasNodeKind,
@@ -125,6 +129,14 @@ export function patchFromProviderSelection(
     // Edit-only image providers map to img2img / Studio 图像编辑.
     switchKind("img2img");
   }
+
+  const nextKind = patch.nodeKind ?? data.nodeKind;
+  if (nextKind !== "video" && nextKind !== "upscale") {
+    const creationMode = patch.creationMode ?? data.creationMode;
+    const resolutionOptions = resolveProviderResolutionOptions(provider, { creationMode });
+    patch.resolution = clampResolutionToOptions(data.resolution, resolutionOptions);
+  }
+
   return patch;
 }
 

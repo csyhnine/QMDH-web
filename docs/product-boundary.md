@@ -19,13 +19,14 @@ This document records the current active product boundary when older docs still 
 - Admins retain global visibility only through dedicated backend management surfaces, not through studio history cards.
 - Chat conversations remain account-owned and continue to be persisted for the user’s own history and personalization.
 - The Chat「设计助手 / agent_mode」entry is **hidden by default** until the assistant product is ready (`VITE_CHAT_AGENT_UI_ENABLED=true` to show).
-- **设计助手产品形态（2026-07-21）**：
+- **设计助手产品形态（2026-07-21；HITL 语义 2026-08 更正）**：
   - **壳**：QMDH `/studio/chat` UI（不是嵌入 Codex CLI/Desktop）
-  - **工程**：借鉴 [openai/codex](https://github.com/openai/codex) 的 harness（agent loop、稳定 tool 注册、HITL 审批、上下文压缩、会话续跑）；**不是**绑定 OpenAI GPT/Codex 专用模型
-  - **手**：院内 tools + 生图/视频经 HITL 确认后走现有 `workflow + task` 计费管线
+  - **工程**：借鉴 [openai/codex](https://github.com/openai/codex) 的 harness（agent loop、稳定 tool 注册、上下文压缩、会话续跑）；**不是**绑定 OpenAI GPT/Codex 专用模型
+  - **手**：院内 tools + 生图/视频经 `create_*` **立即入队**现有 `workflow + task` 计费管线（卡片展示进度）；遗留 `confirm-agent-task` API 仍可用，但 Web 主路径不再要求用户二次确认
   - **Skill**：Admin 通过 Skill Release / tool allowlist 发版能力包；设计师不能自助安装；仓库根目录 `skills/`（OpenClaw）为外部并行线
   - **跨对话记忆**：用户级 durable memory（正式产品能力），与单会话 `context_summary` 压缩分开
   - **红利边界**：工程红利靠对照移植 Codex 开源实践；模型红利靠 Admin 换 Provider；**不会**因 Codex 仓库发版而自动升级 QMDH
+  - **厚度（2026-08）**：harness 默认不注入 tool hints；仅当 allowlist 含 `create_*` 时注入精简 models_note；详 `docs/archive/audit-2026-08-agent-harness-thickness.md`
 
 ### Project Semantics
 

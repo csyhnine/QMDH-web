@@ -92,11 +92,38 @@ def summarize_generation_stack(ctx: StudioToolContext) -> dict[str, object]:
     }
 
 
-def format_enabled_generation_models_note(ctx: StudioToolContext) -> str:
-    """Inject into Chat agent turns so create_* tools need not call list_enabled_image_providers."""
+CREATE_TASK_TOOL_KEYS: frozenset[str] = frozenset(
+    {
+        "create_image_generate_task",
+        "create_image_edit_task",
+        "create_video_generate_task",
+    }
+)
+
+
+def allowlist_needs_generation_models(allowlist: tuple[str, ...] | list[str] | None) -> bool:
+    """True when the turn can create image/video tasks and needs provider_name injection."""
+    if not allowlist:
+        return False
+    return any(key in CREATE_TASK_TOOL_KEYS for key in allowlist)
+
+
+def format_enabled_generation_models_note(
+    ctx: StudioToolContext,
+    *,
+    compact: bool = True,
+) -> str:
+    """Inject into Chat agent turns so create_* tools need not call list_enabled_image_providers.
+
+    compact=True (harness default): short provider_name list to reduce always-on prompt thickness.
+    compact=False: verbose rows for debugging / optional list_enabled_image_providers fallback.
+    """
     providers = list_enabled_image_providers(ctx)
     if not providers:
         return "当前可用生图/视频模型：无（请引导用户检查模型管理或前往 Studio）。"
+    if compact:
+        names = ", ".join(f"`{item.get('provider_name')}`" for item in providers)
+        return f"当前可用生图/视频模型（requested_provider 必须用 provider_name）：{names}"
     lines = [
         "当前可用生图/视频模型（创建任务时 requested_provider 必须用 provider_name）：",
     ]

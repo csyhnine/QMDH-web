@@ -118,8 +118,9 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
         self.assertTrue(submit_request.full_url.endswith("/images/generations"))
         self.assertEqual(submit_body["model"], "gpt-image-2-vip")
         self.assertEqual(submit_body["size"], "16:9")
-        self.assertEqual(submit_body["resolution"], "1k")
-        self.assertEqual(submit_body["response_format"], "url")
+        self.assertEqual(set(submit_body.keys()), {"model", "prompt", "size"})
+        self.assertNotIn("resolution", submit_body)
+        self.assertNotIn("response_format", submit_body)
         self.assertNotIn("output_format", submit_body)
         self.assertTrue(poll_request.full_url.endswith("/images/generations/task_img_abc123"))
         self.assertEqual(outcome.model_name, "gpt-image-2-vip")
@@ -218,7 +219,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
 
         submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
         self.assertEqual(submit_body["model"], "gpt-image-2-vip-2k")
-        self.assertEqual(submit_body["resolution"], "2k")
+        self.assertEqual(set(submit_body.keys()), {"model", "prompt", "size"})
         self.assertEqual(outcome.model_name, "gpt-image-2-vip-2k")
         self.assertEqual(outcome.result["billing"]["resolution_tier"], "2k")
         self.assertEqual(outcome.cost, 2.67)
@@ -296,7 +297,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
 
         submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
         self.assertEqual(submit_body["model"], "gpt-image-2-vip-4k")
-        self.assertEqual(submit_body["resolution"], "4k")
+        self.assertEqual(set(submit_body.keys()), {"model", "prompt", "size"})
         self.assertEqual(outcome.model_name, "gpt-image-2-vip-4k")
         self.assertEqual(outcome.result["billing"]["resolution_tier"], "4k")
         # No unit_price_4k configured → falls back to 2K then 1K price.

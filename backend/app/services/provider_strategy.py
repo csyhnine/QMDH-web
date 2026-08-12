@@ -20,6 +20,7 @@ VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY = "volcengine_ark_video_tasks"
 VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY = "volcengine_cv_jimeng_video"
 HAODEYA_GROK_VIDEO_STRATEGY = "haodeya_grok_video"
 HAODEYA_ASYNC_IMAGE_STRATEGY = "haodeya_async_image"
+HAODEYA_SYNC_IMAGE_STRATEGY = "haodeya_sync_image"
 BIGJPG_UPSCALE_STRATEGY = "bigjpg_upscale"
 
 KNOWN_STRATEGIES = {
@@ -35,6 +36,7 @@ KNOWN_STRATEGIES = {
     VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
     HAODEYA_GROK_VIDEO_STRATEGY,
     HAODEYA_ASYNC_IMAGE_STRATEGY,
+    HAODEYA_SYNC_IMAGE_STRATEGY,
     BIGJPG_UPSCALE_STRATEGY,
 }
 
@@ -61,6 +63,7 @@ _ALLOWED_STRATEGIES_BY_CAPABILITY = {
         CHAT_MODALITIES_IMAGE_STRATEGY,
         CHAT_COMPLETIONS_IMAGE_STRATEGY,
         HAODEYA_ASYNC_IMAGE_STRATEGY,
+        HAODEYA_SYNC_IMAGE_STRATEGY,
     },
     "image.edit": {
         OPENAI_IMAGES_STRATEGY,
@@ -68,6 +71,7 @@ _ALLOWED_STRATEGIES_BY_CAPABILITY = {
         CHAT_MODALITIES_IMAGE_EDIT_STRATEGY,
         CHAT_COMPLETIONS_IMAGE_EDIT_STRATEGY,
         HAODEYA_ASYNC_IMAGE_STRATEGY,
+        HAODEYA_SYNC_IMAGE_STRATEGY,
     },
     "image.upscale": {BIGJPG_UPSCALE_STRATEGY},
     "video.generate": {
@@ -127,8 +131,20 @@ def profile_prefers_native_image_edits(*, provider_name: str, model_name: str, b
 
 def profile_prefers_chat_modalities_image(*, provider_name: str, model_name: str, base_url: str) -> bool:
     identity = f"{provider_name} {model_name} {base_url}".lower()
+    # VIP async / DeepKey sync SKUs use short /images/generations bodies — never chat modalities.
+    if profile_prefers_haodeya_async_image(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+    ) or profile_prefers_haodeya_sync_image(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+    ):
+        return False
     if "gemini" in identity and "image" in identity and "preview" in identity:
         return True
+    # Plain gpt-image on Haodeya (non-vip / non-count) historically used chat modalities.
     if "haodeya" in identity and "gpt-image" in identity:
         return True
     return False
@@ -191,20 +207,36 @@ def profile_prefers_bigjpg_upscale(*, provider_name: str, model_name: str, base_
 
 
 def profile_prefers_haodeya_async_image(*, provider_name: str, model_name: str, base_url: str) -> bool:
-    """Only VIP / async OpenAI-image SKUs — not every Haodeya gateway profile.
+    """ToAPI VIP only — async `/images/generations` + poll (handbook §5).
 
-    Gemini CPA (`gemini-3.1-flash-image`) also uses `newapi.haodeya.xyz` but must stay on
-    `chat_completions_image` / `chat_modalities_image`, not `/images/generations` async.
-    Wan2.7 text-to-image uses synchronous `/images/generations` with literal size tiers;
-    Wan2.7 image edit (with reference) uses `/images/edits` multipart and must not use generations.
+    DeepKey `gpt-image-2-count` is sync (§6) → `haodeya_sync_image`.
+    Gemini CPA stays on chat strategies. Wan2.7 stays on openai_images / edits.
     """
     identity = f"{provider_name} {model_name} {base_url}".lower()
     if "wan2.7" in identity or "wan2_7" in identity:
+        return False
+    if profile_prefers_haodeya_sync_image(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+    ):
         return False
     return (
         "gpt-image-2-vip" in identity
         or "gpt-image-vip" in identity
         or "haodeya_async_image" in identity
+    )
+
+
+def profile_prefers_haodeya_sync_image(*, provider_name: str, model_name: str, base_url: str) -> bool:
+    """DeepKey count SKUs — sync `/images/generations`, short body, no poll (handbook §6)."""
+    identity = f"{provider_name} {model_name} {base_url}".lower()
+    if "wan2.7" in identity or "wan2_7" in identity:
+        return False
+    return (
+        "gpt-image-2-count" in identity
+        or "gpt-image-count" in identity
+        or "haodeya_sync_image" in identity
     )
 
 
@@ -233,6 +265,13 @@ def default_strategy_for_capability(
     ):
         if normalized in {"image.generate", "image.edit"}:
             return HAODEYA_ASYNC_IMAGE_STRATEGY
+    if profile_prefers_haodeya_sync_image(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+    ):
+        if normalized in {"image.generate", "image.edit"}:
+            return HAODEYA_SYNC_IMAGE_STRATEGY
     if profile_prefers_chat_modalities_image(
         provider_name=provider_name,
         model_name=model_name,

@@ -17,7 +17,6 @@ from app.services.agent_memory_service import (
     record_chat_turn_memory,
 )
 from app.services.agent_policy_service import resolve_effective_chat_policy
-from app.services.agent_tool_registry_service import format_tool_hints, rank_tools_for_query
 from app.services.chat_agent_service import build_chat_agent_message
 
 
@@ -71,24 +70,28 @@ def run_chat_agent_harness(
         memory_hit_count = memory_bundle.hit_count
         session_summary_used = memory_bundle.session_summary_used
 
-    ranked = rank_tools_for_query(allowlist=policy.chat_tool_allowlist, query=new_content)
-    tool_hints = format_tool_hints(ranked)
-
-    from app.integrations.studio_agent.tools import StudioToolContext, format_enabled_generation_models_note
-
-    models_note = format_enabled_generation_models_note(
-        StudioToolContext(db=db, user_name=user_name, user_id=user_id)
+    # Tool hints intentionally omitted (2026-08 slice A): duplicated tool schemas and
+    # Chinese query ranking could mis-steer weak models toward memory_* tools.
+    from app.integrations.studio_agent.tools import (
+        StudioToolContext,
+        allowlist_needs_generation_models,
+        format_enabled_generation_models_note,
     )
+
+    models_note = ""
+    if allowlist_needs_generation_models(policy.chat_tool_allowlist):
+        models_note = format_enabled_generation_models_note(
+            StudioToolContext(db=db, user_name=user_name, user_id=user_id),
+            compact=True,
+        )
 
     agent_message = build_chat_agent_message(
         recent_messages[-12:],
         new_content,
         attachment_names=attachment_names,
     )
-    prefix_parts = [part for part in (tool_hints, models_note) if part]
-    if prefix_parts:
-        prefix = "\n\n".join(prefix_parts)
-        agent_message = f"{prefix}\n\n{agent_message}"
+    if models_note:
+        agent_message = f"{models_note}\n\n{agent_message}"
 
     reply = run_studio_agent(
         db,
@@ -119,7 +122,7 @@ def run_chat_agent_harness(
         memory_hit_count=memory_hit_count,
         session_summary_used=session_summary_used,
         policy_version=reply.policy_version,
-        tool_hint_count=len(ranked),
+        tool_hint_count=0,
     )
     audit = {
         "harness_mode": trace.harness_mode,
@@ -127,6 +130,7 @@ def run_chat_agent_harness(
         "session_summary_used": trace.session_summary_used,
         "policy_version": trace.policy_version,
         "tool_hint_count": trace.tool_hint_count,
+        "models_note_injected": bool(models_note),
         "tool_calls": [call.name for call in reply.tool_calls],
         "task_proposals": [item.get("proposal_id") for item in reply.task_proposals],
     }

@@ -1,4 +1,4 @@
-import { resolutionOptions } from "../studio/studioConstants";
+import { resolveProviderResolutionOptions } from "../studio/studioConstants";
 import { aspectRatioOptionsFor } from "../studio/studioCanvasLinkage";
 import { isGrokHaodeyaProvider } from "../studio/grokVideoUtils";
 import {
@@ -105,6 +105,9 @@ export default function CanvasNodeInspector({
   const ratioOptions = aspectRatioOptionsFor(data.nodeKind, {
     grokVideo: data.nodeKind === "video" && isGrokHaodeyaProvider(selectedProvider),
   });
+  const nodeResolutionOptions = resolveProviderResolutionOptions(selectedProvider, {
+    creationMode: data.creationMode,
+  });
   const needsInput = data.nodeKind === "img2img" || isUpscale || isAnnotate;
   const hasUpstreamMedia = upstream.images.length > 0 || upstream.videos.length > 0;
   const hasLocalImage = data.referenceImages.length > 0 || data.assetUrls.length > 0;
@@ -196,7 +199,7 @@ export default function CanvasNodeInspector({
                     disabled={disabled || busy}
                     onChange={(event) => patch({ resolution: event.target.value })}
                   >
-                    {resolutionOptions.map((option) => (
+                    {nodeResolutionOptions.map((option) => (
                       <option key={option.id} value={option.id}>
                         {option.label}
                       </option>

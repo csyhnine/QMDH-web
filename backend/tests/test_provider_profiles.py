@@ -660,6 +660,43 @@ class ProviderProfileTests(unittest.TestCase):
         self.assertFalse(payload["ok"])
         self.assertEqual(payload["status"], "unsupported")
 
+    def test_preview_request_literal_tier_body(self) -> None:
+        with self.SessionLocal() as db:
+            profile = ProviderProfile(
+                provider_name="seedream_preview",
+                display_name="Seedream Preview",
+                api_key=encrypt_value("sk-preview"),
+                base_url="https://api.example.test/v1",
+                model_name="seedream",
+                adapter_kind="openai_compatible",
+                capabilities=["image.generate"],
+                strategies={"image.generate": "openai_images"},
+                adapter_config={
+                    "image_size_mode": "literal_tier",
+                    "supported_resolutions": ["2k", "4k"],
+                },
+                enabled=True,
+            )
+            db.add(profile)
+            db.commit()
+            profile_id = profile.id
+
+        response = self.client.post(
+            f"/providers/profiles/{profile_id}/preview-request",
+            headers=self.auth_headers(),
+            json={
+                "capability": "image.generate",
+                "resolution": "1k",
+                "aspect_ratio": "1:1",
+                "has_reference": False,
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["body"].get("size"), "2K")
+        self.assertIn("/images/generations", payload["endpoint"])
+        self.assertEqual(payload["headers_redacted"].get("Authorization"), "[redacted]")
+
 
 if __name__ == "__main__":
     unittest.main()

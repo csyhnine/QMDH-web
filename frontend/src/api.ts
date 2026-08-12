@@ -61,6 +61,8 @@ export type Provider = {
   configurable: boolean;
   outbound: boolean;
   adapter_kind: string;
+  /** Explicit image tiers from adapter_config; empty = client default (1k/2k + Wan Pro 4K). */
+  supported_resolutions?: string[];
 };
 
 export type AuthUser = {
@@ -265,6 +267,9 @@ export type DashboardStats = {
   model_calls_by_day: DashboardDayModelCalls[];
   today_image_generate_count: number;
   week_image_generate_count: number;
+  today_image_output_count?: number;
+  week_image_output_count?: number;
+  window_image_output_count?: number;
   today_video_generate_count: number;
   week_video_generate_count: number;
   window_chat_turn_count: number;
@@ -368,6 +373,27 @@ export type ProviderProfileProbeResult = {
   detail: string;
   checked_url: string | null;
   checked_at: string;
+};
+
+export type ProviderProfilePreviewRequestPayload = {
+  capability?: string;
+  resolution?: string;
+  aspect_ratio?: string;
+  has_reference?: boolean;
+};
+
+export type ProviderProfilePreviewRequestResult = {
+  endpoint: string;
+  method: string;
+  body: Record<string, unknown>;
+  adapter_mode: string;
+  strategy: string;
+  strategy_label?: string;
+  body_shape?: string;
+  effective_capability: string;
+  headers_redacted: Record<string, string>;
+  multipart: boolean;
+  note?: string | null;
 };
 
 export type ProviderProfileCreatePayload = {
@@ -1244,6 +1270,14 @@ export const api = {
   providerPricingRules: () => request<ProviderPricingRuleRecord[]>("/providers/pricing-rules"),
   probeProviderProfile: (profileId: number) =>
     postJson<ProviderProfileProbeResult>(`/providers/profiles/${profileId}/probe`, {}),
+  previewProviderProfileRequest: (
+    profileId: number,
+    payload: ProviderProfilePreviewRequestPayload = {}
+  ) =>
+    postJson<ProviderProfilePreviewRequestResult>(
+      `/providers/profiles/${profileId}/preview-request`,
+      payload
+    ),
   discoverProviderModels: (baseUrl: string, apiKey: string) =>
     postJson<ProviderDiscoverResult>("/providers/discover", { base_url: baseUrl, api_key: apiKey }),
   bulkImportProviderProfiles: (payload: ProviderBulkImportPayload) =>

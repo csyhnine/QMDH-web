@@ -57,6 +57,7 @@ from app.services.provider_strategy import (
     OPENAI_IMAGE_EDITS_STRATEGY,
     OPENAI_IMAGES_STRATEGY,
     HAODEYA_ASYNC_IMAGE_STRATEGY,
+    HAODEYA_SYNC_IMAGE_STRATEGY,
     VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
     VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
     resolve_strategy_for_capability,
@@ -375,6 +376,7 @@ def _build_image_request_plan(
     payload: dict,
     prompt: str,
 ) -> ImageRequestPlan:
+    _apply_supported_resolution_clamp(profile, payload)
     requested_strategy = resolve_strategy_for_capability(
         capability=capability,
         provider_name=profile.provider_name,
@@ -431,12 +433,22 @@ def _build_image_request_plan(
             strategy = edit_strategy
 
     if strategy == HAODEYA_ASYNC_IMAGE_STRATEGY:
-        return _build_haodeya_async_image_plan(
+        return _build_haodeya_short_images_plan(
             profile=profile,
             requested_capability=capability,
             effective_capability=effective_capability,
             payload=payload,
             prompt=prompt,
+            poll=True,
+        )
+    if strategy == HAODEYA_SYNC_IMAGE_STRATEGY:
+        return _build_haodeya_short_images_plan(
+            profile=profile,
+            requested_capability=capability,
+            effective_capability=effective_capability,
+            payload=payload,
+            prompt=prompt,
+            poll=False,
         )
     if strategy == OPENAI_IMAGES_STRATEGY:
         if _should_use_chat_modalities_plan_for_2k(profile=profile, strategy=strategy, payload=payload):
@@ -573,6 +585,47 @@ def _normalize_image_resolution(payload: dict) -> str:
     return "1k"
 
 
+_RESOLUTION_TIER_ORDER: tuple[str, ...] = ("1k", "2k", "4k")
+
+
+def _supported_resolutions_from_profile(profile: ImageProviderProfile) -> tuple[str, ...] | None:
+    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    raw = adapter_config.get("supported_resolutions")
+    if not isinstance(raw, list) or not raw:
+        return None
+    normalized: list[str] = []
+    for item in raw:
+        value = str(item or "").strip().lower()
+        if value in _RESOLUTION_TIER_ORDER and value not in normalized:
+            normalized.append(value)
+    ordered = tuple(item for item in _RESOLUTION_TIER_ORDER if item in normalized)
+    return ordered or None
+
+
+def _clamp_resolution_to_supported(resolution: str, supported: tuple[str, ...] | None) -> str:
+    if not supported:
+        return resolution
+    if resolution in supported:
+        return resolution
+    try:
+        start = _RESOLUTION_TIER_ORDER.index(resolution)
+    except ValueError:
+        start = 0
+    for candidate in _RESOLUTION_TIER_ORDER[start:]:
+        if candidate in supported:
+            return candidate
+    return supported[0]
+
+
+def _apply_supported_resolution_clamp(profile: ImageProviderProfile, payload: dict) -> str:
+    """Normalize + clamp payload['resolution'] to adapter_config.supported_resolutions when set."""
+    current = _normalize_image_resolution(payload)
+    supported = _supported_resolutions_from_profile(profile)
+    clamped = _clamp_resolution_to_supported(current, supported)
+    payload["resolution"] = clamped
+    return clamped
+
+
 IMAGE_GENERATION_MODALITIES: tuple[str, ...] = ("text", "image")
 IMAGE_GENERATION_MAX_TOKENS_1K = 4096
 IMAGE_GENERATION_MAX_TOKENS_2K = 8192
@@ -593,6 +646,8 @@ def _uses_haodeya_gateway(profile: ImageProviderProfile) -> bool:
 
 def _uses_haodeya_wan_image(profile: ImageProviderProfile) -> bool:
     """Wan2.7 on Haodeya must use /images/generations with literal size 1K/2K/4K."""
+    if _uses_haodeya_seedream_image(profile):
+        return False
     adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
     flavor = str(adapter_config.get("provider_flavor") or "").strip().lower()
     if flavor in {"haodeya_wan_image", "wan_image"}:
@@ -601,6 +656,18 @@ def _uses_haodeya_wan_image(profile: ImageProviderProfile) -> bool:
         return True
     identity = f"{profile.provider_name} {profile.model_name}".lower()
     return "wan2.7" in identity or "wan2_7" in identity
+
+
+def _uses_haodeya_seedream_image(profile: ImageProviderProfile) -> bool:
+    """Seedream Plan on Haodeya: sync /images/generations with size 2K/3K/4K only (handbook §7)."""
+    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    flavor = str(adapter_config.get("provider_flavor") or "").strip().lower()
+    if flavor in {"haodeya_seedream", "seedream"}:
+        return True
+    if str(adapter_config.get("image_size_mode") or "").strip().lower() == "seedream_tier":
+        return True
+    identity = f"{profile.provider_name} {profile.model_name}".lower()
+    return "seedream" in identity or "doubao-seedream" in identity
 
 
 def _literal_image_size_tier(payload: dict) -> str:
@@ -622,14 +689,72 @@ def _wan_image_size(profile: ImageProviderProfile, payload: dict) -> str:
     return {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
 
 
+def _seedream_image_size(profile: ImageProviderProfile, payload: dict) -> str:
+    """Seedream size: literal 2K/4K for square; WIDTHxHEIGHT (≥3.6864M px) for other ratios.
+
+    Handbook §7: `"2K"` alone yields ~2048x2048. Aspect must be expressed as pixels
+    (e.g. 16:9 → `2560x1440`), never OpenAI 1K sizes or ratio strings.
+    """
+    _ = profile
+    resolution = _normalize_image_resolution(payload)
+    aspect = _resolved_image_aspect_ratio(profile, payload).strip() or "1:1"
+
+    if resolution == "4k":
+        mapping_4k = {
+            "1:1": "4K",
+            "16:9": "3840x2160",
+            "9:16": "2160x3840",
+            "4:3": "4096x3072",
+            "3:4": "3072x4096",
+            "3:2": "3840x2560",
+            "2:3": "2560x3840",
+            "21:9": "5040x2160",
+        }
+        return mapping_4k.get(aspect, "4K")
+
+    # 1k / 2k / unknown → 2K tier (1K forbidden)
+    mapping_2k = {
+        "1:1": "2K",
+        "16:9": "2560x1440",
+        "9:16": "1440x2560",
+        "4:3": "2304x1728",
+        "3:4": "1728x2304",
+        "3:2": "2496x1664",
+        "2:3": "1664x2496",
+        "21:9": "3360x1440",
+    }
+    return mapping_2k.get(aspect, "2K")
+
+
 def _uses_haodeya_async_image_gateway(profile: ImageProviderProfile) -> bool:
     adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
     flavor = str(adapter_config.get("provider_flavor") or "").strip().lower()
     if flavor in {"haodeya_async_image", "toapis"}:
         return True
     identity = f"{profile.provider_name} {profile.model_name} {profile.base_url}".lower()
-    # Do not treat every Haodeya base_url as async image (Gemini CPA shares the gateway).
-    return "gpt-image-2-vip" in identity or "gpt-image-vip" in identity or "haodeya_async_image" in identity
+    # VIP ToAPI only — DeepKey count is sync (`_uses_haodeya_sync_image_gateway`).
+    return (
+        "gpt-image-2-vip" in identity
+        or "gpt-image-vip" in identity
+        or "haodeya_async_image" in identity
+    )
+
+
+def _uses_haodeya_sync_image_gateway(profile: ImageProviderProfile) -> bool:
+    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    flavor = str(adapter_config.get("provider_flavor") or "").strip().lower()
+    if flavor in {"haodeya_sync_image", "deepkey"}:
+        return True
+    identity = f"{profile.provider_name} {profile.model_name} {profile.base_url}".lower()
+    return (
+        "gpt-image-2-count" in identity
+        or "gpt-image-count" in identity
+        or "haodeya_sync_image" in identity
+    )
+
+
+def _uses_haodeya_short_images_sku(profile: ImageProviderProfile) -> bool:
+    return _uses_haodeya_async_image_gateway(profile) or _uses_haodeya_sync_image_gateway(profile)
 
 
 def _uses_toapis_gateway(profile: ImageProviderProfile) -> bool:
@@ -713,10 +838,9 @@ def _normalize_toapis_base_model(model_name: str) -> str:
 
 
 def _resolve_haodeya_async_upstream_model(profile: ImageProviderProfile, resolution: str) -> str:
-    """Map VIP async image profile + resolution to upstream model IDs.
+    """Map VIP/count short-body profile + resolution to upstream model IDs.
 
-    Haodeya/ToAPI billing (2026-07 aligned): pick tier by model name.
-    1K=`gpt-image-2-vip`, 2K=`gpt-image-2-vip-2k` (do not rely on resolution alone for billing).
+    Billing is by model name (handbook §0): 2K must be `*-2k` SKU, not body resolution alone.
     """
     tier = _normalize_image_resolution({"resolution": resolution})
     adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
@@ -725,7 +849,8 @@ def _resolve_haodeya_async_upstream_model(profile: ImageProviderProfile, resolut
     if isinstance(override, str) and override.strip():
         return override.strip()
 
-    base_model = _normalize_haodeya_async_base_model(profile.model_name) or "gpt-image-2-vip"
+    default_base = "gpt-image-2-vip" if _uses_haodeya_async_image_gateway(profile) else "gpt-image-2-count"
+    base_model = _normalize_haodeya_async_base_model(profile.model_name) or default_base
     if tier == "1k":
         return base_model
     return f"{base_model}-{tier}"
@@ -750,14 +875,20 @@ def _reference_image_to_public_url(reference_image: str) -> str:
     return public_url
 
 
-def _build_haodeya_async_image_plan(
+def _build_haodeya_short_images_plan(
     *,
     profile: ImageProviderProfile,
     requested_capability: str,
     effective_capability: str,
     payload: dict,
     prompt: str,
+    poll: bool,
 ) -> ImageRequestPlan:
+    """Handbook §5/§6 short body: model + prompt + size.
+
+    VIP (async): size is aspect ratio string (`1:1`, `16:9`).
+    DeepKey (sync): size must be `WIDTHxHEIGHT` pixels — ratio strings return HTTP 400.
+    """
     reference_images = _extract_reference_images(payload)
     resolution = _normalize_image_resolution(payload)
     prompt_text = prompt
@@ -765,18 +896,23 @@ def _build_haodeya_async_image_plan(
     if detail:
         prompt_text = f"{prompt}\n\nAdditional guidance: {detail}"
 
+    aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
+    if poll:
+        size_value: str = aspect_ratio
+    else:
+        size_value = _openai_size_for_aspect_ratio(aspect_ratio)
+        if size_value == "auto":
+            size_value = "1024x1024"
+
     body: dict[str, object] = {
         "model": _resolve_haodeya_async_upstream_model(profile, resolution),
         "prompt": prompt_text,
-        "size": _resolved_image_aspect_ratio(profile, payload),
-        "resolution": resolution,
-        "quality": profile.quality or "high",
-        "response_format": "url",
-        "n": 1,
+        "size": size_value,
     }
 
     reference_result = _image_generation_result_fields(profile, payload)
-    if reference_images:
+    # ToAPI VIP accepts image_urls; DeepKey sync handbook does not document refs on generations.
+    if poll and reference_images:
         body["image_urls"] = [_reference_image_to_public_url(item) for item in reference_images]
         reference_result = {
             **reference_result,
@@ -785,16 +921,37 @@ def _build_haodeya_async_image_plan(
             "reference_image_count": len(reference_images),
         }
     if requested_capability != effective_capability:
-        reference_result["haodeya_async_capability_note"] = requested_capability
+        note_key = "haodeya_async_capability_note" if poll else "haodeya_sync_capability_note"
+        reference_result[note_key] = requested_capability
 
+    strategy = HAODEYA_ASYNC_IMAGE_STRATEGY if poll else HAODEYA_SYNC_IMAGE_STRATEGY
+    adapter_mode = "haodeya_async_image" if poll else "haodeya_sync_image"
     return ImageRequestPlan(
         endpoint_path="/images/generations",
         body=body,
         headers=_build_openai_headers(profile),
         reference_result=reference_result,
-        adapter_mode="haodeya_async_image",
+        adapter_mode=adapter_mode,
         effective_capability=effective_capability,
-        strategy=HAODEYA_ASYNC_IMAGE_STRATEGY,
+        strategy=strategy,
+    )
+
+
+def _build_haodeya_async_image_plan(
+    *,
+    profile: ImageProviderProfile,
+    requested_capability: str,
+    effective_capability: str,
+    payload: dict,
+    prompt: str,
+) -> ImageRequestPlan:
+    return _build_haodeya_short_images_plan(
+        profile=profile,
+        requested_capability=requested_capability,
+        effective_capability=effective_capability,
+        payload=payload,
+        prompt=prompt,
+        poll=True,
     )
 
 
@@ -852,8 +1009,8 @@ def _should_use_chat_modalities_plan_for_2k(
 ) -> bool:
     if _normalize_image_resolution(payload) != "2k" or not _uses_haodeya_gateway(profile):
         return False
-    # Wan2.7 must stay on /images/generations with size=2K — never chat/completions.
-    if _uses_haodeya_wan_image(profile):
+    # Wan2.7 / Seedream must stay on /images/generations with literal size — never chat/completions.
+    if _uses_haodeya_wan_image(profile) or _uses_haodeya_seedream_image(profile):
         return False
     return strategy in {
         OPENAI_IMAGES_STRATEGY,
@@ -899,7 +1056,10 @@ def _resolve_image_model_name(profile: ImageProviderProfile, payload: dict) -> s
     if _uses_haodeya_wan_image(profile):
         # Wan SKUs keep a stable model id; tier is carried by size=1K/2K/4K.
         return base_model
-    if _uses_haodeya_async_image_gateway(profile):
+    if _uses_haodeya_seedream_image(profile):
+        # Seedream keeps a stable model id; tier is carried by size=2K/4K.
+        return base_model
+    if _uses_haodeya_short_images_sku(profile):
         return _resolve_haodeya_async_upstream_model(profile, resolution)
     if _uses_haodeya_gateway(profile):
         return _resolve_haodeya_upstream_model(base_model, resolution, profile)
@@ -942,8 +1102,19 @@ def _openai_image_request_body(
     payload: dict,
     prompt: str,
 ) -> dict[str, object]:
-    if _uses_haodeya_wan_image(profile):
+    if _uses_haodeya_seedream_image(profile):
         body: dict[str, object] = {
+            "model": profile.model_name,
+            "prompt": prompt,
+            "size": _seedream_image_size(profile, payload),
+        }
+        detail = str(payload.get("prompt_supplement") or "").strip()
+        if detail:
+            body["prompt"] = f"{prompt}\n\nAdditional guidance: {detail}"
+        return body
+
+    if _uses_haodeya_wan_image(profile):
+        body = {
             "model": _resolve_image_model_name(profile, payload),
             "prompt": prompt,
             "size": _wan_image_size(profile, payload),

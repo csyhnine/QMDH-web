@@ -29,6 +29,7 @@ class ProviderDefinition:
     outbound: bool = True
     adapter_kind: str = "simulated"
     runtime_profile_name: str | None = None
+    supported_resolutions: tuple[str, ...] = ()
 
 
 STATIC_PROVIDERS: dict[str, ProviderDefinition] = {
@@ -105,6 +106,21 @@ def get_image_provider_profile(provider_name: str, db: Session | None = None) ->
     return profiles[provider_name]
 
 
+def _supported_resolutions_from_adapter_config(adapter_config: dict | None) -> tuple[str, ...]:
+    if not isinstance(adapter_config, dict):
+        return ()
+    raw = adapter_config.get("supported_resolutions")
+    if not isinstance(raw, list):
+        return ()
+    order = ("1k", "2k", "4k")
+    normalized = []
+    for item in raw:
+        value = str(item or "").strip().lower()
+        if value in order and value not in normalized:
+            normalized.append(value)
+    return tuple(item for item in order if item in normalized)
+
+
 def get_provider_map(db: Session | None = None, *, include_static: bool = True) -> dict[str, ProviderDefinition]:
     providers = dict(STATIC_PROVIDERS) if include_static else {}
     for profile in get_image_provider_profiles(db).values():
@@ -117,6 +133,9 @@ def get_provider_map(db: Session | None = None, *, include_static: bool = True) 
             outbound=profile.outbound,
             adapter_kind=profile.adapter_kind,
             runtime_profile_name=profile.provider_name,
+            supported_resolutions=_supported_resolutions_from_adapter_config(
+                profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+            ),
         )
     return providers
 

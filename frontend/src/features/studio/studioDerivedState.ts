@@ -9,7 +9,7 @@ import {
   IMAGE_WORKFLOW_KEY,
   VIDEO_WORKFLOW_KEY,
   normalizeStudioResolution,
-  resolutionOptions,
+  resolveProviderResolutionOptions,
   stylePresets,
 } from "./studioConstants";
 import type { StudioFormState } from "./studioTypes";
@@ -60,7 +60,10 @@ export function deriveStudioViewState({
   const selectedWorkflowKey = getStudioWorkflowKeyForProvider(selectedProvider, studioForm.creationMode);
   const selectedWorkflow = workflows.find((workflow) => workflow.key === selectedWorkflowKey);
   const selectedStyle = stylePresets.find((preset) => preset.id === studioForm.style);
-  const selectedResolution = resolutionOptions.find(
+  const resolvedResolutionOptions = resolveProviderResolutionOptions(selectedProvider, {
+    creationMode: studioForm.creationMode,
+  });
+  const selectedResolution = resolvedResolutionOptions.find(
     (option) => option.id === normalizeStudioResolution(studioForm.resolution)
   );
 

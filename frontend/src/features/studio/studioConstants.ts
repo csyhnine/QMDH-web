@@ -59,10 +59,20 @@ export const maxStudioImageCount = 3;
 
 export const studioImageCountOptions = [1, 2, 3] as const;
 
-export const resolutionOptions = [
+export type ResolutionOption = { id: string; label: string };
+
+export const resolutionOptions: ResolutionOption[] = [
   { id: "1k", label: "标准 1K" },
   { id: "2k", label: "高清 2K" },
 ];
+
+const RESOLUTION_OPTION_CATALOG: ResolutionOption[] = [
+  { id: "1k", label: "标准 1K" },
+  { id: "2k", label: "高清 2K" },
+  { id: "4k", label: "超清 4K" },
+];
+
+const RESOLUTION_ORDER = ["1k", "2k", "4k"] as const;
 
 /** Keeps 1k/2k/4k for upstream routing (wan2.7-pro uses literal size 4K). */
 export function normalizeStudioResolution(resolution: string | undefined | null): string {
@@ -74,8 +84,76 @@ export function normalizeStudioResolution(resolution: string | undefined | null)
 
 export function studioResolutionLabel(resolution: string | undefined | null): string {
   const id = normalizeStudioResolution(resolution);
-  if (id === "4k") return "超清 4K";
-  return resolutionOptions.find((option) => option.id === id)?.label ?? "标准 1K";
+  return RESOLUTION_OPTION_CATALOG.find((option) => option.id === id)?.label ?? "标准 1K";
+}
+
+export function readSupportedResolutions(
+  value: unknown
+): Array<(typeof RESOLUTION_ORDER)[number]> | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const normalized = value
+    .map((item) => String(item || "").trim().toLowerCase())
+    .filter((item): item is (typeof RESOLUTION_ORDER)[number] =>
+      (RESOLUTION_ORDER as readonly string[]).includes(item)
+    );
+  const unique = RESOLUTION_ORDER.filter((id) => normalized.includes(id));
+  return unique.length > 0 ? [...unique] : null;
+}
+
+export function readSupportedResolutionsFromProvider(provider: {
+  supported_resolutions?: string[] | null;
+  adapter_config?: Record<string, unknown> | null;
+} | null | undefined): Array<(typeof RESOLUTION_ORDER)[number]> | null {
+  if (!provider) return null;
+  const fromField = readSupportedResolutions(provider.supported_resolutions);
+  if (fromField) return fromField;
+  const config = provider.adapter_config;
+  if (config && typeof config === "object") {
+    return readSupportedResolutions(config.supported_resolutions);
+  }
+  return null;
+}
+
+function providerLooksLikeWanPro(provider: {
+  provider_name?: string | null;
+  model_name?: string | null;
+} | null | undefined): boolean {
+  const identity = `${provider?.provider_name || ""} ${provider?.model_name || ""}`.toLowerCase();
+  return identity.includes("wan2.7-image-pro") || identity.includes("wan2_7-image-pro");
+}
+
+/** Resolve visible resolution chips for Studio/Canvas; respects adapter_config.supported_resolutions. */
+export function resolveProviderResolutionOptions(
+  provider: {
+    provider_name?: string | null;
+    model_name?: string | null;
+    supported_resolutions?: string[] | null;
+    adapter_config?: Record<string, unknown> | null;
+  } | null | undefined,
+  options?: { creationMode?: string }
+): ResolutionOption[] {
+  const configured = readSupportedResolutionsFromProvider(provider);
+  if (configured) {
+    return configured.map(
+      (id) => RESOLUTION_OPTION_CATALOG.find((item) => item.id === id) ?? { id, label: id.toUpperCase() }
+    );
+  }
+
+  const creationMode = options?.creationMode || "generate";
+  if (providerLooksLikeWanPro(provider) && creationMode === "generate") {
+    return [...resolutionOptions, { id: "4k", label: "超清 4K" }];
+  }
+  return [...resolutionOptions];
+}
+
+/** If current resolution is not allowed, fall back to the first supported option. */
+export function clampResolutionToOptions(
+  resolution: string | undefined | null,
+  options: ResolutionOption[]
+): string {
+  const normalized = normalizeStudioResolution(resolution);
+  if (options.some((item) => item.id === normalized)) return normalized;
+  return options[0]?.id ?? "1k";
 }
 
 export { defaultUpscaleOptions } from "./studioUpscaleOptions";

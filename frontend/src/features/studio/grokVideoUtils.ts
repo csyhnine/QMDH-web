@@ -63,15 +63,19 @@ export function isGrokSkuId(value: string | undefined | null): value is GrokVide
 
 export function isGrokHaodeyaProvider(provider: Provider | undefined): boolean {
   if (!provider) return false;
-  // HappyHorse reuses haodeya_grok adapter_kind but must not open the Grok SKU menu.
-  const identity = `${provider.provider_name} ${provider.model_name}`.toLowerCase();
+  // HappyHorse / Seedance reuse haodeya_grok adapter_kind but must not open the Grok SKU menu.
+  const identity = `${provider.provider_name} ${provider.model_name} ${provider.display_name || ""}`.toLowerCase();
   if (identity.includes("happyhorse")) return false;
+  if (identity.includes("seedance")) return false;
   if (provider.adapter_kind === "haodeya_grok") return true;
   return GROK_SKU_SET.has(provider.model_name);
 }
 
 export function isUnifiedGrokHaodeyaProvider(provider: Provider): boolean {
-  return provider.adapter_kind === "haodeya_grok" && !GROK_SKU_SET.has(provider.model_name);
+  if (provider.adapter_kind !== "haodeya_grok" || GROK_SKU_SET.has(provider.model_name)) return false;
+  const identity = `${provider.provider_name} ${provider.model_name} ${provider.display_name || ""}`.toLowerCase();
+  if (identity.includes("happyhorse") || identity.includes("seedance")) return false;
+  return true;
 }
 
 export function isLegacyGrokSkuProvider(provider: Provider): boolean {

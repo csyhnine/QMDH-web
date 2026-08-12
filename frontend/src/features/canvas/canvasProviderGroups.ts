@@ -3,7 +3,9 @@ import {
   isRuntimeUpscaleProvider,
   publicProviderDisplayName,
 } from "../studio/modelAdminUtils";
-import { isHappyHorseProvider } from "../studio/happyHorseVideoUtils";
+import { isHappyHorseProvider, filterHappyHorseVideoProviders } from "../studio/happyHorseVideoUtils";
+import { filterGrokVideoProviders } from "../studio/grokVideoUtils";
+import { filterSeedance2VideoProviders } from "../studio/seedanceVideoUtils";
 import {
   aspectRatioNeedsResetForSurface,
   defaultAspectRatioFor,
@@ -60,13 +62,16 @@ export function groupProvidersForCanvas(
   providers: Provider[],
   nodeKind?: CanvasNodeKind
 ): Array<{ key: CanvasProviderGroupKey; label: string; providers: Provider[] }> {
+  const studioFiltered = filterSeedance2VideoProviders(
+    filterHappyHorseVideoProviders(filterGrokVideoProviders(providers))
+  );
   const buckets: Record<CanvasProviderGroupKey, Provider[]> = {
     image: [],
     video: [],
     upscale: [],
     llm: [],
   };
-  for (const provider of providers) {
+  for (const provider of studioFiltered) {
     const key = canvasProviderGroupKey(provider);
     if (!key) continue;
     buckets[key].push(provider);

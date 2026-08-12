@@ -227,7 +227,7 @@ const IMAGE_STRATEGY_PRESETS: StrategyPresetOption[] = [
 
 const VIDEO_STRATEGY_PRESETS: StrategyPresetOption[] = [
   { id: "auto", label: "自动", strategy: null, hint: "按适配器/模型推断" },
-  { id: "grok", label: "Haodeya 视频", strategy: "haodeya_grok_video", hint: "Grok / HappyHorse" },
+  { id: "grok", label: "Haodeya 视频", strategy: "haodeya_grok_video", hint: "Grok / HappyHorse / Seedance 2" },
   { id: "ark", label: "Ark 视频", strategy: "volcengine_ark_video_tasks", hint: "Seedance" },
   { id: "dashscope", label: "DashScope 视频", strategy: "dashscope_async_video", hint: "Wan 视频" },
   { id: "jimeng", label: "即梦视频", strategy: "volcengine_cv_jimeng_video", hint: "CV Native" },
@@ -249,8 +249,8 @@ const IMAGE_EDIT_STRATEGY_FOR_GENERATE: Record<string, string> = {
 };
 
 const adapterOptions: AdapterOption[] = [
-  { key: "haodeya_grok", label: "Haodeya 视频（Grok / HappyHorse）", support: "partial", note: "一条 profile + Studio 档位菜单；请求体由后端 adapter 按 SKU 组装，探测不会创建真实视频。" },
-  { key: "volcengine_ark", label: "Volcengine Ark 视频", support: "partial", note: "Seedance / Ark 异步任务；探测不会创建真实视频。" },
+  { key: "haodeya_grok", label: "Haodeya 视频（Grok / HappyHorse / Seedance 2）", support: "partial", note: "一条统一 profile + Studio 档位菜单；Seedance 探测出的裸/分 SKU 可停用，Studio 有统一 profile 时会自动隐藏。探测不会创建真实视频。" },
+  { key: "volcengine_ark", label: "Volcengine Ark 视频", support: "partial", note: "火山 Ark 异步任务（非 Haodeya Seedance 2 ToAPI）；探测不会创建真实视频。" },
   { key: "openai_compatible", label: "OpenAI 兼容", support: "ready", note: "Chat、生图、图像编辑的默认适配器；具体走哪条 strategy 看下方 Strategies。" },
   { key: "dashscope_native", label: "DashScope 原生视频", support: "partial", note: "阿里云 Wan 等异步视频；探测不会创建真实视频。" },
   { key: "anthropic_native", label: "Anthropic Native", support: "planned", note: "可先保存，后端尚无 Claude 原生执行器。" },
@@ -330,6 +330,35 @@ const modelPresets: ModelPreset[] = [
       capabilities: "video.generate",
       strategies: JSON.stringify({ "video.generate": "haodeya_grok_video" }, null, 2),
       adapterConfig: "",
+      pricingCurrency: "CNY",
+      pricingUnit: "per_video",
+      outputFormat: "mp4",
+      timeoutSeconds: 900,
+      referenceMode: "disabled",
+    },
+  },
+  {
+    id: "haodeya-seedance2-video",
+    label: "Seedance 2（Haodeya）",
+    category: "视频",
+    description:
+      "统一 profile + Studio「画质×时长」6 档；探测到的裸/分 SKU 在 Studio 会隐藏。勿用 Ark。",
+    draft: {
+      providerName: "haodeya_seedance",
+      displayName: "Seedance 2 Video",
+      baseUrl: HAODEYA_BASE_URL,
+      modelName: "seedance-2",
+      adapterKind: "haodeya_grok",
+      capabilities: "video.generate",
+      strategies: JSON.stringify({ "video.generate": "haodeya_grok_video" }, null, 2),
+      adapterConfig: JSON.stringify(
+        {
+          unit_price_1k: 7,
+          unit_price_2k: 14,
+        },
+        null,
+        2
+      ),
       pricingCurrency: "CNY",
       pricingUnit: "per_video",
       outputFormat: "mp4",
@@ -691,6 +720,17 @@ function resolveDiscoverImportTransport(
     return {
       adapter_kind: "jimeng_native",
       strategies: { "video.generate": "volcengine_cv_jimeng_video" },
+      reference_mode: "disabled",
+    };
+  }
+  // Seedance 2 ToAPI on Haodeya → /v1/videos (not Ark tasks). Prefer before generic "seedance"→Ark.
+  if (
+    identity.includes("seedance-2") ||
+    (identity.includes("seedance") && identity.includes("haodeya"))
+  ) {
+    return {
+      adapter_kind: "haodeya_grok",
+      strategies: { "video.generate": "haodeya_grok_video" },
       reference_mode: "disabled",
     };
   }
@@ -1384,7 +1424,11 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
         <section className="discover-panel">
           <form className="discover-form" autoComplete="off" onSubmit={(e) => void handleDiscoverModels(e)}>
             <h3>探测模型列表</h3>
-            <p className="discover-hint">重复探测同一上游时，默认只看「未导入」；勾选后可批量设分类再导入。</p>
+            <p className="discover-hint">
+              重复探测同一上游时，默认只看「未导入」；勾选后可批量设分类再导入。Seedance 2
+              请用预设「Seedance 2（Haodeya）」统一 profile；探测到的
+              seedance-2-*-5s/10s 等杂 SKU 可不导入或停用，Studio 有统一 profile 时会隐藏它们。
+            </p>
             {knownDiscoverBaseUrls.length > 0 ? (
               <div className="discover-known-urls">
                 <span>已用过的地址：</span>

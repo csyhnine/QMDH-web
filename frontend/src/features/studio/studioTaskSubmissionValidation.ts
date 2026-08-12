@@ -9,6 +9,11 @@ import {
   happyHorseReferenceUploadError,
   isHappyHorseProvider,
 } from "./happyHorseVideoUtils";
+import {
+  getSelectedSeedance2SkuConfig,
+  isSeedance2Provider,
+  seedance2ReferenceUploadError,
+} from "./seedanceVideoUtils";
 
 type ValidationOptions = {
   form: StudioFormState;
@@ -65,9 +70,10 @@ export function validateStudioTaskSubmission({
       return { ok: false };
     }
 
-    const referenceImageCount = isHappyHorseProvider(providerForSubmit)
-      ? form.referenceImages.filter(Boolean).length
-      : clampReferenceImageCount(form.referenceImages.length);
+    const referenceImageCount =
+      isHappyHorseProvider(providerForSubmit) || isSeedance2Provider(providerForSubmit)
+        ? form.referenceImages.filter(Boolean).length
+        : clampReferenceImageCount(form.referenceImages.length);
     if (isHappyHorseProvider(providerForSubmit)) {
       const skuConfig = getSelectedHappyHorseSkuConfig(form, providerForSubmit);
       if (!skuConfig) {
@@ -80,6 +86,20 @@ export function validateStudioTaskSubmission({
       const hhError = happyHorseReferenceUploadError(form, providerForSubmit, referenceImageCount);
       if (hhError) {
         setState((current) => ({ ...current, error: hhError }));
+        return { ok: false };
+      }
+    } else if (isSeedance2Provider(providerForSubmit)) {
+      const skuConfig = getSelectedSeedance2SkuConfig(form, providerForSubmit);
+      if (!skuConfig) {
+        setState((current) => ({
+          ...current,
+          error: "请先选择 Seedance 2 视频档位。",
+        }));
+        return { ok: false };
+      }
+      const seedanceError = seedance2ReferenceUploadError(form, providerForSubmit, referenceImageCount);
+      if (seedanceError) {
+        setState((current) => ({ ...current, error: seedanceError }));
         return { ok: false };
       }
     } else if (isGrokHaodeyaProvider(providerForSubmit)) {

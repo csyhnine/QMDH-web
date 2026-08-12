@@ -2,6 +2,7 @@ import type { Provider } from "../../api";
 import type { StudioFormState } from "./studioTypes";
 import { getSelectedGrokSkuConfig, isGrokHaodeyaProvider } from "./grokVideoUtils";
 import { getSelectedHappyHorseSkuConfig, isHappyHorseProvider } from "./happyHorseVideoUtils";
+import { getSelectedSeedance2SkuConfig, isSeedance2Provider } from "./seedanceVideoUtils";
 
 export function isComposerBlurWithinForm(event: React.FocusEvent<HTMLFormElement>): boolean {
   return event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget);
@@ -29,6 +30,16 @@ export function composerReferenceHint(
         const uploaded =
           referenceUploadCount > 0 ? `已上传 ${referenceUploadCount} 张。` : "当前未上传图片，纯文本也可提交。";
         return `${skuConfig.referenceHint} ${uploaded} 720p · 生成通常 30 秒～数分钟。`;
+      }
+    }
+    if (isSeedance2Provider(provider) && form) {
+      const skuConfig = getSelectedSeedance2SkuConfig(form, provider);
+      if (skuConfig) {
+        const uploaded =
+          referenceUploadCount > 0
+            ? `已上传 ${referenceUploadCount} 张参考图（可选首帧）。`
+            : "当前未上传图片，纯文本也可提交。";
+        return `可选 1 张参考图作首帧。${uploaded} ${skuConfig.resolution} · ${skuConfig.duration}s · 生成通常需数分钟。`;
       }
     }
     if (isGrokHaodeyaProvider(provider) && form) {

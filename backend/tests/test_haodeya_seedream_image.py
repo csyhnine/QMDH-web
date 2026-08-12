@@ -93,6 +93,60 @@ class HaodeyaSeedreamImageTests(unittest.TestCase):
         self.assertEqual(plan.body["size"], "2560x1440")
         self.assertEqual(plan.body["model"], "doubao-seedream-5.0-lite")
 
+    def test_i2i_injects_image_on_generations_not_edits(self) -> None:
+        profile = self._profile()
+        definition = ProviderDefinition(
+            profile.provider_name,
+            profile.model_name,
+            ["image.generate", "image.edit"],
+            adapter_kind="openai_compatible",
+        )
+        ref_url = "https://cdn.example.com/ref.png"
+        plan = _build_image_request_plan(
+            profile=profile,
+            definition=definition,
+            capability="image.edit",
+            payload={
+                "prompt": "让裙子变成蓝色",
+                "resolution": "2k",
+                "aspect_ratio": "16:9",
+                "reference_images": [ref_url],
+            },
+            prompt="让裙子变成蓝色",
+        )
+        self.assertEqual(plan.endpoint_path, "/images/generations")
+        self.assertEqual(plan.body["image"], [ref_url])
+        self.assertEqual(plan.body["size"], "2560x1440")
+        self.assertTrue(plan.reference_result.get("reference_image_used"))
+        self.assertEqual(plan.reference_result.get("reference_image_mode"), "haodeya_seedream_image")
+        self.assertFalse(plan.multipart_files)
+
+    def test_generate_with_ref_still_uses_image_field(self) -> None:
+        profile = self._profile()
+        definition = ProviderDefinition(
+            profile.provider_name,
+            profile.model_name,
+            ["image.generate", "image.edit"],
+            adapter_kind="openai_compatible",
+        )
+        ref_url = "https://cdn.example.com/a.png"
+        plan = _build_image_request_plan(
+            profile=profile,
+            definition=definition,
+            capability="image.generate",
+            payload={
+                "prompt": "change outfit",
+                "resolution": "2k",
+                "aspect_ratio": "1:1",
+                "reference_image": ref_url,
+            },
+            prompt="change outfit",
+        )
+        self.assertEqual(plan.endpoint_path, "/images/generations")
+        self.assertEqual(plan.body["image"], [ref_url])
+        self.assertEqual(plan.body["size"], "2K")
+        self.assertNotIn("image_url", plan.body)
+
 
 if __name__ == "__main__":
     unittest.main()

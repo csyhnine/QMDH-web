@@ -411,6 +411,18 @@ def _build_image_request_plan(
             prompt=prompt,
         )
 
+    # Seedream i2i stays on /images/generations + body.image (never OpenAI edits multipart).
+    if _uses_haodeya_seedream_image(profile):
+        if capability == "image.edit" and not reference_images:
+            raise ValueError("Seedream image edit requires a reference image")
+        return _build_openai_images_plan(
+            profile=profile,
+            requested_capability=capability,
+            effective_capability=capability if capability in {"image.generate", "image.edit"} else "image.generate",
+            payload=payload,
+            prompt=prompt,
+        )
+
     if (
         capability == "image.generate"
         and reference_images
@@ -875,6 +887,29 @@ def _reference_image_to_public_url(reference_image: str) -> str:
     return public_url
 
 
+def _seedream_reference_image_value(reference_image: str) -> str:
+    """Seedream handbook: HTTPS URL or Base64 data URL (not OpenAI edits multipart)."""
+    normalized = reference_image.strip()
+    if not normalized:
+        raise ValueError("Seedream reference image path is empty.")
+    if normalized.startswith("data:image/"):
+        return normalized
+    if normalized.startswith("https://"):
+        return normalized
+    if normalized.startswith("http://"):
+        raise ValueError("Seedream reference images require HTTPS URLs or base64 data URLs.")
+
+    public_url = resolve_public_media_url(normalized)
+    if public_url.startswith("https://"):
+        return public_url
+
+    image_bytes, _filename, content_type = _load_reference_image_bytes(normalized)
+    subtype = "png"
+    if "/" in content_type:
+        subtype = content_type.split("/", 1)[1].split(";", 1)[0].strip() or "png"
+    return f"data:image/{subtype};base64,{b64encode(image_bytes).decode('ascii')}"
+
+
 def _build_haodeya_short_images_plan(
     *,
     profile: ImageProviderProfile,
@@ -1111,6 +1146,12 @@ def _openai_image_request_body(
         detail = str(payload.get("prompt_supplement") or "").strip()
         if detail:
             body["prompt"] = f"{prompt}\n\nAdditional guidance: {detail}"
+        # Handbook: i2i uses generations + `image` (URL/base64 array), never /images/edits.
+        reference_images = _extract_reference_images(payload)
+        if reference_images:
+            if len(reference_images) > 14:
+                raise ValueError("Seedream accepts at most 14 reference images.")
+            body["image"] = [_seedream_reference_image_value(item) for item in reference_images]
         return body
 
     if _uses_haodeya_wan_image(profile):
@@ -1152,6 +1193,32 @@ def _build_openai_images_plan(
             "Wan image tasks with a reference image must use /images/edits; "
             "do not submit them to /images/generations"
         )
+
+    # Seedream: native `image` on generations — do not caption or bridge.
+    if _uses_haodeya_seedream_image(profile):
+        if effective_capability == "image.edit" and not reference_images:
+            raise ValueError("Seedream image edit requires a reference image")
+        body = _openai_image_request_body(profile=profile, payload=payload, prompt=prompt)
+        reference_result = _image_generation_result_fields(profile, payload)
+        if reference_images:
+            reference_result = {
+                **reference_result,
+                "reference_image_used": True,
+                "reference_image_mode": "haodeya_seedream_image",
+                "reference_image_count": len(reference_images),
+            }
+        if requested_capability != effective_capability:
+            reference_result["native_image_edit_fallback_from"] = requested_capability
+        return ImageRequestPlan(
+            endpoint_path="/images/generations",
+            body=body,
+            headers=_build_openai_headers(profile, async_images=True),
+            reference_result=reference_result,
+            adapter_mode="openai",
+            effective_capability=effective_capability,
+            strategy=OPENAI_IMAGES_STRATEGY,
+        )
+
     reference_image = reference_images[0] if reference_images else ""
     prompt_for_generation = prompt
     reference_result: dict[str, object] = {}

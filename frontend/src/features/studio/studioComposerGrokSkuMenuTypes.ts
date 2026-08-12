@@ -1,8 +1,9 @@
 import type { ComposerMenuKey, StudioFormState } from "./studioTypes";
 import type { GrokVideoSku } from "./grokVideoUtils";
 import type { HappyHorseVideoSku } from "./happyHorseVideoUtils";
+import type { Seedance2VideoSku } from "./seedanceVideoUtils";
 
-export type StudioVideoSku = GrokVideoSku | HappyHorseVideoSku;
+export type StudioVideoSku = GrokVideoSku | HappyHorseVideoSku | Seedance2VideoSku;
 
 export type StudioComposerGrokSkuMenuProps = {
   activeComposerMenu: ComposerMenuKey;

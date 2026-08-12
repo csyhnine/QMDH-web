@@ -29,6 +29,15 @@ HAPPYHORSE_VIDEO_SKU_PRICES: dict[str, float] = {
     "happyhorse-1.1-r2v-10s": 6.8,
 }
 
+SEEDANCE2_VIDEO_SKU_PRICES: dict[str, float] = {
+    "seedance-2-fast-720p-5s": 5.6,
+    "seedance-2-fast-720p-10s": 11.2,
+    "seedance-2-720p-5s": 7.0,
+    "seedance-2-720p-10s": 14.0,
+    "seedance-2-1080p-5s": 17.5,
+    "seedance-2-1080p-10s": 35.0,
+}
+
 IMAGE_MODEL_PRICES: dict[str, dict[str, Any]] = {
     "google/gemini-3.1-flash-image-preview": {
         "unit_price_1k": 0.67,
@@ -242,6 +251,24 @@ def sync_haodeya_pricing(db: Session) -> PricingSyncResult:
             adapter_config["unit_price_2k"] = 6.8
             profile.adapter_config = adapter_config
             updated_profiles.append(f"{profile.provider_name}:5s=3.4,10s=6.8 {PRICING_CURRENCY}")
+            changed = True
+
+        if (
+            provider_name in {"haodeya_seedance", "haodeya_seedance_2"}
+            or model_name in SEEDANCE2_VIDEO_SKU_PRICES
+            or model_name in {"seedance-2", "haodeya_seedance"}
+            or "seedance-2" in model_name.lower()
+            or ("seedance" in model_name.lower() and "haodeya" in provider_name.lower())
+        ):
+            # Duration tiers only (5s→1k, 10s→2k); quality-specific SKU prices stay in SEEDANCE2 map.
+            profile.pricing_currency = PRICING_CURRENCY
+            profile.pricing_unit = "per_video"
+            profile.unit_price = 7.0
+            adapter_config = dict(profile.adapter_config or {})
+            adapter_config["unit_price_1k"] = 7.0
+            adapter_config["unit_price_2k"] = 14.0
+            profile.adapter_config = adapter_config
+            updated_profiles.append(f"{profile.provider_name}:5s=7.0,10s=14.0 {PRICING_CURRENCY}")
             changed = True
 
         image_pricing = _image_pricing_for_model(model_name)

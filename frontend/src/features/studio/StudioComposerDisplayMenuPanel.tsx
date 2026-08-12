@@ -7,6 +7,7 @@ import {
 import { linkForCreationMode } from "./studioCanvasLinkage";
 import { isGrokHaodeyaProvider } from "./grokVideoUtils";
 import { isHappyHorseProvider } from "./happyHorseVideoUtils";
+import { getSelectedSeedance2SkuConfig, isSeedance2Provider } from "./seedanceVideoUtils";
 import type { StudioComposerDisplayMenuPanelProps } from "./studioComposerDisplayMenuTypes";
 
 export default function StudioComposerDisplayMenuPanel({
@@ -19,8 +20,14 @@ export default function StudioComposerDisplayMenuPanel({
 }: StudioComposerDisplayMenuPanelProps) {
   const isVideoMode = studioForm.creationMode === "video";
   const isEditMode = studioForm.creationMode === "edit";
-  const isFixed720pVideo =
+  const isHappyHorseOrGrokFixed720p =
     isVideoMode && (isGrokHaodeyaProvider(selectedProvider) || isHappyHorseProvider(selectedProvider));
+  const isSeedance2Video = isVideoMode && isSeedance2Provider(selectedProvider);
+  const seedanceResolution =
+    isSeedance2Video
+      ? getSelectedSeedance2SkuConfig(studioForm, selectedProvider)?.resolution ?? "720p"
+      : null;
+  const isFixedResolutionVideo = isHappyHorseOrGrokFixed720p || isSeedance2Video;
   const visibleResolutionOptions = resolveProviderResolutionOptions(selectedProvider, {
     creationMode: studioForm.creationMode,
   });
@@ -44,10 +51,14 @@ export default function StudioComposerDisplayMenuPanel({
       ) : null}
 
       {isVideoMode ? (
-        isFixed720pVideo ? (
+        isFixedResolutionVideo ? (
           <div className="composer-menu-field composer-menu-field-full">
             <span>分辨率</span>
-            <p className="composer-menu-note">720p（固定分辨率，不可更改）</p>
+            <p className="composer-menu-note">
+              {isSeedance2Video
+                ? `${seedanceResolution}（由档位菜单决定，不可单独改）`
+                : "720p（固定分辨率，不可更改）"}
+            </p>
           </div>
         ) : null
       ) : (

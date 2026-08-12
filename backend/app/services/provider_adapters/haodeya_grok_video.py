@@ -38,9 +38,55 @@ HAPPYHORSE_VIDEO_SKUS: dict[str, dict[str, object]] = {
     "happyhorse-1.1-r2v-10s": {"duration": 10, "mode": "r2v", "family": "happyhorse"},
 }
 
+SEEDANCE2_VIDEO_SKUS: dict[str, dict[str, object]] = {
+    "seedance-2-fast-720p-5s": {
+        "duration": 5,
+        "mode": "t2v",
+        "family": "seedance2",
+        "quality": "fast720",
+        "resolution": "720p",
+    },
+    "seedance-2-fast-720p-10s": {
+        "duration": 10,
+        "mode": "t2v",
+        "family": "seedance2",
+        "quality": "fast720",
+        "resolution": "720p",
+    },
+    "seedance-2-720p-5s": {
+        "duration": 5,
+        "mode": "t2v",
+        "family": "seedance2",
+        "quality": "720",
+        "resolution": "720p",
+    },
+    "seedance-2-720p-10s": {
+        "duration": 10,
+        "mode": "t2v",
+        "family": "seedance2",
+        "quality": "720",
+        "resolution": "720p",
+    },
+    "seedance-2-1080p-5s": {
+        "duration": 5,
+        "mode": "t2v",
+        "family": "seedance2",
+        "quality": "1080",
+        "resolution": "1080p",
+    },
+    "seedance-2-1080p-10s": {
+        "duration": 10,
+        "mode": "t2v",
+        "family": "seedance2",
+        "quality": "1080",
+        "resolution": "1080p",
+    },
+}
+
 HAODEYA_VIDEO_SKUS: dict[str, dict[str, object]] = {
     **GROK_VIDEO_SKUS,
     **HAPPYHORSE_VIDEO_SKUS,
+    **SEEDANCE2_VIDEO_SKUS,
 }
 
 _DEPRECATED_GROK_MODEL = "x-ai/grok-imagine-video"
@@ -54,6 +100,13 @@ _PLACEHOLDER_PROFILE_MODELS = {
     "happyhorse-1.1-t2v",
     "happyhorse-1.1-i2v",
     "happyhorse-1.1-r2v",
+    "seedance-2",
+    "haodeya_seedance",
+    "haodeya_seedance_2",
+    "seedance-2-fast",
+    "seedance-2-720p",
+    "seedance-2-1080p",
+    "seedance-2-mini",
 }
 
 
@@ -179,7 +232,7 @@ def _resolve_grok_sku(profile: ImageProviderProfile, payload: dict) -> str:
     elif profile.model_name.strip().lower() in _PLACEHOLDER_PROFILE_MODELS:
         raise ValueError(
             "Video task is missing video_sku. Select a concrete SKU with duration suffix "
-            "(e.g. happyhorse-1.1-t2v-5s or x-ai/grok-imagine-video-i2v) before submitting."
+            "(e.g. happyhorse-1.1-t2v-5s, seedance-2-720p-5s, or x-ai/grok-imagine-video-i2v) before submitting."
         )
     else:
         sku = profile.model_name.strip()
@@ -244,6 +297,8 @@ def _build_haodeya_grok_request_body(sku: str, prompt: str, payload: dict) -> di
     family = str(cfg.get("family") or "grok")
     if family == "happyhorse":
         return _build_happyhorse_request_body(sku, prompt, payload)
+    if family == "seedance2":
+        return _build_seedance2_request_body(sku, prompt, payload)
     return _build_grok_request_body(sku, prompt, payload)
 
 
@@ -342,6 +397,38 @@ def _build_happyhorse_request_body(sku: str, prompt: str, payload: dict) -> dict
     if len(public_urls) > 9:
         raise ValueError("HappyHorse r2v accepts at most 9 reference images")
     input_block["media"] = [{"type": "reference_image", "url": url} for url in public_urls]
+    return body
+
+
+def _build_seedance2_request_body(sku: str, prompt: str, payload: dict) -> dict[str, object]:
+    """Haodeya Seedance 2 ToAPI: short /v1/videos body; duration must match SKU suffix."""
+    cfg = HAODEYA_VIDEO_SKUS[sku]
+    duration = int(cfg["duration"])
+    payload_duration = payload.get("duration")
+    if payload_duration is not None and int(payload_duration) != duration:
+        raise ValueError(
+            f"Seedance 2 duration must be {duration} for SKU {sku}; got {payload_duration}"
+        )
+
+    aspect_ratio = str(payload.get("aspect_ratio") or payload.get("ratio") or "16:9").strip() or "16:9"
+    body: dict[str, object] = {
+        "model": sku,
+        "prompt": prompt,
+        "duration": duration,
+        "aspect_ratio": aspect_ratio,
+    }
+
+    # Optional first-frame / reference (ToAPI image_with_roles). Text-only is the default path.
+    reference_paths = _collect_reference_paths(payload)
+    if reference_paths:
+        if len(reference_paths) > 1:
+            raise ValueError("Seedance 2 currently accepts at most one reference image (first_frame)")
+        body["image_with_roles"] = [
+            {
+                "url": resolve_public_media_url(reference_paths[0]),
+                "role": "first_frame",
+            }
+        ]
     return body
 
 

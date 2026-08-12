@@ -177,6 +177,12 @@ def profile_prefers_dashscope_video(*, provider_name: str, model_name: str, base
 
 def profile_prefers_volcengine_ark_video(*, provider_name: str, model_name: str, base_url: str) -> bool:
     identity = f"{provider_name} {model_name} {base_url}".lower()
+    # Seedance 2 ToAPI on Haodeya uses POST /v1/videos (haodeya_grok_video), not Ark tasks.
+    if "haodeya" in identity:
+        return False
+    normalized_model = str(model_name or "").strip().lower()
+    if normalized_model.startswith("seedance-2"):
+        return False
     return "ark" in identity or "seedance" in identity or "volces.com/api/v3" in identity
 
 
@@ -187,9 +193,17 @@ def profile_prefers_volcengine_jimeng_video(*, provider_name: str, model_name: s
 
 def profile_prefers_haodeya_grok_video(*, provider_name: str, model_name: str, base_url: str) -> bool:
     identity = f"{provider_name} {model_name} {base_url}".lower()
+    normalized_model = str(model_name or "").strip().lower()
     if "happyhorse" in identity and "haodeya" in identity:
         return True
-    if model_name.strip().startswith("happyhorse-1.1-"):
+    if normalized_model.startswith("happyhorse-1.1-"):
+        return True
+    # Seedance 2 ToAPI SKUs / unified placeholder on Haodeya.
+    if normalized_model.startswith("seedance-2"):
+        return True
+    if "seedance" in identity and "haodeya" in identity:
+        return True
+    if "haodeya_seedance" in identity:
         return True
     if "haodeya" in identity or "grok-imagine-video" in identity:
         return True

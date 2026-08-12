@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { resolveProviderResolutionOptions } from "../studio/studioConstants";
 import { aspectRatioOptionsFor } from "../studio/studioCanvasLinkage";
 import { isGrokHaodeyaProvider } from "../studio/grokVideoUtils";
+import { isHappyHorseProvider } from "../studio/happyHorseVideoUtils";
+import { isSeedance2Provider } from "../studio/seedanceVideoUtils";
 import {
   upscaleNoiseOptions,
   upscaleScaleOptions,
@@ -49,7 +51,11 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
   const isAnnotate = data.nodeKind === "annotate";
   const selectedProvider = providers.find((item) => item.provider_name === data.requestedProvider);
   const ratioOptions = aspectRatioOptionsFor(data.nodeKind, {
-    grokVideo: data.nodeKind === "video" && isGrokHaodeyaProvider(selectedProvider),
+    grokVideo:
+      data.nodeKind === "video" &&
+      (isGrokHaodeyaProvider(selectedProvider) ||
+        isHappyHorseProvider(selectedProvider) ||
+        isSeedance2Provider(selectedProvider)),
   });
   const nodeResolutionOptions = resolveProviderResolutionOptions(selectedProvider, {
     creationMode: data.creationMode,

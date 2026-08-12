@@ -2,6 +2,7 @@ import type { Asset, Project, Provider, Task, Workflow } from "../../api";
 import type { FeedFilterState } from "./studioHistoryPaneTypes";
 import { filterGrokVideoProviders } from "./grokVideoUtils";
 import { filterHappyHorseVideoProviders } from "./happyHorseVideoUtils";
+import { filterSeedance2VideoProviders } from "./seedanceVideoUtils";
 import { groupProviders, isRuntimeStudioProvider, publicProviderDisplayName } from "./modelAdminUtils";
 import {
   IMAGE_EDIT_WORKFLOW_KEY,
@@ -34,16 +35,18 @@ export function deriveStudioViewState({
   studioForm,
   filters,
 }: DeriveStudioViewStateInput) {
-  const availableProviders = filterHappyHorseVideoProviders(
-    filterGrokVideoProviders(
-      providers.filter(
-        (provider) =>
-          isRuntimeStudioProvider(provider, studioForm.creationMode) &&
-          provider.capabilities.some((capability) => {
-            if (studioForm.creationMode === "video") return capability === "video.generate";
-            if (studioForm.creationMode === "edit") return capability === "image.edit";
-            return capability === "image.generate";
-          })
+  const availableProviders = filterSeedance2VideoProviders(
+    filterHappyHorseVideoProviders(
+      filterGrokVideoProviders(
+        providers.filter(
+          (provider) =>
+            isRuntimeStudioProvider(provider, studioForm.creationMode) &&
+            provider.capabilities.some((capability) => {
+              if (studioForm.creationMode === "video") return capability === "video.generate";
+              if (studioForm.creationMode === "edit") return capability === "image.edit";
+              return capability === "image.generate";
+            })
+        )
       )
     )
   );

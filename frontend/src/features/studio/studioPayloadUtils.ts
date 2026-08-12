@@ -9,9 +9,12 @@ import {
 import { resolveSelectedGrokSku, getSelectedGrokSkuConfig, isGrokHaodeyaProvider } from "./grokVideoUtils";
 import {
   buildHappyHorseVideoPayload,
-  getSelectedHappyHorseSkuConfig,
   isHappyHorseProvider,
 } from "./happyHorseVideoUtils";
+import {
+  buildSeedance2VideoPayload,
+  isSeedance2Provider,
+} from "./seedanceVideoUtils";
 import type { StudioFormState } from "./studioTypes";
 import { clampImageCount } from "./studioAssetUtils";
 
@@ -57,6 +60,10 @@ export function buildVideoPayload(form: StudioFormState, provider?: Provider): R
 
   if (provider && isHappyHorseProvider(provider)) {
     return buildHappyHorseVideoPayload(form, provider);
+  }
+
+  if (provider && isSeedance2Provider(provider)) {
+    return buildSeedance2VideoPayload(form, provider);
   }
 
   if (provider && isGrokHaodeyaProvider(provider)) {

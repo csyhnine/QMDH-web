@@ -22,11 +22,30 @@ import {
   happyHorseVideoSkuForProviderSelection,
   isHappyHorseProvider,
 } from "./happyHorseVideoUtils";
+import {
+  filterSeedance2VideoProviders,
+  getSelectedSeedance2SkuConfig,
+  isSeedance2Provider,
+  seedance2VideoSkuForProviderSelection,
+} from "./seedanceVideoUtils";
 import { isRuntimeStudioProvider } from "./modelAdminUtils";
 import { pickPreferredStudioProvider } from "./studioProviderDefaults";
 import type { StudioVideoSku } from "./studioComposerGrokSkuMenuTypes";
 import type { StudioComposerCanvasProps } from "./studioComposerCanvasTypes";
 import type { StudioDesignerViewProps } from "./studioDesignerViewTypes";
+
+function videoSkuForProviderSelection(
+  provider: Parameters<typeof isHappyHorseProvider>[0],
+  currentSku: string
+): string {
+  if (isHappyHorseProvider(provider)) {
+    return happyHorseVideoSkuForProviderSelection(provider, currentSku);
+  }
+  if (isSeedance2Provider(provider)) {
+    return seedance2VideoSkuForProviderSelection(provider, currentSku);
+  }
+  return grokVideoSkuForProviderSelection(provider, currentSku);
+}
 
 export function buildStudioComposerCanvasProps({
   activeComposerMenu,
@@ -69,9 +88,7 @@ export function buildStudioComposerCanvasProps({
         ...current,
         requestedProvider: providerName,
         resolution: clampResolutionToOptions(current.resolution, nextOptions),
-        grokVideoSku: isHappyHorseProvider(provider)
-          ? happyHorseVideoSkuForProviderSelection(provider, current.grokVideoSku)
-          : grokVideoSkuForProviderSelection(provider, current.grokVideoSku),
+        grokVideoSku: videoSkuForProviderSelection(provider, current.grokVideoSku),
       };
     });
     setActiveComposerMenu(null);
@@ -85,12 +102,18 @@ export function buildStudioComposerCanvasProps({
   const isGrokVideo = studioForm.creationMode === "video" && isGrokHaodeyaProvider(selectedProvider);
   const isHappyHorseVideo =
     studioForm.creationMode === "video" && isHappyHorseProvider(selectedProvider);
+  const isSeedance2Video =
+    studioForm.creationMode === "video" && isSeedance2Provider(selectedProvider);
   const grokSkuConfig = isGrokVideo ? getSelectedGrokSkuConfig(studioForm, selectedProvider) : null;
   const happyHorseSkuConfig = isHappyHorseVideo
     ? getSelectedHappyHorseSkuConfig(studioForm, selectedProvider)
     : null;
+  const seedance2SkuConfig = isSeedance2Video
+    ? getSelectedSeedance2SkuConfig(studioForm, selectedProvider)
+    : null;
+  const isSkuMenuVideo = isGrokVideo || isHappyHorseVideo || isSeedance2Video;
   const composerAspectRatioOptions = aspectRatioOptionsFor(studioForm.creationMode, {
-    grokVideo: isGrokVideo || isHappyHorseVideo,
+    grokVideo: isSkuMenuVideo,
   });
   const composerResolutionOptions = resolveProviderResolutionOptions(selectedProvider, {
     creationMode: studioForm.creationMode,
@@ -111,10 +134,12 @@ export function buildStudioComposerCanvasProps({
     referenceUploads: referenceUpload.referenceUploads,
     resolutionOptions: composerResolutionOptions.length > 0 ? composerResolutionOptions : resolutionOptions,
     selectedProvider,
-    selectedGrokSkuLabel: grokSkuConfig?.label ?? happyHorseSkuConfig?.label ?? null,
+    selectedGrokSkuLabel:
+      grokSkuConfig?.label ?? happyHorseSkuConfig?.label ?? seedance2SkuConfig?.label ?? null,
     selectedProviderModelName: selectedProvider?.display_name ?? selectedProvider?.model_name ?? null,
-    selectedResolutionLabel:
-      isGrokVideo || isHappyHorseVideo
+    selectedResolutionLabel: isSeedance2Video
+      ? `${seedance2SkuConfig?.resolution ?? "720p"}（由档位决定）`
+      : isGrokVideo || isHappyHorseVideo
         ? "720p（固定）"
         : studioResolutionLabel(studioForm.resolution) || selectedResolution?.label || null,
     sharedTemplates: studioTemplates.sharedTemplates,
@@ -138,16 +163,18 @@ export function buildStudioComposerCanvasProps({
     onImageCountSelect: handleImageCountSelect,
     onModeChange: (mode) => {
       setStudioForm((current) => {
-        const providersForMode = filterHappyHorseVideoProviders(
-          filterGrokVideoProviders(
-            state.providers.filter(
-              (provider) =>
-                isRuntimeStudioProvider(provider, mode) &&
-                provider.capabilities.some((capability) => {
-                  if (mode === "video") return capability === "video.generate";
-                  if (mode === "edit") return capability === "image.edit";
-                  return capability === "image.generate";
-                })
+        const providersForMode = filterSeedance2VideoProviders(
+          filterHappyHorseVideoProviders(
+            filterGrokVideoProviders(
+              state.providers.filter(
+                (provider) =>
+                  isRuntimeStudioProvider(provider, mode) &&
+                  provider.capabilities.some((capability) => {
+                    if (mode === "video") return capability === "video.generate";
+                    if (mode === "edit") return capability === "image.edit";
+                    return capability === "image.generate";
+                  })
+              )
             )
           )
         );
@@ -161,14 +188,12 @@ export function buildStudioComposerCanvasProps({
         const provider =
           providersForMode.find((item) => item.provider_name === resolvedProviderName) || preferred;
         const nextGrokSku =
-          mode === "video"
-            ? isHappyHorseProvider(provider)
-              ? happyHorseVideoSkuForProviderSelection(provider, current.grokVideoSku)
-              : grokVideoSkuForProviderSelection(provider, current.grokVideoSku)
-            : "";
-        const nextIsFixed720p =
+          mode === "video" ? videoSkuForProviderSelection(provider, current.grokVideoSku) : "";
+        const nextIsSkuMenuVideo =
           mode === "video" &&
-          (isGrokHaodeyaProvider(provider) || isHappyHorseProvider(provider));
+          (isGrokHaodeyaProvider(provider) ||
+            isHappyHorseProvider(provider) ||
+            isSeedance2Provider(provider));
         let nextAspectRatio = current.aspectRatio;
         if (mode === "edit") {
           nextAspectRatio = defaultAspectRatioFor("edit");
@@ -176,7 +201,7 @@ export function buildStudioComposerCanvasProps({
           nextAspectRatio = defaultAspectRatioFor(mode);
         } else {
           nextAspectRatio = resolveAspectRatioForSurface(mode, current.aspectRatio);
-          const allowed = aspectRatioOptionsFor(mode, { grokVideo: Boolean(nextIsFixed720p) });
+          const allowed = aspectRatioOptionsFor(mode, { grokVideo: Boolean(nextIsSkuMenuVideo) });
           if (!allowed.includes(nextAspectRatio)) {
             nextAspectRatio = defaultAspectRatioFor(mode);
           }

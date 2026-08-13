@@ -15,6 +15,7 @@ from app.services.provider_strategy import (
     default_strategy_for_capability,
     profile_prefers_haodeya_grok_video,
     profile_prefers_volcengine_ark_video,
+    resolve_strategy_for_capability,
 )
 
 
@@ -60,6 +61,18 @@ class Seedance2VideoRoutingTests(unittest.TestCase):
                 base_url="https://ark.cn-beijing.volces.com/api/v3",
             ),
             VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
+        )
+
+    def test_explicit_ark_strategy_overridden_for_seedance2(self) -> None:
+        self.assertEqual(
+            resolve_strategy_for_capability(
+                capability="video.generate",
+                provider_name="seedance-2",
+                model_name="seedance-2",
+                base_url="https://newapi.haodeya.xyz/v1",
+                strategies={"video.generate": VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY},
+            ),
+            HAODEYA_GROK_VIDEO_STRATEGY,
         )
 
 

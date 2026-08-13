@@ -357,6 +357,18 @@ def resolve_strategy_for_capability(
 ) -> str | None:
     normalized = normalize_capability_key(capability)
     explicit = normalize_strategies(strategies).get(normalized)
+    # Discovery often stamps Seedance 2 ToAPI SKUs with Ark tasks strategy; Haodeya
+    # gateway returns 404 on POST /v1/contents/generations/tasks — force /v1/videos.
+    if (
+        normalized == "video.generate"
+        and explicit == VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY
+        and profile_prefers_haodeya_grok_video(
+            provider_name=provider_name,
+            model_name=model_name,
+            base_url=base_url,
+        )
+    ):
+        return HAODEYA_GROK_VIDEO_STRATEGY
     if explicit:
         return explicit
     return default_strategy_for_capability(

@@ -94,8 +94,11 @@ function seedance2ModelName(provider: Provider): string {
 }
 
 /** Volc Ark Plan（doubao-seedance-2.0-*）与 Haodeya ToAPI Seedance 2 不是同一产品。 */
-function isVolcSeedancePlanModel(model: string): boolean {
-  return model.startsWith("doubao-seedance") || model.includes("seedance-2.0");
+export function isVolcSeedancePlanProvider(provider: Provider): boolean {
+  const model = seedance2ModelName(provider);
+  if (model.startsWith("doubao-seedance") || model.includes("seedance-2.0")) return true;
+  const identity = `${provider.provider_name} ${provider.model_name} ${provider.display_name || ""}`.toLowerCase();
+  return identity.includes("doubao-seedance") || identity.includes("seedance-2.0");
 }
 
 export function isSeedance2SkuId(value: string | undefined | null): value is Seedance2VideoSku {
@@ -105,8 +108,8 @@ export function isSeedance2SkuId(value: string | undefined | null): value is See
 export function isSeedance2Provider(provider: Provider | undefined): boolean {
   if (!provider) return false;
   if (isSeedance2SkuId(provider.model_name)) return true;
+  if (isVolcSeedancePlanProvider(provider)) return false;
   const model = seedance2ModelName(provider);
-  if (isVolcSeedancePlanModel(model)) return false;
   const identity = `${provider.provider_name} ${provider.model_name} ${provider.display_name || ""}`.toLowerCase();
   if (identity.includes("happyhorse") || identity.includes("grok-imagine")) return false;
   if (SEEDANCE2_UNIFIED_MODEL_NAMES.has(model)) return true;
@@ -114,7 +117,7 @@ export function isSeedance2Provider(provider: Provider | undefined): boolean {
   // Full ToAPI SKUs may appear with minor casing/spacing differences.
   if (model.startsWith("seedance-2-")) return true;
   if (identity.includes("haodeya_seedance")) return true;
-  return identity.includes("haodeya") && identity.includes("seedance") && !isVolcSeedancePlanModel(model);
+  return identity.includes("haodeya") && identity.includes("seedance");
 }
 
 /** Unified Admin profile only — never treat bare discovery names as unified. */
@@ -131,13 +134,17 @@ export function isLegacySeedance2SkuProvider(provider: Provider): boolean {
 }
 
 /**
- * When a unified Seedance profile exists, hide discovered per-SKU / bare models from Studio.
+ * When a unified Seedance profile exists, hide:
+ * - discovered per-SKU / bare Haodeya models
+ * - Volc Plan names like doubao-seedance-2.0-fast (duplicate product surface in Studio)
  * Keep only the unified placeholder (`seedance-2` / haodeya_seedance).
  */
 export function filterSeedance2VideoProviders(providers: Provider[]): Provider[] {
   const hasUnified = providers.some(isUnifiedSeedance2Provider);
   if (!hasUnified) return providers;
-  return providers.filter((provider) => !isLegacySeedance2SkuProvider(provider));
+  return providers.filter(
+    (provider) => !isLegacySeedance2SkuProvider(provider) && !isVolcSeedancePlanProvider(provider)
+  );
 }
 
 export function resolveSelectedSeedance2Sku(

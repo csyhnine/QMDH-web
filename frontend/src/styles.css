@@ -3366,6 +3366,14 @@ button {
   opacity: 0.72;
 }
 
+.reference-preview-item.is-avatar-idle .reference-preview {
+  opacity: 0.92;
+}
+
+.reference-preview-item.is-avatar-idle {
+  outline: 1px dashed rgba(37, 99, 235, 0.45);
+}
+
 .reference-preview-item.is-avatar-failed .reference-preview {
   outline: 2px solid #c45c5c;
 }

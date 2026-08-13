@@ -138,6 +138,8 @@ function sleep(ms: number) {
 
 export function seedanceAvatarStatusLabel(item: ReferenceUploadItem): string | null {
   switch (item.avatarStatus) {
+    case "idle":
+      return "虚拟角色需入库";
     case "registering":
       return "人像入库中…";
     case "processing":
@@ -149,4 +151,10 @@ export function seedanceAvatarStatusLabel(item: ReferenceUploadItem): string | n
     default:
       return null;
   }
+}
+
+export function seedanceAvatarActionLabel(item: ReferenceUploadItem): string | null {
+  if (item.avatarStatus === "idle") return "入库";
+  if (item.avatarStatus === "failed") return "重试入库";
+  return null;
 }

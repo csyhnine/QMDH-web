@@ -140,7 +140,7 @@ class Seedance2VideoBodyTests(unittest.TestCase):
             [{"url": "asset://pa_01KTEST", "role": "reference_image"}],
         )
 
-    def test_profile_fallback_registers_private_avatar(self) -> None:
+    def test_https_reference_without_forced_avatar(self) -> None:
         profile = ImageProviderProfile(
             provider_name="seedance-2",
             api_key="k",
@@ -148,19 +148,18 @@ class Seedance2VideoBodyTests(unittest.TestCase):
             model_name="seedance-2",
         )
         with patch(
-            "app.services.seedance_private_avatar.ensure_seedance_reference_asset_url",
-            return_value="asset://pa_FROM_FALLBACK",
-        ) as mocked:
+            "app.services.provider_adapters.haodeya_grok_video.resolve_public_media_url",
+            return_value="https://cdn.example.test/a.png",
+        ):
             body = _build_seedance2_request_body(
                 "seedance-2-720p-5s",
                 "prompt",
                 {"duration": 5, "reference_images": ["/media/references/a.png"]},
                 profile=profile,
             )
-        mocked.assert_called_once()
         self.assertEqual(
             body["image_with_roles"],
-            [{"url": "asset://pa_FROM_FALLBACK", "role": "reference_image"}],
+            [{"url": "https://cdn.example.test/a.png", "role": "first_frame"}],
         )
 
     def test_multiple_reference_images(self) -> None:

@@ -85,14 +85,19 @@ export function useStudioReferenceUploads({
     resetReferenceFileInput();
   }
 
-  async function finalizeSeedanceAvatarItems(items: ReferenceUploadItem[]): Promise<ReferenceUploadItem[]> {
+  async function finalizeSeedanceAvatarItems(
+    items: ReferenceUploadItem[],
+    options?: { onlyIndexes?: number[] }
+  ): Promise<ReferenceUploadItem[]> {
     if (!enableAvatarRef.current) return items;
     avatarAbortRef.current?.abort();
     const controller = new AbortController();
     avatarAbortRef.current = controller;
+    const only = options?.onlyIndexes ? new Set(options.onlyIndexes) : null;
 
     const registering = await Promise.all(
-      items.map(async (item) => {
+      items.map(async (item, index) => {
+        if (only && !only.has(index)) return item;
         if (item.storagePath.startsWith("asset://") || item.avatarStatus === "active") {
           return item;
         }
@@ -105,7 +110,8 @@ export function useStudioReferenceUploads({
     syncReferenceUploads(registering);
 
     const settled = await Promise.all(
-      registering.map(async (item) => {
+      registering.map(async (item, index) => {
+        if (only && !only.has(index)) return item;
         if (item.avatarStatus === "active" || item.avatarStatus === "failed") return item;
         if (!item.assetId) return item;
         return pollSeedancePrivateAvatarUntilSettled(item, {
@@ -163,13 +169,7 @@ export function useStudioReferenceUploads({
       const nextUploads = [...referenceUploads, ...withMedia];
       syncReferenceUploads(nextUploads);
       onClearError();
-      if (enableAvatarRef.current) {
-        const settled = await finalizeSeedanceAvatarItems(nextUploads);
-        const failed = settled.find((item) => item.avatarStatus === "failed");
-        if (failed?.avatarError) {
-          onError(failed.avatarError);
-        }
-      }
+      // Seedance private-avatar is manual: user clicks「入库」per image.
     } catch (error) {
       onError(error instanceof Error ? error.message : "参考图上传失败");
     } finally {
@@ -221,18 +221,6 @@ export function useStudioReferenceUploads({
     const nextUploads = [...referenceUploads, nextItem];
     syncReferenceUploads(nextUploads);
     onClearError();
-    if (enableAvatarRef.current) {
-      void (async () => {
-        setUploadingReference(true);
-        try {
-          const settled = await finalizeSeedanceAvatarItems(nextUploads);
-          const failed = settled.find((entry) => entry.avatarStatus === "failed");
-          if (failed?.avatarError) onError(failed.avatarError);
-        } finally {
-          setUploadingReference(false);
-        }
-      })();
-    }
     return { ok: true, message: "已置入创作区参考图。" };
   }
 
@@ -253,23 +241,12 @@ export function useStudioReferenceUploads({
     };
     const nextUploads = referenceUploads.map((entry, i) => (i === index ? nextItem : entry));
     syncReferenceUploads(nextUploads);
-    if (enableAvatarRef.current) {
-      void (async () => {
-        setUploadingReference(true);
-        try {
-          const settled = await finalizeSeedanceAvatarItems(nextUploads);
-          const failed = settled.find((entry) => entry.avatarStatus === "failed");
-          if (failed?.avatarError) onError(failed.avatarError);
-        } finally {
-          setUploadingReference(false);
-        }
-      })();
-    }
   }
 
-  async function retrySeedancePrivateAvatar(index: number) {
+  async function registerSeedancePrivateAvatar(index: number) {
     const item = referenceUploads[index];
     if (!item || !enableAvatarRef.current) return;
+    if (item.avatarStatus === "registering" || item.avatarStatus === "processing") return;
     setUploadingReference(true);
     try {
       const reset: ReferenceUploadItem = {
@@ -287,7 +264,7 @@ export function useStudioReferenceUploads({
       }
       const nextUploads = referenceUploads.map((entry, i) => (i === index ? reset : entry));
       syncReferenceUploads(nextUploads);
-      const settled = await finalizeSeedanceAvatarItems(nextUploads);
+      const settled = await finalizeSeedanceAvatarItems(nextUploads, { onlyIndexes: [index] });
       const failed = settled.find((entry) => entry.avatarStatus === "failed");
       if (failed?.avatarError) onError(failed.avatarError);
       else onClearError();
@@ -309,7 +286,8 @@ export function useStudioReferenceUploads({
     removeReferenceUpload: referenceUploadState.removeReferenceUpload,
     replaceReferenceUploadAt,
     replaceReferenceUploads: referenceUploadState.replaceReferenceUploads,
-    retrySeedancePrivateAvatar,
+    registerSeedancePrivateAvatar,
+    retrySeedancePrivateAvatar: registerSeedancePrivateAvatar,
     uploadingReference,
   };
 }

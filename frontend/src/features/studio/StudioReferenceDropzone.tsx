@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { seedanceAvatarStatusLabel } from "./seedancePrivateAvatar";
+import { seedanceAvatarActionLabel, seedanceAvatarStatusLabel } from "./seedancePrivateAvatar";
 import type { StudioReferenceDropzoneProps } from "./studioComposerExpandedContentTypes";
 import StudioReferenceAnnotateLightbox from "./StudioReferenceAnnotateLightbox";
 
@@ -45,6 +45,9 @@ export default function StudioReferenceDropzone({
         <div className="reference-preview-grid">
           {referenceUploads.slice(0, cappedMax).map((item, index) => {
             const avatarLabel = seedanceAvatarStatusLabel(item);
+            const avatarAction = onRetrySeedancePrivateAvatar
+              ? seedanceAvatarActionLabel(item)
+              : null;
             const previewSrc =
               item.previewUrl.startsWith("asset://")
                 ? item.mediaPath || item.previewUrl
@@ -59,7 +62,9 @@ export default function StudioReferenceDropzone({
                       ? "reference-preview-item is-avatar-active"
                       : item.avatarStatus === "registering" || item.avatarStatus === "processing"
                         ? "reference-preview-item is-avatar-pending"
-                        : "reference-preview-item"
+                        : item.avatarStatus === "idle"
+                          ? "reference-preview-item is-avatar-idle"
+                          : "reference-preview-item"
                 }
               >
                 <div className="reference-preview-hit" aria-hidden="true">
@@ -70,13 +75,13 @@ export default function StudioReferenceDropzone({
                     {avatarLabel}
                   </span>
                 ) : null}
-                {item.avatarStatus === "failed" && onRetrySeedancePrivateAvatar ? (
+                {avatarAction ? (
                   <button
                     type="button"
                     className="reference-preview-avatar-retry"
-                    onClick={() => onRetrySeedancePrivateAvatar(index)}
+                    onClick={() => onRetrySeedancePrivateAvatar?.(index)}
                   >
-                    重试入库
+                    {avatarAction}
                   </button>
                 ) : null}
                 {onReplaceReferenceUpload ? (

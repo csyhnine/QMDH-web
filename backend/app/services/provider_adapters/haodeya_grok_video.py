@@ -414,6 +414,7 @@ def _build_seedance2_request_body(
     profile: ImageProviderProfile | None = None,
 ) -> dict[str, object]:
     """Haodeya Seedance 2 ToAPI: short /v1/videos body; duration must match SKU suffix."""
+    del profile  # kept for call-site compatibility; Studio registers avatars manually
     cfg = HAODEYA_VIDEO_SKUS[sku]
     duration = int(cfg["duration"])
     payload_duration = payload.get("duration")
@@ -430,7 +431,8 @@ def _build_seedance2_request_body(
         "aspect_ratio": aspect_ratio,
     }
 
-    # Optional references (ToAPI image_with_roles). Prefer asset:// from private-avatar.
+    # Optional references (ToAPI image_with_roles).
+    # Prefer asset:// from manual private-avatar; otherwise public HTTPS (no forced register).
     reference_paths = _collect_reference_paths(payload)
     if reference_paths:
         if len(reference_paths) > 4:
@@ -440,24 +442,10 @@ def _build_seedance2_request_body(
             if raw_ref.strip().lower().startswith("asset://"):
                 image_with_roles.append({"url": raw_ref.strip(), "role": "reference_image"})
                 continue
-            # Fallback: auto-register HTTPS/local media into private-avatar when Studio missed it.
-            if profile is not None:
-                from app.services.seedance_private_avatar import (
-                    SeedancePrivateAvatarError,
-                    ensure_seedance_reference_asset_url,
-                )
-
-                try:
-                    ref_url = ensure_seedance_reference_asset_url(profile, raw_ref, poll=True)
-                    image_with_roles.append({"url": ref_url, "role": "reference_image"})
-                except SeedancePrivateAvatarError as exc:
-                    raise ValueError(f"人像未入库或未通过审核：{exc}") from exc
-            else:
-                ref_url = resolve_public_media_url(raw_ref)
-                # Single local/HTTPS ref without profile → treat as first_frame I2V;
-                # multi-ref uses reference_image (Haodeya multi-image example).
-                role = "first_frame" if len(reference_paths) == 1 else "reference_image"
-                image_with_roles.append({"url": ref_url, "role": role})
+            ref_url = resolve_public_media_url(raw_ref)
+            # Single HTTPS ref → first_frame I2V; multi-ref → reference_image.
+            role = "first_frame" if len(reference_paths) == 1 else "reference_image"
+            image_with_roles.append({"url": ref_url, "role": role})
         body["image_with_roles"] = image_with_roles
     return body
 

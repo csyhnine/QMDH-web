@@ -110,34 +110,16 @@ export function validateStudioTaskSubmission({
       }
       if (referenceImageCount > 0) {
         const pending = referenceUploads.find(
-          (item) =>
-            item.avatarStatus === "registering" ||
-            item.avatarStatus === "processing" ||
-            item.avatarStatus === "idle"
+          (item) => item.avatarStatus === "registering" || item.avatarStatus === "processing"
         );
         if (pending) {
           setState((current) => ({
             ...current,
-            error: "虚拟人像审核中，请等待「人像已可用」后再生成。",
+            error: "人像入库/审核进行中，请等待完成或取消后再生成。",
           }));
           return { ok: false };
         }
-        const failed = referenceUploads.find((item) => item.avatarStatus === "failed");
-        if (failed) {
-          setState((current) => ({
-            ...current,
-            error: failed.avatarError || "虚拟人像入库失败，请换图或重试入库。",
-          }));
-          return { ok: false };
-        }
-        const unresolved = form.referenceImages.filter(Boolean).some((path) => !path.startsWith("asset://"));
-        if (unresolved) {
-          setState((current) => ({
-            ...current,
-            error: "Seedance 参考图需完成虚拟人像入库（asset://）后再生成。",
-          }));
-          return { ok: false };
-        }
+        // idle / failed：允许直接用 HTTPS 参考图生成；虚拟角色请用户手动点「入库」。
       }
     } else if (isGrokHaodeyaProvider(providerForSubmit)) {
       const skuConfig = getSelectedGrokSkuConfig(form, providerForSubmit);

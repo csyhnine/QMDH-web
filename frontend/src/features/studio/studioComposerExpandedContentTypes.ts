@@ -45,6 +45,7 @@ export type StudioComposerBodyProps = Pick<
   | "onReferenceDrop"
   | "onRemoveReferenceUpload"
   | "onReplaceReferenceUpload"
+  | "onRetrySeedancePrivateAvatar"
 >;
 
 export type StudioComposerModeSwitchProps = {
@@ -58,6 +59,7 @@ export type StudioReferenceDropzoneProps = {
   onReferenceDrop: (event: DragEvent<HTMLElement>) => void;
   onRemoveReferenceUpload: (index: number) => void;
   onReplaceReferenceUpload?: (index: number, item: ReferenceUploadItem) => void;
+  onRetrySeedancePrivateAvatar?: (index: number) => void;
 };
 
 export type StudioPromptTextareaProps = Pick<

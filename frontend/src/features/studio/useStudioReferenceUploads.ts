@@ -4,22 +4,29 @@ import {
   type DragEvent,
   type RefObject,
   type SetStateAction,
+  useEffect,
+  useRef,
   useState,
 } from "react";
 
 import { api } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import {
+  pollSeedancePrivateAvatarUntilSettled,
+  registerSeedancePrivateAvatarForUpload,
+} from "./seedancePrivateAvatar";
+import {
   buildReferenceUploadTracker,
   prepareReferenceUploadFiles,
   shouldClearTransientReferenceTracker,
   uploadReferenceFiles,
 } from "./studioReferenceUtils";
-import type { StudioFormState, SubmissionTracker } from "./studioTypes";
+import type { ReferenceUploadItem, StudioFormState, SubmissionTracker } from "./studioTypes";
 import { useStudioReferenceUploadState } from "./useStudioReferenceUploadState";
 
 type UseStudioReferenceUploadsOptions = {
   defaultTitle: string;
+  enableSeedancePrivateAvatar?: boolean;
   fileInputRef: RefObject<HTMLInputElement | null>;
   maxReferenceCount?: number;
   onClearError: () => void;
@@ -34,6 +41,7 @@ export type StudioReferenceUploadState = ReturnType<typeof useStudioReferenceUpl
 
 export function useStudioReferenceUploads({
   defaultTitle,
+  enableSeedancePrivateAvatar = false,
   fileInputRef,
   maxReferenceCount = 4,
   onClearError,
@@ -47,6 +55,17 @@ export function useStudioReferenceUploads({
   const [uploadingReference, setUploadingReference] = useState(false);
   const referenceUploadState = useStudioReferenceUploadState({ setStudioForm });
   const { referenceUploads, syncReferenceUploads } = referenceUploadState;
+  const avatarAbortRef = useRef<AbortController | null>(null);
+  const enableAvatarRef = useRef(enableSeedancePrivateAvatar);
+  const providerNameRef = useRef(selectedProviderName);
+  enableAvatarRef.current = enableSeedancePrivateAvatar;
+  providerNameRef.current = selectedProviderName;
+
+  useEffect(() => {
+    return () => {
+      avatarAbortRef.current?.abort();
+    };
+  }, []);
 
   function resetReferenceFileInput() {
     if (fileInputRef.current) {
@@ -55,9 +74,45 @@ export function useStudioReferenceUploads({
   }
 
   function clearReferenceUpload() {
+    avatarAbortRef.current?.abort();
     setUploadingReference(false);
     referenceUploadState.clearReferenceUploads();
     resetReferenceFileInput();
+  }
+
+  async function finalizeSeedanceAvatarItems(items: ReferenceUploadItem[]): Promise<ReferenceUploadItem[]> {
+    if (!enableAvatarRef.current) return items;
+    avatarAbortRef.current?.abort();
+    const controller = new AbortController();
+    avatarAbortRef.current = controller;
+
+    const registering = await Promise.all(
+      items.map(async (item) => {
+        if (item.storagePath.startsWith("asset://") || item.avatarStatus === "active") {
+          return item;
+        }
+        return registerSeedancePrivateAvatarForUpload(item, {
+          providerName: providerNameRef.current,
+        });
+      })
+    );
+    if (controller.signal.aborted) return registering;
+    syncReferenceUploads(registering);
+
+    const settled = await Promise.all(
+      registering.map(async (item) => {
+        if (item.avatarStatus === "active" || item.avatarStatus === "failed") return item;
+        if (!item.assetId) return item;
+        return pollSeedancePrivateAvatarUntilSettled(item, {
+          providerName: providerNameRef.current,
+          signal: controller.signal,
+        });
+      })
+    );
+    if (!controller.signal.aborted) {
+      syncReferenceUploads(settled);
+    }
+    return settled;
   }
 
   async function handleReferenceFiles(files: File[]) {
@@ -89,9 +144,21 @@ export function useStudioReferenceUploads({
 
     try {
       const uploadedItems = await uploadReferenceFiles(acceptedFiles, api.uploadReferenceImage);
-      const nextUploads = [...referenceUploads, ...uploadedItems];
+      const withMedia = uploadedItems.map((item) => ({
+        ...item,
+        mediaPath: item.storagePath,
+        avatarStatus: enableAvatarRef.current ? ("idle" as const) : undefined,
+      }));
+      const nextUploads = [...referenceUploads, ...withMedia];
       syncReferenceUploads(nextUploads);
       onClearError();
+      if (enableAvatarRef.current) {
+        const settled = await finalizeSeedanceAvatarItems(nextUploads);
+        const failed = settled.find((item) => item.avatarStatus === "failed");
+        if (failed?.avatarError) {
+          onError(failed.avatarError);
+        }
+      }
     } catch (error) {
       onError(error instanceof Error ? error.message : "参考图上传失败");
     } finally {
@@ -125,7 +192,7 @@ export function useStudioReferenceUploads({
     if (!path) {
       return { ok: false, message: "当前图片没有可用路径，无法置入参考图。" };
     }
-    if (referenceUploads.some((item) => item.storagePath === path)) {
+    if (referenceUploads.some((item) => item.storagePath === path || item.mediaPath === path)) {
       return { ok: false, message: "这张图已经在参考图里了。" };
     }
     if (referenceUploads.length >= maxReferenceCount) {
@@ -135,9 +202,87 @@ export function useStudioReferenceUploads({
     if (!item) {
       return { ok: false, message: "无法将当前图片置入参考图。" };
     }
-    syncReferenceUploads([...referenceUploads, item]);
+    const nextItem: ReferenceUploadItem = {
+      ...item,
+      mediaPath: path,
+      avatarStatus: enableAvatarRef.current ? "idle" : undefined,
+    };
+    const nextUploads = [...referenceUploads, nextItem];
+    syncReferenceUploads(nextUploads);
     onClearError();
+    if (enableAvatarRef.current) {
+      void (async () => {
+        setUploadingReference(true);
+        try {
+          const settled = await finalizeSeedanceAvatarItems(nextUploads);
+          const failed = settled.find((entry) => entry.avatarStatus === "failed");
+          if (failed?.avatarError) onError(failed.avatarError);
+        } finally {
+          setUploadingReference(false);
+        }
+      })();
+    }
     return { ok: true, message: "已置入创作区参考图。" };
+  }
+
+  function replaceReferenceUploadAt(index: number, item: ReferenceUploadItem) {
+    const mediaPath =
+      item.mediaPath ||
+      (item.storagePath.startsWith("asset://") ? undefined : item.storagePath) ||
+      item.storagePath;
+    const nextItem: ReferenceUploadItem = {
+      ...item,
+      mediaPath,
+      storagePath: mediaPath,
+      previewUrl: item.previewUrl || mediaPath,
+      avatarStatus: enableAvatarRef.current ? "idle" : item.avatarStatus,
+      assetId: undefined,
+      assetUrl: undefined,
+      avatarError: undefined,
+    };
+    const nextUploads = referenceUploads.map((entry, i) => (i === index ? nextItem : entry));
+    syncReferenceUploads(nextUploads);
+    if (enableAvatarRef.current) {
+      void (async () => {
+        setUploadingReference(true);
+        try {
+          const settled = await finalizeSeedanceAvatarItems(nextUploads);
+          const failed = settled.find((entry) => entry.avatarStatus === "failed");
+          if (failed?.avatarError) onError(failed.avatarError);
+        } finally {
+          setUploadingReference(false);
+        }
+      })();
+    }
+  }
+
+  async function retrySeedancePrivateAvatar(index: number) {
+    const item = referenceUploads[index];
+    if (!item || !enableAvatarRef.current) return;
+    setUploadingReference(true);
+    try {
+      const reset: ReferenceUploadItem = {
+        ...item,
+        mediaPath: item.mediaPath || item.storagePath.replace(/^asset:\/\//, "") || item.storagePath,
+        storagePath: item.mediaPath || item.storagePath,
+        avatarStatus: "idle",
+        assetId: undefined,
+        assetUrl: undefined,
+        avatarError: undefined,
+      };
+      // If storagePath was asset://, restore mediaPath for re-register
+      if (reset.storagePath.startsWith("asset://") && item.mediaPath) {
+        reset.storagePath = item.mediaPath;
+      }
+      const nextUploads = referenceUploads.map((entry, i) => (i === index ? reset : entry));
+      syncReferenceUploads(nextUploads);
+      const settled = await finalizeSeedanceAvatarItems(nextUploads);
+      const failed = settled.find((entry) => entry.avatarStatus === "failed");
+      if (failed?.avatarError) onError(failed.avatarError);
+      else onClearError();
+    } finally {
+      setUploadingReference(false);
+    }
   }
 
   return {
@@ -147,10 +292,12 @@ export function useStudioReferenceUploads({
     handleReferenceDrop,
     handleReferenceInputChange,
     openReferencePicker,
+    referenceFileInputRef: fileInputRef,
     referenceUploads,
     removeReferenceUpload: referenceUploadState.removeReferenceUpload,
-    replaceReferenceUploadAt: referenceUploadState.replaceReferenceUploadAt,
+    replaceReferenceUploadAt,
     replaceReferenceUploads: referenceUploadState.replaceReferenceUploads,
+    retrySeedancePrivateAvatar,
     uploadingReference,
   };
 }

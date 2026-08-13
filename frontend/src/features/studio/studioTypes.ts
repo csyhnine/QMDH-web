@@ -40,7 +40,14 @@ export type StudioFormState = {
 export type ReferenceUploadItem = {
   fileName: string;
   previewUrl: string;
+  /** Local /media path or asset:// when Seedance private-avatar is active. */
   storagePath: string;
+  /** Original /media path kept for preview when storagePath becomes asset://. */
+  mediaPath?: string;
+  avatarStatus?: "idle" | "registering" | "processing" | "active" | "failed";
+  assetId?: string;
+  assetUrl?: string;
+  avatarError?: string;
 };
 
 export type PromptTemplateFormValue = {

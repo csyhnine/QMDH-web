@@ -129,6 +129,40 @@ class Seedance2VideoBodyTests(unittest.TestCase):
             [{"url": "https://cdn.example.test/frame.png", "role": "first_frame"}],
         )
 
+    def test_asset_protocol_passthrough(self) -> None:
+        body = _build_seedance2_request_body(
+            "seedance-2-720p-5s",
+            "prompt",
+            {"duration": 5, "reference_images": ["asset://pa_01KTEST"]},
+        )
+        self.assertEqual(
+            body["image_with_roles"],
+            [{"url": "asset://pa_01KTEST", "role": "reference_image"}],
+        )
+
+    def test_profile_fallback_registers_private_avatar(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="seedance-2",
+            api_key="k",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="seedance-2",
+        )
+        with patch(
+            "app.services.seedance_private_avatar.ensure_seedance_reference_asset_url",
+            return_value="asset://pa_FROM_FALLBACK",
+        ) as mocked:
+            body = _build_seedance2_request_body(
+                "seedance-2-720p-5s",
+                "prompt",
+                {"duration": 5, "reference_images": ["/media/references/a.png"]},
+                profile=profile,
+            )
+        mocked.assert_called_once()
+        self.assertEqual(
+            body["image_with_roles"],
+            [{"url": "asset://pa_FROM_FALLBACK", "role": "reference_image"}],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

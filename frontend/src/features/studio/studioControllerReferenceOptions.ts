@@ -23,6 +23,8 @@ export function buildStudioReferenceUploadOptions({
       : grokReferenceLimit(controllerState.studioForm, selectedProvider);
   return {
     defaultTitle: defaultStudioForm.title,
+    enableSeedancePrivateAvatar:
+      controllerState.studioForm.creationMode === "video" && isSeedance2Provider(selectedProvider),
     fileInputRef: controllerState.fileInputRef,
     maxReferenceCount:
       controllerState.studioForm.creationMode === "video" ? videoReferenceLimit : 4,

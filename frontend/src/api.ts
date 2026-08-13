@@ -697,6 +697,21 @@ export type ReferenceUploadResponse = {
   storage_path: string;
 };
 
+export type SeedancePrivateAvatarAsset = {
+  asset_id: string;
+  asset_url: string;
+  group_id: string;
+  status: string;
+  source_url?: string;
+};
+
+export type SeedancePrivateAvatarRegisterPayload = {
+  storage_path?: string;
+  source_url?: string;
+  name?: string;
+  provider_name?: string;
+};
+
 export type AgentClientRecord = {
   id: number;
   key: string;
@@ -1318,6 +1333,14 @@ export const api = {
     postJson<void>(`/prompt-templates/${templateId}/events`, payload),
   uploadReferenceImage: (payload: ReferenceUploadPayload) =>
     postJson<ReferenceUploadResponse>("/assets/reference-upload", payload),
+  registerSeedancePrivateAvatar: (payload: SeedancePrivateAvatarRegisterPayload) =>
+    postJson<SeedancePrivateAvatarAsset>("/seedance/private-avatar/register", payload),
+  getSeedancePrivateAvatarAsset: (assetId: string, providerName?: string) =>
+    request<SeedancePrivateAvatarAsset>(
+      `/seedance/private-avatar/assets/${encodeURIComponent(assetId)}${
+        providerName ? `?provider_name=${encodeURIComponent(providerName)}` : ""
+      }`
+    ),
   uploadChatAttachment: (payload: ReferenceUploadPayload) =>
     postJson<{ file_name: string; storage_path: string; mime_type: string; kind: "image" | "file" }>(
       "/chat/attachments/upload",

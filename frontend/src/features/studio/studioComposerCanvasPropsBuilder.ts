@@ -226,6 +226,7 @@ export function buildStudioComposerCanvasProps({
     onReferenceInputChange: referenceUpload.handleReferenceInputChange,
     onRemoveReferenceUpload: referenceUpload.removeReferenceUpload,
     onReplaceReferenceUpload: referenceUpload.replaceReferenceUploadAt,
+    onRetrySeedancePrivateAvatar: referenceUpload.retrySeedancePrivateAvatar,
     onResolutionSelect: (resolutionId) =>
       setStudioForm((current) => ({ ...current, resolution: resolutionId })),
     onSaveCustomTemplate: () => void studioTemplates.saveCustomTemplate(),

@@ -30,6 +30,7 @@ export function useStudioTaskSubmission({
   studioTemplates,
   submissionInFlightRef,
   uploadingReference,
+  referenceUploads = [],
 }: UseStudioTaskSubmissionOptions) {
   const submitStudioTask = useCallback(async (form: StudioFormState): Promise<boolean> => {
     setActiveComposerMenu(null);
@@ -41,6 +42,7 @@ export function useStudioTaskSubmission({
       providerForSubmit,
       setState,
       uploadingReference,
+      referenceUploads,
     });
     if (!validation.ok || !providerForSubmit) return false;
 
@@ -96,6 +98,7 @@ export function useStudioTaskSubmission({
     studioTemplates,
     submissionInFlightRef,
     uploadingReference,
+    referenceUploads,
   ]);
 
   return {

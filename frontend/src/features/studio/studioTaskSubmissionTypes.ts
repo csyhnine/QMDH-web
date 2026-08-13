@@ -22,4 +22,9 @@ export type UseStudioTaskSubmissionOptions = {
   studioTemplates: StudioTemplatesApi;
   submissionInFlightRef: MutableRef<boolean>;
   uploadingReference: boolean;
+  referenceUploads?: Array<{
+    avatarStatus?: "idle" | "registering" | "processing" | "active" | "failed";
+    avatarError?: string;
+    storagePath: string;
+  }>;
 };

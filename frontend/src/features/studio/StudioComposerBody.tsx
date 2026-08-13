@@ -15,6 +15,7 @@ export default function StudioComposerBody({
   onReferenceDrop,
   onRemoveReferenceUpload,
   onReplaceReferenceUpload,
+  onRetrySeedancePrivateAvatar,
 }: StudioComposerBodyProps) {
   return (
     <div className="composer-body">
@@ -26,6 +27,7 @@ export default function StudioComposerBody({
           onReferenceDrop={onReferenceDrop}
           onRemoveReferenceUpload={onRemoveReferenceUpload}
           onReplaceReferenceUpload={onReplaceReferenceUpload}
+          onRetrySeedancePrivateAvatar={onRetrySeedancePrivateAvatar}
         />
       </div>
 

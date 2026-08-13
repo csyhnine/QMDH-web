@@ -35,7 +35,11 @@ export function releaseReferencePreviews(items: ReferenceUploadItem[]) {
 }
 
 export function referenceUploadStoragePaths(items: ReferenceUploadItem[]): string[] {
-  return items.map((item) => item.storagePath);
+  return items.map((item) => {
+    if (item.avatarStatus === "active" && item.assetUrl) return item.assetUrl;
+    if (item.storagePath.startsWith("asset://")) return item.storagePath;
+    return item.storagePath;
+  });
 }
 
 export function removeReferenceUploadAt(

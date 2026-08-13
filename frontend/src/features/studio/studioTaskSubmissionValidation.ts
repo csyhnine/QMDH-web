@@ -20,6 +20,11 @@ type ValidationOptions = {
   providerForSubmit: Provider | undefined;
   setState: Dispatch<SetStateAction<LoadState>>;
   uploadingReference: boolean;
+  referenceUploads?: Array<{
+    avatarStatus?: "idle" | "registering" | "processing" | "active" | "failed";
+    avatarError?: string;
+    storagePath: string;
+  }>;
 };
 
 export type StudioTaskSubmissionValidation =
@@ -36,11 +41,12 @@ export function validateStudioTaskSubmission({
   providerForSubmit,
   setState,
   uploadingReference,
+  referenceUploads = [],
 }: ValidationOptions): StudioTaskSubmissionValidation {
   if (uploadingReference) {
     setState((current) => ({
       ...current,
-      error: "参考图仍在上传，请稍后再提交。",
+      error: "参考图仍在上传或人像入库中，请稍后再提交。",
     }));
     return { ok: false };
   }
@@ -101,6 +107,37 @@ export function validateStudioTaskSubmission({
       if (seedanceError) {
         setState((current) => ({ ...current, error: seedanceError }));
         return { ok: false };
+      }
+      if (referenceImageCount > 0) {
+        const pending = referenceUploads.find(
+          (item) =>
+            item.avatarStatus === "registering" ||
+            item.avatarStatus === "processing" ||
+            item.avatarStatus === "idle"
+        );
+        if (pending) {
+          setState((current) => ({
+            ...current,
+            error: "虚拟人像审核中，请等待「人像已可用」后再生成。",
+          }));
+          return { ok: false };
+        }
+        const failed = referenceUploads.find((item) => item.avatarStatus === "failed");
+        if (failed) {
+          setState((current) => ({
+            ...current,
+            error: failed.avatarError || "虚拟人像入库失败，请换图或重试入库。",
+          }));
+          return { ok: false };
+        }
+        const unresolved = form.referenceImages.filter(Boolean).some((path) => !path.startsWith("asset://"));
+        if (unresolved) {
+          setState((current) => ({
+            ...current,
+            error: "Seedance 参考图需完成虚拟人像入库（asset://）后再生成。",
+          }));
+          return { ok: false };
+        }
       }
     } else if (isGrokHaodeyaProvider(providerForSubmit)) {
       const skuConfig = getSelectedGrokSkuConfig(form, providerForSubmit);

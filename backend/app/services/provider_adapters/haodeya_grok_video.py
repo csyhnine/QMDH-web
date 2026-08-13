@@ -145,7 +145,7 @@ class HaodeyaGrokVideoProviderAdapter:
 
         try:
             started_at = perf_counter()
-            request_body = _build_haodeya_grok_request_body(sku, prompt, payload)
+            request_body = _build_haodeya_grok_request_body(sku, prompt, payload, profile=self.profile)
             submit_payload = _submit_haodeya_grok_video_task(self.profile, request_body)
             upstream_task_id = _extract_task_id(submit_payload)
             polling_url = _extract_polling_url(submit_payload)
@@ -292,13 +292,19 @@ def _collect_reference_paths(payload: dict) -> list[str]:
     return list(dict.fromkeys(paths))
 
 
-def _build_haodeya_grok_request_body(sku: str, prompt: str, payload: dict) -> dict[str, object]:
+def _build_haodeya_grok_request_body(
+    sku: str,
+    prompt: str,
+    payload: dict,
+    *,
+    profile: ImageProviderProfile | None = None,
+) -> dict[str, object]:
     cfg = HAODEYA_VIDEO_SKUS[sku]
     family = str(cfg.get("family") or "grok")
     if family == "happyhorse":
         return _build_happyhorse_request_body(sku, prompt, payload)
     if family == "seedance2":
-        return _build_seedance2_request_body(sku, prompt, payload)
+        return _build_seedance2_request_body(sku, prompt, payload, profile=profile)
     return _build_grok_request_body(sku, prompt, payload)
 
 
@@ -400,7 +406,13 @@ def _build_happyhorse_request_body(sku: str, prompt: str, payload: dict) -> dict
     return body
 
 
-def _build_seedance2_request_body(sku: str, prompt: str, payload: dict) -> dict[str, object]:
+def _build_seedance2_request_body(
+    sku: str,
+    prompt: str,
+    payload: dict,
+    *,
+    profile: ImageProviderProfile | None = None,
+) -> dict[str, object]:
     """Haodeya Seedance 2 ToAPI: short /v1/videos body; duration must match SKU suffix."""
     cfg = HAODEYA_VIDEO_SKUS[sku]
     duration = int(cfg["duration"])
@@ -418,17 +430,34 @@ def _build_seedance2_request_body(sku: str, prompt: str, payload: dict) -> dict[
         "aspect_ratio": aspect_ratio,
     }
 
-    # Optional first-frame / reference (ToAPI image_with_roles). Text-only is the default path.
+    # Optional reference (ToAPI image_with_roles). Prefer asset:// from private-avatar.
     reference_paths = _collect_reference_paths(payload)
     if reference_paths:
         if len(reference_paths) > 1:
-            raise ValueError("Seedance 2 currently accepts at most one reference image (first_frame)")
-        body["image_with_roles"] = [
-            {
-                "url": resolve_public_media_url(reference_paths[0]),
-                "role": "first_frame",
-            }
-        ]
+            raise ValueError("Seedance 2 currently accepts at most one reference image")
+        raw_ref = reference_paths[0]
+        if raw_ref.strip().lower().startswith("asset://"):
+            ref_url = raw_ref.strip()
+            role = "reference_image"
+        else:
+            # Fallback: auto-register HTTPS/local media into private-avatar when Studio missed it.
+            if profile is not None:
+                from app.services.seedance_private_avatar import (
+                    SeedancePrivateAvatarError,
+                    ensure_seedance_reference_asset_url,
+                )
+
+                try:
+                    ref_url = ensure_seedance_reference_asset_url(profile, raw_ref, poll=True)
+                    role = "reference_image"
+                except SeedancePrivateAvatarError as exc:
+                    raise ValueError(
+                        f"人像未入库或未通过审核：{exc}"
+                    ) from exc
+            else:
+                ref_url = resolve_public_media_url(raw_ref)
+                role = "first_frame"
+        body["image_with_roles"] = [{"url": ref_url, "role": role}]
     return body
 
 

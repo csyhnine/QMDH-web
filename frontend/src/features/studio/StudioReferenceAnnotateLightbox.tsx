@@ -40,7 +40,12 @@ export default function StudioReferenceAnnotateLightbox({
     setSaving(true);
     setError("");
     try {
-      const exported = await exportAnnotatedDataUrl(item.previewUrl || item.storagePath, strokes);
+      const exported = await exportAnnotatedDataUrl(
+        item.previewUrl.startsWith("asset://")
+          ? item.mediaPath || item.previewUrl
+          : item.previewUrl || item.storagePath,
+        strokes
+      );
       const uploaded = await api.uploadReferenceImage({
         file_name: exported.fileName,
         data_url: exported.dataUrl,
@@ -49,6 +54,7 @@ export default function StudioReferenceAnnotateLightbox({
         fileName: uploaded.file_name || exported.fileName,
         previewUrl: uploaded.storage_path,
         storagePath: uploaded.storage_path,
+        mediaPath: uploaded.storage_path,
       });
       onClose();
     } catch (err) {

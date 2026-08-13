@@ -53,6 +53,7 @@ export function useStudioTaskActions({
     studioTemplates,
     submissionInFlightRef,
     uploadingReference: referenceUpload.uploadingReference,
+    referenceUploads: referenceUpload.referenceUploads,
   });
 
   function applyTaskToComposer(task: Task, asset?: Asset): StudioFormState {

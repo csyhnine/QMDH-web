@@ -317,6 +317,46 @@ const modelPresets: ModelPreset[] = [
     },
   },
   {
+    id: "haodeya-gpt-image-count",
+    label: "GPT Image Count（DeepKey）",
+    category: "生图",
+    description: "同步短 body；2K 映射上游 gpt-image-2-count-2k；size 用像素。",
+    draft: {
+      providerName: "gpt-image-2-count",
+      displayName: "GPT Image 2 Count",
+      baseUrl: HAODEYA_BASE_URL,
+      modelName: "gpt-image-2-count",
+      adapterKind: "openai_compatible",
+      capabilities: "image.generate, image.edit",
+      strategies: JSON.stringify(
+        {
+          "image.generate": "haodeya_sync_image",
+          "image.edit": "haodeya_sync_image",
+        },
+        null,
+        2
+      ),
+      adapterConfig: JSON.stringify(
+        {
+          provider_flavor: "haodeya_sync_image",
+          unit_price_1k: 1.62,
+          unit_price_2k: 2.67,
+          supported_resolutions: ["1k", "2k"],
+          upstream_model_1k: "gpt-image-2-count",
+          upstream_model_2k: "gpt-image-2-count-2k",
+          upstream_model_4k: "gpt-image-2-count-4k",
+        },
+        null,
+        2
+      ),
+      pricingCurrency: "CNY",
+      pricingUnit: "per_image",
+      outputFormat: "png",
+      timeoutSeconds: 300,
+      referenceMode: "disabled",
+    },
+  },
+  {
     id: "haodeya-happyhorse-video",
     label: "HappyHorse 视频",
     category: "视频",

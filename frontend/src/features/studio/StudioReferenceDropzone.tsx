@@ -37,7 +37,13 @@ export default function StudioReferenceDropzone({
         onDrop={onReferenceDrop}
         onDragOver={(event) => event.preventDefault()}
       >
-        <div className="reference-preview-grid">
+        <div
+          className={
+            referenceUploads.length === 1
+              ? "reference-preview-grid is-single"
+              : "reference-preview-grid"
+          }
+        >
           {referenceUploads.slice(0, 4).map((item, index) => {
             const avatarLabel = seedanceAvatarStatusLabel(item);
             const previewSrc =

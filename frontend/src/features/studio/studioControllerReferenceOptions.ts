@@ -2,7 +2,10 @@ import { defaultStudioForm } from "./studioConstants";
 import { grokReferenceLimit } from "./grokVideoUtils";
 import { happyHorseReferenceLimit, isHappyHorseProvider } from "./happyHorseVideoUtils";
 import { isSeedance2Provider, seedance2ReferenceLimit } from "./seedanceVideoUtils";
-import { selectedReferenceUploadProviderName } from "./studioControllerProps";
+import {
+  selectedReferenceUploadProviderLabel,
+  selectedReferenceUploadProviderName,
+} from "./studioControllerProps";
 import type { StudioDerivedState } from "./studioDerivedState";
 import type { useStudioControllerState } from "./useStudioControllerState";
 import type { useStudioReferenceUploads } from "./useStudioReferenceUploads";
@@ -30,6 +33,10 @@ export function buildStudioReferenceUploadOptions({
       controllerState.studioForm.creationMode === "video" ? videoReferenceLimit : 4,
     onClearError: controllerState.clearLoadError,
     onError: controllerState.pushLoadError,
+    selectedProviderLabel: selectedReferenceUploadProviderLabel({
+      fallbackProviderName: controllerState.studioForm.requestedProvider,
+      selectedProvider,
+    }),
     selectedProviderName: selectedReferenceUploadProviderName({
       fallbackProviderName: controllerState.studioForm.requestedProvider,
       selectedProvider,

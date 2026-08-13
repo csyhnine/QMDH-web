@@ -31,6 +31,9 @@ type UseStudioReferenceUploadsOptions = {
   maxReferenceCount?: number;
   onClearError: () => void;
   onError: (message: string) => void;
+  /** Human-readable label for submission tracker UI. */
+  selectedProviderLabel?: string;
+  /** Admin provider_name used for avatar register API. */
   selectedProviderName: string;
   setStudioForm: Dispatch<SetStateAction<StudioFormState>>;
   setSubmissionTracker: Dispatch<SetStateAction<SubmissionTracker | null>>;
@@ -46,6 +49,7 @@ export function useStudioReferenceUploads({
   maxReferenceCount = 4,
   onClearError,
   onError,
+  selectedProviderLabel,
   selectedProviderName,
   setStudioForm,
   setSubmissionTracker,
@@ -60,6 +64,7 @@ export function useStudioReferenceUploads({
   const providerNameRef = useRef(selectedProviderName);
   enableAvatarRef.current = enableSeedancePrivateAvatar;
   providerNameRef.current = selectedProviderName;
+  const trackerProviderName = selectedProviderLabel || selectedProviderName;
 
   useEffect(() => {
     return () => {
@@ -140,7 +145,13 @@ export function useStudioReferenceUploads({
     }
 
     setUploadingReference(true);
-    setSubmissionTracker(buildReferenceUploadTracker({ defaultTitle, selectedProviderName, studioForm }));
+    setSubmissionTracker(
+      buildReferenceUploadTracker({
+        defaultTitle,
+        selectedProviderName: trackerProviderName,
+        studioForm,
+      })
+    );
 
     try {
       const uploadedItems = await uploadReferenceFiles(acceptedFiles, api.uploadReferenceImage);

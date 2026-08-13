@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 from sqlalchemy.orm import Session
 
 from app.core.config import ImageProviderProfile
-from app.services.model_registry import get_image_provider_profile, get_image_provider_profiles
+from app.services.model_registry import get_image_provider_profiles
 from app.services.provider_adapters.video_common import resolve_public_media_url
 
 PRIVATE_AVATAR_GROUPS_PATH = "/videos/doubao-seedance-2-0/private-avatar/groups"
@@ -35,16 +35,43 @@ def resolve_seedance_image_provider_profile(
     *,
     provider_name: str | None = None,
 ) -> ImageProviderProfile:
-    if provider_name and provider_name.strip():
-        try:
-            return get_image_provider_profile(provider_name.strip(), db)
-        except KeyError as exc:
-            raise SeedancePrivateAvatarError(f"未找到模型配置：{provider_name}") from exc
+    profiles = get_image_provider_profiles(db)
 
-    for profile in get_image_provider_profiles(db).values():
+    def _is_seedance(profile: ImageProviderProfile) -> bool:
         model = (profile.model_name or "").strip().lower()
         pname = (profile.provider_name or "").strip().lower()
-        if model.startswith("seedance-2") or "haodeya_seedance" in pname or pname == "seedance-2":
+        return (
+            model.startswith("seedance-2")
+            or "haodeya_seedance" in pname
+            or pname == "seedance-2"
+            or "seedance" in model
+        )
+
+    requested = (provider_name or "").strip()
+    if requested:
+        # Exact provider_name first.
+        if requested in profiles:
+            return profiles[requested]
+        # Tolerant match: display label / model id accidentally passed from UI.
+        lowered = requested.lower()
+        for profile in profiles.values():
+            candidates = {
+                (profile.provider_name or "").strip().lower(),
+                (profile.model_name or "").strip().lower(),
+                (profile.display_name or "").strip().lower(),
+            }
+            if lowered in candidates or lowered.replace(" ", "-") in candidates:
+                if _is_seedance(profile) or "seedance" in lowered:
+                    return profile
+        # Last resort: any Seedance profile if the requested name looks like Seedance UI label.
+        if "seedance" in lowered:
+            for profile in profiles.values():
+                if _is_seedance(profile):
+                    return profile
+        raise SeedancePrivateAvatarError(f"未找到模型配置：{requested}")
+
+    for profile in profiles.values():
+        if _is_seedance(profile):
             return profile
     raise SeedancePrivateAvatarError("未找到可用的 Seedance 2 模型配置，请先在 Admin 启用 Seedance 2。")
 

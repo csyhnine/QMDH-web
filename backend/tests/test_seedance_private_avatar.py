@@ -116,6 +116,25 @@ class SeedancePrivateAvatarTests(unittest.TestCase):
                     source_path="/media/a.png",
                 )
 
+    def test_resolve_accepts_display_label(self) -> None:
+        from unittest.mock import MagicMock
+
+        from app.services import seedance_private_avatar as mod
+
+        profile = ImageProviderProfile(
+            provider_name="seedance-2",
+            display_name="Seedance 2",
+            api_key="k",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="seedance-2",
+        )
+        db = MagicMock()
+        with patch.object(mod, "get_image_provider_profiles", return_value={"seedance-2": profile}):
+            resolved = mod.resolve_seedance_image_provider_profile(
+                db, provider_name="Seedance 2 Video"
+            )
+        self.assertEqual(resolved.provider_name, "seedance-2")
+
 
 if __name__ == "__main__":
     unittest.main()

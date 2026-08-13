@@ -217,4 +217,8 @@ export default function StudioReferenceDropzone({
               </button>
             </div>
           </div>
- 
+        </div>
+      ) : null}
+    </>
+  );
+}

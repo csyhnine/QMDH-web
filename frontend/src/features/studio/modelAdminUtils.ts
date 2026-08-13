@@ -15,12 +15,25 @@ function stripUpstreamTokens(value: string): string {
     .trim();
 }
 
+function isSeedance2UnifiedIdentity(identity: string, modelName: string): boolean {
+  const model = modelName.trim().toLowerCase();
+  if (model === "seedance-2" || model === "haodeya_seedance") return true;
+  return identity.includes("haodeya_seedance");
+}
+
 export function publicProviderDisplayName(provider: ProviderLike): string {
   const identity = providerIdentity(provider);
   const adapter = (provider.adapter_kind || "").toLowerCase();
+  const model = (provider.model_name || "").trim().toLowerCase();
 
   if (adapter === "bigjpg" || provider.provider_name === "bigjpg" || identity.includes("bigjpg")) {
     return "高清放大";
+  }
+  // Prefer product label over bare model ids like seedance-2 / seedance-2-720p.
+  if (isSeedance2UnifiedIdentity(identity, model) || model.startsWith("seedance-2")) {
+    const cleaned = stripUpstreamTokens(provider.display_name || "");
+    if (cleaned && !/^seedance-2/i.test(cleaned)) return cleaned;
+    return "Seedance 2 Video";
   }
   if (adapter === "haodeya_grok" || identity.includes("haodeya")) {
     const cleaned = stripUpstreamTokens(provider.display_name || "");
@@ -36,10 +49,16 @@ export function publicProviderDisplayName(provider: ProviderLike): string {
 
 export function publicProviderModelLine(provider: ProviderLike): string {
   const identity = providerIdentity(provider);
+  const model = (provider.model_name || "").trim().toLowerCase();
   if (provider.provider_name === "bigjpg" || provider.model_name === "bigjpg" || identity.includes("bigjpg")) {
     return "";
   }
-  if (provider.adapter_kind === "haodeya_grok" || identity.includes("haodeya")) {
+  if (
+    isSeedance2UnifiedIdentity(identity, model) ||
+    model.startsWith("seedance-2") ||
+    provider.adapter_kind === "haodeya_grok" ||
+    identity.includes("haodeya")
+  ) {
     return "";
   }
   if (provider.model_name === provider.provider_name) {
@@ -50,7 +69,17 @@ export function publicProviderModelLine(provider: ProviderLike): string {
 
 export function providerGroupLabel(provider: Provider): string {
   const name = providerIdentity(provider);
-  if (name.includes("grok") || name.includes("haodeya")) return "Grok 视频";
+  const model = provider.model_name.trim().toLowerCase();
+  // Haodeya Seedance 2 ToAPI — same Studio bucket as Grok / HappyHorse.
+  if (
+    model === "seedance-2" ||
+    model === "haodeya_seedance" ||
+    model.startsWith("seedance-2-") ||
+    name.includes("haodeya_seedance")
+  ) {
+    return "Grok 视频";
+  }
+  if (name.includes("grok") || name.includes("haodeya") || name.includes("happyhorse")) return "Grok 视频";
   if (name.includes("firered")) return "魔搭 / FireRed";
   if (name.includes("z_image") || name.includes("z-image")) return "魔搭 / 造相 Z";
   if (name.includes("qwen")) return "魔搭 / Qwen";

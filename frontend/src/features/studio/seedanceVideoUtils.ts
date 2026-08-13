@@ -27,42 +27,42 @@ export const SEEDANCE2_VIDEO_SKU_CONFIG: Record<Seedance2VideoSku, Seedance2SkuC
     quality: "fast720",
     resolution: "720p",
     label: "720p 快速 · 5 秒",
-    detail: "Fast · 720p · 5s",
+    detail: "上游 Fast 720p",
   },
   "seedance-2-fast-720p-10s": {
     duration: 10,
     quality: "fast720",
     resolution: "720p",
     label: "720p 快速 · 10 秒",
-    detail: "Fast · 720p · 10s",
+    detail: "上游 Fast 720p",
   },
   "seedance-2-720p-5s": {
     duration: 5,
     quality: "720",
     resolution: "720p",
     label: "720p 标准 · 5 秒",
-    detail: "标准 · 720p · 5s",
+    detail: "上游标准 720p",
   },
   "seedance-2-720p-10s": {
     duration: 10,
     quality: "720",
     resolution: "720p",
     label: "720p 标准 · 10 秒",
-    detail: "标准 · 720p · 10s",
+    detail: "上游标准 720p",
   },
   "seedance-2-1080p-5s": {
     duration: 5,
     quality: "1080",
     resolution: "1080p",
     label: "1080p · 5 秒",
-    detail: "标准 · 1080p · 5s",
+    detail: "上游标准 1080p",
   },
   "seedance-2-1080p-10s": {
     duration: 10,
     quality: "1080",
     resolution: "1080p",
     label: "1080p · 10 秒",
-    detail: "标准 · 1080p · 10s",
+    detail: "上游标准 1080p",
   },
 };
 
@@ -76,7 +76,10 @@ export const SEEDANCE2_VIDEO_SKU_OPTIONS = (
 
 const SEEDANCE2_SKU_SET = new Set<string>(Object.keys(SEEDANCE2_VIDEO_SKU_CONFIG));
 
-/** Bare / partial names from model discovery that should be hidden when a unified profile exists. */
+/** Admin 统一 profile 的 placeholder model_name（仅这些算「统一模型」）。 */
+const SEEDANCE2_UNIFIED_MODEL_NAMES = new Set<string>(["seedance-2", "haodeya_seedance"]);
+
+/** 探测导入的裸名 / 半成品 SKU，有统一 profile 时应从 Studio 隐藏。 */
 const SEEDANCE2_LEGACY_MODEL_NAMES = new Set<string>([
   ...SEEDANCE2_SKU_SET,
   "seedance-2-fast",
@@ -84,8 +87,16 @@ const SEEDANCE2_LEGACY_MODEL_NAMES = new Set<string>([
   "seedance-2-1080p",
   "seedance-2-mini",
   "seedance-2-mini-480p",
-  "seedance-2",
 ]);
+
+function seedance2ModelName(provider: Provider): string {
+  return provider.model_name.trim().toLowerCase();
+}
+
+/** Volc Ark Plan（doubao-seedance-2.0-*）与 Haodeya ToAPI Seedance 2 不是同一产品。 */
+function isVolcSeedancePlanModel(model: string): boolean {
+  return model.startsWith("doubao-seedance") || model.includes("seedance-2.0");
+}
 
 export function isSeedance2SkuId(value: string | undefined | null): value is Seedance2VideoSku {
   return Boolean(value && SEEDANCE2_SKU_SET.has(value));
@@ -94,38 +105,39 @@ export function isSeedance2SkuId(value: string | undefined | null): value is See
 export function isSeedance2Provider(provider: Provider | undefined): boolean {
   if (!provider) return false;
   if (isSeedance2SkuId(provider.model_name)) return true;
+  const model = seedance2ModelName(provider);
+  if (isVolcSeedancePlanModel(model)) return false;
   const identity = `${provider.provider_name} ${provider.model_name} ${provider.display_name || ""}`.toLowerCase();
   if (identity.includes("happyhorse") || identity.includes("grok-imagine")) return false;
-  return (
-    identity.includes("seedance-2") ||
-    identity.includes("haodeya_seedance") ||
-    (identity.includes("seedance") && identity.includes("haodeya"))
-  );
+  if (SEEDANCE2_UNIFIED_MODEL_NAMES.has(model)) return true;
+  if (SEEDANCE2_LEGACY_MODEL_NAMES.has(model)) return true;
+  // Full ToAPI SKUs may appear with minor casing/spacing differences.
+  if (model.startsWith("seedance-2-")) return true;
+  if (identity.includes("haodeya_seedance")) return true;
+  return identity.includes("haodeya") && identity.includes("seedance") && !isVolcSeedancePlanModel(model);
 }
 
-/** Unified Admin profile (placeholder model_name), same pattern as HappyHorse. */
+/** Unified Admin profile only — never treat bare discovery names as unified. */
 export function isUnifiedSeedance2Provider(provider: Provider): boolean {
-  return isSeedance2Provider(provider) && !isSeedance2SkuId(provider.model_name);
+  if (!isSeedance2Provider(provider)) return false;
+  const model = seedance2ModelName(provider);
+  if (SEEDANCE2_UNIFIED_MODEL_NAMES.has(model)) return true;
+  const providerName = provider.provider_name.trim().toLowerCase();
+  return providerName.includes("haodeya_seedance") && !model.startsWith("seedance-2-") && !isSeedance2SkuId(provider.model_name);
 }
 
 export function isLegacySeedance2SkuProvider(provider: Provider): boolean {
-  const model = provider.model_name.trim().toLowerCase();
-  if (isSeedance2SkuId(provider.model_name)) return true;
-  return SEEDANCE2_LEGACY_MODEL_NAMES.has(model) && model !== "seedance-2";
+  return isSeedance2Provider(provider) && !isUnifiedSeedance2Provider(provider);
 }
 
 /**
  * When a unified Seedance profile exists, hide discovered per-SKU / bare models from Studio.
- * Keep the unified placeholder (`seedance-2` / haodeya_seedance).
+ * Keep only the unified placeholder (`seedance-2` / haodeya_seedance).
  */
 export function filterSeedance2VideoProviders(providers: Provider[]): Provider[] {
   const hasUnified = providers.some(isUnifiedSeedance2Provider);
   if (!hasUnified) return providers;
-  return providers.filter((provider) => {
-    if (!isSeedance2Provider(provider)) return true;
-    if (isUnifiedSeedance2Provider(provider)) return true;
-    return false;
-  });
+  return providers.filter((provider) => !isLegacySeedance2SkuProvider(provider));
 }
 
 export function resolveSelectedSeedance2Sku(

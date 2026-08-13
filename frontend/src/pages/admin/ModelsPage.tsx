@@ -724,9 +724,13 @@ function resolveDiscoverImportTransport(
     };
   }
   // Seedance 2 ToAPI on Haodeya → /v1/videos (not Ark tasks). Prefer before generic "seedance"→Ark.
+  // Exclude Volc Plan names like doubao-seedance-2.0-* (substring "seedance-2" would false-match).
+  const isVolcSeedancePlan =
+    identity.includes("doubao-seedance") || identity.includes("seedance-2.0");
   if (
-    identity.includes("seedance-2") ||
-    (identity.includes("seedance") && identity.includes("haodeya"))
+    !isVolcSeedancePlan &&
+    (identity.includes("seedance-2") ||
+      (identity.includes("seedance") && identity.includes("haodeya")))
   ) {
     return {
       adapter_kind: "haodeya_grok",

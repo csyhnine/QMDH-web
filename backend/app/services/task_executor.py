@@ -946,13 +946,16 @@ def _build_haodeya_short_images_plan(
     }
 
     reference_result = _image_generation_result_fields(profile, payload)
-    # ToAPI VIP accepts image_urls; DeepKey sync handbook does not document refs on generations.
-    if poll and reference_images:
+    # VIP (async) and DeepKey count (sync) both accept public HTTPS image_urls on generations.
+    # Without this, Studio shows「参考图 N 张」but upstream only sees prompt → unrelated T2I.
+    if reference_images:
         body["image_urls"] = [_reference_image_to_public_url(item) for item in reference_images]
         reference_result = {
             **reference_result,
             "reference_image_used": True,
-            "reference_image_mode": "haodeya_async_image_urls",
+            "reference_image_mode": (
+                "haodeya_async_image_urls" if poll else "haodeya_sync_image_urls"
+            ),
             "reference_image_count": len(reference_images),
         }
     if requested_capability != effective_capability:

@@ -163,6 +163,34 @@ class Seedance2VideoBodyTests(unittest.TestCase):
             [{"url": "asset://pa_FROM_FALLBACK", "role": "reference_image"}],
         )
 
+    def test_multiple_reference_images(self) -> None:
+        body = _build_seedance2_request_body(
+            "seedance-2-720p-5s",
+            "prompt",
+            {
+                "duration": 5,
+                "reference_images": ["asset://pa_1", "asset://pa_2"],
+            },
+        )
+        self.assertEqual(
+            body["image_with_roles"],
+            [
+                {"url": "asset://pa_1", "role": "reference_image"},
+                {"url": "asset://pa_2", "role": "reference_image"},
+            ],
+        )
+
+    def test_rejects_more_than_four_references(self) -> None:
+        with self.assertRaisesRegex(ValueError, "at most 4"):
+            _build_seedance2_request_body(
+                "seedance-2-720p-5s",
+                "prompt",
+                {
+                    "duration": 5,
+                    "reference_images": [f"asset://pa_{i}" for i in range(5)],
+                },
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

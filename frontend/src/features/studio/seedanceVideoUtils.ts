@@ -175,9 +175,12 @@ export function seedance2VideoSkuForProviderSelection(
   return DEFAULT_SEEDANCE2_VIDEO_SKU;
 }
 
+/** Max reference images for Seedance 2 (ToAPI `image_with_roles`, multi `reference_image`). */
+export const SEEDANCE2_MAX_REFERENCE_IMAGES = 4;
+
 export function seedance2ReferenceLimit(_form: StudioFormState, provider?: Provider): number {
   if (!provider || !isSeedance2Provider(provider)) return 4;
-  return 1;
+  return SEEDANCE2_MAX_REFERENCE_IMAGES;
 }
 
 export function seedance2ReferenceUploadError(
@@ -186,8 +189,8 @@ export function seedance2ReferenceUploadError(
   count: number
 ): string | null {
   if (!provider || !isSeedance2Provider(provider)) return null;
-  if (count > 1) {
-    return "Seedance 2 最多只能上传 1 张参考图（可选首帧）。";
+  if (count > SEEDANCE2_MAX_REFERENCE_IMAGES) {
+    return `Seedance 2 最多只能上传 ${SEEDANCE2_MAX_REFERENCE_IMAGES} 张参考图。`;
   }
   void form;
   return null;
@@ -214,10 +217,10 @@ export function buildSeedance2VideoPayload(
     ratio,
     aspect_ratio: ratio,
   };
-  if (referenceImages[0]) {
+  if (referenceImages.length > 0) {
     payload.start_image_url = referenceImages[0];
     payload.reference_image = referenceImages[0];
-    payload.reference_images = [referenceImages[0]];
+    payload.reference_images = referenceImages;
   }
   return payload;
 }

@@ -39,7 +39,7 @@ export function composerReferenceHint(
           referenceUploadCount > 0
             ? `已上传 ${referenceUploadCount} 张参考图（虚拟角色会自动人像入库）。`
             : "当前未上传图片，纯文本也可提交。";
-        return `可选 1 张虚拟角色参考图。${uploaded} ${skuConfig.resolution} · ${skuConfig.duration}s · 生成通常需数分钟。`;
+        return `可选最多 4 张参考图（含虚拟角色；人像会自动入库）。${uploaded} ${skuConfig.resolution} · ${skuConfig.duration}s · 生成通常需数分钟。`;
       }
     }
     if (isGrokHaodeyaProvider(provider) && form) {

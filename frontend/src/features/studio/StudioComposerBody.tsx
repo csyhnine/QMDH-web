@@ -6,6 +6,7 @@ import type { StudioComposerBodyProps } from "./studioComposerExpandedContentTyp
 export default function StudioComposerBody({
   promptTextareaRef,
   referenceHint,
+  maxReferenceCount,
   referenceUploads,
   studioForm,
   onModeChange,
@@ -23,6 +24,7 @@ export default function StudioComposerBody({
         <StudioComposerModeSwitch creationMode={studioForm.creationMode} onModeChange={onModeChange} />
         <StudioReferenceDropzone
           referenceUploads={referenceUploads}
+          maxReferenceCount={maxReferenceCount}
           onOpenReferencePicker={onOpenReferencePicker}
           onReferenceDrop={onReferenceDrop}
           onRemoveReferenceUpload={onRemoveReferenceUpload}

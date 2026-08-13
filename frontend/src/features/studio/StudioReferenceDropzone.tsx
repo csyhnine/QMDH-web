@@ -4,8 +4,11 @@ import { seedanceAvatarStatusLabel } from "./seedancePrivateAvatar";
 import type { StudioReferenceDropzoneProps } from "./studioComposerExpandedContentTypes";
 import StudioReferenceAnnotateLightbox from "./StudioReferenceAnnotateLightbox";
 
+const DEFAULT_MAX_REFERENCE_COUNT = 4;
+
 export default function StudioReferenceDropzone({
   referenceUploads,
+  maxReferenceCount = DEFAULT_MAX_REFERENCE_COUNT,
   onOpenReferencePicker,
   onReferenceDrop,
   onRemoveReferenceUpload,
@@ -15,6 +18,8 @@ export default function StudioReferenceDropzone({
   const [annotateIndex, setAnnotateIndex] = useState<number | null>(null);
   const annotateItem =
     annotateIndex !== null ? referenceUploads[annotateIndex] ?? null : null;
+  const cappedMax = Math.max(1, Math.min(4, maxReferenceCount));
+  const canAddMore = referenceUploads.length < cappedMax;
 
   if (referenceUploads.length === 0) {
     return (
@@ -37,14 +42,8 @@ export default function StudioReferenceDropzone({
         onDrop={onReferenceDrop}
         onDragOver={(event) => event.preventDefault()}
       >
-        <div
-          className={
-            referenceUploads.length === 1
-              ? "reference-preview-grid is-single"
-              : "reference-preview-grid"
-          }
-        >
-          {referenceUploads.slice(0, 4).map((item, index) => {
+        <div className="reference-preview-grid">
+          {referenceUploads.slice(0, cappedMax).map((item, index) => {
             const avatarLabel = seedanceAvatarStatusLabel(item);
             const previewSrc =
               item.previewUrl.startsWith("asset://")
@@ -63,14 +62,9 @@ export default function StudioReferenceDropzone({
                         : "reference-preview-item"
                 }
               >
-                <button
-                  type="button"
-                  className="reference-preview-hit"
-                  onClick={onOpenReferencePicker}
-                  aria-label={`查看或更换参考图 ${item.fileName}`}
-                >
+                <div className="reference-preview-hit" aria-hidden="true">
                   <img src={previewSrc} alt={item.fileName} className="reference-preview" />
-                </button>
+                </div>
                 {avatarLabel ? (
                   <span className="reference-preview-avatar-status" title={avatarLabel}>
                     {avatarLabel}
@@ -107,6 +101,17 @@ export default function StudioReferenceDropzone({
               </div>
             );
           })}
+          {canAddMore ? (
+            <button
+              type="button"
+              className="reference-preview-add"
+              onClick={onOpenReferencePicker}
+              aria-label={`继续添加参考图（还可 ${cappedMax - referenceUploads.length} 张）`}
+              title="继续添加参考图"
+            >
+              <span className="reference-dropzone-plus">+</span>
+            </button>
+          ) : null}
         </div>
       </div>
       {annotateItem && annotateIndex !== null && onReplaceReferenceUpload ? (

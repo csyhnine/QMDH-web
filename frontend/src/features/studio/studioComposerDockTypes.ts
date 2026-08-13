@@ -58,6 +58,7 @@ export type StudioComposerDockProps = {
   onTemplateDraftTitleChange: (value: string) => void;
   onToggleComposerMenu: (menu: Exclude<ComposerMenuKey, null>) => void;
   providerGroups: ProviderGroup[];
+  maxReferenceCount?: number;
   referenceUploads: ReferenceUploadItem[];
   resolutionOptions: ResolutionOption[];
   selectedProvider?: Provider;

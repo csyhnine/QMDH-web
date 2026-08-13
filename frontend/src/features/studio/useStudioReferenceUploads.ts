@@ -302,6 +302,7 @@ export function useStudioReferenceUploads({
     clearReferenceUpload,
     handleReferenceDrop,
     handleReferenceInputChange,
+    maxReferenceCount,
     openReferencePicker,
     referenceFileInputRef: fileInputRef,
     referenceUploads,

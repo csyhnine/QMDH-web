@@ -25,6 +25,7 @@ export function getStudioComposerLeadingProps({
 export function getStudioComposerBodyProps({
   promptTextareaRef,
   referenceHint,
+  maxReferenceCount,
   referenceUploads,
   studioForm,
   onModeChange,
@@ -39,6 +40,7 @@ export function getStudioComposerBodyProps({
   return {
     promptTextareaRef,
     referenceHint,
+    maxReferenceCount,
     referenceUploads,
     studioForm,
     onModeChange,

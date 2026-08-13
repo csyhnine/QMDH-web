@@ -132,6 +132,7 @@ export function buildStudioComposerCanvasProps({
     hasActiveProject: Boolean(activeProject),
     providerGroups,
     referenceUploads: referenceUpload.referenceUploads,
+    maxReferenceCount: referenceUpload.maxReferenceCount,
     resolutionOptions: composerResolutionOptions.length > 0 ? composerResolutionOptions : resolutionOptions,
     selectedProvider,
     selectedGrokSkuLabel:

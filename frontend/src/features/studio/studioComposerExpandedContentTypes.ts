@@ -36,6 +36,7 @@ export type StudioComposerBodyProps = Pick<
   StudioComposerExpandedContentProps,
   | "promptTextareaRef"
   | "referenceHint"
+  | "maxReferenceCount"
   | "referenceUploads"
   | "studioForm"
   | "onModeChange"
@@ -55,6 +56,7 @@ export type StudioComposerModeSwitchProps = {
 
 export type StudioReferenceDropzoneProps = {
   referenceUploads: ReferenceUploadItem[];
+  maxReferenceCount?: number;
   onOpenReferencePicker: () => void;
   onReferenceDrop: (event: DragEvent<HTMLElement>) => void;
   onRemoveReferenceUpload: (index: number) => void;

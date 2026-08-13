@@ -110,7 +110,10 @@ export function validateStudioTaskSubmission({
       }
       if (referenceImageCount > 0) {
         const pending = referenceUploads.find(
-          (item) => item.avatarStatus === "registering" || item.avatarStatus === "processing"
+          (item) =>
+            item.avatarStatus === "registering" ||
+            item.avatarStatus === "processing" ||
+            item.avatarStatus === "verifying"
         );
         if (pending) {
           setState((current) => ({

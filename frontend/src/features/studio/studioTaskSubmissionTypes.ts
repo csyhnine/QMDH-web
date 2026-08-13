@@ -23,7 +23,7 @@ export type UseStudioTaskSubmissionOptions = {
   submissionInFlightRef: MutableRef<boolean>;
   uploadingReference: boolean;
   referenceUploads?: Array<{
-    avatarStatus?: "idle" | "registering" | "processing" | "active" | "failed";
+    avatarStatus?: "idle" | "registering" | "processing" | "verifying" | "active" | "failed";
     avatarError?: string;
     storagePath: string;
   }>;

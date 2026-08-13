@@ -44,10 +44,12 @@ export type ReferenceUploadItem = {
   storagePath: string;
   /** Original /media path kept for preview when storagePath becomes asset://. */
   mediaPath?: string;
-  avatarStatus?: "idle" | "registering" | "processing" | "active" | "failed";
+  avatarStatus?: "idle" | "registering" | "processing" | "verifying" | "active" | "failed";
+  avatarKind?: "private" | "real";
   assetId?: string;
   assetUrl?: string;
   avatarError?: string;
+  verifyTaskId?: string;
 };
 
 export type PromptTemplateFormValue = {

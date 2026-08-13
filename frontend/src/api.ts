@@ -703,9 +703,27 @@ export type SeedancePrivateAvatarAsset = {
   group_id: string;
   status: string;
   source_url?: string;
+  kind?: "private" | "real";
 };
 
 export type SeedancePrivateAvatarRegisterPayload = {
+  storage_path?: string;
+  source_url?: string;
+  name?: string;
+  provider_name?: string;
+};
+
+export type SeedanceRealAvatarVerifyStart = {
+  task_id: string;
+  h5_link: string;
+  byted_token?: string;
+  expires_at?: number | string | null;
+  status?: string;
+  callback_url?: string;
+};
+
+export type SeedanceRealAvatarRegisterPayload = {
+  verify_task_id: string;
   storage_path?: string;
   source_url?: string;
   name?: string;
@@ -1338,6 +1356,16 @@ export const api = {
   getSeedancePrivateAvatarAsset: (assetId: string, providerName?: string) =>
     request<SeedancePrivateAvatarAsset>(
       `/seedance/private-avatar/assets/${encodeURIComponent(assetId)}${
+        providerName ? `?provider_name=${encodeURIComponent(providerName)}` : ""
+      }`
+    ),
+  startSeedanceRealAvatarVerify: (payload?: { provider_name?: string }) =>
+    postJson<SeedanceRealAvatarVerifyStart>("/seedance/real-avatar/verify-tasks", payload || {}),
+  registerSeedanceRealAvatar: (payload: SeedanceRealAvatarRegisterPayload) =>
+    postJson<SeedancePrivateAvatarAsset>("/seedance/real-avatar/register", payload),
+  getSeedanceRealAvatarAsset: (assetId: string, providerName?: string) =>
+    request<SeedancePrivateAvatarAsset>(
+      `/seedance/real-avatar/assets/${encodeURIComponent(assetId)}${
         providerName ? `?provider_name=${encodeURIComponent(providerName)}` : ""
       }`
     ),

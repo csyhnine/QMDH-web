@@ -1,21 +1,34 @@
 import { useState } from "react";
 
-import { seedanceAvatarActionLabel, seedanceAvatarStatusLabel } from "./seedancePrivateAvatar";
+import { seedanceAvatarStatusLabel } from "./seedancePrivateAvatar";
 import type { StudioReferenceDropzoneProps } from "./studioComposerExpandedContentTypes";
 import StudioReferenceAnnotateLightbox from "./StudioReferenceAnnotateLightbox";
 
 const DEFAULT_MAX_REFERENCE_COUNT = 4;
 
+type RealVerifySession = {
+  index: number;
+  taskId: string;
+  h5Link: string;
+};
+
 export default function StudioReferenceDropzone({
   referenceUploads,
   maxReferenceCount = DEFAULT_MAX_REFERENCE_COUNT,
+  enableSeedanceAvatar = false,
   onOpenReferencePicker,
   onReferenceDrop,
   onRemoveReferenceUpload,
   onReplaceReferenceUpload,
-  onRetrySeedancePrivateAvatar,
+  onRegisterSeedancePrivateAvatar,
+  onStartSeedanceRealAvatar,
+  onCompleteSeedanceRealAvatar,
 }: StudioReferenceDropzoneProps) {
   const [annotateIndex, setAnnotateIndex] = useState<number | null>(null);
+  const [menuIndex, setMenuIndex] = useState<number | null>(null);
+  const [realSession, setRealSession] = useState<RealVerifySession | null>(null);
+  const [realBusy, setRealBusy] = useState(false);
+  const [realError, setRealError] = useState<string | null>(null);
   const annotateItem =
     annotateIndex !== null ? referenceUploads[annotateIndex] ?? null : null;
   const cappedMax = Math.max(1, Math.min(4, maxReferenceCount));
@@ -35,6 +48,35 @@ export default function StudioReferenceDropzone({
     );
   }
 
+  async function handleStartReal(index: number) {
+    if (!onStartSeedanceRealAvatar) return;
+    setMenuIndex(null);
+    setRealError(null);
+    setRealBusy(true);
+    try {
+      const started = await onStartSeedanceRealAvatar(index);
+      setRealSession({ index, taskId: started.taskId, h5Link: started.h5Link });
+    } catch (error) {
+      setRealError(error instanceof Error ? error.message : "发起真人认证失败");
+    } finally {
+      setRealBusy(false);
+    }
+  }
+
+  async function handleCompleteReal() {
+    if (!realSession || !onCompleteSeedanceRealAvatar) return;
+    setRealBusy(true);
+    setRealError(null);
+    try {
+      await onCompleteSeedanceRealAvatar(realSession.index, realSession.taskId);
+      setRealSession(null);
+    } catch (error) {
+      setRealError(error instanceof Error ? error.message : "真人入库失败");
+    } finally {
+      setRealBusy(false);
+    }
+  }
+
   return (
     <>
       <div
@@ -44,10 +86,18 @@ export default function StudioReferenceDropzone({
       >
         <div className="reference-preview-grid">
           {referenceUploads.slice(0, cappedMax).map((item, index) => {
-            const avatarLabel = seedanceAvatarStatusLabel(item);
-            const avatarAction = onRetrySeedancePrivateAvatar
-              ? seedanceAvatarActionLabel(item)
-              : null;
+            const effectiveStatus =
+              item.avatarStatus ||
+              (enableSeedanceAvatar && !item.storagePath.startsWith("asset://") ? "idle" : undefined);
+            const displayItem = { ...item, avatarStatus: effectiveStatus };
+            const avatarLabel = enableSeedanceAvatar ? seedanceAvatarStatusLabel(displayItem) : null;
+            const showRegister =
+              enableSeedanceAvatar &&
+              Boolean(onRegisterSeedancePrivateAvatar) &&
+              effectiveStatus !== "active" &&
+              effectiveStatus !== "registering" &&
+              effectiveStatus !== "processing" &&
+              effectiveStatus !== "verifying";
             const previewSrc =
               item.previewUrl.startsWith("asset://")
                 ? item.mediaPath || item.previewUrl
@@ -56,13 +106,15 @@ export default function StudioReferenceDropzone({
               <div
                 key={`${item.mediaPath || item.storagePath}-${index}`}
                 className={
-                  item.avatarStatus === "failed"
+                  effectiveStatus === "failed"
                     ? "reference-preview-item is-avatar-failed"
-                    : item.avatarStatus === "active"
+                    : effectiveStatus === "active"
                       ? "reference-preview-item is-avatar-active"
-                      : item.avatarStatus === "registering" || item.avatarStatus === "processing"
+                      : effectiveStatus === "registering" ||
+                          effectiveStatus === "processing" ||
+                          effectiveStatus === "verifying"
                         ? "reference-preview-item is-avatar-pending"
-                        : item.avatarStatus === "idle"
+                        : effectiveStatus === "idle"
                           ? "reference-preview-item is-avatar-idle"
                           : "reference-preview-item"
                 }
@@ -75,14 +127,32 @@ export default function StudioReferenceDropzone({
                     {avatarLabel}
                   </span>
                 ) : null}
-                {avatarAction ? (
-                  <button
-                    type="button"
-                    className="reference-preview-avatar-retry"
-                    onClick={() => onRetrySeedancePrivateAvatar?.(index)}
-                  >
-                    {avatarAction}
-                  </button>
+                {showRegister ? (
+                  <div className="reference-preview-avatar-actions">
+                    <button
+                      type="button"
+                      className="reference-preview-avatar-entry"
+                      onClick={() => setMenuIndex(menuIndex === index ? null : index)}
+                    >
+                      入库
+                    </button>
+                    {menuIndex === index ? (
+                      <div className="reference-preview-avatar-menu">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuIndex(null);
+                            onRegisterSeedancePrivateAvatar?.(index);
+                          }}
+                        >
+                          虚拟人入库
+                        </button>
+                        <button type="button" onClick={() => void handleStartReal(index)}>
+                          真人入库
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
                 {onReplaceReferenceUpload ? (
                   <button
@@ -127,6 +197,24 @@ export default function StudioReferenceDropzone({
           onReplace={onReplaceReferenceUpload}
         />
       ) : null}
-    </>
-  );
-}
+      {realSession || realError ? (
+        <div className="seedance-real-avatar-modal" role="dialog" aria-modal="true">
+          <div className="seedance-real-avatar-dialog">
+            <h3>真人入库认证</h3>
+            <p>请在手机打开认证页完成人脸核验，完成后回到这里继续入库。</p>
+            {realSession ? (
+              <a href={realSession.h5Link} target="_blank" rel="noreferrer" className="seedance-real-avatar-link">
+                打开真人认证 H5
+              </a>
+            ) : null}
+            {realError ? <p className="seedance-real-avatar-error">{realError}</p> : null}
+            <div className="seedance-real-avatar-actions">
+              <button type="button" disabled={realBusy} onClick={() => { setRealSession(null); setRealError(null); }}>
+                取消
+              </button>
+              <button type="button" disabled={realBusy || !realSession} onClick={() => void handleCompleteReal()}>
+                {realBusy ? "处理中…" : "认证完成，继续入库"}
+              </button>
+            </div>
+          </div>
+ 

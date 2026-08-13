@@ -46,7 +46,10 @@ export type StudioComposerBodyProps = Pick<
   | "onReferenceDrop"
   | "onRemoveReferenceUpload"
   | "onReplaceReferenceUpload"
-  | "onRetrySeedancePrivateAvatar"
+  | "enableSeedanceAvatar"
+  | "onRegisterSeedancePrivateAvatar"
+  | "onStartSeedanceRealAvatar"
+  | "onCompleteSeedanceRealAvatar"
 >;
 
 export type StudioComposerModeSwitchProps = {
@@ -57,11 +60,14 @@ export type StudioComposerModeSwitchProps = {
 export type StudioReferenceDropzoneProps = {
   referenceUploads: ReferenceUploadItem[];
   maxReferenceCount?: number;
+  enableSeedanceAvatar?: boolean;
   onOpenReferencePicker: () => void;
   onReferenceDrop: (event: DragEvent<HTMLElement>) => void;
   onRemoveReferenceUpload: (index: number) => void;
   onReplaceReferenceUpload?: (index: number, item: ReferenceUploadItem) => void;
-  onRetrySeedancePrivateAvatar?: (index: number) => void;
+  onRegisterSeedancePrivateAvatar?: (index: number) => void;
+  onStartSeedanceRealAvatar?: (index: number) => Promise<{ taskId: string; h5Link: string }>;
+  onCompleteSeedanceRealAvatar?: (index: number, verifyTaskId: string) => Promise<void> | void;
 };
 
 export type StudioPromptTextareaProps = Pick<

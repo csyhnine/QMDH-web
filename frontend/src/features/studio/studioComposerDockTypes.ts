@@ -48,7 +48,10 @@ export type StudioComposerDockProps = {
   onGrokVideoSkuSelect: (sku: import("./studioComposerGrokSkuMenuTypes").StudioVideoSku) => void;
   onRemoveReferenceUpload: (index: number) => void;
   onReplaceReferenceUpload: (index: number, item: ReferenceUploadItem) => void;
-  onRetrySeedancePrivateAvatar?: (index: number) => void;
+  enableSeedanceAvatar?: boolean;
+  onRegisterSeedancePrivateAvatar?: (index: number) => void;
+  onStartSeedanceRealAvatar?: (index: number) => Promise<{ taskId: string; h5Link: string }>;
+  onCompleteSeedanceRealAvatar?: (index: number, verifyTaskId: string) => Promise<void> | void;
   onReferenceDrop: (event: DragEvent<HTMLElement>) => void;
   onReferenceInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onResolutionSelect: (resolutionId: string) => void;

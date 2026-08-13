@@ -16,7 +16,10 @@ export default function StudioComposerBody({
   onReferenceDrop,
   onRemoveReferenceUpload,
   onReplaceReferenceUpload,
-  onRetrySeedancePrivateAvatar,
+  enableSeedanceAvatar,
+  onRegisterSeedancePrivateAvatar,
+  onStartSeedanceRealAvatar,
+  onCompleteSeedanceRealAvatar,
 }: StudioComposerBodyProps) {
   return (
     <div className="composer-body">
@@ -25,11 +28,14 @@ export default function StudioComposerBody({
         <StudioReferenceDropzone
           referenceUploads={referenceUploads}
           maxReferenceCount={maxReferenceCount}
+          enableSeedanceAvatar={enableSeedanceAvatar}
           onOpenReferencePicker={onOpenReferencePicker}
           onReferenceDrop={onReferenceDrop}
           onRemoveReferenceUpload={onRemoveReferenceUpload}
           onReplaceReferenceUpload={onReplaceReferenceUpload}
-          onRetrySeedancePrivateAvatar={onRetrySeedancePrivateAvatar}
+          onRegisterSeedancePrivateAvatar={onRegisterSeedancePrivateAvatar}
+          onStartSeedanceRealAvatar={onStartSeedanceRealAvatar}
+          onCompleteSeedanceRealAvatar={onCompleteSeedanceRealAvatar}
         />
       </div>
 

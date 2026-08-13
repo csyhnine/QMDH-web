@@ -14,6 +14,8 @@ import { useAuth } from "../../context/AuthContext";
 import {
   pollSeedancePrivateAvatarUntilSettled,
   registerSeedancePrivateAvatarForUpload,
+  registerSeedanceRealAvatarForUpload,
+  startSeedanceRealAvatarVerify,
 } from "./seedancePrivateAvatar";
 import {
   buildReferenceUploadTracker,
@@ -83,47 +85,6 @@ export function useStudioReferenceUploads({
     setUploadingReference(false);
     referenceUploadState.clearReferenceUploads();
     resetReferenceFileInput();
-  }
-
-  async function finalizeSeedanceAvatarItems(
-    items: ReferenceUploadItem[],
-    options?: { onlyIndexes?: number[] }
-  ): Promise<ReferenceUploadItem[]> {
-    if (!enableAvatarRef.current) return items;
-    avatarAbortRef.current?.abort();
-    const controller = new AbortController();
-    avatarAbortRef.current = controller;
-    const only = options?.onlyIndexes ? new Set(options.onlyIndexes) : null;
-
-    const registering = await Promise.all(
-      items.map(async (item, index) => {
-        if (only && !only.has(index)) return item;
-        if (item.storagePath.startsWith("asset://") || item.avatarStatus === "active") {
-          return item;
-        }
-        return registerSeedancePrivateAvatarForUpload(item, {
-          providerName: providerNameRef.current,
-        });
-      })
-    );
-    if (controller.signal.aborted) return registering;
-    syncReferenceUploads(registering);
-
-    const settled = await Promise.all(
-      registering.map(async (item, index) => {
-        if (only && !only.has(index)) return item;
-        if (item.avatarStatus === "active" || item.avatarStatus === "failed") return item;
-        if (!item.assetId) return item;
-        return pollSeedancePrivateAvatarUntilSettled(item, {
-          providerName: providerNameRef.current,
-          signal: controller.signal,
-        });
-      })
-    );
-    if (!controller.signal.aborted) {
-      syncReferenceUploads(settled);
-    }
-    return settled;
   }
 
   async function handleReferenceFiles(files: File[]) {
@@ -243,30 +204,118 @@ export function useStudioReferenceUploads({
     syncReferenceUploads(nextUploads);
   }
 
+  async function pollAvatarItem(
+    item: ReferenceUploadItem,
+    signal: AbortSignal
+  ): Promise<ReferenceUploadItem> {
+    if (item.avatarStatus === "active" || item.avatarStatus === "failed") return item;
+    if (!item.assetId) return item;
+    return pollSeedancePrivateAvatarUntilSettled(item, {
+      providerName: providerNameRef.current,
+      signal,
+      kind: item.avatarKind || "private",
+    });
+  }
+
   async function registerSeedancePrivateAvatar(index: number) {
     const item = referenceUploads[index];
     if (!item || !enableAvatarRef.current) return;
-    if (item.avatarStatus === "registering" || item.avatarStatus === "processing") return;
+    if (item.avatarStatus === "registering" || item.avatarStatus === "processing" || item.avatarStatus === "verifying") {
+      return;
+    }
     setUploadingReference(true);
+    avatarAbortRef.current?.abort();
+    const controller = new AbortController();
+    avatarAbortRef.current = controller;
     try {
       const reset: ReferenceUploadItem = {
         ...item,
         mediaPath: item.mediaPath || item.storagePath.replace(/^asset:\/\//, "") || item.storagePath,
         storagePath: item.mediaPath || item.storagePath,
         avatarStatus: "idle",
+        avatarKind: "private",
         assetId: undefined,
         assetUrl: undefined,
         avatarError: undefined,
+        verifyTaskId: undefined,
       };
-      // If storagePath was asset://, restore mediaPath for re-register
       if (reset.storagePath.startsWith("asset://") && item.mediaPath) {
         reset.storagePath = item.mediaPath;
       }
-      const nextUploads = referenceUploads.map((entry, i) => (i === index ? reset : entry));
+      let nextUploads = referenceUploads.map((entry, i) => (i === index ? reset : entry));
       syncReferenceUploads(nextUploads);
-      const settled = await finalizeSeedanceAvatarItems(nextUploads, { onlyIndexes: [index] });
-      const failed = settled.find((entry) => entry.avatarStatus === "failed");
-      if (failed?.avatarError) onError(failed.avatarError);
+
+      const registered = await registerSeedancePrivateAvatarForUpload(reset, {
+        providerName: providerNameRef.current,
+      });
+      nextUploads = nextUploads.map((entry, i) => (i === index ? registered : entry));
+      syncReferenceUploads(nextUploads);
+      if (controller.signal.aborted) return;
+
+      const settled = await pollAvatarItem(registered, controller.signal);
+      nextUploads = nextUploads.map((entry, i) => (i === index ? settled : entry));
+      syncReferenceUploads(nextUploads);
+      if (settled.avatarStatus === "failed" && settled.avatarError) onError(settled.avatarError);
+      else onClearError();
+    } finally {
+      setUploadingReference(false);
+    }
+  }
+
+  async function startSeedanceRealAvatar(index: number): Promise<{ taskId: string; h5Link: string }> {
+    const item = referenceUploads[index];
+    if (!item || !enableAvatarRef.current) {
+      throw new Error("当前模型未启用 Seedance 人像入库");
+    }
+    const started = await startSeedanceRealAvatarVerify({
+      providerName: providerNameRef.current,
+    });
+    const nextUploads = referenceUploads.map((entry, i) =>
+      i === index
+        ? {
+            ...entry,
+            mediaPath: entry.mediaPath || entry.storagePath,
+            avatarStatus: "verifying" as const,
+            avatarKind: "real" as const,
+            verifyTaskId: started.taskId,
+            avatarError: undefined,
+          }
+        : entry
+    );
+    syncReferenceUploads(nextUploads);
+    return started;
+  }
+
+  async function completeSeedanceRealAvatar(index: number, verifyTaskId: string) {
+    const item = referenceUploads[index];
+    if (!item || !enableAvatarRef.current) return;
+    setUploadingReference(true);
+    avatarAbortRef.current?.abort();
+    const controller = new AbortController();
+    avatarAbortRef.current = controller;
+    try {
+      const base: ReferenceUploadItem = {
+        ...item,
+        mediaPath: item.mediaPath || item.storagePath.replace(/^asset:\/\//, "") || item.storagePath,
+        storagePath: item.mediaPath || item.storagePath,
+        verifyTaskId,
+        avatarKind: "real",
+        avatarError: undefined,
+      };
+      if (base.storagePath.startsWith("asset://") && item.mediaPath) {
+        base.storagePath = item.mediaPath;
+      }
+      const registered = await registerSeedanceRealAvatarForUpload(base, {
+        providerName: providerNameRef.current,
+        verifyTaskId,
+      });
+      let nextUploads = referenceUploads.map((entry, i) => (i === index ? registered : entry));
+      syncReferenceUploads(nextUploads);
+      if (controller.signal.aborted) return;
+      const settled = await pollAvatarItem(registered, controller.signal);
+      nextUploads = nextUploads.map((entry, i) => (i === index ? settled : entry));
+      syncReferenceUploads(nextUploads);
+      if (settled.avatarStatus === "failed" && settled.avatarError) onError(settled.avatarError);
       else onClearError();
     } finally {
       setUploadingReference(false);
@@ -277,17 +326,20 @@ export function useStudioReferenceUploads({
     addReferenceFromStoragePath,
     buildUploadsFromPaths: referenceUploadState.buildUploadsFromPaths,
     clearReferenceUpload,
+    completeSeedanceRealAvatar,
+    enableSeedancePrivateAvatar,
     handleReferenceDrop,
     handleReferenceInputChange,
     maxReferenceCount,
     openReferencePicker,
     referenceFileInputRef: fileInputRef,
     referenceUploads,
+    registerSeedancePrivateAvatar,
     removeReferenceUpload: referenceUploadState.removeReferenceUpload,
     replaceReferenceUploadAt,
     replaceReferenceUploads: referenceUploadState.replaceReferenceUploads,
-    registerSeedancePrivateAvatar,
     retrySeedancePrivateAvatar: registerSeedancePrivateAvatar,
+    startSeedanceRealAvatar,
     uploadingReference,
   };
 }

@@ -64,7 +64,10 @@ export type StudioComposerCanvasProps = {
   onReferenceInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemoveReferenceUpload: (index: number) => void;
   onReplaceReferenceUpload: (index: number, item: ReferenceUploadItem) => void;
-  onRetrySeedancePrivateAvatar?: (index: number) => void;
+  enableSeedanceAvatar?: boolean;
+  onRegisterSeedancePrivateAvatar?: (index: number) => void;
+  onStartSeedanceRealAvatar?: (index: number) => Promise<{ taskId: string; h5Link: string }>;
+  onCompleteSeedanceRealAvatar?: (index: number, verifyTaskId: string) => Promise<void> | void;
   onResolutionSelect: (resolutionId: string) => void;
   onSaveCustomTemplate: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;

@@ -35,7 +35,10 @@ export function getStudioComposerBodyProps({
   onReferenceDrop,
   onRemoveReferenceUpload,
   onReplaceReferenceUpload,
-  onRetrySeedancePrivateAvatar,
+  enableSeedanceAvatar,
+  onRegisterSeedancePrivateAvatar,
+  onStartSeedanceRealAvatar,
+  onCompleteSeedanceRealAvatar,
 }: StudioComposerExpandedContentProps): StudioComposerBodyProps {
   return {
     promptTextareaRef,
@@ -50,7 +53,10 @@ export function getStudioComposerBodyProps({
     onReferenceDrop,
     onRemoveReferenceUpload,
     onReplaceReferenceUpload,
-    onRetrySeedancePrivateAvatar,
+    enableSeedanceAvatar,
+    onRegisterSeedancePrivateAvatar,
+    onStartSeedanceRealAvatar,
+    onCompleteSeedanceRealAvatar,
   };
 }
 

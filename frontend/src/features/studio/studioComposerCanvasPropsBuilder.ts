@@ -133,6 +133,7 @@ export function buildStudioComposerCanvasProps({
     providerGroups,
     referenceUploads: referenceUpload.referenceUploads,
     maxReferenceCount: referenceUpload.maxReferenceCount,
+    enableSeedanceAvatar: referenceUpload.enableSeedancePrivateAvatar,
     resolutionOptions: composerResolutionOptions.length > 0 ? composerResolutionOptions : resolutionOptions,
     selectedProvider,
     selectedGrokSkuLabel:
@@ -227,7 +228,9 @@ export function buildStudioComposerCanvasProps({
     onReferenceInputChange: referenceUpload.handleReferenceInputChange,
     onRemoveReferenceUpload: referenceUpload.removeReferenceUpload,
     onReplaceReferenceUpload: referenceUpload.replaceReferenceUploadAt,
-    onRetrySeedancePrivateAvatar: referenceUpload.retrySeedancePrivateAvatar,
+    onRegisterSeedancePrivateAvatar: referenceUpload.registerSeedancePrivateAvatar,
+    onStartSeedanceRealAvatar: referenceUpload.startSeedanceRealAvatar,
+    onCompleteSeedanceRealAvatar: referenceUpload.completeSeedanceRealAvatar,
     onResolutionSelect: (resolutionId) =>
       setStudioForm((current) => ({ ...current, resolution: resolutionId })),
     onSaveCustomTemplate: () => void studioTemplates.saveCustomTemplate(),

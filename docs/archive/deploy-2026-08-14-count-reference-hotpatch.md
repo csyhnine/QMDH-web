@@ -10,15 +10,16 @@ Alembic：无新迁移（仍 `r9s0t1u2v3w4`）
 - Studio 已上传参考图，但 **count（DeepKey 同步）** 在旧 `task_executor` 里未把 `image_urls` 发给上游 → 纯文生图，结果与原图差异大。
 - 修复在 **`0d6fa6e`**；2026-08-12/14 生产热补未覆盖 `task_executor.py`。
 
-## 服务器执行（宝塔 SSH / root）
+## 服务器执行（已完成 2026-08-14）
 
 ```bash
 cd /www/wwwroot/qmdh-web
-chmod +x scripts/deploy-production-hotpatch.sh
 ./scripts/deploy-production-hotpatch.sh
 ```
 
-脚本会：`git pull`（admin）→ `docker cp` 热补 `task_executor.py` 等 → `restart backend worker` → health + 容器内断言 `image_urls` 逻辑。
+- 生产 HEAD：**`fc75825`**
+- Health：`https://cityusbdisk.cn/api/v1/health` → healthy
+- 容器断言：`OK: gpt-image-2-count sends image_urls when reference_images present`
 
 ## 验收
 

@@ -50,13 +50,13 @@
 
 
 
-### [2026-08-14] count 参考图热补 + 看板 video/chat — **待服务器执行脚本**
-- Git tip（GitHub）：**`d3d91a0`**；部署脚本：**`scripts/deploy-production-hotpatch.sh`**
-- 根因：生产 worker 旧 `task_executor` 未发 `image_urls` → count 当纯 T2I（`0d6fa6e` 已合 main 但未热补）
+### [2026-08-14] count 参考图热补 + 看板 video/chat — **已上生产**
+- Git tip / 生产：**`fc75825`**（热补 backend + 3×worker；未全量 rebuild 镜像）
+- 根因：旧 `task_executor` 未发 `image_urls` → count 当纯 T2I；`0d6fa6e` 已热补进容器
+- 容器校验：`OK: gpt-image-2-count sends image_urls when reference_images present`
 - 归档：`docs/archive/deploy-2026-08-14-count-reference-hotpatch.md`
-- 服务器：`cd /www/wwwroot/qmdh-web && ./scripts/deploy-production-hotpatch.sh`（需宝塔/root SSH；本机无密钥）
-- 验收：重跑 count+参考图 → `reference_image_mode=haodeya_sync_image_urls`
-- Safe to hand off: **Yes**（脚本已 push；生产 HEAD 待 pull 后仍为 `e005414` 直至执行）
+- 验收：图像编辑 + count + 参考图重跑 → `reference_image_mode=haodeya_sync_image_urls`
+- Safe to hand off: **Yes**
 
 ### [2026-08-14] Seedance 入库 + Grok `asset://` — **已上生产**
 

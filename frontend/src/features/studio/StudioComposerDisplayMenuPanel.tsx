@@ -1,5 +1,6 @@
 import StudioComposerOptionGroup from "./StudioComposerOptionGroup";
 import {
+  SMART_ASPECT_RATIO_LABEL,
   SOURCE_ASPECT_RATIO_LABEL,
   normalizeStudioResolution,
   resolveProviderResolutionOptions,
@@ -33,6 +34,7 @@ export default function StudioComposerDisplayMenuPanel({
   });
   const optionsForChips =
     visibleResolutionOptions.length > 0 ? visibleResolutionOptions : resolutionOptions;
+  const isGenerateMode = studioForm.creationMode === "generate";
   const editDefaultLabel = linkForCreationMode("edit").defaultAspectRatio || SOURCE_ASPECT_RATIO_LABEL;
   const usesWideChipGrid = optionsForChips.length > 2;
 
@@ -46,7 +48,12 @@ export default function StudioComposerDisplayMenuPanel({
       />
       {isEditMode ? (
         <p className="composer-menu-note">
-          「{editDefaultLabel}」只影响比例（不传宽高比）；下方分辨率仍会传给模型。
+          「{editDefaultLabel}」：按参考图比例推断画幅（count/VIP 仍须传 size）。与文生图「{SMART_ASPECT_RATIO_LABEL}」不同，后者由模型自行选比例、不锁定参考图。
+        </p>
+      ) : null}
+      {isGenerateMode ? (
+        <p className="composer-menu-note">
+          「{SMART_ASPECT_RATIO_LABEL}」：由模型根据提示词自动选比例；图像编辑请用「{SOURCE_ASPECT_RATIO_LABEL}」跟参考图。
         </p>
       ) : null}
 

@@ -25,10 +25,13 @@ from app.models import Asset, AssetType, Project, ProviderCall, Task, TaskStatus
 from app.services.image_aspect_ratio import (
     SMART_RATIO_LABELS,
     SOURCE_ASPECT_RATIO_LABELS,
+    openai_pixel_size_for_aspect_ratio,
     read_image_dimensions,
     resolve_image_aspect_ratio,
+    resolve_size_aspect_for_reference,
 )
 from app.services.media_storage import (
+    encode_public_http_url,
     read_binary_asset,
     write_base64_asset,
     write_binary_asset,
@@ -569,7 +572,19 @@ def _should_omit_upstream_aspect_ratio(payload: dict) -> bool:
     raw = str(payload.get("aspect_ratio") or "").strip()
     if not raw:
         return True
-    return raw in SMART_RATIO_LABELS or raw in SOURCE_ASPECT_RATIO_LABELS
+    return raw in SOURCE_ASPECT_RATIO_LABELS
+
+
+def _should_follow_source_for_size(payload: dict) -> bool:
+    """Haodeya count/VIP size inference: only「遵循原图」, not「智能」."""
+    if not _extract_reference_images(payload):
+        return False
+    raw = str(payload.get("aspect_ratio") or "").strip()
+    if raw in SMART_RATIO_LABELS:
+        return False
+    if not raw:
+        return True
+    return raw in SOURCE_ASPECT_RATIO_LABELS
 
 
 def _aspect_ratio_result_fields(profile: ImageProviderProfile, payload: dict) -> dict[str, str]:
@@ -879,12 +894,12 @@ def _reference_image_to_public_url(reference_image: str) -> str:
     if normalized.startswith(("http://", "https://")):
         if not normalized.startswith("https://"):
             raise ValueError("Haodeya async image requires public HTTPS image URLs for reference images.")
-        return normalized
+        return encode_public_http_url(normalized)
 
     public_url = resolve_public_media_url(normalized)
     if not public_url.startswith("https://"):
         raise ValueError("Haodeya async image requires public HTTPS image URLs for reference images.")
-    return public_url
+    return encode_public_http_url(public_url)
 
 
 def _seedream_reference_image_value(reference_image: str) -> str:
@@ -931,13 +946,19 @@ def _build_haodeya_short_images_plan(
     if detail:
         prompt_text = f"{prompt}\n\nAdditional guidance: {detail}"
 
-    aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
+    follow_source = _should_follow_source_for_size(payload)
+    aspect_ratio = resolve_size_aspect_for_reference(
+        str(payload.get("aspect_ratio") or "").strip(),
+        provider_name=profile.provider_name,
+        model_name=profile.model_name,
+        base_url=profile.base_url,
+        reference_images=reference_images,
+        follow_source=follow_source,
+    )
     if poll:
         size_value: str = aspect_ratio
     else:
-        size_value = _openai_size_for_aspect_ratio(aspect_ratio)
-        if size_value == "auto":
-            size_value = "1024x1024"
+        size_value = openai_pixel_size_for_aspect_ratio(aspect_ratio)
 
     body: dict[str, object] = {
         "model": _resolve_haodeya_async_upstream_model(profile, resolution),
@@ -1863,15 +1884,7 @@ def _extract_chat_message_content(response_payload: dict) -> str:
 
 
 def _openai_size_for_aspect_ratio(aspect_ratio: str) -> str:
-    mapping = {
-        "1:1": "1024x1024",
-        "16:9": "1536x1024",
-        "4:3": "1536x1024",
-        "3:2": "1536x1024",
-        "2:3": "1024x1536",
-        "9:16": "1024x1536",
-    }
-    return mapping.get(aspect_ratio, "auto")
+    return openai_pixel_size_for_aspect_ratio(aspect_ratio)
 
 
 def _openai_size_for_payload(payload: dict) -> str:

@@ -26,6 +26,34 @@
 
 
 
+### [2026-08-14] Haodeya 图生图 size 推断 + 参考图 URL 编码 — **部署中**
+
+- Git tip：待 push
+
+- 对照 [Haodeya v2 文档](https://newapi.haodeya.xyz/docs)（2026-08-14）：
+
+  - **count / VIP 图生图**：`size` 仍必填；「遵循原图」→ 从参考图读宽高 → 推断比例 → count 映射像素（如 16:9→`1536x1024`）
+
+  - **参考图 URL**：OSS 中文路径 percent-encode，避免上游拉取 404
+
+  - **HTTPS 参考图**：可 HEAD/GET 前缀读 PNG/JPEG 尺寸用于推断
+
+- 前端：图像编辑比例菜单补充 count/VIP / Seedream / wan 语义说明
+
+- **遵循原图 vs 智能**（设计师要求区分）：
+
+  - 图像编辑「遵循原图」→ payload 显式 `aspect_ratio: "遵循原图"` → 后端只跟参考图比例
+
+  - 文生图「智能」→ 模型自选调比例，**不**锁定参考图尺寸
+
+  - 使用日志分别显示「遵循原图」「智能」
+
+- 测试：`test_image_aspect_ratio` / `test_haodeya_sync_image` / `test_media_storage` 新增用例
+
+- 部署：热补 `task_executor.py` + `image_aspect_ratio.py` + `media_storage.py` 进 backend + worker 后 restart；frontend 需 rebuild 才显示新文案
+
+- Safe to hand off: **Yes**（commit + 部署后）
+
 ### [2026-08-14] 运营看板视频/Chat 统计 + harness Slice B — **待部署**
 
 - Git tip：**`d8d5102`**；上一提交 **`2f85bfb`**（harness Slice B）

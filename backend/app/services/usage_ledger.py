@@ -76,9 +76,14 @@ def compose_task_input_summary(
 ) -> str:
     parts: list[str] = []
     ratio = str(aspect_ratio or "").strip()
-    if ratio in {"", "smart", "auto", "source", "遵循原图"}:
-        if (capability or "").startswith("image.edit") or ratio in {"source", "遵循原图"}:
-            parts.append("遵循原图")
+    capability_value = str(capability or "").strip()
+    smart_labels = {"智能", "smart", "auto", "automatic"}
+    source_labels = {"source", "遵循原图", "遵循原图比例", "原图", "原图比例", "match_source", "follow_source"}
+
+    if ratio in source_labels or (not ratio and capability_value.startswith("image.edit")):
+        parts.append("遵循原图")
+    elif ratio in smart_labels:
+        parts.append("智能")
     elif ratio:
         parts.append(ratio)
 

@@ -27,8 +27,9 @@ export const stylePresets = [
 ];
 
 export const SOURCE_ASPECT_RATIO_LABEL = "遵循原图";
+export const SMART_ASPECT_RATIO_LABEL = "智能";
 
-export const aspectRatioOptions = ["智能", "21:9", "16:9", "3:2", "4:3", "1:1", "3:4", "2:3", "9:16"];
+export const aspectRatioOptions = [SMART_ASPECT_RATIO_LABEL, "21:9", "16:9", "3:2", "4:3", "1:1", "3:4", "2:3", "9:16"];
 
 /** Image-edit ratios: default follows the reference image; fixed ratios remain optional overrides. */
 export const imageEditAspectRatioOptions = [
@@ -43,15 +44,26 @@ export const imageEditAspectRatioOptions = [
   "9:16",
 ];
 
+export function isSmartAspectRatio(value: string | undefined | null): boolean {
+  const normalized = String(value || "").trim();
+  return (
+    normalized === SMART_ASPECT_RATIO_LABEL ||
+    normalized === "auto" ||
+    normalized === "automatic" ||
+    normalized === "smart"
+  );
+}
+
 export function isSourceAspectRatio(value: string | undefined | null): boolean {
   const normalized = String(value || "").trim();
   return (
-    !normalized ||
     normalized === SOURCE_ASPECT_RATIO_LABEL ||
     normalized === "遵循原图比例" ||
     normalized === "原图比例" ||
     normalized === "原图" ||
-    normalized === "智能"
+    normalized === "source" ||
+    normalized === "match_source" ||
+    normalized === "follow_source"
   );
 }
 

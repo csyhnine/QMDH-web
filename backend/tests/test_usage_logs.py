@@ -89,11 +89,21 @@ class UsageLogDisplayTests(unittest.TestCase):
         self.assertEqual(
             compose_task_input_summary(
                 capability="image.edit",
-                aspect_ratio="",
+                aspect_ratio="遵循原图",
                 resolution="1k",
                 reference_count=1,
             ),
             "遵循原图 · 1K · 参考图 1",
+        )
+
+    def test_compose_task_input_summary_for_smart_ratio(self) -> None:
+        self.assertEqual(
+            compose_task_input_summary(
+                capability="image.generate",
+                aspect_ratio="智能",
+                resolution="1k",
+            ),
+            "智能 · 1K",
         )
 
     def test_output_summary_uses_image_count(self) -> None:

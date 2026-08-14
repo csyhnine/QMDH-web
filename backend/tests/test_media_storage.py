@@ -8,6 +8,7 @@ from unittest.mock import patch
 from app.services.media_storage import (
     LocalStorage,
     OSSStorage,
+    encode_public_http_url,
     read_binary_asset,
     resolve_storage_path,
     write_binary_asset,
@@ -179,6 +180,27 @@ class MediaStorageTests(unittest.TestCase):
                                         return_value=bucket,
                                     ):
                                         self.assertEqual(read_binary_asset("legacy/only-oss.png"), b"from-oss")
+
+    def test_encode_public_http_url_percent_encodes_non_ascii_path(self) -> None:
+        raw = "https://qmdh-media.oss-cn-shenzhen.aliyuncs.com/generated/清洗.png"
+        encoded = encode_public_http_url(raw)
+        self.assertNotEqual(encoded, raw)
+        self.assertIn("%E6%B8%85", encoded)
+        self.assertTrue(encoded.endswith(".png"))
+
+    def test_oss_url_for_encodes_non_ascii_keys(self) -> None:
+        bucket = _FakeBucket()
+        backend = OSSStorage(
+            endpoint="https://oss-cn-shenzhen.aliyuncs.com",
+            bucket_name="qmdh-media",
+            access_key_id="ak",
+            access_key_secret="sk",
+            cdn_base_url="https://qmdh-media.oss-cn-shenzhen.aliyuncs.com",
+            timeout_seconds=5,
+        )
+        with patch.object(backend, "_get_bucket", return_value=bucket):
+            url = backend.url_for("generated/清洗.png")
+        self.assertIn("%E6%B8%85", url)
 
 
 if __name__ == "__main__":

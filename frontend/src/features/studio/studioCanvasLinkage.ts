@@ -11,6 +11,7 @@ import {
   VIDEO_WORKFLOW_KEY,
   aspectRatioOptions,
   imageEditAspectRatioOptions,
+  isSmartAspectRatio,
   isSourceAspectRatio,
   resolutionOptions,
 } from "./studioConstants";
@@ -174,7 +175,7 @@ export function defaultAspectRatioFor(surface: CanvasSurfaceKind | StudioCreatio
 
 /**
  * Normalize a raw aspect value for a given Studio/canvas surface.
- * Edit / img2img: empty / smart / follow-source labels → 遵循原图.
+ * Edit / img2img: only follow-source labels map to「遵循原图」;「智能」is T2I-only.
  */
 export function resolveAspectRatioForSurface(
   surface: CanvasSurfaceKind | StudioCreationMode,
@@ -186,7 +187,9 @@ export function resolveAspectRatioForSurface(
       : linkForNodeKind(surface);
   const value = String(raw || "").trim();
   if (link.nodeKind === "img2img" || link.creationMode === "edit") {
-    if (!value || isSourceAspectRatio(value)) return link.defaultAspectRatio;
+    if (!value || isSourceAspectRatio(value) || isSmartAspectRatio(value)) {
+      return link.defaultAspectRatio;
+    }
     return value;
   }
   if (!value) return link.defaultAspectRatio || "16:9";

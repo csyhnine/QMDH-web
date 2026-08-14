@@ -8,7 +8,7 @@ from mimetypes import guess_type
 from pathlib import Path
 from time import sleep
 from typing import Any, Protocol
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse, urlunparse
 
 from app.core.config import settings
 
@@ -32,6 +32,19 @@ class StorageBackend(Protocol):
 def _normalize_relative_path(relative_path: str) -> str:
     normalized = str(relative_path).replace("\\", "/").strip()
     return normalized.lstrip("/")
+
+
+def encode_public_http_url(url: str) -> str:
+    """Percent-encode path/query so upstream fetchers can GET non-ASCII OSS keys."""
+    normalized = str(url or "").strip()
+    if not normalized.startswith(("http://", "https://")):
+        return normalized
+    parsed = urlparse(normalized)
+    if not parsed.scheme or not parsed.netloc:
+        return normalized
+    encoded_path = quote(parsed.path, safe="/")
+    encoded_query = quote(parsed.query, safe="=&") if parsed.query else ""
+    return urlunparse((parsed.scheme, parsed.netloc, encoded_path, parsed.params, encoded_query, parsed.fragment))
 
 
 def is_legacy_absolute_path(path: str) -> bool:
@@ -228,9 +241,9 @@ class OSSStorage:
 
     def url_for(self, relative_path: str) -> str:
         if is_legacy_absolute_path(relative_path):
-            return str(relative_path)
+            return encode_public_http_url(str(relative_path))
         normalized = _normalize_relative_path(relative_path)
-        return f"{self._public_base_url().rstrip('/')}/{normalized}"
+        return encode_public_http_url(f"{self._public_base_url().rstrip('/')}/{normalized}")
 
 
 def get_storage_backend() -> StorageBackend:

@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import struct
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
-from app.services.media_storage import read_binary_asset
+from app.services.media_storage import encode_public_http_url, read_binary_asset
 
 SMART_RATIO_LABELS = frozenset({"智能", "auto", "automatic", "smart"})
 SOURCE_ASPECT_RATIO_LABELS = frozenset(
@@ -48,6 +50,21 @@ GPT_IMAGE_ASPECT_RATIOS: tuple[str, ...] = (
     "21:9",
 )
 
+_OPENAI_PIXEL_SIZE_BY_RATIO: dict[str, str] = {
+    "1:1": "1024x1024",
+    "16:9": "1536x1024",
+    "4:3": "1536x1024",
+    "3:2": "1536x1024",
+    "2:3": "1024x1536",
+    "9:16": "1024x1536",
+}
+
+_MAX_REFERENCE_PROBE_BYTES = 512 * 1024
+_REFERENCE_FETCH_UA = (
+    "Mozilla/5.0 (compatible; QMDH/1.0; +https://cityusbdisk.cn) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
 
 def _ratio_value(ratio: str) -> float:
     width_text, height_text = ratio.split(":", 1)
@@ -67,6 +84,11 @@ def allowed_image_aspect_ratios(*, provider_name: str, model_name: str, base_url
     if "gemini" in identity or "banana" in identity:
         return GEMINI_IMAGE_ASPECT_RATIOS
     return GPT_IMAGE_ASPECT_RATIOS
+
+
+def openai_pixel_size_for_aspect_ratio(aspect_ratio: str) -> str:
+    """DeepKey count sync SKUs require WIDTHxHEIGHT pixels (handbook §6)."""
+    return _OPENAI_PIXEL_SIZE_BY_RATIO.get(aspect_ratio, "1024x1024")
 
 
 def _png_dimensions(data: bytes) -> tuple[int, int] | None:
@@ -111,10 +133,29 @@ def read_image_dimensions(data: bytes) -> tuple[int, int] | None:
     return _png_dimensions(data) or _jpeg_dimensions(data)
 
 
+def _fetch_reference_image_prefix(url: str) -> bytes | None:
+    normalized = str(url or "").strip()
+    if not normalized.startswith(("http://", "https://")):
+        return None
+    safe_url = encode_public_http_url(normalized)
+    request = Request(
+        safe_url,
+        headers={"User-Agent": _REFERENCE_FETCH_UA},
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=20) as response:
+            return response.read(_MAX_REFERENCE_PROBE_BYTES)
+    except (HTTPError, URLError, TimeoutError, ValueError, OSError):
+        return None
+
+
 def _reference_image_bytes(reference_image: str) -> bytes | None:
     normalized = reference_image.strip()
-    if not normalized or normalized.startswith(("http://", "https://", "data:image/")):
+    if not normalized or normalized.startswith("data:image/"):
         return None
+    if normalized.startswith(("http://", "https://")):
+        return _fetch_reference_image_prefix(normalized)
     try:
         return read_binary_asset(normalized)
     except (FileNotFoundError, ValueError):
@@ -130,6 +171,24 @@ def dimensions_from_reference_images(reference_images: list[str]) -> tuple[int, 
         if dimensions is not None:
             return dimensions
     return None
+
+
+def _is_smart_ratio(value: str) -> bool:
+    normalized = str(value or "").strip()
+    return normalized in SMART_RATIO_LABELS
+
+
+def _is_follow_source_ratio(value: str) -> bool:
+    normalized = str(value or "").strip()
+    return normalized in SOURCE_ASPECT_RATIO_LABELS
+
+
+def is_follow_source_aspect_ratio(value: str) -> bool:
+    return _is_follow_source_ratio(value)
+
+
+def is_smart_aspect_ratio(value: str) -> bool:
+    return _is_smart_ratio(value)
 
 
 def resolve_image_aspect_ratio(
@@ -152,8 +211,18 @@ def resolve_image_aspect_ratio(
     if value in allowed:
         return value
 
-    smart_mode = not value or value in SMART_RATIO_LABELS
-    if smart_mode:
+    if _is_follow_source_ratio(value):
+        dimensions = dimensions_from_reference_images(reference_images or [])
+        if dimensions is not None:
+            width, height = dimensions
+            return nearest_aspect_ratio(width / height, allowed)
+        return fallback
+
+    if _is_smart_ratio(value):
+        # Smart match: model/platform picks ratio; do not lock to reference dimensions.
+        return fallback
+
+    if not value:
         dimensions = dimensions_from_reference_images(reference_images or [])
         if dimensions is not None:
             width, height = dimensions
@@ -167,3 +236,40 @@ def resolve_image_aspect_ratio(
             return fallback
 
     return fallback
+
+
+def resolve_size_aspect_for_reference(
+    raw_value: str,
+    *,
+    provider_name: str,
+    model_name: str,
+    base_url: str = "",
+    reference_images: list[str] | None = None,
+    follow_source: bool = False,
+    default: str = "1:1",
+) -> str:
+    """Aspect ratio for Haodeya VIP (ratio size) or count (pixel size mapping).
+
+    follow_source=True only for「遵循原图」— always prefer reference dimensions.
+    「智能」must not set follow_source; it falls back to resolve_image_aspect_ratio smart path.
+    """
+    refs = reference_images or []
+    value = str(raw_value or "").strip()
+    if follow_source and refs and (_is_follow_source_ratio(value) or not value):
+        dimensions = dimensions_from_reference_images(refs)
+        if dimensions is not None:
+            width, height = dimensions
+            allowed = allowed_image_aspect_ratios(
+                provider_name=provider_name,
+                model_name=model_name,
+                base_url=base_url,
+            )
+            return nearest_aspect_ratio(width / height, allowed)
+    return resolve_image_aspect_ratio(
+        raw_value,
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+        reference_images=refs,
+        default=default,
+    )

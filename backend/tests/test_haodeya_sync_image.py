@@ -1,5 +1,6 @@
 import json
 import shutil
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +8,13 @@ from unittest.mock import patch
 
 from app.services.model_registry import ImageProviderProfile, ProviderDefinition
 from app.services.task_executor import OpenAIImageProviderAdapter
+
+
+def _minimal_png_header(width: int, height: int) -> bytes:
+    png = bytearray(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
+    png.extend(struct.pack(">II", width, height))
+    png.extend(b"\x00" * 8)
+    return bytes(png)
 
 
 class _FakeResponse:
@@ -189,6 +197,105 @@ class HaodeyaSyncImageTests(unittest.TestCase):
         self.assertEqual(submit_body["image_urls"], [ref_url])
         self.assertTrue(outcome.result.get("reference_image_used"))
         self.assertEqual(outcome.result.get("reference_image_mode"), "haodeya_sync_image_urls")
+
+    def test_count_follow_source_infers_landscape_pixel_size(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="gpt-image-2-count",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="gpt-image-2-count",
+            timeout_seconds=30,
+            quality="high",
+            adapter_config={"unit_price_1k": 1.62, "unit_price_2k": 2.67},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                profile.provider_name,
+                profile.model_name,
+                ["image.generate", "image.edit"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        ref_file = self.tempdir / "references" / "wide.png"
+        ref_file.parent.mkdir(parents=True, exist_ok=True)
+        ref_file.write_bytes(_minimal_png_header(1920, 1080))
+        ref_path = "/media/references/wide.png"
+
+        sync_payload = {
+            "data": [{"url": "https://cdn.example.test/count-follow-source.png"}],
+            "model": "gpt-image-2-count",
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[
+                _FakeResponse(sync_payload),
+                _FakeBinaryResponse(b"png-follow"),
+            ],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    with patch("app.services.task_executor.settings.media_url_prefix", "/media"):
+                        with patch(
+                            "app.services.task_executor.settings.public_media_base_url",
+                            "https://cityusbdisk.cn",
+                        ):
+                            adapter.execute(
+                                "image.edit",
+                                {
+                                    "edit_prompt": "refresh facade",
+                                    "aspect_ratio": "遵循原图",
+                                    "resolution": "1k",
+                                    "reference_images": [ref_path],
+                                },
+                            )
+
+        submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        self.assertEqual(submit_body["size"], "1536x1024")
+        self.assertIn("image_urls", submit_body)
+
+    def test_count_encodes_non_ascii_reference_urls(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="gpt-image-2-count",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="gpt-image-2-count",
+            timeout_seconds=30,
+            quality="high",
+            adapter_config={"unit_price_1k": 1.62, "unit_price_2k": 2.67},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                profile.provider_name,
+                profile.model_name,
+                ["image.generate", "image.edit"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        raw_ref = "https://qmdh-media.oss-cn-shenzhen.aliyuncs.com/generated/清洗.png"
+        sync_payload = {"data": [{"url": "https://cdn.example.test/out.png"}], "model": "gpt-image-2-count"}
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(sync_payload), _FakeBinaryResponse(b"png")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    adapter.execute(
+                        "image.generate",
+                        {
+                            "prompt": "edit",
+                            "aspect_ratio": "16:9",
+                            "resolution": "1k",
+                            "reference_images": [raw_ref],
+                        },
+                    )
+
+        submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        self.assertIn("%E6%B8%85", submit_body["image_urls"][0])
+        self.assertNotEqual(submit_body["image_urls"][0], raw_ref)
 
     def test_count_2k_uses_tiered_model_name(self) -> None:
         profile = ImageProviderProfile(

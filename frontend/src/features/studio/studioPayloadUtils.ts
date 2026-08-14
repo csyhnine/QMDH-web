@@ -3,6 +3,7 @@ import {
   IMAGE_EDIT_WORKFLOW_KEY,
   IMAGE_WORKFLOW_KEY,
   VIDEO_WORKFLOW_KEY,
+  SOURCE_ASPECT_RATIO_LABEL,
   isSourceAspectRatio,
   normalizeStudioResolution,
 } from "./studioConstants";
@@ -20,10 +21,10 @@ import type { ReferenceUploadItem, StudioFormState } from "./studioTypes";
 import { clampImageCount } from "./studioAssetUtils";
 
 function imageAspectRatioForPayload(form: StudioFormState, workflowKey: string): string {
-  // Image-edit default "遵循原图" omits aspect_ratio so upstream keeps source dimensions.
-  // A fixed ratio selected in edit mode is still sent as an explicit override.
+  // Image-edit「遵循原图」: explicit label → backend follows reference dimensions.
+  // Do not conflate with T2I「智能」, which lets the model pick ratio without locking to the reference.
   if (workflowKey === IMAGE_EDIT_WORKFLOW_KEY && isSourceAspectRatio(form.aspectRatio)) {
-    return "";
+    return SOURCE_ASPECT_RATIO_LABEL;
   }
   return form.aspectRatio;
 }

@@ -58,8 +58,10 @@ class AgentPolicyServiceTests(unittest.TestCase):
 
         self.assertEqual(policy.policy_version, "qmdh-chat-prod")
         self.assertIn("寒暄时简短回复。", policy.system_prompt)
-        # memory tools are auto-appended when not disabled
         self.assertIn("search_shared_templates", policy.chat_tool_allowlist)
+        self.assertNotIn("memory_recall", policy.chat_tool_allowlist)
+        self.assertNotIn("memory_store", policy.chat_tool_allowlist)
+        self.assertNotIn("memory_forget", policy.chat_tool_allowlist)
 
     def test_resolve_pinned_policy_version(self) -> None:
         with self.SessionLocal() as db:

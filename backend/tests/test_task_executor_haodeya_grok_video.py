@@ -477,5 +477,27 @@ class HappyHorseVideoBodyTests(unittest.TestCase):
             )
 
 
+class SeedanceAssetProtocolRejectionTests(unittest.TestCase):
+    def test_grok_rejects_asset_protocol_reference(self) -> None:
+        from app.services.provider_adapters.haodeya_grok_video import _build_grok_request_body
+
+        with self.assertRaisesRegex(ValueError, "asset://"):
+            _build_grok_request_body(
+                "x-ai/grok-imagine-video-i2v-10s",
+                "test",
+                {"reference_images": ["asset://pa_01KTEST"]},
+            )
+
+    def test_happyhorse_rejects_asset_protocol_reference(self) -> None:
+        from app.services.provider_adapters.haodeya_grok_video import _build_happyhorse_request_body
+
+        with self.assertRaisesRegex(ValueError, "asset://"):
+            _build_happyhorse_request_body(
+                "happyhorse-1.1-r2v-5s",
+                "test",
+                {"reference_images": ["asset://pa_01KTEST"]},
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

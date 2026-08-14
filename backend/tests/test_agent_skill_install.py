@@ -173,6 +173,8 @@ class InstallSkillBundleTests(unittest.TestCase):
             policy = resolve_effective_chat_policy(db, environment="prod")
             self.assertIn("grill-me", policy.system_prompt)
             self.assertIn("read_skill_resource", policy.chat_tool_allowlist)
+            self.assertNotIn("### Skill `grill-me`", policy.system_prompt)
+            self.assertNotIn("Detail body", policy.system_prompt)
 
             entry.is_active = False
             db.commit()

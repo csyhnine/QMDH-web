@@ -586,7 +586,7 @@ def build_enabled_skills_prompt_section(db: Session, *, max_chars: int = 12_000)
 
     lines: list[str] = [
         "已启用的院内 Skill（Agent Skills 包）。scripts/ 不可在服务端执行；"
-        "需要附属文件时调用 read_skill_resource(skill_key, relative_path)。",
+        "需要 Skill 正文或附属文件时调用 read_skill_resource(skill_key, relative_path)。",
         "",
         "## Skill 目录",
     ]
@@ -598,16 +598,16 @@ def build_enabled_skills_prompt_section(db: Session, *, max_chars: int = 12_000)
             paths = ", ".join(str(item.get("path")) for item in manifest[:12] if item.get("path"))
             lines.append(f"  文件: {paths}")
 
-    body_parts: list[str] = ["\n".join(lines), ""]
-    used = sum(len(p) for p in body_parts)
-    for row in rows:
-        chunk = f"### Skill `{row.key}`\n\n{row.skill_md.strip()}\n"
-        if used + len(chunk) > max_chars:
-            body_parts.append(f"（其余 Skill 正文因长度上限未全部注入，可用 read_skill_resource 读取 `SKILL.md`。）\n")
-            break
-        body_parts.append(chunk)
-        used += len(chunk)
-    return "\n".join(body_parts).strip()
+    lines.extend(
+        [
+            "",
+            "Skill 正文未注入 system prompt；请用 read_skill_resource 读取 `SKILL.md` 或 references/ 下的文件。",
+        ]
+    )
+    section = "\n".join(lines).strip()
+    if len(section) > max_chars:
+        return section[: max_chars - 1].rstrip() + "…"
+    return section
 
 
 def get_skill_file_content(db: Session, *, skill_key: str, relative_path: str) -> dict[str, Any]:

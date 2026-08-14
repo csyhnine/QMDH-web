@@ -321,9 +321,8 @@ def resolve_effective_chat_policy(
         if "read_skill_resource" not in disabled_all:
             allowlist = (*allowlist, "read_skill_resource")
 
-    for memory_tool in ("memory_recall", "memory_store", "memory_forget"):
-        if memory_tool not in allowlist and memory_tool not in disabled_all:
-            allowlist = (*allowlist, memory_tool)
+    # Slice B (2026-08): memory_* tools stay opt-in via release allowlist or defaults;
+    # do not force-append when a release narrows the tool surface.
 
     return EffectiveChatPolicy(
         policy_version=base_policy.policy_version,

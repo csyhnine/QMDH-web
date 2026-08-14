@@ -198,14 +198,17 @@ export function seedance2ReferenceUploadError(
 
 export function buildSeedance2VideoPayload(
   form: StudioFormState,
-  provider: Provider
+  provider: Provider,
+  referenceImagesOverride?: string[]
 ): Record<string, unknown> {
   const sku = resolveSelectedSeedance2Sku(form, provider);
   const config = getSelectedSeedance2SkuConfig(form, provider);
   if (!sku || !config) {
     throw new Error("请先选择 Seedance 2 视频档位。");
   }
-  const referenceImages = form.referenceImages.filter((value) => Boolean(value));
+  const referenceImages = (
+    referenceImagesOverride ?? form.referenceImages.filter((value) => Boolean(value))
+  ).filter(Boolean);
   const aspectRatio = form.aspectRatio.trim();
   const ratio = aspectRatio === "智能" || !aspectRatio ? "16:9" : aspectRatio;
   const payload: Record<string, unknown> = {

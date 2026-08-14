@@ -55,7 +55,11 @@ export function useStudioTaskSubmission({
       return false;
     }
 
-    const submissionDraft = buildTaskSubmissionPayload({ form, provider: providerForSubmit });
+    const submissionDraft = buildTaskSubmissionPayload({
+      form,
+      provider: providerForSubmit,
+      referenceUploads,
+    });
     setSubmissionTracker(
       buildPendingSubmissionTracker({
         form,

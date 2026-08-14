@@ -308,6 +308,15 @@ def _build_haodeya_grok_request_body(
     return _build_grok_request_body(sku, prompt, payload)
 
 
+def _reject_seedance_asset_protocol(paths: list[str], *, model_label: str) -> None:
+    for path in paths:
+        if str(path or "").strip().lower().startswith("asset://"):
+            raise ValueError(
+                f"{model_label} 不支持 Seedance 人像协议 asset://。"
+                "请使用原始参考图（/media 或 HTTPS），或改用 Seedance 2 生成。"
+            )
+
+
 def _build_grok_request_body(sku: str, prompt: str, payload: dict) -> dict[str, object]:
     cfg = HAODEYA_VIDEO_SKUS[sku]
     mode = str(cfg["mode"])
@@ -328,6 +337,10 @@ def _build_grok_request_body(sku: str, prompt: str, payload: dict) -> dict[str, 
     }
 
     reference_paths = _collect_reference_paths(payload)
+    _reject_seedance_asset_protocol(reference_paths, model_label="Grok 视频")
+    start_image = str(payload.get("start_image_url") or "").strip()
+    if start_image:
+        _reject_seedance_asset_protocol([start_image], model_label="Grok 视频")
     public_urls = [resolve_public_media_url(path) for path in reference_paths]
 
     if mode == "i2v":
@@ -335,13 +348,13 @@ def _build_grok_request_body(sku: str, prompt: str, payload: dict) -> dict[str, 
             raise ValueError("i2v mode cannot use input_references")
         if len(public_urls) > 1:
             raise ValueError("i2v mode accepts at most one start frame image")
-        start_url = str(payload.get("start_image_url") or "").strip() or (public_urls[0] if public_urls else "")
+        start_url = start_image or (public_urls[0] if public_urls else "")
         if start_url:
             body["frame_images"] = [_grok_frame_image_item(resolve_public_media_url(start_url))]
     else:
         if payload.get("frame_images"):
             raise ValueError("ref mode cannot use frame_images")
-        if str(payload.get("start_image_url") or "").strip():
+        if start_image:
             raise ValueError("ref mode cannot use start_image_url / frame_images")
         if len(public_urls) > 4:
             raise ValueError("ref mode accepts at most 4 reference images")
@@ -381,6 +394,7 @@ def _build_happyhorse_request_body(sku: str, prompt: str, payload: dict) -> dict
     }
 
     reference_paths = _collect_reference_paths(payload)
+    _reject_seedance_asset_protocol(reference_paths, model_label="HappyHorse 视频")
     public_urls = [resolve_public_media_url(path) for path in reference_paths]
 
     if mode == "t2v":

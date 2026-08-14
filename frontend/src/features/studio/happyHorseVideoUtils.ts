@@ -160,14 +160,17 @@ export function happyHorseReferenceUploadError(
 
 export function buildHappyHorseVideoPayload(
   form: StudioFormState,
-  provider: Provider
+  provider: Provider,
+  referenceImagesOverride?: string[]
 ): Record<string, unknown> {
   const sku = resolveSelectedHappyHorseSku(form, provider);
   const config = getSelectedHappyHorseSkuConfig(form, provider);
   if (!sku || !config) {
     throw new Error("请先选择 HappyHorse 视频档位。");
   }
-  const referenceImages = form.referenceImages.filter((value) => Boolean(value));
+  const referenceImages = (
+    referenceImagesOverride ?? form.referenceImages.filter((value) => Boolean(value))
+  ).filter((value) => !value.toLowerCase().startsWith("asset://"));
   const aspectRatio = form.aspectRatio.trim();
   const ratio = aspectRatio === "智能" || !aspectRatio ? "16:9" : aspectRatio;
   const payload: Record<string, unknown> = {

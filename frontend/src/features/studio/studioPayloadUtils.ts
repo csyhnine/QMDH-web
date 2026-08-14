@@ -15,7 +15,8 @@ import {
   buildSeedance2VideoPayload,
   isSeedance2Provider,
 } from "./seedanceVideoUtils";
-import type { StudioFormState } from "./studioTypes";
+import { resolveReferencePathsForProvider } from "./studioReferenceUtils";
+import type { ReferenceUploadItem, StudioFormState } from "./studioTypes";
 import { clampImageCount } from "./studioAssetUtils";
 
 function imageAspectRatioForPayload(form: StudioFormState, workflowKey: string): string {
@@ -27,9 +28,28 @@ function imageAspectRatioForPayload(form: StudioFormState, workflowKey: string):
   return form.aspectRatio;
 }
 
+function videoReferenceImages(
+  form: StudioFormState,
+  provider: Provider | undefined,
+  referenceUploads?: ReferenceUploadItem[]
+): string[] {
+  const allowAsset = Boolean(provider && isSeedance2Provider(provider));
+  if (referenceUploads && referenceUploads.length > 0) {
+    return resolveReferencePathsForProvider(referenceUploads, { allowAssetProtocol: allowAsset });
+  }
+  // Fallback: form paths; strip Seedance asset:// for non-Seedance providers.
+  return form.referenceImages.filter((value) => {
+    if (!value) return false;
+    if (!allowAsset && value.toLowerCase().startsWith("asset://")) return false;
+    return true;
+  });
+}
+
 export function buildImagePayload(form: StudioFormState, workflowKey: string): Record<string, unknown> {
   const isImageEdit = workflowKey === IMAGE_EDIT_WORKFLOW_KEY;
-  const referenceImages = isImageEdit ? form.referenceImages.filter((value) => Boolean(value)) : [];
+  const referenceImages = isImageEdit
+    ? form.referenceImages.filter((value) => Boolean(value) && !value.toLowerCase().startsWith("asset://"))
+    : [];
   const primaryReferenceImage = referenceImages[0] ?? "";
   const payload: Record<string, unknown> = {
     style: form.style,
@@ -54,16 +74,20 @@ export function buildImagePayload(form: StudioFormState, workflowKey: string): R
   );
 }
 
-export function buildVideoPayload(form: StudioFormState, provider?: Provider): Record<string, unknown> {
-  const referenceImages = form.referenceImages.filter((value) => Boolean(value));
+export function buildVideoPayload(
+  form: StudioFormState,
+  provider?: Provider,
+  referenceUploads?: ReferenceUploadItem[]
+): Record<string, unknown> {
+  const referenceImages = videoReferenceImages(form, provider, referenceUploads);
   const aspectRatio = form.aspectRatio.trim();
 
   if (provider && isHappyHorseProvider(provider)) {
-    return buildHappyHorseVideoPayload(form, provider);
+    return buildHappyHorseVideoPayload(form, provider, referenceImages);
   }
 
   if (provider && isSeedance2Provider(provider)) {
-    return buildSeedance2VideoPayload(form, provider);
+    return buildSeedance2VideoPayload(form, provider, referenceImages);
   }
 
   if (provider && isGrokHaodeyaProvider(provider)) {
@@ -120,9 +144,8 @@ export function getStudioWorkflowKeyForProvider(
   if (creationMode === "video" && provider?.capabilities.includes("video.generate")) {
     return VIDEO_WORKFLOW_KEY;
   }
-  if (creationMode === "edit" && provider?.capabilities.includes("image.edit")) return IMAGE_EDIT_WORKFLOW_KEY;
-  if (provider?.capabilities.includes("image.generate")) return IMAGE_WORKFLOW_KEY;
-  if (provider?.capabilities.includes("image.edit")) return IMAGE_EDIT_WORKFLOW_KEY;
-  if (provider?.capabilities.includes("video.generate")) return VIDEO_WORKFLOW_KEY;
+  if (creationMode === "edit") {
+    return IMAGE_EDIT_WORKFLOW_KEY;
+  }
   return IMAGE_WORKFLOW_KEY;
 }

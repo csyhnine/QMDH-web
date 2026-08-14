@@ -7,6 +7,7 @@ import { buildImagePayload, buildVideoPayload, clampImageCount, deriveTaskTitleF
 type BuildTaskSubmissionPayloadOptions = {
   form: StudioFormState;
   provider: Provider;
+  referenceUploads?: import("./studioTypes").ReferenceUploadItem[];
 };
 
 type BuildPendingSubmissionTrackerOptions = BuildTaskSubmissionPayloadOptions & {
@@ -32,11 +33,14 @@ export type TrackPromptTemplateEvent = (
 export function buildTaskSubmissionPayload({
   form,
   provider,
+  referenceUploads,
 }: BuildTaskSubmissionPayloadOptions): TaskSubmissionDraft {
   const workflowKey = getStudioWorkflowKeyForProvider(provider, form.creationMode);
   const taskTitle = deriveTaskTitleFromPrompt(form.prompt, form.title.trim() || defaultStudioForm.title);
   const taskPayload =
-    form.creationMode === "video" ? buildVideoPayload(form, provider) : buildImagePayload(form, workflowKey);
+    form.creationMode === "video"
+      ? buildVideoPayload(form, provider, referenceUploads)
+      : buildImagePayload(form, workflowKey);
 
   return {
     taskTitle,

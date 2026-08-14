@@ -35,11 +35,38 @@ export function releaseReferencePreviews(items: ReferenceUploadItem[]) {
 }
 
 export function referenceUploadStoragePaths(items: ReferenceUploadItem[]): string[] {
-  return items.map((item) => {
-    if (item.avatarStatus === "active" && item.assetUrl) return item.assetUrl;
-    if (item.storagePath.startsWith("asset://")) return item.storagePath;
-    return item.storagePath;
-  });
+  // Prefer original /media (or HTTPS) paths in the form so non-Seedance models
+  // (Grok / HappyHorse / image) never receive Seedance-only asset:// URLs.
+  return items
+    .map((item) => {
+      const mediaPath = (item.mediaPath || "").trim();
+      if (mediaPath && !mediaPath.toLowerCase().startsWith("asset://")) return mediaPath;
+      const storagePath = (item.storagePath || "").trim();
+      if (storagePath && !storagePath.toLowerCase().startsWith("asset://")) return storagePath;
+      // Last resort: keep asset:// only when that is the sole available path.
+      return storagePath || mediaPath;
+    })
+    .filter(Boolean);
+}
+
+/** Resolve reference paths for a specific provider family. */
+export function resolveReferencePathsForProvider(
+  items: ReferenceUploadItem[],
+  options: { allowAssetProtocol: boolean }
+): string[] {
+  return items
+    .map((item) => {
+      if (options.allowAssetProtocol) {
+        if (item.avatarStatus === "active" && item.assetUrl) return item.assetUrl;
+        if (item.storagePath.toLowerCase().startsWith("asset://")) return item.storagePath;
+      }
+      const mediaPath = (item.mediaPath || "").trim();
+      if (mediaPath && !mediaPath.toLowerCase().startsWith("asset://")) return mediaPath;
+      const storagePath = (item.storagePath || "").trim();
+      if (storagePath && !storagePath.toLowerCase().startsWith("asset://")) return storagePath;
+      return "";
+    })
+    .filter(Boolean);
 }
 
 export function removeReferenceUploadAt(

@@ -11,6 +11,16 @@
 
 ## Latest Handoffs
 
+### [2026-08-15] count 图生图参考图 URL 双重编码 — **已上生产**
+
+- **问题：** count + 参考图时出图与原图无关；上游 `image_tokens=0`
+- **根因：** OSS `url_for` 已编码中文路径，`_reference_image_to_public_url` 再次 `encode_public_http_url` → `%25E4...` 404
+- **证据：** task **3949**（08/15 00:52）；`public_url` 200，`encoded_url` 404
+- **修复 commit：** **`2d798e9`** — `encode_public_http_url` 幂等（unquote→quote）；`upstream_request` 记录 `image_urls`
+- **生产热补：** 2026-08-15；容器验收 ref URL fetch OK
+- **待验收：** 同参考图重跑 count 图生图 → `image_tokens>0`、出图贴近原图
+- Safe to hand off: **Yes**（建议用户重试 task 3949 场景）
+
 ### [2026-08-15] wan2.7 文生图 size 丢失比例 — **已上生产**
 
 - **修复 commit：** **`bd67d8d`** — 恢复 `_wan_pixel_size_for_aspect` + 扩展 `_wan_image_size`

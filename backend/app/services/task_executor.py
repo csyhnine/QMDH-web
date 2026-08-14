@@ -576,7 +576,7 @@ def _should_omit_upstream_aspect_ratio(payload: dict) -> bool:
 
 
 def _should_follow_source_for_size(payload: dict) -> bool:
-    """Haodeya count/VIP size inference: only「遵循原图」, not「智能」."""
+    """Haodeya count/VIP size inference: only「遵循原图」, not「匹配比例」."""
     if not _extract_reference_images(payload):
         return False
     raw = str(payload.get("aspect_ratio") or "").strip()
@@ -707,13 +707,51 @@ def _wan_supports_4k(profile: ImageProviderProfile) -> bool:
     return "wan2.7-image-pro" in identity or "wan2_7-image-pro" in identity
 
 
+_WAN_TIER_LONG_EDGE = {"1k": 1024, "2k": 2048, "4k": 4096}
+
+
+def _wan_pixel_size_for_aspect(aspect_ratio: str, resolution: str) -> str | None:
+    """Map aspect + resolution tier to Wan WxH (literal 1K/2K/4K alone is always square)."""
+    raw = str(aspect_ratio or "").strip()
+    if not raw or ":" not in raw:
+        return None
+    if raw in SMART_RATIO_LABELS or raw in SOURCE_ASPECT_RATIO_LABELS:
+        return None
+    try:
+        width_text, height_text = raw.split(":", 1)
+        ratio_w = float(width_text.strip())
+        ratio_h = float(height_text.strip())
+    except ValueError:
+        return None
+    if ratio_w <= 0 or ratio_h <= 0:
+        return None
+    long_edge = _WAN_TIER_LONG_EDGE.get(resolution, _WAN_TIER_LONG_EDGE["1k"])
+    if ratio_w >= ratio_h:
+        width = long_edge
+        height = max(64, int(round(long_edge * ratio_h / ratio_w / 16) * 16))
+    else:
+        height = long_edge
+        width = max(64, int(round(long_edge * ratio_w / ratio_h / 16) * 16))
+    return f"{width}x{height}"
+
+
 def _wan_image_size(profile: ImageProviderProfile, payload: dict) -> str:
-    """Haodeya wan size is a literal tier only (1K/2K/4K). 4K is pro text-to-image only."""
+    """Wan size: follow-source / match-ratio → literal tier; concrete ratio → WxH at that tier."""
     resolution = _normalize_image_resolution(payload)
     has_refs = bool(_extract_reference_images(payload))
     if resolution == "4k" and (has_refs or not _wan_supports_4k(profile)):
         resolution = "2k"
-    return {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
+
+    if _should_omit_upstream_aspect_ratio(payload):
+        return {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
+
+    requested = str(payload.get("aspect_ratio") or "").strip()
+    if not requested or requested in SMART_RATIO_LABELS:
+        return {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
+
+    resolved = _resolved_image_aspect_ratio(profile, payload)
+    pixel = _wan_pixel_size_for_aspect(resolved, resolution)
+    return pixel or {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
 
 
 def _seedream_image_size(profile: ImageProviderProfile, payload: dict) -> str:

@@ -36,12 +36,18 @@ class WanImageRoutingTests(unittest.TestCase):
             adapter_kind="openai",
         )
 
-    def test_literal_size_tiers_only(self) -> None:
-        self.assertEqual(_wan_image_size(self.profile, {"resolution": "4k"}), "4K")
+    def test_concrete_aspect_maps_to_pixel_size(self) -> None:
+        self.assertEqual(
+            _wan_image_size(self.profile, {"aspect_ratio": "16:9", "resolution": "1k"}),
+            "1024x576",
+        )
         self.assertEqual(
             _wan_image_size(self.profile, {"aspect_ratio": "16:9", "resolution": "2k"}),
-            "2K",
+            "2048x1152",
         )
+
+    def test_follow_source_and_match_ratio_use_literal_tier(self) -> None:
+        self.assertEqual(_wan_image_size(self.profile, {"resolution": "4k"}), "4K")
         self.assertEqual(
             _wan_image_size(
                 self.profile,
@@ -52,6 +58,10 @@ class WanImageRoutingTests(unittest.TestCase):
                 },
             ),
             "2K",
+        )
+        self.assertEqual(
+            _wan_image_size(self.profile, {"aspect_ratio": "匹配比例", "resolution": "1k"}),
+            "1K",
         )
 
     def test_non_pro_clamps_4k(self) -> None:
@@ -71,11 +81,11 @@ class WanImageRoutingTests(unittest.TestCase):
             profile=self.profile,
             definition=self.definition,
             capability="image.generate",
-            payload={"prompt": "a cat", "resolution": "2k"},
+            payload={"prompt": "a cat", "aspect_ratio": "16:9", "resolution": "2k"},
             prompt="a cat",
         )
         self.assertEqual(plan.endpoint_path, "/images/generations")
-        self.assertEqual(plan.body["size"], "2K")
+        self.assertEqual(plan.body["size"], "2048x1152")
         self.assertEqual(plan.multipart_files, ())
 
     def test_edit_with_ref_uses_multipart_edits(self) -> None:

@@ -11,15 +11,15 @@
 
 ## Latest Handoffs
 
-### [2026-08-15] count 图生图参考图 URL 双重编码 — **已上生产**
+### [2026-08-15] count 图生图参考图 URL — **已上生产（第二版）**
 
-- **问题：** count + 参考图时出图与原图无关；上游 `image_tokens=0`
-- **根因：** OSS `url_for` 已编码中文路径，`_reference_image_to_public_url` 再次 `encode_public_http_url` → `%25E4...` 404
-- **证据：** task **3949**（08/15 00:52）；`public_url` 200，`encoded_url` 404
-- **修复 commit：** **`2d798e9`** — `encode_public_http_url` 幂等（unquote→quote）；`upstream_request` 记录 `image_urls`
-- **生产热补：** 2026-08-15；容器验收 ref URL fetch OK
-- **待验收：** 同参考图重跑 count 图生图 → `image_tokens>0`、出图贴近原图
-- Safe to hand off: **Yes**（建议用户重试 task 3949 场景）
+- **问题：** count + 参考图仍出无关图；`image_urls` 已发但 `image_tokens=0`（tasks 3955/3956）
+- **根因 1（已修 `2d798e9`）：** OSS URL 双重编码 → 404
+- **根因 2（已修 `90d1f12`）：** 上游 URL 用 OSS 直链 + `.bin`/`application/octet-stream`；Haodeya 忽略
+- **修复：** 上游改 `cityusbdisk.cn/media/...png`；`.bin` PNG 自动镜像为 `.png` 别名
+- **容器验收：** ref URL → `image/png`，magic `89504e47`
+- **待验收：** 同哥特参考图 + count 重跑 → `image_tokens>0`、出图贴近原图
+- Safe to hand off: **Yes**（请用户重试）
 
 ### [2026-08-15] wan2.7 文生图 size 丢失比例 — **已上生产**
 

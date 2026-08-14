@@ -8,7 +8,7 @@ from mimetypes import guess_type
 from pathlib import Path
 from time import sleep
 from typing import Any, Protocol
-from urllib.parse import quote, urlparse, urlunparse
+from urllib.parse import quote, unquote, urlparse, urlunparse
 
 from app.core.config import settings
 
@@ -35,15 +35,19 @@ def _normalize_relative_path(relative_path: str) -> str:
 
 
 def encode_public_http_url(url: str) -> str:
-    """Percent-encode path/query so upstream fetchers can GET non-ASCII OSS keys."""
+    """Percent-encode path/query so upstream fetchers can GET non-ASCII OSS keys.
+
+    Idempotent: OSS ``url_for`` may already return encoded paths; re-encoding must not
+    double-escape ``%`` (which breaks Haodeya ``image_urls`` fetches with HTTP 404).
+    """
     normalized = str(url or "").strip()
     if not normalized.startswith(("http://", "https://")):
         return normalized
     parsed = urlparse(normalized)
     if not parsed.scheme or not parsed.netloc:
         return normalized
-    encoded_path = quote(parsed.path, safe="/")
-    encoded_query = quote(parsed.query, safe="=&") if parsed.query else ""
+    encoded_path = quote(unquote(parsed.path), safe="/")
+    encoded_query = quote(unquote(parsed.query), safe="=&") if parsed.query else ""
     return urlunparse((parsed.scheme, parsed.netloc, encoded_path, parsed.params, encoded_query, parsed.fragment))
 
 

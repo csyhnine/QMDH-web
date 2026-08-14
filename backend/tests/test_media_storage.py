@@ -188,6 +188,14 @@ class MediaStorageTests(unittest.TestCase):
         self.assertIn("%E6%B8%85", encoded)
         self.assertTrue(encoded.endswith(".png"))
 
+    def test_encode_public_http_url_is_idempotent_for_already_encoded_paths(self) -> None:
+        once = encode_public_http_url(
+            "https://qmdh-media.oss-cn-shenzhen.aliyuncs.com/generated/清洗.png"
+        )
+        twice = encode_public_http_url(once)
+        self.assertEqual(twice, once)
+        self.assertNotIn("%25E4", twice)
+
     def test_oss_url_for_encodes_non_ascii_keys(self) -> None:
         bucket = _FakeBucket()
         backend = OSSStorage(

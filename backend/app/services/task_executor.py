@@ -1133,6 +1133,8 @@ def _upstream_request_excerpt(body: dict[str, object]) -> dict[str, object]:
     excerpt: dict[str, object] = {"model": body.get("model")}
     if body.get("size"):
         excerpt["size"] = body.get("size")
+    if body.get("image_urls"):
+        excerpt["image_urls"] = body.get("image_urls")
     if body.get("resolution"):
         excerpt["resolution"] = body.get("resolution")
     if body.get("modalities"):

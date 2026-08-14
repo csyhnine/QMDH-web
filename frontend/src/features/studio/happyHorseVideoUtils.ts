@@ -1,4 +1,5 @@
 import type { Provider } from "../../api";
+import { isMatchAspectRatio } from "./studioConstants";
 import type { StudioFormState } from "./studioTypes";
 
 export type HappyHorseVideoSku =
@@ -172,7 +173,7 @@ export function buildHappyHorseVideoPayload(
     referenceImagesOverride ?? form.referenceImages.filter((value) => Boolean(value))
   ).filter((value) => !value.toLowerCase().startsWith("asset://"));
   const aspectRatio = form.aspectRatio.trim();
-  const ratio = aspectRatio === "智能" || !aspectRatio ? "16:9" : aspectRatio;
+  const ratio = isMatchAspectRatio(aspectRatio) || !aspectRatio ? "16:9" : aspectRatio;
   const payload: Record<string, unknown> = {
     prompt: form.prompt,
     motion_prompt: form.notes,

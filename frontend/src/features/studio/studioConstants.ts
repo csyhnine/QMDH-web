@@ -27,9 +27,11 @@ export const stylePresets = [
 ];
 
 export const SOURCE_ASPECT_RATIO_LABEL = "遵循原图";
-export const SMART_ASPECT_RATIO_LABEL = "智能";
+export const MATCH_ASPECT_RATIO_LABEL = "匹配比例";
+/** @deprecated use MATCH_ASPECT_RATIO_LABEL */
+export const SMART_ASPECT_RATIO_LABEL = MATCH_ASPECT_RATIO_LABEL;
 
-export const aspectRatioOptions = [SMART_ASPECT_RATIO_LABEL, "21:9", "16:9", "3:2", "4:3", "1:1", "3:4", "2:3", "9:16"];
+export const aspectRatioOptions = [MATCH_ASPECT_RATIO_LABEL, "21:9", "16:9", "3:2", "4:3", "1:1", "3:4", "2:3", "9:16"];
 
 /** Image-edit ratios: default follows the reference image; fixed ratios remain optional overrides. */
 export const imageEditAspectRatioOptions = [
@@ -44,15 +46,19 @@ export const imageEditAspectRatioOptions = [
   "9:16",
 ];
 
-export function isSmartAspectRatio(value: string | undefined | null): boolean {
+export function isMatchAspectRatio(value: string | undefined | null): boolean {
   const normalized = String(value || "").trim();
   return (
-    normalized === SMART_ASPECT_RATIO_LABEL ||
+    normalized === MATCH_ASPECT_RATIO_LABEL ||
+    normalized === "智能" ||
     normalized === "auto" ||
     normalized === "automatic" ||
     normalized === "smart"
   );
 }
+
+/** @deprecated use isMatchAspectRatio */
+export const isSmartAspectRatio = isMatchAspectRatio;
 
 export function isSourceAspectRatio(value: string | undefined | null): boolean {
   const normalized = String(value || "").trim();

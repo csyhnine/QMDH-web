@@ -4,6 +4,7 @@ import {
   IMAGE_WORKFLOW_KEY,
   VIDEO_WORKFLOW_KEY,
   SOURCE_ASPECT_RATIO_LABEL,
+  isMatchAspectRatio,
   isSourceAspectRatio,
   normalizeStudioResolution,
 } from "./studioConstants";
@@ -22,7 +23,7 @@ import { clampImageCount } from "./studioAssetUtils";
 
 function imageAspectRatioForPayload(form: StudioFormState, workflowKey: string): string {
   // Image-edit「遵循原图」: explicit label → backend follows reference dimensions.
-  // Do not conflate with T2I「智能」, which lets the model pick ratio without locking to the reference.
+  // Do not conflate with T2I「匹配比例」, which lets the model pick ratio without locking to the reference.
   if (workflowKey === IMAGE_EDIT_WORKFLOW_KEY && isSourceAspectRatio(form.aspectRatio)) {
     return SOURCE_ASPECT_RATIO_LABEL;
   }
@@ -104,7 +105,7 @@ export function buildVideoPayload(
       grok_video_mode: skuConfig.mode,
       duration: skuConfig.duration,
       resolution: "720p",
-      aspect_ratio: aspectRatio === "智能" ? "16:9" : aspectRatio,
+      aspect_ratio: isMatchAspectRatio(aspectRatio) ? "16:9" : aspectRatio,
     };
     if (skuConfig.mode === "i2v") {
       if (referenceImages[0]) {
@@ -123,7 +124,7 @@ export function buildVideoPayload(
     motion_prompt: form.notes,
     storyboard: form.deliverable,
     prompt_supplement: form.notes,
-    aspect_ratio: aspectRatio === "智能" ? "" : aspectRatio,
+    aspect_ratio: isMatchAspectRatio(aspectRatio) ? "" : aspectRatio,
     source_images: referenceImages,
     reference_images: referenceImages,
     reference_image: referenceImages[0] ?? "",

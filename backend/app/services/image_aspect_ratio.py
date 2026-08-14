@@ -7,7 +7,7 @@ from urllib.request import Request, urlopen
 
 from app.services.media_storage import encode_public_http_url, read_binary_asset
 
-SMART_RATIO_LABELS = frozenset({"智能", "auto", "automatic", "smart"})
+SMART_RATIO_LABELS = frozenset({"匹配比例", "智能", "auto", "automatic", "smart"})
 SOURCE_ASPECT_RATIO_LABELS = frozenset(
     {
         "遵循原图",

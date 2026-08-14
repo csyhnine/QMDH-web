@@ -1,15 +1,13 @@
 import StudioComposerOptionGroup from "./StudioComposerOptionGroup";
 import {
-  SMART_ASPECT_RATIO_LABEL,
   SOURCE_ASPECT_RATIO_LABEL,
   normalizeStudioResolution,
   resolveProviderResolutionOptions,
 } from "./studioConstants";
-import { linkForCreationMode } from "./studioCanvasLinkage";
+import { followSourceHintForProvider } from "./studioFollowSourceHint";
 import { isGrokHaodeyaProvider } from "./grokVideoUtils";
 import { isHappyHorseProvider } from "./happyHorseVideoUtils";
 import { getSelectedSeedance2SkuConfig, isSeedance2Provider } from "./seedanceVideoUtils";
-import { followSourceHintForProvider } from "./studioFollowSourceHint";
 import type { StudioComposerDisplayMenuPanelProps } from "./studioComposerDisplayMenuTypes";
 
 export default function StudioComposerDisplayMenuPanel({
@@ -35,8 +33,6 @@ export default function StudioComposerDisplayMenuPanel({
   });
   const optionsForChips =
     visibleResolutionOptions.length > 0 ? visibleResolutionOptions : resolutionOptions;
-  const isGenerateMode = studioForm.creationMode === "generate";
-  const editDefaultLabel = linkForCreationMode("edit").defaultAspectRatio || SOURCE_ASPECT_RATIO_LABEL;
   const usesWideChipGrid = optionsForChips.length > 2;
 
   return (
@@ -47,15 +43,8 @@ export default function StudioComposerDisplayMenuPanel({
         title="比例"
         onSelect={onAspectRatioSelect}
       />
-      {isEditMode ? (
-        <p className="composer-menu-note">
-          「{editDefaultLabel}」：{followSourceHintForProvider(selectedProvider)}
-        </p>
-      ) : null}
-      {isGenerateMode ? (
-        <p className="composer-menu-note">
-          「{SMART_ASPECT_RATIO_LABEL}」：模型根据提示词自动选比例，不读取参考图。
-        </p>
+      {isEditMode && studioForm.aspectRatio === SOURCE_ASPECT_RATIO_LABEL ? (
+        <p className="composer-menu-note">{followSourceHintForProvider(selectedProvider)}</p>
       ) : null}
 
       {isVideoMode ? (

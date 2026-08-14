@@ -17,9 +17,9 @@ class ImageAspectRatioTests(unittest.TestCase):
         self.assertEqual(nearest_aspect_ratio(1.78, GPT_IMAGE_ASPECT_RATIOS), "16:9")
         self.assertEqual(nearest_aspect_ratio(0.75, GPT_IMAGE_ASPECT_RATIOS), "3:4")
 
-    def test_smart_ratio_without_reference_defaults_to_fallback(self) -> None:
+    def test_match_ratio_without_reference_defaults_to_fallback(self) -> None:
         resolved = resolve_image_aspect_ratio(
-            "智能",
+            "匹配比例",
             provider_name="openrouter_gpt_image",
             model_name="openai/gpt-5.4-image-2",
             reference_images=[],
@@ -27,17 +27,27 @@ class ImageAspectRatioTests(unittest.TestCase):
         )
         self.assertEqual(resolved, "1:1")
 
-    def test_smart_ratio_ignores_reference_dimensions(self) -> None:
+    def test_match_ratio_ignores_reference_dimensions(self) -> None:
         with patch(
             "app.services.image_aspect_ratio.dimensions_from_reference_images",
             return_value=(1920, 1080),
         ):
             resolved = resolve_image_aspect_ratio(
-                "智能",
+                "匹配比例",
                 provider_name="openrouter_gemini_image",
                 model_name="google/gemini-3.1-flash-image-preview",
                 reference_images=["/media/references/sample.png"],
             )
+        self.assertEqual(resolved, "1:1")
+
+    def test_legacy_smart_ratio_label_still_resolves(self) -> None:
+        resolved = resolve_image_aspect_ratio(
+            "智能",
+            provider_name="openrouter_gpt_image",
+            model_name="openai/gpt-5.4-image-2",
+            reference_images=[],
+            default="1:1",
+        )
         self.assertEqual(resolved, "1:1")
 
     def test_empty_aspect_ratio_does_not_infer_in_generic_resolver(self) -> None:

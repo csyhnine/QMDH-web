@@ -3,12 +3,15 @@ import shutil
 import tempfile
 import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from app.services.media_storage import (
     LocalStorage,
     OSSStorage,
+    _content_type_for_path,
     encode_public_http_url,
+    ensure_public_object_url,
     read_binary_asset,
     resolve_storage_path,
     write_binary_asset,
@@ -209,6 +212,50 @@ class MediaStorageTests(unittest.TestCase):
         with patch.object(backend, "_get_bucket", return_value=bucket):
             url = backend.url_for("generated/清洗.png")
         self.assertIn("%E6%B8%85", url)
+
+    def test_ensure_public_object_url_prefers_site_media_over_raw_oss(self) -> None:
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rel = "generated/sample.png"
+            target = root / rel
+            target.parent.mkdir(parents=True)
+            target.write_bytes(png)
+            with patch("app.services.media_storage.settings.media_root", str(root)):
+                with patch("app.services.media_storage.settings.storage_backend", "local"):
+                    with patch("app.services.media_storage.settings.media_url_prefix", "/media"):
+                        with patch(
+                            "app.services.media_storage.settings.public_media_base_url",
+                            "https://cityusbdisk.cn",
+                        ):
+                            url = ensure_public_object_url(f"/media/{rel}")
+        self.assertTrue(url.startswith("https://cityusbdisk.cn/media/"))
+        self.assertIn("sample.png", url)
+
+    def test_ensure_public_object_url_bin_png_gets_png_alias(self) -> None:
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rel = "generated/test-ref.bin"
+            target = root / rel
+            target.parent.mkdir(parents=True)
+            target.write_bytes(png)
+            with patch("app.services.media_storage.settings.media_root", str(root)):
+                with patch("app.services.media_storage.settings.storage_backend", "local"):
+                    with patch("app.services.media_storage.settings.media_url_prefix", "/media"):
+                        with patch(
+                            "app.services.media_storage.settings.public_media_base_url",
+                            "https://cityusbdisk.cn",
+                        ):
+                            url = ensure_public_object_url(f"/media/{rel}")
+                            alias = root / "generated/test-ref.png"
+                            self.assertTrue(alias.is_file())
+                            self.assertTrue(url.endswith("test-ref.png"))
+                            self.assertIn("cityusbdisk.cn/media/", url)
+
+    def test_content_type_for_path_sniffs_bin_png(self) -> None:
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8
+        self.assertEqual(_content_type_for_path("generated/x.bin", png), "image/png")
 
 
 if __name__ == "__main__":

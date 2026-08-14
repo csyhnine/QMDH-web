@@ -34,6 +34,57 @@ def _normalize_relative_path(relative_path: str) -> str:
     return normalized.lstrip("/")
 
 
+def _sniff_image_mime(data: bytes) -> str | None:
+    header = data[:16]
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if header[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if header[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def _content_type_for_path(relative_path: str, data: bytes | None = None) -> str:
+    guessed, _ = guess_type(relative_path)
+    if guessed and guessed != "application/octet-stream":
+        return guessed
+    if data:
+        sniffed = _sniff_image_mime(data[:16])
+        if sniffed:
+            return sniffed
+    return guessed or "application/octet-stream"
+
+
+def _image_extension_for_mime(mime: str) -> str:
+    return {
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+    }.get(mime, ".png")
+
+
+def _relative_with_image_extension(relative: str) -> str:
+    """Haodeya upstream ignores .bin / octet-stream refs — mirror PNG/JPEG bytes to a typed alias."""
+    normalized = _normalize_relative_path(relative)
+    if not normalized.lower().endswith(".bin"):
+        return normalized
+    try:
+        data = read_binary_asset(normalized)
+    except FileNotFoundError:
+        return normalized
+    mime = _sniff_image_mime(data[:16])
+    if not mime:
+        return normalized
+    alias = f"{normalized[:-4]}{_image_extension_for_mime(mime)}"
+    if alias != normalized:
+        write_binary_asset(alias, data, overwrite=False)
+    return alias
+
+
 def encode_public_http_url(url: str) -> str:
     """Percent-encode path/query so upstream fetchers can GET non-ASCII OSS keys.
 
@@ -201,15 +252,14 @@ class OSSStorage:
 
         return exc.__class__.__name__ in {"RequestError", "ServerError", "OpenApiServerError"}
 
-    def _content_type_for(self, relative_path: str) -> str:
-        guessed, _ = guess_type(relative_path)
-        return guessed or "application/octet-stream"
+    def _content_type_for(self, relative_path: str, data: bytes | None = None) -> str:
+        return _content_type_for_path(relative_path, data)
 
     def write(self, relative_path: str, data: bytes, *, overwrite: bool = True) -> str:
         del overwrite  # OSS objects are overwritten by key; callers retain a uniform interface.
         normalized = _normalize_relative_path(relative_path)
         bucket = self._get_bucket()
-        headers = {"Content-Type": self._content_type_for(normalized)}
+        headers = {"Content-Type": self._content_type_for(normalized, data)}
         backoffs = (1, 2, 4)
 
         for attempt in range(len(backoffs) + 1):
@@ -344,26 +394,36 @@ def read_binary_asset(relative_path: str) -> bytes:
 
 
 def ensure_public_object_url(path: str) -> str:
-    """Absolute URL for upstream providers. Uses OSS when configured; uploads on demand."""
+    """Absolute HTTPS URL for upstream providers (Haodeya image_urls, Grok refs, etc.).
+
+    Prefer ``public_media_base_url`` (e.g. cityusbdisk.cn/media/...) over raw OSS URLs.
+    PNG/JPEG bytes stored as ``.bin`` are mirrored to a typed extension for upstream fetch.
+    """
     normalized = str(path or "").strip()
     if not normalized:
         return ""
     if normalized.startswith(("http://", "https://")):
-        return normalized
+        return encode_public_http_url(normalized)
 
-    relative = coerce_relative_media_path(normalized)
-    if not _oss_enabled():
-        public_base = settings.public_media_base_url.strip().rstrip("/")
-        local_url = get_local_storage().url_for(relative)
-        if local_url.startswith("/"):
-            base = public_base or settings.frontend_origin.strip().rstrip("/")
-            return f"{base}{local_url}"
-        return local_url
+    relative = _relative_with_image_extension(coerce_relative_media_path(normalized))
+    if _oss_enabled():
+        oss = get_storage_backend()
+        if not oss.exists(relative):
+            oss.write(relative, read_binary_asset(relative), overwrite=True)
 
-    oss = get_storage_backend()
-    if not oss.exists(relative):
-        oss.write(relative, read_binary_asset(relative), overwrite=True)
-    return oss.url_for(relative)
+    public_base = settings.public_media_base_url.strip().rstrip("/")
+    media_prefix = settings.media_url_prefix.rstrip("/")
+    if public_base:
+        return encode_public_http_url(f"{public_base}{media_prefix}/{relative}")
+
+    if _oss_enabled():
+        return get_storage_backend().url_for(relative)
+
+    local_url = get_local_storage().url_for(relative)
+    if local_url.startswith("/"):
+        base = settings.frontend_origin.strip().rstrip("/")
+        return encode_public_http_url(f"{base}{local_url}")
+    return encode_public_http_url(local_url)
 
 def write_base64_asset(relative_path: str, data: str, *, overwrite: bool = True) -> str:
     return write_binary_asset(relative_path, b64decode(data), overwrite=overwrite)

@@ -963,6 +963,94 @@ def _seedream_reference_image_value(reference_image: str) -> str:
     return f"data:image/{subtype};base64,{b64encode(image_bytes).decode('ascii')}"
 
 
+def _haodeya_short_images_body(
+    *,
+    profile: ImageProviderProfile,
+    payload: dict,
+    prompt: str,
+    poll: bool,
+    reference_images: list[str],
+) -> dict[str, object]:
+    """Shared model/prompt/size fields for Haodeya VIP async + DeepKey count sync."""
+    resolution = _normalize_image_resolution(payload)
+    prompt_text = prompt
+    detail = str(payload.get("prompt_supplement") or "").strip()
+    if detail:
+        prompt_text = f"{prompt}\n\nAdditional guidance: {detail}"
+
+    follow_source = _should_follow_source_for_size(payload)
+    body: dict[str, object] = {
+        "model": _resolve_haodeya_async_upstream_model(profile, resolution),
+        "prompt": prompt_text,
+    }
+
+    native_follow_source = bool(poll and follow_source and reference_images)
+    if native_follow_source:
+        pass
+    elif poll:
+        body["size"] = _resolved_image_aspect_ratio(profile, payload)
+    elif follow_source and reference_images:
+        aspect_ratio = resolve_size_aspect_for_reference(
+            str(payload.get("aspect_ratio") or "").strip(),
+            provider_name=profile.provider_name,
+            model_name=profile.model_name,
+            base_url=profile.base_url,
+            reference_images=reference_images,
+            follow_source=True,
+        )
+        body["size"] = openai_pixel_size_for_aspect_ratio(aspect_ratio)
+    else:
+        body["size"] = openai_pixel_size_for_aspect_ratio(_resolved_image_aspect_ratio(profile, payload))
+    return body
+
+
+def _build_haodeya_count_image_edits_plan(
+    *,
+    profile: ImageProviderProfile,
+    requested_capability: str,
+    effective_capability: str,
+    payload: dict,
+    prompt: str,
+) -> ImageRequestPlan:
+    """DeepKey count i2i: handbook §6 has no image_urls on generations — use /images/edits."""
+    reference_images = _extract_reference_images(payload)
+    if not reference_images:
+        raise ValueError("Count image edit requires a reference image")
+
+    body = _haodeya_short_images_body(
+        profile=profile,
+        payload=payload,
+        prompt=prompt,
+        poll=False,
+        reference_images=reference_images,
+    )
+    body["images"] = [{"image_url": _reference_image_to_model_url(item)} for item in reference_images]
+
+    effective = "image.edit" if requested_capability == "image.generate" else effective_capability
+    reference_result: dict[str, object] = {
+        **_image_generation_result_fields(profile, payload),
+        "reference_image_used": True,
+        "reference_image_mode": "haodeya_sync_image_edits",
+        "reference_image_count": len(reference_images),
+        "native_image_edit_used": True,
+        "native_image_edit_endpoint": "images.edits",
+        "native_image_edit_provider": profile.provider_name,
+    }
+    if requested_capability != effective:
+        reference_result["native_image_edit_fallback_from"] = requested_capability
+        reference_result["haodeya_sync_capability_note"] = requested_capability
+
+    return ImageRequestPlan(
+        endpoint_path="/images/edits",
+        body=body,
+        headers=_build_openai_headers(profile),
+        reference_result=reference_result,
+        adapter_mode="haodeya_sync_image",
+        effective_capability=effective,
+        strategy=OPENAI_IMAGE_EDITS_STRATEGY,
+    )
+
+
 def _build_haodeya_short_images_plan(
     *,
     profile: ImageProviderProfile,
@@ -978,49 +1066,34 @@ def _build_haodeya_short_images_plan(
     DeepKey (sync): size must be `WIDTHxHEIGHT` pixels — ratio strings return HTTP 400.
     """
     reference_images = _extract_reference_images(payload)
-    resolution = _normalize_image_resolution(payload)
-    prompt_text = prompt
-    detail = str(payload.get("prompt_supplement") or "").strip()
-    if detail:
-        prompt_text = f"{prompt}\n\nAdditional guidance: {detail}"
-
-    follow_source = _should_follow_source_for_size(payload)
-
-    body: dict[str, object] = {
-        "model": _resolve_haodeya_async_upstream_model(profile, resolution),
-        "prompt": prompt_text,
-    }
-
-    native_follow_source = bool(poll and follow_source and reference_images)
-    if native_follow_source:
-        # VIP async + image_urls: upstream follows reference; do not force inferred size.
-        pass
-    elif poll:
-        aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
-        body["size"] = aspect_ratio
-    elif follow_source and reference_images:
-        aspect_ratio = resolve_size_aspect_for_reference(
-            str(payload.get("aspect_ratio") or "").strip(),
-            provider_name=profile.provider_name,
-            model_name=profile.model_name,
-            base_url=profile.base_url,
-            reference_images=reference_images,
-            follow_source=True,
+    if not poll and reference_images:
+        return _build_haodeya_count_image_edits_plan(
+            profile=profile,
+            requested_capability=requested_capability,
+            effective_capability=effective_capability,
+            payload=payload,
+            prompt=prompt,
         )
-        body["size"] = openai_pixel_size_for_aspect_ratio(aspect_ratio)
-    else:
-        aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
-        body["size"] = openai_pixel_size_for_aspect_ratio(aspect_ratio)
+
+    resolution = _normalize_image_resolution(payload)
+    body = _haodeya_short_images_body(
+        profile=profile,
+        payload=payload,
+        prompt=prompt,
+        poll=poll,
+        reference_images=reference_images,
+    )
+    follow_source = _should_follow_source_for_size(payload)
+    native_follow_source = bool(poll and follow_source and reference_images)
 
     reference_result = _image_generation_result_fields(profile, payload)
-    # VIP (async) and DeepKey count (sync) both accept public HTTPS image_urls on generations.
-    # Without this, Studio shows「参考图 N 张」but upstream only sees prompt → unrelated T2I.
-    if reference_images:
+    # VIP async only — DeepKey sync refs use /images/edits (see _build_haodeya_count_image_edits_plan).
+    if poll and reference_images:
         body["image_urls"] = [_reference_image_to_public_url(item) for item in reference_images]
         ref_mode = (
             "haodeya_async_image_urls_follow_source"
             if native_follow_source
-            else ("haodeya_async_image_urls" if poll else "haodeya_sync_image_urls")
+            else "haodeya_async_image_urls"
         )
         reference_result = {
             **reference_result,
@@ -1135,6 +1208,8 @@ def _upstream_request_excerpt(body: dict[str, object]) -> dict[str, object]:
         excerpt["size"] = body.get("size")
     if body.get("image_urls"):
         excerpt["image_urls"] = body.get("image_urls")
+    if body.get("images"):
+        excerpt["images"] = body.get("images")
     if body.get("resolution"):
         excerpt["resolution"] = body.get("resolution")
     if body.get("modalities"):

@@ -148,7 +148,7 @@ class HaodeyaSyncImageTests(unittest.TestCase):
         self.assertEqual(submit_body["size"], "1536x1024")
         self.assertNotEqual(submit_body["size"], "16:9")
 
-    def test_count_sends_image_urls_for_reference(self) -> None:
+    def test_count_with_ref_uses_native_edits_endpoint(self) -> None:
         profile = ImageProviderProfile(
             provider_name="gpt-image-2-count",
             api_key="test-key",
@@ -192,11 +192,15 @@ class HaodeyaSyncImageTests(unittest.TestCase):
                         },
                     )
 
-        submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        submit_request = mocked_urlopen.call_args_list[0].args[0]
+        submit_body = json.loads(submit_request.data.decode("utf-8"))
+        self.assertTrue(submit_request.full_url.endswith("/images/edits"))
         self.assertEqual(submit_body["model"], "gpt-image-2-count")
-        self.assertEqual(submit_body["image_urls"], [ref_url])
+        self.assertEqual(submit_body["images"][0]["image_url"], ref_url)
+        self.assertNotIn("image_urls", submit_body)
         self.assertTrue(outcome.result.get("reference_image_used"))
-        self.assertEqual(outcome.result.get("reference_image_mode"), "haodeya_sync_image_urls")
+        self.assertEqual(outcome.result.get("reference_image_mode"), "haodeya_sync_image_edits")
+        self.assertTrue(outcome.result.get("native_image_edit_used"))
 
     def test_count_follow_source_infers_landscape_pixel_size(self) -> None:
         profile = ImageProviderProfile(
@@ -251,11 +255,13 @@ class HaodeyaSyncImageTests(unittest.TestCase):
                                 },
                             )
 
-        submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        submit_request = mocked_urlopen.call_args_list[0].args[0]
+        submit_body = json.loads(submit_request.data.decode("utf-8"))
+        self.assertTrue(submit_request.full_url.endswith("/images/edits"))
         self.assertEqual(submit_body["size"], "1536x1024")
-        self.assertIn("image_urls", submit_body)
+        self.assertIn("images", submit_body)
 
-    def test_count_encodes_non_ascii_reference_urls(self) -> None:
+    def test_count_https_ref_passes_through_in_edits_body(self) -> None:
         profile = ImageProviderProfile(
             provider_name="gpt-image-2-count",
             api_key="test-key",
@@ -293,11 +299,12 @@ class HaodeyaSyncImageTests(unittest.TestCase):
                         },
                     )
 
-        submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
-        self.assertIn("%E6%B8%85", submit_body["image_urls"][0])
-        self.assertNotEqual(submit_body["image_urls"][0], raw_ref)
+        submit_request = mocked_urlopen.call_args_list[0].args[0]
+        submit_body = json.loads(submit_request.data.decode("utf-8"))
+        self.assertTrue(submit_request.full_url.endswith("/images/edits"))
+        self.assertEqual(submit_body["images"][0]["image_url"], raw_ref)
 
-    def test_count_does_not_double_encode_already_encoded_oss_reference_urls(self) -> None:
+    def test_count_local_ref_embeds_base64_in_edits_body(self) -> None:
         profile = ImageProviderProfile(
             provider_name="gpt-image-2-count",
             api_key="test-key",
@@ -316,21 +323,18 @@ class HaodeyaSyncImageTests(unittest.TestCase):
             ),
             profile,
         )
-        encoded_ref = (
-            "https://qmdh-media.oss-cn-shenzhen.aliyuncs.com/generated/"
-            "%E6%B8%85%E6%B4%97.png"
-        )
         sync_payload = {"data": [{"url": "https://cdn.example.test/out.png"}], "model": "gpt-image-2-count"}
+
+        ref_file = self.tempdir / "generated" / "gpt-image-2-count" / "清洗.png"
+        ref_file.parent.mkdir(parents=True, exist_ok=True)
+        ref_file.write_bytes(_minimal_png_header(512, 512))
 
         with patch(
             "app.services.task_executor.urlopen",
             side_effect=[_FakeResponse(sync_payload), _FakeBinaryResponse(b"png")],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
-                with patch(
-                    "app.services.task_executor.resolve_public_media_url",
-                    return_value=encoded_ref,
-                ):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
                     adapter.execute(
                         "image.generate",
                         {
@@ -344,8 +348,9 @@ class HaodeyaSyncImageTests(unittest.TestCase):
                     )
 
         submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
-        self.assertEqual(submit_body["image_urls"], [encoded_ref])
-        self.assertNotIn("%25E6", submit_body["image_urls"][0])
+        image_url = submit_body["images"][0]["image_url"]
+        self.assertTrue(str(image_url).startswith("data:image/"))
+        self.assertNotIn("image_urls", submit_body)
 
     def test_count_2k_uses_tiered_model_name(self) -> None:
         profile = ImageProviderProfile(

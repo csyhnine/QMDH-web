@@ -48,7 +48,7 @@ export default function StudioComposerDisplayMenuPanel({
       />
       {isEditMode ? (
         <p className="composer-menu-note">
-          「{editDefaultLabel}」：按参考图比例推断画幅（count/VIP 仍须传 size）。与文生图「{SMART_ASPECT_RATIO_LABEL}」不同，后者由模型自行选比例、不锁定参考图。
+          「{editDefaultLabel}」：Gemini/VIP 由上游跟参考图（不传画幅）；count 会推断像素 size；Seedream/wan 仅跟分辨率档位。与文生图「{SMART_ASPECT_RATIO_LABEL}」不同。
         </p>
       ) : null}
       {isGenerateMode ? (

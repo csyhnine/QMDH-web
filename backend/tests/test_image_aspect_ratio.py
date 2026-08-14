@@ -40,11 +40,7 @@ class ImageAspectRatioTests(unittest.TestCase):
             )
         self.assertEqual(resolved, "1:1")
 
-    def test_smart_ratio_uses_reference_dimensions(self) -> None:
-        png = bytearray(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
-        png.extend(struct.pack(">II", 1920, 1080))
-        png.extend(b"\x00" * 8)
-
+    def test_empty_aspect_ratio_does_not_infer_in_generic_resolver(self) -> None:
         with patch(
             "app.services.image_aspect_ratio.dimensions_from_reference_images",
             return_value=(1920, 1080),
@@ -56,7 +52,7 @@ class ImageAspectRatioTests(unittest.TestCase):
                 reference_images=["/media/references/sample.png"],
             )
 
-        self.assertEqual(resolved, "16:9")
+        self.assertEqual(resolved, "1:1")
 
     def test_unknown_ratio_snaps_to_nearest_allowed(self) -> None:
         resolved = resolve_image_aspect_ratio(
@@ -76,7 +72,7 @@ class ImageAspectRatioTests(unittest.TestCase):
         self.assertEqual(resolved, "4:1")
         self.assertIn(resolved, GEMINI_IMAGE_ASPECT_RATIOS)
 
-    def test_follow_source_label_uses_reference_dimensions(self) -> None:
+    def test_follow_source_label_does_not_infer_in_generic_resolver(self) -> None:
         with patch(
             "app.services.image_aspect_ratio.dimensions_from_reference_images",
             return_value=(1920, 1080),
@@ -87,7 +83,7 @@ class ImageAspectRatioTests(unittest.TestCase):
                 model_name="gpt-image-2-count",
                 reference_images=["/media/references/wide.png"],
             )
-        self.assertEqual(resolved, "16:9")
+        self.assertEqual(resolved, "1:1")
 
     def test_resolve_size_aspect_for_reference_prefers_dimensions_when_follow_source(self) -> None:
         with patch(

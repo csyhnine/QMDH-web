@@ -947,38 +947,51 @@ def _build_haodeya_short_images_plan(
         prompt_text = f"{prompt}\n\nAdditional guidance: {detail}"
 
     follow_source = _should_follow_source_for_size(payload)
-    aspect_ratio = resolve_size_aspect_for_reference(
-        str(payload.get("aspect_ratio") or "").strip(),
-        provider_name=profile.provider_name,
-        model_name=profile.model_name,
-        base_url=profile.base_url,
-        reference_images=reference_images,
-        follow_source=follow_source,
-    )
-    if poll:
-        size_value: str = aspect_ratio
-    else:
-        size_value = openai_pixel_size_for_aspect_ratio(aspect_ratio)
 
     body: dict[str, object] = {
         "model": _resolve_haodeya_async_upstream_model(profile, resolution),
         "prompt": prompt_text,
-        "size": size_value,
     }
+
+    native_follow_source = bool(poll and follow_source and reference_images)
+    if native_follow_source:
+        # VIP async + image_urls: upstream follows reference; do not force inferred size.
+        pass
+    elif poll:
+        aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
+        body["size"] = aspect_ratio
+    elif follow_source and reference_images:
+        aspect_ratio = resolve_size_aspect_for_reference(
+            str(payload.get("aspect_ratio") or "").strip(),
+            provider_name=profile.provider_name,
+            model_name=profile.model_name,
+            base_url=profile.base_url,
+            reference_images=reference_images,
+            follow_source=True,
+        )
+        body["size"] = openai_pixel_size_for_aspect_ratio(aspect_ratio)
+    else:
+        aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
+        body["size"] = openai_pixel_size_for_aspect_ratio(aspect_ratio)
 
     reference_result = _image_generation_result_fields(profile, payload)
     # VIP (async) and DeepKey count (sync) both accept public HTTPS image_urls on generations.
     # Without this, Studio shows「参考图 N 张」but upstream only sees prompt → unrelated T2I.
     if reference_images:
         body["image_urls"] = [_reference_image_to_public_url(item) for item in reference_images]
+        ref_mode = (
+            "haodeya_async_image_urls_follow_source"
+            if native_follow_source
+            else ("haodeya_async_image_urls" if poll else "haodeya_sync_image_urls")
+        )
         reference_result = {
             **reference_result,
             "reference_image_used": True,
-            "reference_image_mode": (
-                "haodeya_async_image_urls" if poll else "haodeya_sync_image_urls"
-            ),
+            "reference_image_mode": ref_mode,
             "reference_image_count": len(reference_images),
         }
+        if native_follow_source:
+            reference_result["aspect_ratio_follow_source_native"] = True
     if requested_capability != effective_capability:
         note_key = "haodeya_async_capability_note" if poll else "haodeya_sync_capability_note"
         reference_result[note_key] = requested_capability

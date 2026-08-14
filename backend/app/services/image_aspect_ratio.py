@@ -212,10 +212,8 @@ def resolve_image_aspect_ratio(
         return value
 
     if _is_follow_source_ratio(value):
-        dimensions = dimensions_from_reference_images(reference_images or [])
-        if dimensions is not None:
-            width, height = dimensions
-            return nearest_aspect_ratio(width / height, allowed)
+        # Native-follow providers (Gemini chat, VIP+image_urls) omit size/aspect upstream.
+        # Count sync infers pixels via resolve_size_aspect_for_reference instead.
         return fallback
 
     if _is_smart_ratio(value):
@@ -223,10 +221,6 @@ def resolve_image_aspect_ratio(
         return fallback
 
     if not value:
-        dimensions = dimensions_from_reference_images(reference_images or [])
-        if dimensions is not None:
-            width, height = dimensions
-            return nearest_aspect_ratio(width / height, allowed)
         return fallback
 
     if ":" in value:
@@ -248,10 +242,9 @@ def resolve_size_aspect_for_reference(
     follow_source: bool = False,
     default: str = "1:1",
 ) -> str:
-    """Aspect ratio for Haodeya VIP (ratio size) or count (pixel size mapping).
+    """Infer aspect ratio from reference dimensions for count sync only.
 
-    follow_source=True only for「遵循原图」— always prefer reference dimensions.
-    「智能」must not set follow_source; it falls back to resolve_image_aspect_ratio smart path.
+    VIP/Gemini native-follow paths omit size/aspect upstream instead of calling this.
     """
     refs = reference_images or []
     value = str(raw_value or "").strip()

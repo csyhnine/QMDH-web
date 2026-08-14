@@ -335,6 +335,40 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
         self.assertTrue(outcome.result["reference_image_used"])
         self.assertEqual(outcome.result["reference_image_mode"], "haodeya_async_image_urls")
 
+    def test_vip_follow_source_omits_size_with_reference(self) -> None:
+        profile = self._profile()
+        adapter = self._adapter(profile)
+        submit_payload = {"id": "task_vip_follow", "status": "queued"}
+        poll_payload = {"id": "task_vip_follow", "status": "completed", "url": "https://cdn.example.test/output-follow.png"}
+        ref_url = "https://cityusbdisk.cn/media/refs/source.png"
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[
+                _FakeResponse(submit_payload),
+                _FakeResponse(poll_payload),
+                _FakeBinaryResponse(b"png-follow"),
+            ],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    with patch("app.services.task_executor.sleep"):
+                        outcome = adapter.execute(
+                            "image.edit",
+                            {
+                                "edit_prompt": "Enhance facade quality",
+                                "aspect_ratio": "遵循原图",
+                                "resolution": "1k",
+                                "reference_images": [ref_url],
+                            },
+                        )
+
+        submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        self.assertNotIn("size", submit_body)
+        self.assertEqual(submit_body["image_urls"], [ref_url])
+        self.assertEqual(outcome.result.get("reference_image_mode"), "haodeya_async_image_urls_follow_source")
+        self.assertTrue(outcome.result.get("aspect_ratio_follow_source_native"))
+
     def test_toapis_generate_with_reference_images_stays_on_generations_endpoint(self) -> None:
         profile = self._profile()
         adapter = self._adapter(profile)

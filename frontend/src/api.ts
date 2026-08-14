@@ -272,6 +272,7 @@ export type DashboardStats = {
   window_image_output_count?: number;
   today_video_generate_count: number;
   week_video_generate_count: number;
+  window_video_generate_count?: number;
   window_chat_turn_count: number;
   window_chat_input_tokens: number;
   window_chat_output_tokens: number;

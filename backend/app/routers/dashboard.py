@@ -88,6 +88,10 @@ def _quota_status(quota_limit: float | None, quota_used: float) -> str:
 
 
 def _infer_task_capability(entry: UsageLedger, provider_entries: list[UsageLedger]) -> str:
+    ledger_capability = (entry.capability or "").strip()
+    if ledger_capability:
+        return ledger_capability
+
     for provider_entry in provider_entries:
         capability = (provider_entry.capability or "").strip()
         if capability:
@@ -571,6 +575,11 @@ def get_dashboard_stats(
         for entry in task_entries
         if _is_image_capability(task_capability_by_task_id.get(entry.task_id or 0, "image.generate"))
     )
+    window_video_generate_count = sum(
+        1
+        for entry in task_entries
+        if task_capability_by_task_id.get(entry.task_id or 0, "image.generate") == "video.generate"
+    )
 
     execution_rankings = sorted(
         (
@@ -687,10 +696,12 @@ def get_dashboard_stats(
         total_cost=round(total_cost, 2),
         cost_unit=primary_currency if len(cost_by_currency_counter) <= 1 else "multiple currencies",
         cost_formula=(
-            "总成本按币种分别汇总：total_cost = sum(tasks.cost)。运营主视图同时展示出图张数（output_count）与任务执行次数。"
+            "总成本按币种分别汇总：total_cost = sum(tasks.cost)。"
+            "运营主视图同时展示出图张数、视频任务次数与 Chat 轮次。"
         ),
         cost_notes=[
             "真实出图张数来自任务结果 output_count，与素材落库张数对齐；一次任务可对应多张。",
+            "视频任务按 capability=video.generate 计次；Chat 按 chat.message.completed 计轮次与 token。",
             "按模型面板聚合图像/视频任务与 Chat 轮次；汇总行缺模型名时回退到 requested_provider 或 provider_call。",
             "只有在模型配置里维护了 pricing_currency、pricing_unit 和 unit_price 后，成本才代表真实计费口径。",
             "旧版 gpt-image-2 的本地 CNY 历史已从当前运营支出口径中排除，原始记录仍保留在账本中。",
@@ -717,6 +728,7 @@ def get_dashboard_stats(
         window_image_output_count=window_image_output_count,
         today_video_generate_count=today_video_generate_count,
         week_video_generate_count=week_video_generate_count,
+        window_video_generate_count=window_video_generate_count,
         window_chat_turn_count=len(chat_entries),
         window_chat_input_tokens=sum(int(entry.input_tokens or 0) for entry in chat_entries),
         window_chat_output_tokens=sum(int(entry.output_tokens or 0) for entry in chat_entries),
@@ -803,10 +815,13 @@ def _usage_log_input_summary(
 def _usage_log_output_summary(entry: UsageLedger, *, capability: str = "") -> str:
     resolved_capability = (capability or entry.capability or "").strip()
     count = int(entry.output_count or 0)
+    if entry.entry_type == "chat.message.completed":
+        tokens = int(entry.total_tokens or entry.output_tokens or entry.completion_tokens or 0)
+        return f"{tokens} tokens" if tokens > 0 else "1 轮"
     if resolved_capability.startswith("image.") and count > 0:
         return f"{count} 张"
-    if resolved_capability.startswith("video.") and count > 0:
-        return f"{count} 段"
+    if resolved_capability.startswith("video."):
+        return f"{count if count > 0 else 1} 段"
     if count > 0 and int(entry.output_tokens or entry.completion_tokens or 0) <= 0:
         return f"{count} 个"
     return ""

@@ -85,6 +85,26 @@ export type DashboardDateRange = {
   endDate: string;
 };
 
+function formatDailyActivitySummary(day: {
+  image_output_count: number;
+  video_generate_count: number;
+  chat_turn_count: number;
+}): string {
+  const parts: string[] = [];
+  if (day.image_output_count > 0) parts.push(`${formatCount(day.image_output_count)}张`);
+  if (day.video_generate_count > 0) parts.push(`视频${formatCount(day.video_generate_count)}`);
+  if (day.chat_turn_count > 0) parts.push(`Chat${formatCount(day.chat_turn_count)}`);
+  return parts.length > 0 ? parts.join(" · ") : "0";
+}
+
+function dailyActivityTotal(day: {
+  image_output_count: number;
+  video_generate_count: number;
+  chat_turn_count: number;
+}): number {
+  return day.image_output_count + day.video_generate_count + day.chat_turn_count;
+}
+
 export type DashboardPageProps = {
   dashboard: DashboardStats | null;
   groupSummaries: UserGroupSummary[];
@@ -161,7 +181,7 @@ export default function DashboardPage({
     );
   }
 
-  const maxDailyImageOutputs = rowMax(dashboard.daily_series, (item) => item.image_output_count);
+  const maxDailyActivity = rowMax(dashboard.daily_series, dailyActivityTotal);
   const modelRankingMax = rowMax(dashboard.model_rankings, (item) => {
     const images = Number(item.image_output_count || 0);
     const tasks = Number(item.count || 0);
@@ -228,7 +248,7 @@ export default function DashboardPage({
       <header className="ops-dashboard-head">
         <div>
           <h1>运营看板</h1>
-          <p>以出图张数与任务执行频次为主，Chat token / 成本保留为次级参考。</p>
+          <p>统计窗口内出图张数、视频任务次数与 Chat 轮次；成本与 Token 为次级参考。</p>
         </div>
         <div className="ops-toolbar">
           <div className="ops-segment">
@@ -273,9 +293,11 @@ export default function DashboardPage({
         </article>
         <article className="ops-kpi-card ops-kpi-purple">
           <div>
-            <span>今日视频任务</span>
-            <strong>{formatCount(dashboard.today_video_generate_count)}</strong>
-            <small>{`本周 ${formatCount(dashboard.week_video_generate_count)} 次`}</small>
+            <span>窗口视频任务</span>
+            <strong>{formatCount(dashboard.window_video_generate_count ?? 0)}</strong>
+            <small>
+              {`今日 ${formatCount(dashboard.today_video_generate_count)} · 本周 ${formatCount(dashboard.week_video_generate_count)} 次`}
+            </small>
           </div>
           <i>视</i>
         </article>
@@ -300,30 +322,53 @@ export default function DashboardPage({
       <div className="ops-dashboard-grid">
         <section className="ops-panel ops-panel-wide">
           <div className="ops-panel-head">
-            <h2>每日出图趋势</h2>
-            <span>柱高按出图张数；下方括号为任务次数</span>
+            <h2>每日用量趋势</h2>
+            <span>柱高按出图张数 + 视频任务 + Chat 轮次；括号内为当日任务总次数</span>
           </div>
           <div className="ops-task-series">
             {dashboard.daily_series.map((day) => {
               const taskCount = day.image_generate_count + day.image_edit_count + day.video_generate_count;
-              const imageOutputs = day.image_output_count;
+              const activityTotal = dailyActivityTotal(day);
               const barHeight =
-                maxDailyImageOutputs === 0
+                maxDailyActivity === 0
                   ? 6
-                  : Math.max(12, (imageOutputs / maxDailyImageOutputs) * 100);
+                  : Math.max(12, (activityTotal / maxDailyActivity) * 100);
+              const imagePct =
+                activityTotal === 0 ? 0 : (day.image_output_count / activityTotal) * 100;
+              const videoPct =
+                activityTotal === 0 ? 0 : (day.video_generate_count / activityTotal) * 100;
+              const chatPct =
+                activityTotal === 0 ? 0 : (day.chat_turn_count / activityTotal) * 100;
               return (
                 <div key={day.date} className="ops-task-series-day">
                   <div className="ops-task-series-bars">
                     <div
-                      className="ops-task-series-stack ops-task-series-stack-images"
+                      className="ops-task-series-stack"
                       style={{ height: `${barHeight}%` }}
-                      title={`出图 ${imageOutputs} 张 · 任务 ${taskCount} 次（生图 ${day.image_generate_count} / 修图 ${day.image_edit_count} / 视频 ${day.video_generate_count}）`}
+                      title={`${formatDailyActivitySummary(day)} · 任务 ${taskCount} 次（生图 ${day.image_generate_count} / 修图 ${day.image_edit_count} / 视频 ${day.video_generate_count} / Chat ${day.chat_turn_count}）`}
                     >
-                      <span className="ops-task-series-segment image" style={{ height: "100%" }} />
+                      {day.image_output_count > 0 ? (
+                        <span
+                          className="ops-task-series-segment image"
+                          style={{ height: `${imagePct}%` }}
+                        />
+                      ) : null}
+                      {day.video_generate_count > 0 ? (
+                        <span
+                          className="ops-task-series-segment video"
+                          style={{ height: `${videoPct}%` }}
+                        />
+                      ) : null}
+                      {day.chat_turn_count > 0 ? (
+                        <span
+                          className="ops-task-series-segment chat"
+                          style={{ height: `${chatPct}%` }}
+                        />
+                      ) : null}
                     </div>
                   </div>
-                  <strong>{formatCount(imageOutputs)}</strong>
-                  <em className="ops-task-series-sub">{`(${formatCount(taskCount)})`}</em>
+                  <strong>{formatDailyActivitySummary(day)}</strong>
+                  <em className="ops-task-series-sub">{`(${formatCount(taskCount)}任务)`}</em>
                   <small>{formatDayLabel(day.date)}</small>
                 </div>
               );
@@ -331,7 +376,8 @@ export default function DashboardPage({
           </div>
           <div className="ops-inline-legend">
             <span><i className="ops-legend-chip image" />出图张数</span>
-            <span>括号内为当日任务次数</span>
+            <span><i className="ops-legend-chip video" />视频任务</span>
+            <span><i className="ops-legend-chip chat" />Chat 轮次</span>
           </div>
         </section>
 
@@ -372,7 +418,15 @@ export default function DashboardPage({
                   <div className="ops-model-row-bar">
                     <b style={{ width: `${barWidth}%` }} />
                   </div>
-                  <em>{images > 0 ? `${formatCount(images)} 张` : tasks > 0 ? `${formatCount(tasks)} 次` : formatToken(chatTokens)}</em>
+                  <em>
+                    {images > 0
+                      ? `${formatCount(images)} 张`
+                      : videoTasks > 0
+                        ? `${formatCount(videoTasks)} 视频`
+                        : chatTurns > 0
+                          ? `${formatCount(chatTurns)} Chat`
+                          : formatToken(chatTokens)}
+                  </em>
                 </div>
               );
             })}
@@ -382,7 +436,7 @@ export default function DashboardPage({
         <section className="ops-panel ops-panel-wide">
           <div className="ops-panel-head">
             <h2>执行人排行</h2>
-            <span>出图张数优先，任务次数为辅</span>
+            <span>出图 / 视频 / Chat 综合排行</span>
           </div>
           <div className="ops-execution-table">
             <div className="ops-execution-head">

@@ -199,6 +199,7 @@ class DashboardStats(BaseModel):
     window_image_output_count: int = 0
     today_video_generate_count: int = 0
     week_video_generate_count: int = 0
+    window_video_generate_count: int = 0
     window_chat_turn_count: int = 0
     window_chat_input_tokens: int = 0
     window_chat_output_tokens: int = 0

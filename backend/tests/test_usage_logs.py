@@ -102,8 +102,30 @@ class UsageLogDisplayTests(unittest.TestCase):
             output_count=2,
             output_tokens=0,
             completion_tokens=0,
+            entry_type="task.finalized",
         )
         self.assertEqual(_usage_log_output_summary(entry, capability="image.generate"), "2 张")
+
+    def test_output_summary_uses_video_segment_count(self) -> None:
+        entry = SimpleNamespace(
+            capability="video.generate",
+            output_count=0,
+            output_tokens=0,
+            completion_tokens=0,
+            entry_type="task.finalized",
+        )
+        self.assertEqual(_usage_log_output_summary(entry, capability="video.generate"), "1 段")
+
+    def test_output_summary_uses_chat_tokens(self) -> None:
+        entry = SimpleNamespace(
+            capability="chat.completions",
+            output_count=1,
+            output_tokens=80,
+            completion_tokens=80,
+            total_tokens=200,
+            entry_type="chat.message.completed",
+        )
+        self.assertEqual(_usage_log_output_summary(entry, capability="chat.completions"), "200 tokens")
 
     def test_input_summary_prefers_usage_payload(self) -> None:
         entry = SimpleNamespace(

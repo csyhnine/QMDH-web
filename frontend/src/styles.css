@@ -5375,6 +5375,10 @@ button {
   background: linear-gradient(180deg, #c4b5fd 0%, #7c3aed 100%);
 }
 
+.ops-task-series-segment.chat {
+  background: linear-gradient(180deg, #6ee7b7 0%, #059669 100%);
+}
+
 .ops-task-series-day strong {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.86rem;
@@ -5411,6 +5415,10 @@ button {
 
 .ops-legend-chip.video {
   background: #7c3aed;
+}
+
+.ops-legend-chip.chat {
+  background: #059669;
 }
 
 .ops-token-series {

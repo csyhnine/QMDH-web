@@ -41,6 +41,7 @@
 | **seedance-avatar-001** | 虚拟人 / 真人手动入库双通道 | **DONE** | `37145dc`…`834e60f`；详档 `handoff-2026-08-14-seedance-avatar-grok-asset.md` |
 | **grok-asset-001** | Grok 拒用 Seedance `asset://` | **DONE** | `e005414` 已上生产；验收：入库后切 Grok 应走 mediaPath |
 | **be-image-rebuild-001** | 生产 backend 全量 rebuild 固化热补 | TODO | 当前多处 docker cp；择机 `docker compose build backend` |
+| **dashboard-video-chat-001** | 运营看板展示视频/Chat 统计 | **DONE（本地）** | capability 推断 + 窗口 KPI + 每日趋势；待 deploy |
 | **hh-i2v-001** | HappyHorse i2v 固定样例复测 | **DONE** | `task_2ngmWnoNnI5ASioE3folcgheW7yse92i` → completed |
 | **hh-i2v-002** | commit/deploy `size: 1280*720` | **DONE** | `6dedbf2` |
 | **hh-i2v-003** | Studio / 生产可用性确认 | **DONE** | size 已部署；用户 2026-07-26 确认 OK（含默认项） |

@@ -17,17 +17,21 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`c6e8dba`**（与 `origin/main` 对齐）
-- Production: **`https://cityusbdisk.cn`** — 代码 **`c6e8dba`**（2026-08-12：frontend 新镜像 + backend/worker 热补丁；待补全量 rebuild）
+- Current branch: **`main`** @ **`e005414`**（与 `origin/main` 对齐）
+- Production: **`https://cityusbdisk.cn`** — 代码 **`e005414`**（2026-08-14：frontend `--no-cache`；backend/worker 热补丁 `haodeya_grok_video.py`；待择机全量 rebuild backend）
 - Alembic head：**`r9s0t1u2v3w4`**（`ai_tools`；前序 `q8r9s0t1u2v3`=`site_announcements`；更早删对话 FK=`p7q8r9s0t1u2`）
-- 最新交接：`docs/handoff.md` → `[2026-07-30] 对比多原图 / 画布导航 / 上游参考`；详档 `docs/archive/handoff-2026-07-30-compare-canvas-upstream.md`
+- 最新交接：`docs/handoff.md` → `[2026-08-14] Seedance 入库双通道 + Grok asset:// 隔离`；详档 `docs/archive/handoff-2026-08-14-seedance-avatar-grok-asset.md`
+- **2026-08-14 已上生产（摘要）**：
+  - Seedance：手动「入库」（虚拟人 / 真人）；参考图最多 4 张；加图「+」入口
+  - Grok/HappyHorse：提交时剥离 Seedance `asset://`，优先 `mediaPath`（修任务 3851 `OSS media not found`）
+  - 归档：`docs/archive/deploy-2026-08-14-seedance-grok-asset.md`
 - **2026-08-12 已上生产（摘要）**：
   - 生图：`vip` 异步短 body（比例 size）；`count` 同步短 body（像素 size）；`seedream` → `2K/4K` 或比例像素（16:9=`2560x1440`）
   - Admin：支持档位、请求体预览、Strategies 预设、看板出图张数/按模型
   - 归档：`docs/archive/deploy-2026-08-12-haodeya-image-ops.md`
-- **对话收束（2026-07-30）**：无代码 WIP；可换新对话继续开发
+- **对话收束（2026-08-14）**：无代码 WIP；可换新对话继续开发
 - **已取消专项**：算力费用 / 对外简历运营数据收集（一次性核对已结束，勿当后续任务）
-- 部署归档：`docs/archive/deploy-2026-08-12-haodeya-image-ops.md`；前序 `docs/archive/deploy-2026-08-06-agent-max-tokens.md`
+- 部署归档：`docs/archive/deploy-2026-08-14-seedance-grok-asset.md`；前序 `deploy-2026-08-12-haodeya-image-ops.md`、`deploy-2026-08-06-agent-max-tokens.md`
 - **2026-07-29～30 已上生产（摘要）**：
   - 对比：多原图可选、灯箱滑杆铺满修复（`MediaComparePanel`）
   - 画布：进场 fitView、中键双击适应视图、缩略图拖拽/点击跳转

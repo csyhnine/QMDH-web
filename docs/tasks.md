@@ -41,7 +41,7 @@
 | **seedance-avatar-001** | 虚拟人 / 真人手动入库双通道 | **DONE** | `37145dc`…`834e60f`；详档 `handoff-2026-08-14-seedance-avatar-grok-asset.md` |
 | **grok-asset-001** | Grok 拒用 Seedance `asset://` | **DONE** | `e005414` 已上生产；验收：入库后切 Grok 应走 mediaPath |
 | **count-i2i-001** | count 图生图参考图上游（multipart edits） | **DONE（用户验收 2026-08-16）** | 热补 + Git 已入库；详档 `handoff-2026-08-16-count-i2i-multipart.md` |
-| **be-image-rebuild-001** | 生产 backend 全量 rebuild 固化热补 | **deploy-ready** | 详档 `deploy-ready-2026-08-16-production-rebuild.md`；服务器跑 `./scripts/deploy-production-rebuild.sh` |
+| **be-image-rebuild-001** | 生产 backend 全量 rebuild 固化热补 | **DONE（2026-08-16）** | HEAD **`59440b5`**；health OK；详档 `deploy-ready-2026-08-16-production-rebuild.md` |
 | **dashboard-video-chat-001** | 运营看板展示视频/Chat 统计 | **DONE（已热补生产 `fc75825`）** | capability 推断 + 窗口 KPI + 每日趋势 |
 | **hh-i2v-001** | HappyHorse i2v 固定样例复测 | **DONE** | `task_2ngmWnoNnI5ASioE3folcgheW7yse92i` → completed |
 | **hh-i2v-002** | commit/deploy `size: 1280*720` | **DONE** | `6dedbf2` |

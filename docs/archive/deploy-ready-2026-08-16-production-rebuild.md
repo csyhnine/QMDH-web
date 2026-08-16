@@ -68,4 +68,6 @@ docker compose up -d --build backend worker frontend
 
 ## 部署前公网快照（2026-08-16）
 
-- `https://cityusbdisk.cn/api/v1/health?detail=full` → healthy，`version: 1.1.0`
+- 部署前：`version: 1.1.0`，uptime ~4.5h
+- **已部署 2026-08-16：** HEAD **`59440b5`**，health healthy，task_executor multipart 断言 OK
+- 备注：首次 build 因 PyPI 超时失败；commit `59440b5`（Dockerfile 阿里云 mirror）后成功

@@ -50,8 +50,11 @@
 | **admin-models-ux-001** | Admin 模型配置侧栏 UX | **DONE** | `4c32d90` |
 | **studio-defaults-001** | 图像默认 1K；视频默认 HappyHorse | **DONE** | `9fff78f` |
 | **agent-memory-002** | 记忆写入筛选 + 会话摘要压缩 | **DONE（已上生产 `ab5ac6e`）** | scrub：删 8 turn summary、压 4 session；归档 `deploy-2026-07-26-agent-memory.md` |
+| **inspiration-001** | 灵感库迭代（内容 / seed / 分享收口） | **搁置（2026-08-16）** | task-014 功能已交付；seed bundle、内容填充、分享至灵感库 tech debt 不做；现有页只读维护 |
 
 **纪律**：禁止再扫 HappyHorse 请求体变体；未经用户同意禁止 push/deploy。
+
+**暂停 / 搁置范围（2026-08-16）**：文生图/图生图（count + wan）；**灵感库新功能与内容运营**。
 
 交接归档：`docs/archive/handoff-2026-07-26-happyhorse-admin-defaults.md`；最新 `docs/handoff.md`。
 
@@ -85,7 +88,7 @@
 | 0.2 | 本地 smoke：`npm run smoke:studio` 8/8 | DONE |
 | 0.3 | count 图生图 multipart edits（`gpt-image-2-count`） | DONE（2026-08-16 用户验收 + Git 入库） |
 | 0.3b | 若仍复现：非 count 的 `gpt-image-2` 参考图链路 | TODO |
-| 0.4 | 若需要：灵感库 seed bundle 导入 | TODO |
+| 0.4 | 灵感库 seed bundle 导入 | **搁置** | 用户 2026-08-16 确认不做；封面空白时见 `server-operations.md` Inspiration Library Notes |
 | 0.5 | urgent 小补丁直接进 `main`，不与 Studio / Video 大 PR 捆绑 | — |
 
 ### 阶段 1：合并 Studio 重构 PR #1（P1）
@@ -455,7 +458,7 @@
   - 从 bootstrap 种子数据中移除 QMDH-SEC 项目
 
 ### Task: [task-014] 灵感页与标记功能
-- 状态：DONE
+- 状态：**DONE（功能交付；迭代搁置 2026-08-16）**
 - 完成说明：
   - 新增 `asset_bookmarks` 表和 `POST /assets/{id}/bookmark` toggle 接口
   - FeedCard "点赞"改为"标记"（收藏），支持标记/取消标记
@@ -465,6 +468,7 @@
   - 灵感页全屏布局，隐藏项目面板和生成输入框
   - FeedCard 新增"删除"按钮，支持删除单条生成记录（含关联资产和 provider 调用）
   - **已填充 12 条建筑参考案例**：Moriyama House、Villa Savoye、宁波博物馆、Luum Temple、红砖美术馆、Fallingwater、绩溪博物馆、Tama Library、龙美术馆、Thermal Baths Vals、阿那亚艺术中心、House NA（来源标注 ArchDaily / 古德设计网）
+- **搁置说明（2026-08-16）**：不再做 seed bundle、内容扩充、「分享至灵感库」收口等；现有路由/API 保留，仅 bugfix
 
 ### Task: [task-015] 任务软删除与基础运营留痕
 - 状态：DONE
@@ -595,10 +599,9 @@
 
 1. ~~优先处理 count 图生图 multipart edits~~（**DONE 2026-08-16**，已 commit）
 2. 生产择机执行 `./scripts/deploy-production-rebuild.sh`（`be-image-rebuild-001`）或 OSS 切换（需用户批准）
-3. 如果当前目标是稳定服务器灵感库，优先上传并导入本地 `tmp/seed-inspiration-bundle.zip`，不要继续依赖服务器直接重抓 ArchDaily
-4. 若导入后仍要求“标题与封面严格一一对应”，为默认 seed 图补一版人工钉死映射，再重新构建并导入 bundle
-5. 回到 `prod-001`：继续拆分 `frontend/src/features/studio/GenerateStudioShell.tsx`，降低当前前端最大热点文件的维护风险
-6. 评估项目归档后的管理端可见性需求：是否需要 `/admin/projects` 增加“已归档项目”只读视图
+3. ~~灵感库 seed bundle / 内容填充~~（**搁置 2026-08-16**）
+4. 回到 `prod-001`：继续拆分 `frontend/src/features/studio/GenerateStudioShell.tsx`，降低当前前端最大热点文件的维护风险
+5. 评估项目归档后的管理端可见性需求：是否需要 `/admin/projects` 增加“已归档项目”只读视图
 
 ---
 

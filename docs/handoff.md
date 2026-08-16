@@ -11,6 +11,14 @@
 
 ## Latest Handoffs
 
+### [2026-08-16] prod-003/008 运维收口 + rebuild 脚本
+
+- **prod-003 DONE：** JSON 结构化日志已在生产路径（`QMDH_LOG_FORMAT=json`）
+- **prod-008：** OSS 代码 + `sync_local_media_to_oss` 就绪；生产仍 local；runbook 写入 `server-operations.md`
+- **be-image-rebuild-001：** 新增 `scripts/deploy-production-rebuild.sh`（全量 build 替代 docker cp）
+- **Git：** `2dc1d15` 起；图链路仍暂停
+- Safe to hand off: **Yes**
+
 ### [2026-08-16] prod-002 生产环境变量模板补全 + count i2i push
 
 - **Git：** `f7ddeb3` count multipart 已 push `origin/main`；`.env.production.example` 补全 `PUBLIC_MEDIA_BASE_URL`、OSS、Meili、Agent 等
@@ -25,13 +33,4 @@
 - **生产：** 热补已落容器（2026-08-16 晚）；Git 已入库 multipart 补丁
 - **详档：** `docs/archive/handoff-2026-08-16-count-i2i-multipart.md`
 - **用户：** 2026-08-16 确认成功；**文生图/图生图先暂停**
-- Safe to hand off: **Yes**
-
-### [2026-08-15] wan2.7 文生图 size 丢失比例 — **已上生产**
-
-- **修复 commit：** **`bd67d8d`** — 恢复 `_wan_pixel_size_for_aspect` + 扩展 `_wan_image_size`
-- **生产 HEAD / 热补：** **`c672aff`**（backend 热补）；frontend **`ad7d80c`** `--no-cache` 重建
-- **容器验收：** `wan_16_9_1k=1024x576`；bundle 含「匹配比例」
-- **详档：** `docs/archive/handoff-2026-08-15-wan-t2i-size-wip.md`
-- **待人工验收：** 文生图 + wan2.7 + 16:9/1K → result 非 1024×1024（低优先级，用户已暂停图链路）
 - Safe to hand off: **Yes**

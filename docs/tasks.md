@@ -41,7 +41,7 @@
 | **seedance-avatar-001** | 虚拟人 / 真人手动入库双通道 | **DONE** | `37145dc`…`834e60f`；详档 `handoff-2026-08-14-seedance-avatar-grok-asset.md` |
 | **grok-asset-001** | Grok 拒用 Seedance `asset://` | **DONE** | `e005414` 已上生产；验收：入库后切 Grok 应走 mediaPath |
 | **count-i2i-001** | count 图生图参考图上游（multipart edits） | **DONE（用户验收 2026-08-16）** | 热补 + Git 已入库；详档 `handoff-2026-08-16-count-i2i-multipart.md` |
-| **be-image-rebuild-001** | 生产 backend 全量 rebuild 固化热补 | TODO | 当前多处 docker cp；择机 `docker compose build backend` |
+| **be-image-rebuild-001** | 生产 backend 全量 rebuild 固化热补 | **脚本就绪** | `./scripts/deploy-production-rebuild.sh`；择机生产执行 |
 | **dashboard-video-chat-001** | 运营看板展示视频/Chat 统计 | **DONE（已热补生产 `fc75825`）** | capability 推断 + 窗口 KPI + 每日趋势 |
 | **hh-i2v-001** | HappyHorse i2v 固定样例复测 | **DONE** | `task_2ngmWnoNnI5ASioE3folcgheW7yse92i` → completed |
 | **hh-i2v-002** | commit/deploy `size: 1280*720` | **DONE** | `6dedbf2` |
@@ -594,7 +594,7 @@
 ## Previous Suggested Step
 
 1. ~~优先处理 count 图生图 multipart edits~~（**DONE 2026-08-16**，已 commit）
-2. 继续 Production Readiness backlog（`prod-003` 结构化日志、`prod-008` OSS 等）
+2. 生产择机执行 `./scripts/deploy-production-rebuild.sh`（`be-image-rebuild-001`）或 OSS 切换（需用户批准）
 3. 如果当前目标是稳定服务器灵感库，优先上传并导入本地 `tmp/seed-inspiration-bundle.zip`，不要继续依赖服务器直接重抓 ArchDaily
 4. 若导入后仍要求“标题与封面严格一一对应”，为默认 seed 图补一版人工钉死映射，再重新构建并导入 bundle
 5. 回到 `prod-001`：继续拆分 `frontend/src/features/studio/GenerateStudioShell.tsx`，降低当前前端最大热点文件的维护风险
@@ -612,7 +612,7 @@
 |----|------|------|--------|
 | prod-001 | GenerateStudioShell 拆分 | 将 `frontend/src/features/studio/GenerateStudioShell.tsx` 继续拆为更小的 hooks / panels，降低 4000+ 行热点维护成本 | P1 |
 | prod-002 | 环境变量规范化 | 新增 `.env.production.example`，标注必填/可选/默认值 | **DONE**（2026-08-16 补全 PUBLIC_MEDIA / OSS / Meili / Agent） |
-| prod-003 | 后端日志结构化 | 统一 JSON 格式日志输出，方便 ELK/Loki 采集 | P2 |
+| prod-003 | 后端日志结构化 | 统一 JSON 格式日志输出，方便 ELK/Loki 采集 | **DONE**（`setup_logging` + `QMDH_LOG_FORMAT`；见 `server-operations.md`） |
 | prod-004 | 健康检查增强 | `/health` 检查 DB 连接、Redis 连接，支持 k8s 存活探针 | **DONE**（`/health/live` + DB/Redis + 503 degraded） |
 
 Current `prod-001` WIP:
@@ -783,7 +783,7 @@ Current `prod-001` WIP:
 | prod-005 | CORS 多域名白名单 | 支持生产环境多前端域名 | P2 |
 | prod-006 | API Rate Limiting | 防刷保护，内测阶段可跳过 | P3 |
 | prod-007 | Session 过期清理 | 定时任务清理 `auth_sessions` 过期记录 | P3 |
-| prod-008 | 静态资源存储方案 | 用户上传图片迁移到 OSS/S3，配合 CDN 分发 | P2 |
+| prod-008 | 静态资源存储方案 | 用户上传图片迁移到 OSS/S3，配合 CDN 分发 | **代码 DONE**（Local+OSS 双写 + sync 脚本；生产仍为 local，runbook 见 `server-operations.md`） |
 
 ### 不建议当前阶段做
 

@@ -1,6 +1,6 @@
 # Server Operations Runbook
 
-Last updated: `2026-06-12`
+Last updated: `2026-08-16`
 
 ## Current Production-Like Server Snapshot
 
@@ -106,7 +106,21 @@ Always update in this order:
    - `docker compose logs --tail=100 backend`
    - `docker compose logs --tail=100 worker`
    - `curl http://127.0.0.1:8080/api/v1/health`
+   - `curl "http://127.0.0.1:8080/api/v1/health?detail=full"` — expect `database: healthy`; `redis: healthy` when `QMDH_TASK_EXECUTION_MODE=redis`
    - manual smoke test for login / chat / generation / admin models
+
+### Full Rebuild (替代 docker cp 热补)
+
+当热补文件过多或需要固化镜像层时，用全量 rebuild 代替 `scripts/deploy-production-hotpatch.sh`：
+
+```bash
+cd /www/wwwroot/qmdh-web
+./scripts/deploy-production-rebuild.sh
+```
+
+脚本会：`git pull` → `alembic upgrade head`（可用 `RUN_MIGRATIONS=0` 跳过）→ `docker compose up -d --build backend worker frontend` → health 断言。
+
+热补仍适用于**单文件紧急修复**；rebuild 适用于**多模块变更**或 `be-image-rebuild-001` 收口。
 
 ### Update Rule Of Thumb
 
@@ -270,6 +284,55 @@ If cards exist but images are blank again, check:
   - `QMDH_FRONTEND_ORIGIN=https://cityusbdisk.cn`
   - `QMDH_PUBLIC_MEDIA_BASE_URL=https://cityusbdisk.cn`
 - IP `http://120.79.227.11` still works but domain access should be the default for designers and for upstream image fetch URLs.
+
+## Structured Logging (prod-003)
+
+Backend 启动时调用 `setup_logging()`（`backend/app/main.py`）。生产默认 JSON Lines，便于 ELK/Loki 采集。
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `QMDH_LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` / `CRITICAL` |
+| `QMDH_LOG_FORMAT` | `json` | 生产用 `json`；本地调试可设 `console` |
+
+每条日志含 `correlation_id`（由请求中间件注入）。访问日志走结构化 middleware；uvicorn access log 已禁用以免重复。
+
+验证：
+
+```bash
+docker compose logs --tail=20 backend | head
+curl -s "http://127.0.0.1:8080/api/v1/health?detail=full"
+```
+
+## OSS 静态资源迁移 (prod-008)
+
+**当前生产：** `QMDH_STORAGE_BACKEND=local`，媒体在 Docker volume `backend_media`。
+
+**代码已就绪：** `LocalStorage` + `OSSStorage`（`oss2`）；`QMDH_STORAGE_BACKEND=oss` 时新写入会**本地优先 + 后台 mirror 到 OSS**；上游公网 URL 仍优先 `QMDH_PUBLIC_MEDIA_BASE_URL`（站点 `/media` 反代），不必切 OSS 也能通 Haodeya 参考图。
+
+### 切换到 OSS（需用户批准后再改生产 `.env`）
+
+1. 在 `.env` 填写：
+   - `QMDH_OSS_ENDPOINT`
+   - `QMDH_OSS_BUCKET_NAME`
+   - `QMDH_OSS_ACCESS_KEY_ID`
+   - `QMDH_OSS_ACCESS_KEY_SECRET`
+   - 可选 `QMDH_CDN_BASE_URL`（自定义 CDN 域名，覆盖默认 bucket 公网 URL）
+2. 先 dry-run 同步存量：
+
+   ```bash
+   docker compose run --rm backend python -m app.scripts.sync_local_media_to_oss --dry-run
+   ```
+
+3. 实际上传：
+
+   ```bash
+   docker compose run --rm backend python -m app.scripts.sync_local_media_to_oss
+   ```
+
+4. 设 `QMDH_STORAGE_BACKEND=oss`，`docker compose up -d --build backend worker`。
+5. 验证：上传参考图 → 检查 OSS 控制台对象；Haodeya 任务 `image_tokens>0`。
+
+回滚：改回 `QMDH_STORAGE_BACKEND=local` 并 restart；本地 volume 仍保留副本。
 
 ## Quick Verification Commands
 

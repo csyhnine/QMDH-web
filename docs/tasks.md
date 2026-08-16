@@ -40,6 +40,7 @@
 |----|------|------|------|
 | **seedance-avatar-001** | 虚拟人 / 真人手动入库双通道 | **DONE** | `37145dc`…`834e60f`；详档 `handoff-2026-08-14-seedance-avatar-grok-asset.md` |
 | **grok-asset-001** | Grok 拒用 Seedance `asset://` | **DONE** | `e005414` 已上生产；验收：入库后切 Grok 应走 mediaPath |
+| **count-i2i-001** | count 图生图参考图上游（multipart edits） | **DONE（用户验收 2026-08-16）** | 热补 + Git 已入库；详档 `handoff-2026-08-16-count-i2i-multipart.md` |
 | **be-image-rebuild-001** | 生产 backend 全量 rebuild 固化热补 | TODO | 当前多处 docker cp；择机 `docker compose build backend` |
 | **dashboard-video-chat-001** | 运营看板展示视频/Chat 统计 | **DONE（已热补生产 `fc75825`）** | capability 推断 + 窗口 KPI + 每日趋势 |
 | **hh-i2v-001** | HappyHorse i2v 固定样例复测 | **DONE** | `task_2ngmWnoNnI5ASioE3folcgheW7yse92i` → completed |
@@ -82,7 +83,8 @@
 |------|------|------|
 | 0.1 | 对齐本地 / GitHub `main` / 服务器 HEAD 与健康检查 | DONE（2026-06-12：GitHub `eb1057f`；生产 `c41778e`；health OK） |
 | 0.2 | 本地 smoke：`npm run smoke:studio` 8/8 | DONE |
-| 0.3 | 若仍复现：`gpt-image-2` 参考图真实上传修复 | TODO |
+| 0.3 | count 图生图 multipart edits（`gpt-image-2-count`） | DONE（2026-08-16 用户验收 + Git 入库） |
+| 0.3b | 若仍复现：非 count 的 `gpt-image-2` 参考图链路 | TODO |
 | 0.4 | 若需要：灵感库 seed bundle 导入 | TODO |
 | 0.5 | urgent 小补丁直接进 `main`，不与 Studio / Video 大 PR 捆绑 | — |
 
@@ -591,11 +593,12 @@
 
 ## Previous Suggested Step
 
-1. 优先处理 `gpt-image-2` 参考图真实上传修复：提交并部署当前本地补丁，然后在服务器复测一条带参考图的任务，确认上游实际收到图片输入而不是纯文本请求
-2. 如果当前目标是稳定服务器灵感库，优先上传并导入本地 `tmp/seed-inspiration-bundle.zip`，不要继续依赖服务器直接重抓 ArchDaily
-3. 若导入后仍要求“标题与封面严格一一对应”，为默认 seed 图补一版人工钉死映射，再重新构建并导入 bundle
-4. 回到 `prod-001`：继续拆分 `frontend/src/features/studio/GenerateStudioShell.tsx`，降低当前前端最大热点文件的维护风险
-5. 评估项目归档后的管理端可见性需求：是否需要 `/admin/projects` 增加“已归档项目”只读视图
+1. ~~优先处理 count 图生图 multipart edits~~（**DONE 2026-08-16**，已 commit）
+2. 继续 Production Readiness backlog（`prod-002`、`prod-004` 等）
+3. 如果当前目标是稳定服务器灵感库，优先上传并导入本地 `tmp/seed-inspiration-bundle.zip`，不要继续依赖服务器直接重抓 ArchDaily
+4. 若导入后仍要求“标题与封面严格一一对应”，为默认 seed 图补一版人工钉死映射，再重新构建并导入 bundle
+5. 回到 `prod-001`：继续拆分 `frontend/src/features/studio/GenerateStudioShell.tsx`，降低当前前端最大热点文件的维护风险
+6. 评估项目归档后的管理端可见性需求：是否需要 `/admin/projects` 增加“已归档项目”只读视图
 
 ---
 

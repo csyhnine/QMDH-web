@@ -51,24 +51,43 @@ done
 curl -sf "http://127.0.0.1:8080/api/v1/health?detail=full" | head -c 400
 echo
 
-echo "==> verify Haodeya i2i size + reference URL encoding in backend container"
+echo "==> verify Haodeya count edits + follow-source size in backend container"
 docker compose exec -T backend python - <<'PY'
 from app.services import task_executor as te
 from app.services import image_aspect_ratio as ar
 from app.services.media_storage import encode_public_http_url
+from app.core.config import ImageProviderProfile
+from app.services.model_registry import ProviderDefinition
 import inspect
 
-src = inspect.getsource(te._build_haodeya_short_images_plan)
-assert "haodeya_sync_image_urls" in src, "missing haodeya_sync_image_urls"
-assert "if reference_images:" in src and "image_urls" in src, "count image_urls path missing"
+assert "_build_haodeya_count_image_edits_plan" in inspect.getsource(te)
+assert "haodeya_sync_image_edits" in inspect.getsource(te._build_haodeya_count_image_edits_plan)
 assert "_should_follow_source_for_size" in inspect.getsource(te), "missing follow_source size helper"
-assert "resolve_size_aspect_for_reference" in src, "missing resolve_size_aspect_for_reference"
 assert "encode_public_http_url" in inspect.getsource(te._reference_image_to_public_url)
 smart_src = inspect.getsource(ar.resolve_image_aspect_ratio)
 assert "_is_smart_ratio" in smart_src and "_is_follow_source_ratio" in smart_src
 encoded = encode_public_http_url("https://cdn.example.com/中文.png")
 assert "%E4%B8" in encoded or "%E6" in encoded, f"URL not encoded: {encoded}"
-print("OK: count image_urls + follow-source size + smart/follow split + URL encode")
+
+p = ImageProviderProfile(
+    provider_name="gpt-image-2-count", api_key="x",
+    base_url="https://newapi.haodeya.xyz/v1", model_name="gpt-image-2-count",
+    timeout_seconds=300,
+    strategies={"image.generate": "haodeya_sync_image", "image.edit": "haodeya_sync_image"},
+    adapter_config={"provider_flavor": "haodeya_sync_image"},
+)
+d = ProviderDefinition("gpt-image-2-count", "gpt-image-2-count", ["image.generate", "image.edit"])
+plan = te._build_image_request_plan(
+    profile=p, definition=d, capability="image.generate",
+    payload={"prompt": "test", "resolution": "1k", "aspect_ratio": "遵循原图",
+             "reference_image": "/media/generated/gpt-image-2-count/sample.bin"},
+    prompt="test",
+)
+assert plan.endpoint_path == "/images/edits", plan.endpoint_path
+assert plan.reference_result.get("reference_image_mode") == "haodeya_sync_image_edits"
+assert plan.multipart_files and plan.multipart_files[0][0] == "image"
+assert "images" not in plan.body
+print("OK: count /images/edits multipart + follow-source size + URL encode")
 PY
 
 echo "Done. HEAD=$HEAD"

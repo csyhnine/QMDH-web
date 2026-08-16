@@ -921,6 +921,16 @@ def _resolve_haodeya_async_upstream_model(profile: ImageProviderProfile, resolut
     return f"{base_model}-{tier}"
 
 
+def _resolve_haodeya_count_edits_model(profile: ImageProviderProfile) -> str:
+    """DeepKey count /images/edits only exposes the 1K SKU — not *-2k tier suffixes."""
+    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    override = adapter_config.get("upstream_model_1k")
+    if isinstance(override, str) and override.strip():
+        return override.strip()
+    default_base = "gpt-image-2-count"
+    return _normalize_haodeya_async_base_model(profile.model_name) or default_base
+
+
 def _resolve_toapis_upstream_model(profile: ImageProviderProfile, resolution: str) -> str:
     return _resolve_haodeya_async_upstream_model(profile, resolution)
 
@@ -1024,7 +1034,8 @@ def _build_haodeya_count_image_edits_plan(
         poll=False,
         reference_images=reference_images,
     )
-    body["images"] = [{"image_url": _reference_image_to_model_url(item)} for item in reference_images]
+    body["model"] = _resolve_haodeya_count_edits_model(profile)
+    image_bytes, filename, content_type = _load_reference_image_bytes(reference_images[0])
 
     effective = "image.edit" if requested_capability == "image.generate" else effective_capability
     reference_result: dict[str, object] = {
@@ -1035,7 +1046,14 @@ def _build_haodeya_count_image_edits_plan(
         "native_image_edit_used": True,
         "native_image_edit_endpoint": "images.edits",
         "native_image_edit_provider": profile.provider_name,
+        "haodeya_count_edits_model": body["model"],
+        "haodeya_count_edits_multipart": True,
     }
+    requested_resolution = _normalize_image_resolution(payload)
+    if requested_resolution != "1k":
+        reference_result["haodeya_count_edits_resolution_note"] = (
+            f"Requested {requested_resolution}; count /images/edits uses 1K SKU {body['model']}."
+        )
     if requested_capability != effective:
         reference_result["native_image_edit_fallback_from"] = requested_capability
         reference_result["haodeya_sync_capability_note"] = requested_capability
@@ -1043,11 +1061,12 @@ def _build_haodeya_count_image_edits_plan(
     return ImageRequestPlan(
         endpoint_path="/images/edits",
         body=body,
-        headers=_build_openai_headers(profile),
+        headers={"Authorization": f"Bearer {profile.api_key}"},
         reference_result=reference_result,
         adapter_mode="haodeya_sync_image",
         effective_capability=effective,
         strategy=OPENAI_IMAGE_EDITS_STRATEGY,
+        multipart_files=(("image", filename, image_bytes, content_type),),
     )
 
 

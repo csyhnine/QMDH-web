@@ -48,6 +48,7 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - 网关 `https://newapi.haodeya.xyz/v1`
   - Chat：生产启用 `qwen3.8-max-preview`（其它 qwen 档位停用）
   - 生图：`wan2.7-image` / `wan2.7-image-pro` → 无参考图 `/images/generations`；有参考图 `/images/edits` multipart；size 字面 `1K/2K/4K`（4K 仅 pro 文生图）
+  - 生图：`gpt-image-2-count` → 无参考图 `/images/generations` 短 body（像素 size）；**有参考图** `/images/edits` **multipart** + model **`gpt-image-2-count`（仅 1K SKU）**；VIP 异步仍 `generations + image_urls`（2026-08-16 验收，详档 `docs/archive/handoff-2026-08-16-count-i2i-multipart.md`）
   - 视频：HappyHorse 单模型 + 档位菜单；合同：`/v1/videos` + `metadata.input.media`（i2v=`first_frame`，r2v=`reference_image`）；顶层 `size`=`1280*720`，档位在 `parameters.resolution`
   - **i2v 已通并已部署**；复测 task `task_2ngmWnoNnI5ASioE3folcgheW7yse92i`
   - **Studio 默认**：图像分辨率 **1K**；视频模型优先 **HappyHorse**（`9fff78f`）

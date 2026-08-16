@@ -7,7 +7,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.services.model_registry import ImageProviderProfile, ProviderDefinition
-from app.services.task_executor import OpenAIImageProviderAdapter
+from app.services.task_executor import (
+    OpenAIImageProviderAdapter,
+    _build_haodeya_count_image_edits_plan,
+    _encode_multipart_form,
+)
 
 
 def _minimal_png_header(width: int, height: int) -> bytes:
@@ -32,8 +36,9 @@ class _FakeResponse:
 
 
 class _FakeBinaryResponse:
-    def __init__(self, payload: bytes):
+    def __init__(self, payload: bytes, *, content_type: str = "image/png"):
         self._payload = payload
+        self.headers = {"Content-Type": content_type}
 
     def read(self) -> bytes:
         return self._payload
@@ -43,6 +48,19 @@ class _FakeBinaryResponse:
 
     def __exit__(self, *args):
         return False
+
+
+def _assert_count_multipart_edits_request(submit_request, *, model: str, size: str | None = None) -> None:
+    assert submit_request.full_url.endswith("/images/edits")
+    content_type = submit_request.headers.get("Content-type") or submit_request.headers.get("Content-Type") or ""
+    assert "multipart/form-data" in content_type
+    data = submit_request.data
+    assert b'name="model"' in data
+    assert model.encode("utf-8") in data
+    assert b'name="image"' in data
+    assert b"image_urls" not in data
+    if size is not None:
+        assert size.encode("utf-8") in data
 
 
 class HaodeyaSyncImageTests(unittest.TestCase):
@@ -176,6 +194,7 @@ class HaodeyaSyncImageTests(unittest.TestCase):
         with patch(
             "app.services.task_executor.urlopen",
             side_effect=[
+                _FakeBinaryResponse(_minimal_png_header(64, 64)),
                 _FakeResponse(sync_payload),
                 _FakeBinaryResponse(b"png-ref"),
             ],
@@ -192,15 +211,12 @@ class HaodeyaSyncImageTests(unittest.TestCase):
                         },
                     )
 
-        submit_request = mocked_urlopen.call_args_list[0].args[0]
-        submit_body = json.loads(submit_request.data.decode("utf-8"))
-        self.assertTrue(submit_request.full_url.endswith("/images/edits"))
-        self.assertEqual(submit_body["model"], "gpt-image-2-count")
-        self.assertEqual(submit_body["images"][0]["image_url"], ref_url)
-        self.assertNotIn("image_urls", submit_body)
+        submit_request = mocked_urlopen.call_args_list[1].args[0]
+        _assert_count_multipart_edits_request(submit_request, model="gpt-image-2-count", size="1536x1024")
         self.assertTrue(outcome.result.get("reference_image_used"))
         self.assertEqual(outcome.result.get("reference_image_mode"), "haodeya_sync_image_edits")
         self.assertTrue(outcome.result.get("native_image_edit_used"))
+        self.assertTrue(outcome.result.get("haodeya_count_edits_multipart"))
 
     def test_count_follow_source_infers_landscape_pixel_size(self) -> None:
         profile = ImageProviderProfile(
@@ -256,12 +272,44 @@ class HaodeyaSyncImageTests(unittest.TestCase):
                             )
 
         submit_request = mocked_urlopen.call_args_list[0].args[0]
-        submit_body = json.loads(submit_request.data.decode("utf-8"))
-        self.assertTrue(submit_request.full_url.endswith("/images/edits"))
-        self.assertEqual(submit_body["size"], "1536x1024")
-        self.assertIn("images", submit_body)
+        _assert_count_multipart_edits_request(submit_request, model="gpt-image-2-count", size="1536x1024")
 
-    def test_count_https_ref_passes_through_in_edits_body(self) -> None:
+    def test_count_edits_plan_uses_multipart_attachment(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="gpt-image-2-count",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="gpt-image-2-count",
+            timeout_seconds=30,
+            quality="high",
+            adapter_config={"unit_price_1k": 1.62, "unit_price_2k": 2.67},
+        )
+        tiny_png = (
+            "data:image/png;base64,"
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yh3cAAAAASUVORK5CYII="
+        )
+        plan = _build_haodeya_count_image_edits_plan(
+            profile=profile,
+            requested_capability="image.edit",
+            effective_capability="image.edit",
+            payload={
+                "edit_prompt": "换成白色衣服",
+                "aspect_ratio": "遵循原图",
+                "resolution": "2k",
+                "reference_image": tiny_png,
+            },
+            prompt="换成白色衣服",
+        )
+        self.assertEqual(plan.endpoint_path, "/images/edits")
+        self.assertEqual(plan.body["model"], "gpt-image-2-count")
+        self.assertEqual(len(plan.multipart_files), 1)
+        self.assertEqual(plan.multipart_files[0][0], "image")
+        data, content_type = _encode_multipart_form(plan.body, plan.multipart_files)
+        self.assertIn("multipart/form-data", content_type)
+        self.assertIn(b'name="image"', data)
+        self.assertNotIn(b"images", data)
+
+    def test_count_https_ref_uploads_multipart_image_bytes(self) -> None:
         profile = ImageProviderProfile(
             provider_name="gpt-image-2-count",
             api_key="test-key",
@@ -285,7 +333,11 @@ class HaodeyaSyncImageTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(sync_payload), _FakeBinaryResponse(b"png")],
+            side_effect=[
+                _FakeBinaryResponse(_minimal_png_header(32, 32)),
+                _FakeResponse(sync_payload),
+                _FakeBinaryResponse(b"png"),
+            ],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -299,12 +351,10 @@ class HaodeyaSyncImageTests(unittest.TestCase):
                         },
                     )
 
-        submit_request = mocked_urlopen.call_args_list[0].args[0]
-        submit_body = json.loads(submit_request.data.decode("utf-8"))
-        self.assertTrue(submit_request.full_url.endswith("/images/edits"))
-        self.assertEqual(submit_body["images"][0]["image_url"], raw_ref)
+        submit_request = mocked_urlopen.call_args_list[1].args[0]
+        _assert_count_multipart_edits_request(submit_request, model="gpt-image-2-count")
 
-    def test_count_local_ref_embeds_base64_in_edits_body(self) -> None:
+    def test_count_local_ref_uploads_multipart_image_bytes(self) -> None:
         profile = ImageProviderProfile(
             provider_name="gpt-image-2-count",
             api_key="test-key",
@@ -335,22 +385,73 @@ class HaodeyaSyncImageTests(unittest.TestCase):
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
-                    adapter.execute(
-                        "image.generate",
+                    with patch("app.services.task_executor.settings.media_url_prefix", "/media"):
+                        with patch(
+                            "app.services.task_executor.settings.public_media_base_url",
+                            "https://cityusbdisk.cn",
+                        ):
+                            adapter.execute(
+                                "image.generate",
+                                {
+                                    "prompt": "edit",
+                                    "aspect_ratio": "16:9",
+                                    "resolution": "1k",
+                                    "reference_images": [
+                                        "/media/generated/gpt-image-2-count/清洗.png"
+                                    ],
+                                },
+                            )
+
+        submit_request = mocked_urlopen.call_args_list[0].args[0]
+        _assert_count_multipart_edits_request(submit_request, model="gpt-image-2-count")
+        self.assertIn(_minimal_png_header(512, 512), submit_request.data)
+
+    def test_count_2k_edit_with_ref_pins_edits_model_to_1k_sku(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="gpt-image-2-count",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="gpt-image-2-count",
+            timeout_seconds=30,
+            quality="high",
+            adapter_config={"unit_price_1k": 1.62, "unit_price_2k": 2.67},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                profile.provider_name,
+                profile.model_name,
+                ["image.generate", "image.edit"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        sync_payload = {"data": [{"url": "https://cdn.example.test/count-ref-2k.png"}], "model": "gpt-image-2-count"}
+        ref_url = "https://cityusbdisk.cn/media/refs/gothic.png"
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[
+                _FakeBinaryResponse(_minimal_png_header(48, 48)),
+                _FakeResponse(sync_payload),
+                _FakeBinaryResponse(b"png-ref"),
+            ],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.edit",
                         {
-                            "prompt": "edit",
-                            "aspect_ratio": "16:9",
-                            "resolution": "1k",
-                            "reference_images": [
-                                "/media/generated/gpt-image-2-count/清洗.png"
-                            ],
+                            "edit_prompt": "换成白色衣服",
+                            "aspect_ratio": "遵循原图",
+                            "resolution": "2k",
+                            "reference_images": [ref_url],
                         },
                     )
 
-        submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
-        image_url = submit_body["images"][0]["image_url"]
-        self.assertTrue(str(image_url).startswith("data:image/"))
-        self.assertNotIn("image_urls", submit_body)
+        submit_request = mocked_urlopen.call_args_list[1].args[0]
+        _assert_count_multipart_edits_request(submit_request, model="gpt-image-2-count")
+        self.assertEqual(outcome.result.get("reference_image_mode"), "haodeya_sync_image_edits")
+        self.assertEqual(outcome.result.get("haodeya_count_edits_model"), "gpt-image-2-count")
 
     def test_count_2k_uses_tiered_model_name(self) -> None:
         profile = ImageProviderProfile(

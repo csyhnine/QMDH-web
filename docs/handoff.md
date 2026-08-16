@@ -11,6 +11,13 @@
 
 ## Latest Handoffs
 
+### [2026-08-16] prod-002 生产环境变量模板补全 + count i2i push
+
+- **Git：** `f7ddeb3` count multipart 已 push `origin/main`；`.env.production.example` 补全 `PUBLIC_MEDIA_BASE_URL`、OSS、Meili、Agent 等
+- **prod-004：** `/health` DB/Redis 检查已实现（无需新开发）
+- **暂停：** 文生图/图生图（count + wan）— 见 `handoff-2026-08-16-count-i2i-multipart.md`
+- Safe to hand off: **Yes**
+
 ### [2026-08-16] count 图生图（gpt-image-2-count i2i）— **已验收**
 
 - **问题链：** `image_urls` 无效 → URL/`.bin` 修复 → `/images/edits` JSON → `-2k` 无渠道 → multipart 500 → **multipart + 1K SKU 成功**
@@ -27,10 +34,4 @@
 - **容器验收：** `wan_16_9_1k=1024x576`；bundle 含「匹配比例」
 - **详档：** `docs/archive/handoff-2026-08-15-wan-t2i-size-wip.md`
 - **待人工验收：** 文生图 + wan2.7 + 16:9/1K → result 非 1024×1024（低优先级，用户已暂停图链路）
-- Safe to hand off: **Yes**
-
-### [2026-08-14] Haodeya 图生图 size 推断 + 遵循原图/智能区分 — **已上生产**
-
-- Git tip / 生产：**`dd84fe4`**（后端热补）；frontend hint **`f98fae1`**
-- count 图生图「遵循原图」推断像素；Gemini/VIP 原生 omit；「智能/匹配比例」不锁参考图
 - Safe to hand off: **Yes**

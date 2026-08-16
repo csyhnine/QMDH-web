@@ -594,7 +594,7 @@
 ## Previous Suggested Step
 
 1. ~~优先处理 count 图生图 multipart edits~~（**DONE 2026-08-16**，已 commit）
-2. 继续 Production Readiness backlog（`prod-002`、`prod-004` 等）
+2. 继续 Production Readiness backlog（`prod-003` 结构化日志、`prod-008` OSS 等）
 3. 如果当前目标是稳定服务器灵感库，优先上传并导入本地 `tmp/seed-inspiration-bundle.zip`，不要继续依赖服务器直接重抓 ArchDaily
 4. 若导入后仍要求“标题与封面严格一一对应”，为默认 seed 图补一版人工钉死映射，再重新构建并导入 bundle
 5. 回到 `prod-001`：继续拆分 `frontend/src/features/studio/GenerateStudioShell.tsx`，降低当前前端最大热点文件的维护风险
@@ -611,9 +611,9 @@
 | ID | 任务 | 说明 | 优先级 |
 |----|------|------|--------|
 | prod-001 | GenerateStudioShell 拆分 | 将 `frontend/src/features/studio/GenerateStudioShell.tsx` 继续拆为更小的 hooks / panels，降低 4000+ 行热点维护成本 | P1 |
-| prod-002 | 环境变量规范化 | 新增 `.env.production.example`，标注必填/可选/默认值 | P1 |
+| prod-002 | 环境变量规范化 | 新增 `.env.production.example`，标注必填/可选/默认值 | **DONE**（2026-08-16 补全 PUBLIC_MEDIA / OSS / Meili / Agent） |
 | prod-003 | 后端日志结构化 | 统一 JSON 格式日志输出，方便 ELK/Loki 采集 | P2 |
-| prod-004 | 健康检查增强 | `/health` 检查 DB 连接、Redis 连接，支持 k8s 存活探针 | P2 |
+| prod-004 | 健康检查增强 | `/health` 检查 DB 连接、Redis 连接，支持 k8s 存活探针 | **DONE**（`/health/live` + DB/Redis + 503 degraded） |
 
 Current `prod-001` WIP:
 - Status: IN_PROGRESS

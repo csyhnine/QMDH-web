@@ -17,8 +17,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`d8d5102`**（与 `origin/main` 对齐）
-- Production: **`https://cityusbdisk.cn`** — 代码 **`fc75825`**（2026-08-14 热补 task_executor/dashboard 等；frontend 仍 `e005414` 镜像层）
+- Current branch: **`main`** @ **`f7ddeb3`**（与 `origin/main` 对齐，2026-08-16）
+- Production: **`https://cityusbdisk.cn`** — count i2i multipart 热补已落；Git **`f7ddeb3`**
 - Alembic head：**`r9s0t1u2v3w4`**（`ai_tools`；前序 `q8r9s0t1u2v3`=`site_announcements`；更早删对话 FK=`p7q8r9s0t1u2`）
 - 最新交接：`docs/handoff.md` → `[2026-08-14] 运营看板视频/Chat 统计 + harness Slice B`
 - **2026-08-14 本地待部署（摘要）**：
@@ -309,5 +309,5 @@ This file is the fast handoff baseline for the next agent. Read these first:
 3. **设计助手 harness 厚度**：审计见 `docs/archive/audit-2026-08-agent-harness-thickness.md`；切片 A 本地未提交。**max_tokens 热修 `2e82e55` + Chat 用量补记 `b61c229` 已热补丁上生产**（设计助手回合 + 普通 Chat 上下文压缩侧调用入账）。
 4. Optional：画布模板草稿/发布门槛；导航工具换正式 logo；root SSH 改密钥并轮换密码。
 5. Optional follow-up：`project_code` 挂钩、LLM 提炼长期记忆。
-6. Continue Production Readiness backlog (`prod-002`, `prod-004`, etc.) per `docs/tasks.md`。
+6. Continue Production Readiness backlog (`prod-003`, `prod-008`, etc.) per `docs/tasks.md`。
 7. 安全：若曾在控制台重置并泄露 root 密码，建议改回密钥登录并轮换密码。

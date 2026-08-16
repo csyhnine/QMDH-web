@@ -11,6 +11,13 @@
 
 ## Latest Handoffs
 
+### [2026-08-16] 生产全量 rebuild — **deploy-ready**
+
+- **目标：** `be-image-rebuild-001` — `./scripts/deploy-production-rebuild.sh` 固化 count multipart 等热补
+- **Git：** 期望 HEAD **`1979343`**；详档 `docs/archive/deploy-ready-2026-08-16-production-rebuild.md`
+- **阻塞：** 本工作站无 SSH；**需在服务器 / 宝塔终端执行**
+- Safe to hand off: **Yes**（待服务器跑完验收）
+
 ### [2026-08-16] 灵感库迭代搁置
 
 - **用户确认：** 灵感库不再继续开发（内容 / seed bundle / 分享收口）

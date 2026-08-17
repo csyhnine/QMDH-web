@@ -304,10 +304,10 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Near-Term Suggested Next Steps
 
-1. Cold-start: 读最新 `docs/handoff.md`（2026-07-30）与 `docs/archive/handoff-2026-07-30-compare-canvas-upstream.md`。
+1. Cold-start: 读最新 `docs/handoff.md`（**2026-08-17** follow-source）与详档 `docs/archive/handoff-2026-08-17-i2i-follow-source-size.md`。
 2. **不要**继续算力/对外简历运营数据专项（已取消）。
 3. **设计助手 harness 厚度**：审计见 `docs/archive/audit-2026-08-agent-harness-thickness.md`；切片 A 本地未提交。**max_tokens 热修 `2e82e55` + Chat 用量补记 `b61c229` 已热补丁上生产**（设计助手回合 + 普通 Chat 上下文压缩侧调用入账）。
 4. Optional：画布模板草稿/发布门槛；导航工具换正式 logo；root SSH 改密钥并轮换密码。
 5. Optional follow-up：`project_code` 挂钩、LLM 提炼长期记忆。
-6. 生产择机：`deploy-production-rebuild.sh` 或 OSS 切换（需用户批准）。**灵感库已搁置**（2026-08-16）。
+6. 下一对话：`docs/tasks.md` Production Readiness backlog 或 OSS 切换（需用户批准）；**图链路 / 灵感库已搁置**；follow-source bugfix 已验收（生产 **`b55e280`**）。
 7. 安全：若曾在控制台重置并泄露 root 密码，建议改回密钥登录并轮换密码。

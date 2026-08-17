@@ -7,6 +7,7 @@ from app.services.image_aspect_ratio import (
     GPT_IMAGE_ASPECT_RATIOS,
     nearest_aspect_ratio,
     openai_pixel_size_for_aspect_ratio,
+    pixel_size_from_reference_images,
     resolve_image_aspect_ratio,
     resolve_size_aspect_for_reference,
 )
@@ -126,3 +127,13 @@ class ImageAspectRatioTests(unittest.TestCase):
     def test_openai_pixel_size_maps_landscape_ratio(self) -> None:
         self.assertEqual(openai_pixel_size_for_aspect_ratio("16:9"), "1536x1024")
         self.assertEqual(openai_pixel_size_for_aspect_ratio("unknown"), "1024x1024")
+
+    def test_pixel_size_from_reference_images_returns_exact_dimensions(self) -> None:
+        with patch(
+            "app.services.image_aspect_ratio.dimensions_from_reference_images",
+            return_value=(1024, 768),
+        ):
+            self.assertEqual(
+                pixel_size_from_reference_images(["/media/references/facade.png"]),
+                "1024x768",
+            )

@@ -272,7 +272,35 @@ class HaodeyaSyncImageTests(unittest.TestCase):
                             )
 
         submit_request = mocked_urlopen.call_args_list[0].args[0]
-        _assert_count_multipart_edits_request(submit_request, model="gpt-image-2-count", size="1536x1024")
+        _assert_count_multipart_edits_request(submit_request, model="gpt-image-2-count", size="1920x1080")
+
+    def test_count_follow_source_uses_exact_reference_pixels(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="gpt-image-2-count",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="gpt-image-2-count",
+            timeout_seconds=30,
+            quality="high",
+            adapter_config={"unit_price_1k": 1.62, "unit_price_2k": 2.67},
+        )
+        ref_file = self.tempdir / "references" / "facade.png"
+        ref_file.parent.mkdir(parents=True, exist_ok=True)
+        ref_file.write_bytes(_minimal_png_header(1024, 768))
+        with patch("app.services.task_executor.settings.media_root", self.tempdir):
+            plan = _build_haodeya_count_image_edits_plan(
+                profile=profile,
+                requested_capability="image.edit",
+                effective_capability="image.edit",
+                payload={
+                    "edit_prompt": "refresh facade",
+                    "aspect_ratio": "遵循原图",
+                    "resolution": "1k",
+                    "reference_image": "/media/references/facade.png",
+                },
+                prompt="refresh facade",
+            )
+        self.assertEqual(plan.body["size"], "1024x768")
 
     def test_count_edits_plan_uses_multipart_attachment(self) -> None:
         profile = ImageProviderProfile(

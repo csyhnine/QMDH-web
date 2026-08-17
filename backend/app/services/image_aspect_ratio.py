@@ -91,6 +91,17 @@ def openai_pixel_size_for_aspect_ratio(aspect_ratio: str) -> str:
     return _OPENAI_PIXEL_SIZE_BY_RATIO.get(aspect_ratio, "1024x1024")
 
 
+def pixel_size_from_reference_images(reference_images: list[str]) -> str | None:
+    """Exact reference WxH for count /images/edits follow-source size."""
+    dimensions = dimensions_from_reference_images(reference_images)
+    if dimensions is None:
+        return None
+    width, height = dimensions
+    if width <= 0 or height <= 0:
+        return None
+    return f"{width}x{height}"
+
+
 def _png_dimensions(data: bytes) -> tuple[int, int] | None:
     if not data.startswith(b"\x89PNG\r\n\x1a\n") or len(data) < 24:
         return None

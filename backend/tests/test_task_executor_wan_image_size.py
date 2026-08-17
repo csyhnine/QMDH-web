@@ -1,5 +1,6 @@
 import os
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("QMDH_OPENAI_IMAGE_API_KEY", "test-key")
 
@@ -46,19 +47,40 @@ class WanImageRoutingTests(unittest.TestCase):
             "2048x1152",
         )
 
+    def test_follow_source_infers_pixel_size_from_reference(self) -> None:
+        with patch(
+            "app.services.image_aspect_ratio.dimensions_from_reference_images",
+            return_value=(1024, 768),
+        ):
+            self.assertEqual(
+                _wan_image_size(
+                    self.profile,
+                    {
+                        "aspect_ratio": "遵循原图",
+                        "resolution": "1k",
+                        "reference_image": "/media/ref.png",
+                    },
+                ),
+                "1024x768",
+            )
+
     def test_follow_source_and_match_ratio_use_literal_tier(self) -> None:
         self.assertEqual(_wan_image_size(self.profile, {"resolution": "4k"}), "4K")
-        self.assertEqual(
-            _wan_image_size(
-                self.profile,
-                {
-                    "aspect_ratio": "遵循原图",
-                    "resolution": "4k",
-                    "reference_image": "data:image/png;base64,xx",
-                },
-            ),
-            "2K",
-        )
+        with patch(
+            "app.services.image_aspect_ratio.dimensions_from_reference_images",
+            return_value=(1920, 1080),
+        ):
+            self.assertEqual(
+                _wan_image_size(
+                    self.profile,
+                    {
+                        "aspect_ratio": "遵循原图",
+                        "resolution": "4k",
+                        "reference_image": "/media/ref.png",
+                    },
+                ),
+                "2048x1152",
+            )
         self.assertEqual(
             _wan_image_size(self.profile, {"aspect_ratio": "匹配比例", "resolution": "1k"}),
             "1K",
@@ -106,7 +128,7 @@ class WanImageRoutingTests(unittest.TestCase):
         )
         self.assertEqual(plan.endpoint_path, "/images/edits")
         self.assertEqual(plan.body["model"], "wan2.7-image-pro")
-        self.assertEqual(plan.body["size"], "2K")
+        self.assertEqual(plan.body["size"], "2048x2048")
         self.assertEqual(plan.body["prompt"], "change background")
         self.assertEqual(len(plan.multipart_files), 1)
         self.assertEqual(plan.multipart_files[0][0], "image")

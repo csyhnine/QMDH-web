@@ -1166,6 +1166,90 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         self.assertEqual(generation_body["model"], "gemini-3.1-flash-image-2k")
         self.assertEqual(generation_body["image_config"]["image_size"], "2K")
 
+    def test_haodeya_gpt_image_2_follow_source_infers_aspect_ratio(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="haodeya_gpt_image",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="gpt-image-2",
+            timeout_seconds=1,
+            strategies={
+                "image.generate": "chat_modalities_image",
+                "image.edit": "chat_modalities_image_edit",
+            },
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                "haodeya_gpt_image",
+                "gpt-image-2",
+                ["image.generate", "image.edit"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        generation_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": "https://cdn.example.test/generated-gpt-i2i.png"}}
+                        ]
+                    }
+                }
+            ]
+        }
+        reference_image = "data:image/png;base64,cmVmZXJlbmNlLWltYWdl"
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"gpt-i2i")],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    with patch(
+                        "app.services.image_aspect_ratio.dimensions_from_reference_images",
+                        return_value=(1024, 768),
+                    ):
+                        outcome = adapter.execute(
+                            "image.edit",
+                            {
+                                "edit_prompt": "refresh facade",
+                                "aspect_ratio": "遵循原图",
+                                "resolution": "1k",
+                                "source_image": reference_image,
+                            },
+                        )
+
+        generation_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        self.assertEqual(generation_body["image_config"]["aspect_ratio"], "4:3")
+        self.assertEqual(outcome.result.get("aspect_ratio"), "4:3")
+
+    def test_openai_native_edits_follow_source_uses_reference_pixels(self) -> None:
+        from app.services.task_executor import _openai_image_request_body
+
+        profile = ImageProviderProfile(
+            provider_name="openai_image",
+            api_key="test-key",
+            base_url="https://api.openai.com/v1",
+            model_name="gpt-image-1",
+            timeout_seconds=1,
+            quality="high",
+            output_format="png",
+        )
+        with patch(
+            "app.services.image_aspect_ratio.dimensions_from_reference_images",
+            return_value=(1024, 768),
+        ):
+            body = _openai_image_request_body(
+                profile=profile,
+                payload={
+                    "aspect_ratio": "遵循原图",
+                    "reference_image": "/media/ref.png",
+                },
+                prompt="refresh facade",
+            )
+        self.assertEqual(body["size"], "1024x768")
+
 
 if __name__ == "__main__":
     unittest.main()

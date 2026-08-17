@@ -26,6 +26,7 @@ from app.services.image_aspect_ratio import (
     SMART_RATIO_LABELS,
     SOURCE_ASPECT_RATIO_LABELS,
     openai_pixel_size_for_aspect_ratio,
+    pixel_size_from_reference_images,
     read_image_dimensions,
     resolve_image_aspect_ratio,
     resolve_size_aspect_for_reference,
@@ -587,9 +588,45 @@ def _should_follow_source_for_size(payload: dict) -> bool:
     return raw in SOURCE_ASPECT_RATIO_LABELS
 
 
+def _aspect_for_image_size(profile: ImageProviderProfile, payload: dict) -> str:
+    """Resolve aspect for size mapping; follow-source reads reference dimensions when possible."""
+    reference_images = _extract_reference_images(payload)
+    if _should_follow_source_for_size(payload) and reference_images:
+        return resolve_size_aspect_for_reference(
+            str(payload.get("aspect_ratio") or "").strip(),
+            provider_name=profile.provider_name,
+            model_name=profile.model_name,
+            base_url=profile.base_url,
+            reference_images=reference_images,
+            follow_source=True,
+        )
+    return _resolved_image_aspect_ratio(profile, payload).strip() or "1:1"
+
+
+def _openai_follow_source_pixel_size(profile: ImageProviderProfile, payload: dict) -> str | None:
+    reference_images = _extract_reference_images(payload)
+    if not _should_follow_source_for_size(payload) or not reference_images:
+        return None
+    return pixel_size_from_reference_images(reference_images)
+
+
 def _aspect_ratio_result_fields(profile: ImageProviderProfile, payload: dict) -> dict[str, str]:
     requested = str(payload.get("aspect_ratio") or "").strip()
     if _should_omit_upstream_aspect_ratio(payload):
+        if _uses_haodeya_gpt_chat_image(profile) and _extract_reference_images(payload):
+            resolved = resolve_size_aspect_for_reference(
+                requested,
+                provider_name=profile.provider_name,
+                model_name=profile.model_name,
+                base_url=profile.base_url,
+                reference_images=_extract_reference_images(payload),
+                follow_source=True,
+            )
+            return {
+                "aspect_ratio_requested": requested,
+                "aspect_ratio_resolved": resolved,
+                "aspect_ratio": resolved,
+            }
         return {
             "aspect_ratio_requested": requested,
             "aspect_ratio_resolved": "",
@@ -743,6 +780,11 @@ def _wan_image_size(profile: ImageProviderProfile, payload: dict) -> str:
         resolution = "2k"
 
     if _should_omit_upstream_aspect_ratio(payload):
+        if _should_follow_source_for_size(payload) and has_refs:
+            resolved = _aspect_for_image_size(profile, payload)
+            pixel = _wan_pixel_size_for_aspect(resolved, resolution)
+            if pixel:
+                return pixel
         return {"1k": "1K", "2k": "2K", "4k": "4K"}.get(resolution, "1K")
 
     requested = str(payload.get("aspect_ratio") or "").strip()
@@ -762,7 +804,7 @@ def _seedream_image_size(profile: ImageProviderProfile, payload: dict) -> str:
     """
     _ = profile
     resolution = _normalize_image_resolution(payload)
-    aspect = _resolved_image_aspect_ratio(profile, payload).strip() or "1:1"
+    aspect = _aspect_for_image_size(profile, payload)
 
     if resolution == "4k":
         mapping_4k = {
@@ -820,6 +862,21 @@ def _uses_haodeya_sync_image_gateway(profile: ImageProviderProfile) -> bool:
 
 def _uses_haodeya_short_images_sku(profile: ImageProviderProfile) -> bool:
     return _uses_haodeya_async_image_gateway(profile) or _uses_haodeya_sync_image_gateway(profile)
+
+
+def _uses_haodeya_gpt_chat_image(profile: ImageProviderProfile) -> bool:
+    """Haodeya plain gpt-image-2 uses chat modalities; omitting aspect defaults to 1:1."""
+    if not _uses_haodeya_gateway(profile):
+        return False
+    if (
+        _uses_haodeya_async_image_gateway(profile)
+        or _uses_haodeya_sync_image_gateway(profile)
+        or _uses_haodeya_wan_image(profile)
+        or _uses_haodeya_seedream_image(profile)
+    ):
+        return False
+    normalized = _normalize_haodeya_base_model(profile.model_name).lower()
+    return normalized in HAODEYA_GPT_BASE_MODELS
 
 
 def _uses_toapis_gateway(profile: ImageProviderProfile) -> bool:
@@ -1000,15 +1057,19 @@ def _haodeya_short_images_body(
     elif poll:
         body["size"] = _resolved_image_aspect_ratio(profile, payload)
     elif follow_source and reference_images:
-        aspect_ratio = resolve_size_aspect_for_reference(
-            str(payload.get("aspect_ratio") or "").strip(),
-            provider_name=profile.provider_name,
-            model_name=profile.model_name,
-            base_url=profile.base_url,
-            reference_images=reference_images,
-            follow_source=True,
-        )
-        body["size"] = openai_pixel_size_for_aspect_ratio(aspect_ratio)
+        pixel_size = pixel_size_from_reference_images(reference_images)
+        if pixel_size:
+            body["size"] = pixel_size
+        else:
+            aspect_ratio = resolve_size_aspect_for_reference(
+                str(payload.get("aspect_ratio") or "").strip(),
+                provider_name=profile.provider_name,
+                model_name=profile.model_name,
+                base_url=profile.base_url,
+                reference_images=reference_images,
+                follow_source=True,
+            )
+            body["size"] = openai_pixel_size_for_aspect_ratio(aspect_ratio)
     else:
         body["size"] = openai_pixel_size_for_aspect_ratio(_resolved_image_aspect_ratio(profile, payload))
     return body
@@ -1281,6 +1342,17 @@ def _build_upstream_image_config(profile: ImageProviderProfile, payload: dict) -
     config: dict[str, str] = {}
     if not omit_aspect_ratio:
         config["aspect_ratio"] = _resolved_image_aspect_ratio(profile, payload)
+    elif _uses_haodeya_gpt_chat_image(profile):
+        reference_images = _extract_reference_images(payload)
+        if reference_images:
+            config["aspect_ratio"] = resolve_size_aspect_for_reference(
+                str(payload.get("aspect_ratio") or "").strip(),
+                provider_name=profile.provider_name,
+                model_name=profile.model_name,
+                base_url=profile.base_url,
+                reference_images=reference_images,
+                follow_source=True,
+            )
     if resolution == "2k":
         config["image_size"] = "2K"
     return config
@@ -1337,10 +1409,19 @@ def _openai_image_request_body(
             body["prompt"] = f"{prompt}\n\nAdditional guidance: {detail}"
         return body
 
+    reference_images = _extract_reference_images(payload)
+    if _should_follow_source_for_size(payload) and reference_images:
+        size = (
+            _openai_follow_source_pixel_size(profile, payload)
+            or _openai_size_for_aspect_ratio(_aspect_for_image_size(profile, payload))
+        )
+    else:
+        size = _openai_size_for_aspect_ratio(_resolved_image_aspect_ratio(profile, payload))
+
     body = {
         "model": profile.model_name,
         "prompt": prompt,
-        "size": _openai_size_for_aspect_ratio(_resolved_image_aspect_ratio(profile, payload)),
+        "size": size,
         "quality": profile.quality,
         "output_format": profile.output_format,
     }

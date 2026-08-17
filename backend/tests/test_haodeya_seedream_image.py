@@ -53,6 +53,26 @@ class HaodeyaSeedreamImageTests(unittest.TestCase):
             "3840x2160",
         )
 
+    def test_seedream_follow_source_infers_aspect_from_reference(self) -> None:
+        from unittest.mock import patch
+
+        profile = self._profile()
+        with patch(
+            "app.services.image_aspect_ratio.dimensions_from_reference_images",
+            return_value=(1024, 768),
+        ):
+            self.assertEqual(
+                _seedream_image_size(
+                    profile,
+                    {
+                        "resolution": "2k",
+                        "aspect_ratio": "遵循原图",
+                        "reference_image": "/media/ref.png",
+                    },
+                ),
+                "2304x1728",
+            )
+
     def test_request_body_uses_literal_tier_size(self) -> None:
         profile = self._profile()
         definition = ProviderDefinition(

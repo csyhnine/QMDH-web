@@ -17,8 +17,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`f7ddeb3`**（与 `origin/main` 对齐，2026-08-16）
-- Production: **`https://cityusbdisk.cn`** — Git **`59440b5`** 全量 rebuild（2026-08-16）
+- Current branch: **`main`** @ **`b55e280`**（与 `origin/main` 对齐，2026-08-17）
+- Production: **`https://cityusbdisk.cn`** — Git **`b55e280`** 全量 rebuild（2026-08-17；含 follow-source 尺寸修复）
 - Alembic head：**`r9s0t1u2v3w4`**（`ai_tools`；前序 `q8r9s0t1u2v3`=`site_announcements`；更早删对话 FK=`p7q8r9s0t1u2`）
 - 最新交接：`docs/handoff.md` → `[2026-08-14] 运营看板视频/Chat 统计 + harness Slice B`
 - **2026-08-14 本地待部署（摘要）**：

@@ -14,8 +14,8 @@
 ### [2026-08-18] Studio 创作区 UX + 历史复制 — **DONE**
 
 - **功能：** 历史卡片「复制到创作区」（参考图 + 提示词，不自动提交）；文生图/图生图命名与提交按钮分化；参考图区布局修复
-- **Git：** **`fcc7a0b`**
-- **部署：** 仅 frontend rebuild（无后端 / migration 变更）
+- **Git：** **`fcc7a0b`**（功能）+ **`f10188e`**（handoff）
+- **生产：** HEAD **`f10188e`**；frontend rebuild 2026-08-18；health **healthy**；`/studio/generate` **200**
 - Safe to hand off: **Yes**
 
 ### [2026-08-17] 图生图「遵循原图」尺寸 — **DONE**

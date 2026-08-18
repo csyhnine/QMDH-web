@@ -24,7 +24,7 @@ export type StudioHistoryFeedProps = {
   onShareAsset: (task: Task, asset: Asset) => void;
   onDeleteTask: (task: Task) => void;
   onPreviewAsset: (task: Task, asset: Asset) => void;
-  onApplyTaskToComposer: (task: Task, asset?: Asset) => void;
+  onCopyTaskToComposer: (task: Task, asset?: Asset) => void;
 };
 
 export type StudioHistoryFeedItemProps = Omit<StudioHistoryFeedProps, "tasks"> & {

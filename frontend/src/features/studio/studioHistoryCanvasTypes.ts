@@ -27,7 +27,7 @@ export type StudioHistoryCanvasProps = {
   upscaleEnabled: boolean;
   upscalingAssetKey: string | null;
   workspaceName: string;
-  onApplyTaskToComposer: (task: Task, asset?: Asset) => void;
+  onCopyTaskToComposer: (task: Task, asset?: Asset) => void;
   onUseAssetAsReference: (task: Task, asset: Asset) => void;
   onBookmarkAsset: (taskId: number, assetId: number) => void;
   onChangeFilters: (next: FeedFilterState) => void;

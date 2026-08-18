@@ -21,7 +21,7 @@ export default function StudioHistoryFeed({
   onShareAsset,
   onDeleteTask,
   onPreviewAsset,
-  onApplyTaskToComposer,
+  onCopyTaskToComposer,
 }: StudioHistoryFeedProps) {
   return (
     <>
@@ -47,7 +47,7 @@ export default function StudioHistoryFeed({
           onShareAsset={onShareAsset}
           onDeleteTask={onDeleteTask}
           onPreviewAsset={onPreviewAsset}
-          onApplyTaskToComposer={onApplyTaskToComposer}
+          onCopyTaskToComposer={onCopyTaskToComposer}
         />
       ))}
     </>

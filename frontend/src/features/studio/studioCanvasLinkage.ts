@@ -59,7 +59,7 @@ const LINKS: Record<CanvasSurfaceKind, StudioCanvasLink> = {
   img2img: {
     nodeKind: "img2img",
     creationMode: "edit",
-    studioLabel: "图像编辑",
+    studioLabel: "图生图",
     canvasLabel: "图生图",
     workflowKey: IMAGE_EDIT_WORKFLOW_KEY,
     aspectRatioOptions: imageEditAspectRatioOptions,

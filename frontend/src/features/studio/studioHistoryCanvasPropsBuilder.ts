@@ -51,7 +51,7 @@ export function buildStudioHistoryCanvasProps({
     upscaleEnabled: Boolean(findUpscaleProvider(state.providers)),
     upscalingAssetKey: taskActions.upscalingAssetKey,
     workspaceName,
-    onApplyTaskToComposer: taskActions.applyTaskToComposer,
+    onCopyTaskToComposer: taskActions.copyTaskToComposer,
     onUseAssetAsReference: taskActions.applyResultAsReference,
     onBookmarkAsset: (taskId, assetId) => void galleryActions.bookmarkAsset(taskId, assetId),
     onChangeFilters: setFilters,

@@ -47,6 +47,7 @@ export function buildStudioFeedCardLayoutProps(
       reuseDisabled: props.reuseDisabled,
       task: props.task,
       onBookmark: props.onBookmark,
+      onCopyToComposer: props.onCopyToComposer,
       onDelete: props.onDelete,
       onReuse: props.onReuse,
       onShare: props.onShare,

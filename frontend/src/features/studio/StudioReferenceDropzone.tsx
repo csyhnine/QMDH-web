@@ -13,6 +13,7 @@ type RealVerifySession = {
 };
 
 export default function StudioReferenceDropzone({
+  creationMode,
   referenceUploads,
   maxReferenceCount = DEFAULT_MAX_REFERENCE_COUNT,
   enableSeedanceAvatar = false,
@@ -34,16 +35,28 @@ export default function StudioReferenceDropzone({
   const cappedMax = Math.max(1, Math.min(4, maxReferenceCount));
   const canAddMore = referenceUploads.length < cappedMax;
 
+  const isEditMode = creationMode === "edit";
+  const needsReference = isEditMode && referenceUploads.length === 0;
+
   if (referenceUploads.length === 0) {
     return (
       <button
         type="button"
-        className="reference-dropzone"
+        className={[
+          "reference-dropzone",
+          needsReference ? "is-required" : "",
+          isEditMode ? "is-edit-mode" : "is-generate-mode",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         onClick={onOpenReferencePicker}
         onDrop={onReferenceDrop}
         onDragOver={(event) => event.preventDefault()}
       >
         <span className="reference-dropzone-plus">+</span>
+        <span className="reference-dropzone-empty-copy">
+          {isEditMode ? "上传要编辑的参考图" : "添加可选参考图"}
+        </span>
       </button>
     );
   }

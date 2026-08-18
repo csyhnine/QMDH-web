@@ -11,6 +11,7 @@ export type StudioFeedCardProps = {
   galleryAssets: Asset[];
   showDebugDetails?: boolean;
   onReuse: () => void;
+  onCopyToComposer: () => void;
   reuseDisabled?: boolean;
   onBookmark: () => void;
   onShare: () => void;
@@ -52,6 +53,7 @@ export type StudioFeedCardFooterProps = Pick<
   | "pendingAction"
   | "reuseDisabled"
   | "onBookmark"
+  | "onCopyToComposer"
   | "onDelete"
   | "onReuse"
   | "onShare"
@@ -91,6 +93,7 @@ export type StudioFeedCardActionsProps = Pick<
   | "pendingAction"
   | "reuseDisabled"
   | "onBookmark"
+  | "onCopyToComposer"
   | "onDelete"
   | "onReuse"
   | "onShare"

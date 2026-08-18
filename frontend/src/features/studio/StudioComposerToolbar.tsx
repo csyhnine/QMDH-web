@@ -7,6 +7,7 @@ export default function StudioComposerToolbar(props: StudioComposerToolbarProps)
     availableProviderCount,
     composerToolbarRef,
     hasActiveProject,
+    referenceUploads,
     submitting,
     submissionProgress,
     uploadingReference,
@@ -27,6 +28,7 @@ export default function StudioComposerToolbar(props: StudioComposerToolbarProps)
         availableProviderCount={availableProviderCount}
         creationMode={props.studioForm.creationMode}
         hasActiveProject={hasActiveProject}
+        referenceUploadCount={referenceUploads.length}
         submitting={submitting}
         submissionProgress={submissionProgress}
         uploadingReference={uploadingReference}

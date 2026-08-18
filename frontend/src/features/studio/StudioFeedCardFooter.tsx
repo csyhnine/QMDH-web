@@ -17,6 +17,7 @@ export default function StudioFeedCardFooter({
   reuseDisabled,
   task,
   onBookmark,
+  onCopyToComposer,
   onDelete,
   onReuse,
   onShare,
@@ -33,6 +34,7 @@ export default function StudioFeedCardFooter({
           pendingAction={pendingAction}
           reuseDisabled={reuseDisabled}
           onBookmark={onBookmark}
+          onCopyToComposer={onCopyToComposer}
           onDelete={onDelete}
           onReuse={onReuse}
           onShare={onShare}

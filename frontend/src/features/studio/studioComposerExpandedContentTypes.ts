@@ -58,6 +58,7 @@ export type StudioComposerModeSwitchProps = {
 };
 
 export type StudioReferenceDropzoneProps = {
+  creationMode: StudioFormState["creationMode"];
   referenceUploads: ReferenceUploadItem[];
   maxReferenceCount?: number;
   enableSeedanceAvatar?: boolean;

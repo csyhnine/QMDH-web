@@ -10,7 +10,12 @@ export function isComposerBlurWithinForm(event: React.FocusEvent<HTMLFormElement
 
 export function composerModeLabel(mode: StudioFormState["creationMode"]): string {
   if (mode === "video") return "视频生成";
-  return mode === "edit" ? "图像编辑" : "文生图";
+  return mode === "edit" ? "图生图" : "文生图";
+}
+
+export function composerReferenceZoneLabel(mode: StudioFormState["creationMode"]): string {
+  if (mode === "video") return "参考图（可选）";
+  return mode === "edit" ? "参考图（必传 1–4 张）" : "参考图（可选）";
 }
 
 export function composerPromptPreview(prompt: string): string {
@@ -55,9 +60,11 @@ export function composerReferenceHint(
       : "视频生成可选上传参考图；仅文本也可提交。";
   }
   if (mode === "edit") {
-    return `图像编辑要求 1-4 张参考图，当前已上传 ${referenceUploadCount} 张。`;
+    return referenceUploadCount > 0
+      ? `图生图已上传 ${referenceUploadCount} 张参考图，将按提示词编辑。`
+      : "图生图需至少 1 张参考图；上传后再描述修改方式。";
   }
-  return "文生图模式不会强制发送参考图；切换到图像编辑后会使用已上传的参考图。";
+  return "文生图可不传参考图；若已上传，部分模型会一并参考。";
 }
 
 export function composerPromptPlaceholder(mode: StudioFormState["creationMode"]): string {
@@ -65,12 +72,20 @@ export function composerPromptPlaceholder(mode: StudioFormState["creationMode"])
     return "描述镜头运动、场景氛围与主体动作，例如：缓慢推进穿过中庭，清晨侧光。";
   }
   if (mode === "edit") {
-    return "描述希望如何修改已上传的参考图。";
+    return "描述要如何改参考图，例如：换墙面颜色、保留构图与人物。";
   }
-  return "请输入要生成或编辑的画面描述。";
+  return "描述你想生成的画面，例如：清晨街景、侧光、写实风格。";
 }
 
-export function composerSubmitLabel(mode: StudioFormState["creationMode"], submitting: boolean): string {
+export function composerSubmitLabel(
+  mode: StudioFormState["creationMode"],
+  submitting: boolean,
+  referenceUploadCount = 0
+): string {
   if (submitting) return "正在创建...";
-  return mode === "video" ? "开始生成视频" : "开始生成";
+  if (mode === "video") return "开始生成视频";
+  if (mode === "edit") {
+    return referenceUploadCount > 0 ? "开始编辑" : "请先上传参考图";
+  }
+  return "开始生成";
 }

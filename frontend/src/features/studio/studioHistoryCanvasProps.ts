@@ -30,7 +30,7 @@ export function getStudioHistoryCanvasProps({
   upscaleEnabled,
   upscalingAssetKey,
   workspaceName,
-  onApplyTaskToComposer,
+  onCopyTaskToComposer,
   onUseAssetAsReference,
   onBookmarkAsset,
   onChangeFilters,
@@ -75,7 +75,7 @@ export function getStudioHistoryCanvasProps({
       onShareAsset,
       onDeleteTask,
       onPreviewAsset,
-      onApplyTaskToComposer,
+      onCopyTaskToComposer,
     },
   };
 }

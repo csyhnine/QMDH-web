@@ -1,3 +1,4 @@
+import { composerReferenceZoneLabel } from "./studioComposerDockUtils";
 import StudioComposerModeSwitch from "./StudioComposerModeSwitch";
 import StudioPromptTextarea from "./StudioPromptTextarea";
 import StudioReferenceDropzone from "./StudioReferenceDropzone";
@@ -25,8 +26,16 @@ export default function StudioComposerBody({
     <div className="composer-body">
       <div className="reference-column">
         <StudioComposerModeSwitch creationMode={studioForm.creationMode} onModeChange={onModeChange} />
-        <StudioReferenceDropzone
-          referenceUploads={referenceUploads}
+        <div
+          className={[
+            "reference-zone",
+            studioForm.creationMode === "edit" ? "is-edit-mode" : "is-generate-mode",
+          ].join(" ")}
+        >
+          <span className="reference-zone-label">{composerReferenceZoneLabel(studioForm.creationMode)}</span>
+          <StudioReferenceDropzone
+            creationMode={studioForm.creationMode}
+            referenceUploads={referenceUploads}
           maxReferenceCount={maxReferenceCount}
           enableSeedanceAvatar={enableSeedanceAvatar}
           onOpenReferencePicker={onOpenReferencePicker}
@@ -37,6 +46,7 @@ export default function StudioComposerBody({
           onStartSeedanceRealAvatar={onStartSeedanceRealAvatar}
           onCompleteSeedanceRealAvatar={onCompleteSeedanceRealAvatar}
         />
+        </div>
       </div>
 
       <StudioPromptTextarea

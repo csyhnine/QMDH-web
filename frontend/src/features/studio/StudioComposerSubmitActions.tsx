@@ -7,6 +7,7 @@ type StudioComposerSubmitActionsProps = {
   availableProviderCount: number;
   creationMode: StudioFormState["creationMode"];
   hasActiveProject: boolean;
+  referenceUploadCount: number;
   submitting: boolean;
   submissionProgress: SubmissionTracker | null;
   uploadingReference: boolean;
@@ -16,18 +17,20 @@ export default function StudioComposerSubmitActions({
   availableProviderCount,
   creationMode,
   hasActiveProject,
+  referenceUploadCount,
   submitting,
   submissionProgress,
   uploadingReference,
 }: StudioComposerSubmitActionsProps) {
   const { isGuest } = useAuth();
+  const editNeedsReference = creationMode === "edit" && referenceUploadCount === 0;
   const submitLabel = isGuest
     ? "登录后生成"
     : submitting
-    ? "正在创建..."
-    : !hasActiveProject
-      ? "请先新建项目"
-      : composerSubmitLabel(creationMode, submitting);
+      ? "正在创建..."
+      : !hasActiveProject
+        ? "请先新建项目"
+        : composerSubmitLabel(creationMode, submitting, referenceUploadCount);
   const showShortcut =
     !isGuest &&
     !submitting &&
@@ -51,7 +54,8 @@ export default function StudioComposerSubmitActions({
           submitting ||
           uploadingReference ||
           availableProviderCount === 0 ||
-          !hasActiveProject
+          !hasActiveProject ||
+          editNeedsReference
         }
         aria-label={showShortcut ? `${submitLabel}，快捷键 Ctrl 加 Enter` : submitLabel}
       >

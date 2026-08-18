@@ -9,6 +9,7 @@ const DELETE_LABEL = "\u5220\u9664";
 const DELETE_PENDING_LABEL = "\u5220\u9664\u4e2d...";
 const REUSE_LABEL = "\u518d\u6b21\u751f\u6210";
 const REUSE_PENDING_LABEL = "\u63d0\u4ea4\u4e2d...";
+const COPY_TO_COMPOSER_LABEL = "\u590d\u5236\u5230\u521b\u4f5c\u533a";
 const SHARE_PENDING_LABEL = "\u5206\u4eab\u4e2d...";
 
 export function feedActionClass(
@@ -60,11 +61,18 @@ export function buildStudioFeedActionItems({
   pendingAction,
   reuseDisabled,
   onBookmark,
+  onCopyToComposer,
   onDelete,
   onReuse,
   onShare,
 }: StudioFeedCardActionsProps): StudioFeedActionItem[] {
   return [
+    {
+      action: "copy_to_composer",
+      disabled: pendingAction !== null,
+      label: COPY_TO_COMPOSER_LABEL,
+      onClick: onCopyToComposer,
+    },
     {
       action: "reuse",
       disabled: Boolean(reuseDisabled) || pendingAction !== null,

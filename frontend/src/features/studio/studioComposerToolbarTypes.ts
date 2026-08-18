@@ -11,6 +11,7 @@ export type StudioComposerToolbarProps = Pick<
   | "editingTemplateId"
   | "hasActiveProject"
   | "providerGroups"
+  | "referenceUploads"
   | "resolutionOptions"
   | "selectedProvider"
   | "selectedGrokSkuLabel"

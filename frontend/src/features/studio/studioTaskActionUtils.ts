@@ -66,6 +66,13 @@ export function regenerateTaskFeedback(submitted: boolean): RegenerateTaskFeedba
   };
 }
 
+export function copyTaskToComposerFeedback(): RegenerateTaskFeedback {
+  return {
+    tone: "success",
+    message: "已复制参考图与提示词到创作区，可修改后提交。",
+  };
+}
+
 export function scrollComposerIntoView(
   composerToolbarRef: MutableRef<HTMLDivElement | null>,
   setComposerCollapsed: Dispatch<SetStateAction<boolean>>

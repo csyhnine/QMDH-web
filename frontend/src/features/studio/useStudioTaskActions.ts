@@ -6,6 +6,7 @@ import type { StudioFormState } from "./studioTypes";
 import {
   applyTaskToComposerState,
   buildStudioFormFromTask,
+  copyTaskToComposerFeedback,
   regenerateTaskFeedback,
   scrollComposerIntoView,
 } from "./studioTaskActionUtils";
@@ -69,6 +70,12 @@ export function useStudioTaskActions({
       studioForm,
       task,
     });
+  }
+
+  function copyTaskToComposer(task: Task, asset?: Asset) {
+    applyTaskToComposer(task, asset);
+    const feedback = copyTaskToComposerFeedback();
+    historyFeedback.pushFeedback(task.id, "copy_to_composer", feedback.tone, feedback.message);
   }
 
   async function regenerateTask(task: Task, asset?: Asset) {
@@ -181,6 +188,7 @@ export function useStudioTaskActions({
   return {
     applyResultAsReference,
     applyTaskToComposer,
+    copyTaskToComposer,
     handleSubmit,
     regeneratingTaskId,
     regenerateTask,

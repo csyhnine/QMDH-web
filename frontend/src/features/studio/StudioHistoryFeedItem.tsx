@@ -22,7 +22,7 @@ export default function StudioHistoryFeedItem({
   onShareAsset,
   onDeleteTask,
   onPreviewAsset,
-  onApplyTaskToComposer,
+  onCopyTaskToComposer,
 }: StudioHistoryFeedItemProps) {
   const galleryAssets = buildGalleryAssets(imageAssetsByTaskId.get(task.id) ?? []);
   const linkedAsset = galleryAssets[0];
@@ -39,6 +39,7 @@ export default function StudioHistoryFeedItem({
       galleryAssets={galleryAssets}
       showDebugDetails={showDebugDetails}
       onReuse={() => onRegenerateTask(task, linkedAsset ?? galleryAssets[0])}
+      onCopyToComposer={() => onCopyTaskToComposer(task, linkedAsset ?? galleryAssets[0])}
       reuseDisabled={submitting || regeneratingTaskId === task.id}
       upscaleEnabled={upscaleEnabled}
       upscaleDisabled={upscaleDisabled}
@@ -52,7 +53,7 @@ export default function StudioHistoryFeedItem({
         if (getRenderableUrl(asset)) {
           onPreviewAsset(task, asset);
         } else {
-          onApplyTaskToComposer(task, asset);
+          onCopyTaskToComposer(task, asset);
         }
       }}
       anchorRef={isLatestTask ? latestTaskRef : undefined}

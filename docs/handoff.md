@@ -11,6 +11,13 @@
 
 ## Latest Handoffs
 
+### [2026-08-18] Studio 创作区 UX + 历史复制 — **DONE**
+
+- **功能：** 历史卡片「复制到创作区」（参考图 + 提示词，不自动提交）；文生图/图生图命名与提交按钮分化；参考图区布局修复
+- **Git：** **`3ae9899`**
+- **部署：** 仅 frontend rebuild（无后端 / migration 变更）
+- Safe to hand off: **Yes**
+
 ### [2026-08-17] 图生图「遵循原图」尺寸 — **DONE**
 
 - **问题：** gpt-image-2 / count / Seedream / Wan / OpenAI edits 在「遵循原图」时仍默认 1:1 或与参考图不符的固定档

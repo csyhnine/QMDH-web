@@ -343,6 +343,15 @@ export type UsageLogQuery = {
   include_task_summary?: boolean;
 };
 
+export type PlatformSettingsRecord = {
+  chat_agent_ui_enabled: boolean;
+  updated_at?: string | null;
+};
+
+export type PlatformSettingsUpdatePayload = {
+  chat_agent_ui_enabled: boolean;
+};
+
 export type ProviderProfileRecord = {
   id: number;
   provider_name: string;
@@ -1257,6 +1266,9 @@ export const api = {
     return request<UsageLogPage>(`/dashboard/usage-logs${suffix ? `?${suffix}` : ""}`);
   },
   health: () => request<{ status: string; service: string }>("/health"),
+  platformSettings: () => request<PlatformSettingsRecord>("/settings/platform"),
+  updatePlatformSettings: (payload: PlatformSettingsUpdatePayload) =>
+    patchJson<PlatformSettingsRecord>("/settings/platform", payload),
   projects: () => request<Project[]>("/projects"),
   createProject: (name: string, classification?: string) =>
     postJson<Project>("/projects", { name, classification: classification || "B" }),

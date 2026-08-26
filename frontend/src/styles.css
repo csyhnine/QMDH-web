@@ -7589,6 +7589,18 @@ button {
   color: #10a760;
 }
 
+.settings-feature-toggle-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.settings-feature-toggle-meta {
+  color: #667085;
+  font-size: 0.82rem;
+}
+
 .settings-layout-integrations {
   grid-template-columns: 280px minmax(0, 1fr) 360px;
 }
@@ -10900,6 +10912,17 @@ textarea:focus-visible {
 
 .qmdh-canvas-edge-break-wrap:not(.is-visible) {
   pointer-events: none;
+}
+
+.qmdh-canvas-edge-break-wrap.is-selected {
+  z-index: 2;
+}
+
+.qmdh-canvas-edge-break-wrap.is-selected .qmdh-canvas-edge-break {
+  width: 26px;
+  height: 26px;
+  font-size: 15px;
+  box-shadow: 0 6px 16px rgba(180, 35, 24, 0.22);
 }
 
 .qmdh-canvas-edge-break {

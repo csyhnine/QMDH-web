@@ -7,9 +7,9 @@ RUN npm ci
 
 COPY . .
 
-# Vite inlines these at build time. Defaults keep Chat「设计助手」visible in production.
-ARG VITE_CHAT_AGENT_UI_ENABLED=true
-ARG VITE_CHAT_AGENT_MODE_DEFAULT=true
+# Vite inlines these at build time. Chat「设计助手」 stays hidden until explicitly enabled.
+ARG VITE_CHAT_AGENT_UI_ENABLED=false
+ARG VITE_CHAT_AGENT_MODE_DEFAULT=false
 ENV VITE_CHAT_AGENT_UI_ENABLED=$VITE_CHAT_AGENT_UI_ENABLED \
     VITE_CHAT_AGENT_MODE_DEFAULT=$VITE_CHAT_AGENT_MODE_DEFAULT
 

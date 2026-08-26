@@ -541,6 +541,34 @@ export function expandSelectionWithGroupChildren(
   return selected;
 }
 
+/**
+ * Expand selection to include upstream nodes connected by incoming edges.
+ * Copying a downstream node also copies its upstream chain and internal edges.
+ */
+export function expandSelectionWithUpstreamConnections(
+  nodes: CanvasFlowNode[],
+  edges: Edge[],
+  selectedIds: string[]
+): Set<string> {
+  let selected = expandSelectionWithGroupChildren(nodes, selectedIds);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const edge of edges) {
+      if (selected.has(edge.target) && !selected.has(edge.source)) {
+        selected.add(edge.source);
+        grew = true;
+      }
+    }
+    const withGroups = expandSelectionWithGroupChildren(nodes, [...selected]);
+    if (withGroups.size > selected.size) {
+      selected = withGroups;
+      grew = true;
+    }
+  }
+  return selected;
+}
+
 /** Runnable nodes inside the current selection (groups expand to children), in topo order. */
 export function listRunnableNodeIdsForSelection(
   nodes: CanvasFlowNode[],
@@ -575,7 +603,7 @@ export function duplicateCanvasSelection(
   selectedIds: string[],
   offset = { x: 48, y: 48 }
 ): { nodes: CanvasFlowNode[]; edges: Edge[]; createdIds: string[] } | null {
-  const selected = expandSelectionWithGroupChildren(nodes, selectedIds);
+  const selected = expandSelectionWithUpstreamConnections(nodes, edges, selectedIds);
   const toClone = nodes.filter((node) => selected.has(node.id));
   if (toClone.length === 0) return null;
 
@@ -662,7 +690,7 @@ export function snapshotCanvasSelection(
   edges: Edge[],
   selectedIds: string[]
 ): { nodes: CanvasFlowNode[]; edges: Edge[] } | null {
-  const selected = expandSelectionWithGroupChildren(nodes, selectedIds);
+  const selected = expandSelectionWithUpstreamConnections(nodes, edges, selectedIds);
   const toCopy = nodes.filter((node) => selected.has(node.id));
   if (toCopy.length === 0) return null;
 

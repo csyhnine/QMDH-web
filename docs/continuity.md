@@ -17,10 +17,11 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`b55e280`**（与 `origin/main` 对齐，2026-08-17）
-- Production: **`https://cityusbdisk.cn`** — Git **`b55e280`** 全量 rebuild（2026-08-17；含 follow-source 尺寸修复）
+- Current branch: **`main`** @ **`9817ab5`**（ahead of `origin/main` by 1，2026-08-25）
+- Production: **`https://cityusbdisk.cn`** — 代码 **`f10188e`**（Studio UX rebuild 2026-08-18）；follow-source **`b55e280`**
+- **本地未提交 WIP（2026-08-25）**：Chat「设计助手」UI 默认隐藏 — `featureFlags.ts` + `docker-compose.yml` + `frontend/Dockerfile`；详档 `docs/archive/handoff-2026-08-25-billing-chat-agent-ui.md`
 - Alembic head：**`r9s0t1u2v3w4`**（`ai_tools`；前序 `q8r9s0t1u2v3`=`site_announcements`；更早删对话 FK=`p7q8r9s0t1u2`）
-- 最新交接：`docs/handoff.md` → `[2026-08-14] 运营看板视频/Chat 统计 + harness Slice B`
+- 最新交接：`docs/handoff.md` → **`[2026-08-25] 计费审计 + Chat 助手 UI 隐藏`**
 - **2026-08-14 本地待部署（摘要）**：
   - 运营看板：视频任务 / Chat 轮次纳入 KPI 与每日趋势；capability 推断修复
   - harness Slice B（`2f85bfb`）：memory 工具 opt-in；Skill 目录-only
@@ -55,7 +56,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - 归档：`docs/archive/handoff-2026-07-26-happyhorse-admin-defaults.md`
 - **Chat Agent（重要）**：
   - **B1 / gov / harness / memory** 已合 main 并已上生产
-  - **「设计助手」UI 默认开启**（`VITE_CHAT_AGENT_UI_ENABLED !== "false"`）
+  - **「设计助手」UI 默认隐藏**（本地 WIP：`VITE_CHAT_AGENT_UI_ENABLED` 须显式 `true` 才显示；生产尚未 rebuild）
+  - **GPT 计费（2026-08-25）：** 用户 Admin 已将 `gpt-image-2` 改为 `per_image`；历史 ledger 不重算
   - **产品定调**：QMDH UI 壳 + Codex **风格 harness**（非换 GPT）+ Admin Skill 发版 + 跨对话记忆 + HITL 生图/视频
   - **记忆写入策略**：停写每轮 turn summary；长期记忆含 preference/feedback/thought/fact/**experience**；会话 compact；存量 scrub 已在生产执行
   - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**（勿整包 merge）
@@ -281,7 +283,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 2. Expect current local residuals to be:
    - `storage/` / `tmp/`
    - `assets/`（本地截图，勿提交）
-   - 可选未跟踪：`docs/archive/handoff-2026-07-21-canvas-copy-run-wip.md`
+   - **未提交 WIP（2026-08-25）**：`featureFlags.ts`、`docker-compose.yml`、`frontend/Dockerfile`（Chat 助手 UI 隐藏）
+   - 可选未跟踪：`docs/archive/handoff-2026-07-21-canvas-copy-run-wip.md`、`docs/archive/handoff-2026-08-25-billing-chat-agent-ui.md`
 3. Read the latest entry in `docs/handoff.md`.
 4. Reconfirm:
    - local head
@@ -304,10 +307,9 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Near-Term Suggested Next Steps
 
-1. Cold-start: 读最新 `docs/handoff.md`（**2026-08-17** follow-source）与详档 `docs/archive/handoff-2026-08-17-i2i-follow-source-size.md`。
-2. **不要**继续算力/对外简历运营数据专项（已取消）。
-3. **设计助手 harness 厚度**：审计见 `docs/archive/audit-2026-08-agent-harness-thickness.md`；切片 A 本地未提交。**max_tokens 热修 `2e82e55` + Chat 用量补记 `b61c229` 已热补丁上生产**（设计助手回合 + 普通 Chat 上下文压缩侧调用入账）。
-4. Optional：画布模板草稿/发布门槛；导航工具换正式 logo；root SSH 改密钥并轮换密码。
-5. Optional follow-up：`project_code` 挂钩、LLM 提炼长期记忆。
-6. 下一对话：`docs/tasks.md` Production Readiness backlog 或 OSS 切换（需用户批准）；**图链路 / 灵感库已搁置**；follow-source bugfix 已验收（生产 **`b55e280`**）。
-7. 安全：若曾在控制台重置并泄露 root 密码，建议改回密钥登录并轮换密码。
+1. Cold-start: 读 `docs/handoff.md` → **`[2026-08-25]`** 与详档 `docs/archive/handoff-2026-08-25-billing-chat-agent-ui.md`。
+2. **用户批准后**：commit Chat 助手 UI 隐藏 + push `9817ab5` + frontend rebuild（生产隐藏助手开关）。
+3. **Chat 助手产品**：继续 `chat-b2-001` / harness；修完再开 `VITE_CHAT_AGENT_UI_ENABLED=true`。
+4. **不要**继续算力/对外简历运营数据专项（已取消）；**图链路 / 灵感库 / 画布 poll·复制** 仍搁置。
+5. Optional：画布 `stash@{0}`（复制+批量运行）；OSS `prod-008`；root SSH 改密钥。
+6. 自测：`gpt-image-2` 2K × 3 张 ledger ≈ ¥8.01（`per_image` 验收）。

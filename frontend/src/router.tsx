@@ -19,6 +19,7 @@ import {
   type Provider,
   type ProviderPricingRuleRecord,
   type ProviderProfileRecord,
+  type PlatformSettingsRecord,
   type Task,
   type UserGroupSummary,
 } from "./api";
@@ -503,16 +504,19 @@ function SettingsRoute() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfileRecord[]>([]);
   const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettingsRecord | null>(null);
 
   async function refresh() {
-    const [nextTasks, nextProfiles, nextUsers] = await Promise.all([
+    const [nextTasks, nextProfiles, nextUsers, nextPlatformSettings] = await Promise.all([
       api.tasks(),
       api.providerProfiles(),
       canManageUsers ? api.users() : Promise.resolve([]),
+      api.platformSettings(),
     ]);
     setTasks(nextTasks);
     setProviderProfiles(nextProfiles);
     setUsers(nextUsers);
+    setPlatformSettings(nextPlatformSettings);
   }
 
   useEffect(() => {
@@ -527,6 +531,7 @@ function SettingsRoute() {
         tasks={tasks}
         providerProfiles={providerProfiles}
         users={users}
+        platformSettings={platformSettings}
         onRefresh={refresh}
       />
     </AppShell>

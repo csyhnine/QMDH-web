@@ -733,3 +733,16 @@ class AiTool(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     created_by: Mapped[User | None] = relationship()
+
+
+class PlatformSettings(Base):
+    """Singleton platform feature toggles (row id=1)."""
+
+    __tablename__ = "platform_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_agent_ui_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    updated_by: Mapped[User | None] = relationship()

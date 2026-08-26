@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
-import { type ManagedUser, type ProviderProfileRecord, type Task } from "../../api";
+import { type ManagedUser, type PlatformSettingsRecord, type ProviderProfileRecord, type Task } from "../../api";
+import ChatAgentUiSettingsPanel from "./ChatAgentUiSettingsPanel";
 import BigjpgIntegrationPanel, { bigjpgIntegrationStatus, isBigjpgProfile } from "./BigjpgIntegrationPanel";
 import { integrationMenuItems, type IntegrationMenuKey } from "./settingsIntegrationConstants";
 
@@ -15,10 +16,11 @@ export type SettingsPageProps = {
   tasks: Task[];
   providerProfiles: ProviderProfileRecord[];
   users: ManagedUser[];
+  platformSettings: PlatformSettingsRecord | null;
   onRefresh: () => Promise<void>;
 };
 
-type SettingsTab = "integrations" | "overview";
+type SettingsTab = "integrations" | "features" | "overview";
 
 export default function SettingsPage({
   userCanUseOpsViews,
@@ -26,6 +28,7 @@ export default function SettingsPage({
   tasks,
   providerProfiles,
   users,
+  platformSettings,
   onRefresh,
 }: SettingsPageProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("integrations");
@@ -64,6 +67,13 @@ export default function SettingsPage({
               onClick={() => setActiveTab("integrations")}
             >
               外部工具集成
+            </button>
+            <button
+              type="button"
+              className={activeTab === "features" ? "active" : ""}
+              onClick={() => setActiveTab("features")}
+            >
+              功能开关
             </button>
             <button
               type="button"
@@ -129,6 +139,12 @@ export default function SettingsPage({
                 </div>
               </aside>
             </div>
+          ) : activeTab === "features" ? (
+            <div className="settings-layout settings-layout-overview">
+              <section className="settings-main settings-main-wide">
+                <ChatAgentUiSettingsPanel settings={platformSettings} onRefresh={onRefresh} />
+              </section>
+            </div>
           ) : (
             <div className="settings-layout settings-layout-overview">
               <section className="settings-main settings-main-wide">
@@ -168,6 +184,7 @@ export default function SettingsPage({
                       ["高清放大", "历史卡片「放大」按钮可提交超分任务。", bigjpgStatus.tone === "ready"],
                       ["模型配置", "管理员可在模型管理维护 Provider。", true],
                       ["账号管理", "管理员可维护账号、角色与额度。", userCanManageUsers],
+                      ["设计助手 UI", "在「功能开关」页对设计师开放 Chat 助手。", platformSettings?.chat_agent_ui_enabled ?? false],
                     ] as const).map(([title, desc, enabled]) => (
                       <div key={title} className="settings-switch-row">
                         <span>

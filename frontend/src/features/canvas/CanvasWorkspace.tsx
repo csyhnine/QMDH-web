@@ -964,7 +964,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
           </div>
           <div className="qmdh-canvas-toolbar-center">
             <span className="qmdh-canvas-toolbar-hint">
-              右键添加 · 框选 · 中键双击适应视图 · 缩略图拖拽移动 · 悬停连线可断开 · Ctrl+Z 撤销 · Ctrl+C/V
+              右键添加 · 框选 · 中键双击适应视图 · 缩略图拖拽移动 · 悬停/选中连线近节点处可断开 · Ctrl+Z 撤销 · Ctrl+C/V
               复制粘贴 · Ctrl+D 原地复制 · Ctrl+G 编组 · 选中后可「运行所选」
             </span>
           </div>

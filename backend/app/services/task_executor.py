@@ -427,11 +427,24 @@ def _build_image_request_plan(
             prompt=prompt,
         )
 
+    # Grok Imagine Image: Haodeya sync /images/generations (never chat/completions).
+    if _uses_haodeya_grok_image(profile):
+        if capability == "image.edit" and not reference_images:
+            raise ValueError("Grok image edit requires a reference image")
+        return _build_openai_images_plan(
+            profile=profile,
+            requested_capability=capability,
+            effective_capability=capability if capability in {"image.generate", "image.edit"} else "image.generate",
+            payload=payload,
+            prompt=prompt,
+        )
+
     if (
         capability == "image.generate"
         and reference_images
         and "image.edit" in definition.capabilities
         and not _uses_haodeya_async_image_gateway(profile)
+        and not _uses_haodeya_grok_image(profile)
     ):
         edit_strategy = resolve_strategy_for_capability(
             capability="image.edit",
@@ -732,6 +745,66 @@ def _uses_haodeya_seedream_image(profile: ImageProviderProfile) -> bool:
         return True
     identity = f"{profile.provider_name} {profile.model_name}".lower()
     return "seedream" in identity or "doubao-seedream" in identity
+
+
+def _uses_haodeya_grok_image(profile: ImageProviderProfile) -> bool:
+    """Grok Imagine Image on Haodeya: sync /images/generations (handbook § Grok Imagine)."""
+    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    flavor = str(adapter_config.get("provider_flavor") or "").strip().lower()
+    if flavor in {"haodeya_grok_image", "grok_image"}:
+        return True
+    identity = f"{profile.provider_name} {profile.model_name} {profile.base_url}".lower()
+    if "grok-imagine-video" in identity or "grok_imagine_video" in identity:
+        return False
+    return "grok-imagine-image" in identity or "grok_imagine_image" in identity
+
+
+def _grok_image_aspect_ratio(profile: ImageProviderProfile, payload: dict) -> str:
+    reference_images = _extract_reference_images(payload)
+    if _should_follow_source_for_size(payload) and reference_images:
+        return resolve_size_aspect_for_reference(
+            str(payload.get("aspect_ratio") or "").strip(),
+            provider_name=profile.provider_name,
+            model_name=profile.model_name,
+            base_url=profile.base_url,
+            reference_images=reference_images,
+            follow_source=True,
+        )
+    return _resolved_image_aspect_ratio(profile, payload).strip() or "1:1"
+
+
+def _grok_image_request_body(
+    *,
+    profile: ImageProviderProfile,
+    payload: dict,
+    prompt: str,
+) -> dict[str, object]:
+    """Haodeya Grok Imagine: /images/generations with aspect_ratio (2K) or size pixels (1K)."""
+    prompt_text = prompt
+    detail = str(payload.get("prompt_supplement") or "").strip()
+    if detail:
+        prompt_text = f"{prompt}\n\nAdditional guidance: {detail}"
+
+    resolution = _normalize_image_resolution(payload)
+    aspect_ratio = _grok_image_aspect_ratio(profile, payload)
+    body: dict[str, object] = {
+        "model": _resolve_image_model_name(profile, payload),
+        "prompt": prompt_text,
+        "quality": profile.quality or "medium",
+        "n": _requested_image_count(payload),
+    }
+    if resolution == "2k":
+        body["aspect_ratio"] = aspect_ratio
+    else:
+        body["size"] = openai_pixel_size_for_aspect_ratio(aspect_ratio)
+
+    reference_images = _extract_reference_images(payload)
+    if reference_images:
+        if len(reference_images) > 3:
+            raise ValueError("Grok image accepts at most 3 reference images.")
+        body["image_urls"] = [_reference_image_to_public_url(item) for item in reference_images]
+
+    return body
 
 
 def _literal_image_size_tier(payload: dict) -> str:
@@ -1272,8 +1345,12 @@ def _should_use_chat_modalities_plan_for_2k(
 ) -> bool:
     if _normalize_image_resolution(payload) != "2k" or not _uses_haodeya_gateway(profile):
         return False
-    # Wan2.7 / Seedream must stay on /images/generations with literal size — never chat/completions.
-    if _uses_haodeya_wan_image(profile) or _uses_haodeya_seedream_image(profile):
+    # Wan2.7 / Seedream / Grok Image must stay on /images/generations — never chat/completions.
+    if (
+        _uses_haodeya_wan_image(profile)
+        or _uses_haodeya_seedream_image(profile)
+        or _uses_haodeya_grok_image(profile)
+    ):
         return False
     return strategy in {
         OPENAI_IMAGES_STRATEGY,
@@ -1286,6 +1363,8 @@ def _upstream_request_excerpt(body: dict[str, object]) -> dict[str, object]:
     excerpt: dict[str, object] = {"model": body.get("model")}
     if body.get("size"):
         excerpt["size"] = body.get("size")
+    if body.get("aspect_ratio"):
+        excerpt["aspect_ratio"] = body.get("aspect_ratio")
     if body.get("image_urls"):
         excerpt["image_urls"] = body.get("image_urls")
     if body.get("images"):
@@ -1467,6 +1546,30 @@ def _build_openai_images_plan(
             headers=_build_openai_headers(profile, async_images=True),
             reference_result=reference_result,
             adapter_mode="openai",
+            effective_capability=effective_capability,
+            strategy=OPENAI_IMAGES_STRATEGY,
+        )
+
+    if _uses_haodeya_grok_image(profile):
+        if effective_capability == "image.edit" and not reference_images:
+            raise ValueError("Grok image edit requires a reference image")
+        body = _grok_image_request_body(profile=profile, payload=payload, prompt=prompt)
+        reference_result = _image_generation_result_fields(profile, payload)
+        if reference_images:
+            reference_result = {
+                **reference_result,
+                "reference_image_used": True,
+                "reference_image_mode": "haodeya_grok_image",
+                "reference_image_count": len(reference_images),
+            }
+        if requested_capability != effective_capability:
+            reference_result["native_image_edit_fallback_from"] = requested_capability
+        return ImageRequestPlan(
+            endpoint_path="/images/generations",
+            body=body,
+            headers=_build_openai_headers(profile, async_images=True),
+            reference_result=reference_result,
+            adapter_mode="haodeya_grok_image",
             effective_capability=effective_capability,
             strategy=OPENAI_IMAGES_STRATEGY,
         )

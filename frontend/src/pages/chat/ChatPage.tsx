@@ -16,7 +16,8 @@ import {
 import { chatRoundElementId, extractChatRounds } from "../../lib/chat/chatRoundUtils";
 import { QmdhChatTransport } from "../../lib/chat/qmdhChatTransport";
 import type { ChatTaskProposal, ChatThinkingStep, ChatToolCall } from "../../lib/chat/qmdhSseParser";
-import { chatAgentModeDefault, isChatAgentUiEnabled } from "../../lib/featureFlags";
+import { chatAgentModeDefaultFor } from "../../lib/featureFlags";
+import { useChatAgentUiEnabled } from "../../lib/useChatAgentUiEnabled";
 import { useChatAttachments } from "../../lib/chat/useChatAttachments";
 import ChatAgentCapabilitiesDrawer from "./ChatAgentCapabilitiesDrawer";
 import ChatAgentMemoryDrawer from "./ChatAgentMemoryDrawer";
@@ -65,6 +66,8 @@ function formatConversationTime(value: string) {
 
 export default function ChatPage() {
   const { currentUser, isGuest } = useAuth();
+  const chatAgentUiEnabled = useChatAgentUiEnabled();
+  const showChatAgentUi = chatAgentUiEnabled ?? false;
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [activeChatId, setActiveChatId] = useState<number | null>(() => {
     const saved = localStorage.getItem(ACTIVE_CHAT_STORAGE_KEY);
@@ -82,16 +85,7 @@ export default function ChatPage() {
   const [contextUsagePercent, setContextUsagePercent] = useState<number | null>(null);
   const [contextTokens, setContextTokens] = useState<number | null>(null);
   const [contextWindowTokens, setContextWindowTokens] = useState<number | null>(null);
-  const [agentMode, setAgentMode] = useState(() => {
-    if (!isChatAgentUiEnabled) {
-      return false;
-    }
-    const saved = localStorage.getItem(AGENT_MODE_STORAGE_KEY);
-    if (saved === null) {
-      return chatAgentModeDefault;
-    }
-    return saved !== "false";
-  });
+  const [agentMode, setAgentMode] = useState(false);
   const [activeToolCalls, setActiveToolCalls] = useState<ChatToolCall[]>([]);
   const [activeTaskProposals, setActiveTaskProposals] = useState<ChatTaskProposal[]>([]);
   const [proposalDecisions, setProposalDecisions] = useState<Record<string, ProposalDecision>>({});
@@ -111,7 +105,7 @@ export default function ChatPage() {
   const activeChatIdRef = useRef<number | null>(activeChatId);
   activeChatIdRef.current = activeChatId;
 
-  const effectiveAgentMode = isChatAgentUiEnabled && agentMode;
+  const effectiveAgentMode = showChatAgentUi && agentMode;
   const agentModeRef = useRef(effectiveAgentMode);
   agentModeRef.current = effectiveAgentMode;
 
@@ -270,11 +264,27 @@ export default function ChatPage() {
   }
 
   useEffect(() => {
-    if (!isChatAgentUiEnabled) {
+    if (chatAgentUiEnabled === null) {
+      return;
+    }
+    if (!chatAgentUiEnabled) {
+      setAgentMode(false);
+      return;
+    }
+    const saved = localStorage.getItem(AGENT_MODE_STORAGE_KEY);
+    if (saved === null) {
+      setAgentMode(chatAgentModeDefaultFor(true));
+      return;
+    }
+    setAgentMode(saved !== "false");
+  }, [chatAgentUiEnabled]);
+
+  useEffect(() => {
+    if (!showChatAgentUi) {
       return;
     }
     localStorage.setItem(AGENT_MODE_STORAGE_KEY, agentMode ? "true" : "false");
-  }, [agentMode]);
+  }, [agentMode, showChatAgentUi]);
 
   useEffect(() => {
     if (!effectiveAgentMode) {
@@ -619,7 +629,7 @@ export default function ChatPage() {
                 </div>
               </div>
             ) : null}
-            {isChatAgentUiEnabled ? (
+            {showChatAgentUi ? (
               <div className="chat-agent-controls">
                 <label
                   className={`chat-agent-toggle${agentMode ? " is-on" : " is-off"}`}
@@ -670,14 +680,14 @@ export default function ChatPage() {
           </div>
         </header>
 
-        {isChatAgentUiEnabled ? (
+        {showChatAgentUi ? (
           <ChatAgentCapabilitiesDrawer
             open={capabilitiesOpen && agentMode}
             policy={agentPolicy}
             onClose={() => setCapabilitiesOpen(false)}
           />
         ) : null}
-        {isChatAgentUiEnabled ? (
+        {showChatAgentUi ? (
           <ChatAgentMemoryDrawer open={memoryOpen && agentMode} onClose={() => setMemoryOpen(false)} />
         ) : null}
 

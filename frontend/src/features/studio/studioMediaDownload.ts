@@ -1,5 +1,16 @@
+import { trackGenerationOutcome } from "./trackGenerationOutcome";
+
+export type DownloadMediaOptions = {
+  taskId?: number;
+  assetId?: number;
+};
+
 /** Trigger a browser download for a media URL (generated image/video). */
-export async function downloadMediaUrl(url: string, fileNameHint?: string): Promise<void> {
+export async function downloadMediaUrl(
+  url: string,
+  fileNameHint?: string,
+  options?: DownloadMediaOptions
+): Promise<void> {
   const fileName = sanitizeDownloadFileName(fileNameHint || guessFileNameFromUrl(url));
   try {
     const response = await fetch(url, { credentials: "include" });
@@ -13,6 +24,9 @@ export async function downloadMediaUrl(url: string, fileNameHint?: string): Prom
   } catch {
     // Cross-origin / CORS fallback: open the media so the user can save it.
     triggerAnchorDownload(url, fileName, true);
+  }
+  if (options?.taskId) {
+    trackGenerationOutcome(options.taskId, "downloaded", { assetId: options.assetId });
   }
 }
 

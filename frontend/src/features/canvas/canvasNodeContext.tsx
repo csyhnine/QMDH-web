@@ -32,7 +32,11 @@ export type CanvasNodeActions = {
   uploadNodeImage: (nodeId: string, file: File) => Promise<void>;
   saveAnnotation: (nodeId: string) => Promise<void>;
   getUpstreamDeliverables: (nodeId: string) => UpstreamDeliverables;
-  previewMedia: (url: string, compareUrls?: string | string[] | null) => void;
+  previewMedia: (
+    url: string,
+    compareUrls?: string | string[] | null,
+    options?: { taskId?: number; assetId?: number }
+  ) => void;
 };
 
 

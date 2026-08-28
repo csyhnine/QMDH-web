@@ -42,6 +42,11 @@ class GenerationAnalyticsOverviewOut(BaseModel):
     high_explore_sessions: int
     settled_sessions: int
     outcome_totals: dict[str, int]
+    download_event_count: int
+    downloaded_intent_count: int
+    download_rate: float
+    download_only_settled_count: int
+    download_settle_share: float
     polish_event_count: int
     polish_unique_users: int
     polish_studio_count: int

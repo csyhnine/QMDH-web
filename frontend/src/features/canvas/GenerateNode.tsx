@@ -76,7 +76,12 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
   function openPreview(url: string) {
     const isVideo = /\.(mp4|webm|mov)(\?|$)/i.test(url);
     const canCompare = !isVideo && Boolean(resultUrl) && url === resultUrl && compareUrls.length > 0;
-    previewMedia(url, canCompare ? compareUrls : null);
+    const isResult = Boolean(resultUrl) && url === resultUrl;
+    previewMedia(
+      url,
+      canCompare ? compareUrls : null,
+      isResult && data.taskId ? { taskId: data.taskId } : undefined
+    );
   }
   const needsInput = data.nodeKind === "img2img" || isUpscale || isAnnotate;
   const hasUpstreamMedia = upstream.images.length > 0 || upstream.videos.length > 0;

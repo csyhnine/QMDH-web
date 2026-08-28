@@ -99,7 +99,8 @@ export default function StudioFeedGallery({
                       setDownloadingKey(assetKey);
                       void downloadMediaUrl(
                         mediaUrl,
-                        asset.name || (asset.asset_type === "video" ? "generated-video.mp4" : "generated-image.png")
+                        asset.name || (asset.asset_type === "video" ? "generated-video.mp4" : "generated-image.png"),
+                        { taskId: task.id, assetId: asset.id }
                       ).finally(() => {
                         setDownloadingKey((current) => (current === assetKey ? null : current));
                       });

@@ -28,7 +28,10 @@ export default function StudioGalleryPreviewLightbox({
       const hint =
         galleryPreview.asset.name ||
         (videoAsset ? "generated-video.mp4" : "generated-image.png");
-      await downloadMediaUrl(previewUrl, hint);
+      await downloadMediaUrl(previewUrl, hint, {
+        taskId: galleryPreview.task.id,
+        assetId: galleryPreview.asset.id,
+      });
     } finally {
       setDownloading(false);
     }

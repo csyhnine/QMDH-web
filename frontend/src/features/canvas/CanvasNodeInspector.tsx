@@ -386,7 +386,11 @@ export default function CanvasNodeInspector({
                   type="button"
                   className="qmdh-canvas-inspector-preview-hit"
                   onClick={() =>
-                    previewMedia(resultPreview, resultUrl && compareUrls.length > 0 ? compareUrls : null)
+                    previewMedia(
+                      resultPreview,
+                      resultUrl && compareUrls.length > 0 ? compareUrls : null,
+                      data.taskId ? { taskId: data.taskId } : undefined
+                    )
                   }
                 >
                   <img src={resultPreview} alt="" />

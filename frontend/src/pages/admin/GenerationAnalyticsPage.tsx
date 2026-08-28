@@ -19,6 +19,7 @@ const OUTCOME_LABELS: Record<string, string> = {
   shared_to_inspiration: "分享灵感",
   applied_to_composer: "应用到创作区",
   regenerated: "重新生成",
+  downloaded: "下载",
 };
 
 function formatPercent(value: number): string {
@@ -139,7 +140,7 @@ export default function GenerationAnalyticsPage() {
         <div>
           <h1>生成行为分析</h1>
           <p>
-            基于同参考图 + 30 分钟内连续提交，衡量设计师是在「同 prompt 抽卡」还是「频繁改词」，并结合收藏/放大等采纳信号评估模板与出图质量。
+            基于同参考图 + 30 分钟内连续提交，衡量设计师是在「同 prompt 抽卡」还是「频繁改词」，并结合收藏/放大/下载等采纳信号评估模板与出图质量。
           </p>
         </div>
         <div className="ops-toolbar">
@@ -225,6 +226,33 @@ export default function GenerationAnalyticsPage() {
           <div className="ops-kpi-grid">
             <article className="ops-kpi-card ops-kpi-blue">
               <div>
+                <span>下载次数</span>
+                <strong>{formatCount(overview.download_event_count)}</strong>
+                <small>{`${formatCount(overview.downloaded_intent_count)} 次生成被下载`}</small>
+              </div>
+              <i>下</i>
+            </article>
+            <article className="ops-kpi-card ops-kpi-purple">
+              <div>
+                <span>下载率</span>
+                <strong>{formatPercent(overview.download_rate)}</strong>
+                <small>{`${formatCount(overview.downloaded_intent_count)} / ${formatCount(overview.intent_count)} 次生成触发下载`}</small>
+              </div>
+              <i>载</i>
+            </article>
+            <article className="ops-kpi-card ops-kpi-green">
+              <div>
+                <span>沉默采纳占比</span>
+                <strong>{formatPercent(overview.download_settle_share)}</strong>
+                <small>{`${formatCount(overview.download_only_settled_count)} 条 settled 仅来自下载（无收藏/放大等）`}</small>
+              </div>
+              <i>默</i>
+            </article>
+          </div>
+
+          <div className="ops-kpi-grid">
+            <article className="ops-kpi-card ops-kpi-blue">
+              <div>
                 <span>润色次数</span>
                 <strong>{formatCount(overview.polish_event_count)}</strong>
                 <small>{`${formatCount(overview.polish_unique_users)} 人使用 · Studio ${formatCount(overview.polish_studio_count)} / 画布 ${formatCount(overview.polish_canvas_count)}`}</small>
@@ -243,7 +271,7 @@ export default function GenerationAnalyticsPage() {
               <div>
                 <span>润色后采纳率</span>
                 <strong>{formatPercent(overview.polish_settle_rate)}</strong>
-                <small>润色后提交且出现收藏/放大等正向 outcome 的比例</small>
+                <small>润色后提交且出现收藏/放大/下载等正向 outcome 的比例</small>
               </div>
               <i>效</i>
             </article>
@@ -288,7 +316,7 @@ export default function GenerationAnalyticsPage() {
             <section className="ops-panel">
               <div className="ops-panel-head">
                 <h2>正向 Outcome 汇总</h2>
-                <span>收藏、放大、置入参考等采纳信号</span>
+                <span>收藏、放大、置入参考、下载等采纳信号</span>
               </div>
               {outcomeEntries.length > 0 ? (
                 <div className="ops-table-list">

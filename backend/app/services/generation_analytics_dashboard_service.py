@@ -10,8 +10,11 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditEventType
 from app.models import AuditLog, GenerationIntent, GenerationSession, PromptTemplate, User
+from app.services.generation_outcome_service import SETTLE_OUTCOME_TYPES
 
 DEFAULT_LOOKBACK_DAYS = 30
+
+SETTLE_OUTCOME_TYPES_EXCLUDING_DOWNLOAD = SETTLE_OUTCOME_TYPES - frozenset({"downloaded"})
 
 
 def _utc(value: datetime | None) -> datetime | None:
@@ -70,6 +73,51 @@ def _intent_was_prompt_polished(intent: GenerationIntent) -> bool:
 
 def _intent_is_settled(intent: GenerationIntent) -> bool:
     return bool((intent.outcome_signals or {}).get("settled"))
+
+
+def _intent_download_count(intent: GenerationIntent) -> int:
+    bucket = (intent.outcome_signals or {}).get("downloaded")
+    if not isinstance(bucket, dict):
+        return 0
+    return int(bucket.get("count") or 0)
+
+
+def _intent_has_download(intent: GenerationIntent) -> bool:
+    return _intent_download_count(intent) > 0
+
+
+def _intent_has_explicit_settle(intent: GenerationIntent) -> bool:
+    signals = intent.outcome_signals or {}
+    for outcome_type in SETTLE_OUTCOME_TYPES_EXCLUDING_DOWNLOAD:
+        bucket = signals.get(outcome_type)
+        if isinstance(bucket, dict) and int(bucket.get("count") or 0) > 0:
+            return True
+    return False
+
+
+def get_download_usage_stats(db: Session, *, days: int = DEFAULT_LOOKBACK_DAYS) -> dict:
+    since = _since(days)
+    intents = db.scalars(select(GenerationIntent).where(GenerationIntent.submitted_at >= since)).all()
+
+    download_event_count = sum(_intent_download_count(intent) for intent in intents)
+    downloaded_intent_count = sum(1 for intent in intents if _intent_has_download(intent))
+    download_only_settled_count = sum(
+        1
+        for intent in intents
+        if _intent_is_settled(intent) and _intent_has_download(intent) and not _intent_has_explicit_settle(intent)
+    )
+    settled_intent_count = sum(1 for intent in intents if _intent_is_settled(intent))
+    intent_count = len(intents)
+
+    return {
+        "download_event_count": download_event_count,
+        "downloaded_intent_count": downloaded_intent_count,
+        "download_rate": round(downloaded_intent_count / intent_count, 4) if intent_count else 0.0,
+        "download_only_settled_count": download_only_settled_count,
+        "download_settle_share": round(download_only_settled_count / settled_intent_count, 4)
+        if settled_intent_count
+        else 0.0,
+    }
 
 
 def get_prompt_polish_usage_stats(db: Session, *, days: int = DEFAULT_LOOKBACK_DAYS) -> dict:
@@ -159,6 +207,7 @@ def get_generation_analytics_overview(db: Session, *, days: int = DEFAULT_LOOKBA
         "high_explore_sessions": high_explore_sessions,
         "settled_sessions": settled_sessions,
         "outcome_totals": dict(outcome_totals),
+        **get_download_usage_stats(db, days=days),
         **get_prompt_polish_usage_stats(db, days=days),
     }
 

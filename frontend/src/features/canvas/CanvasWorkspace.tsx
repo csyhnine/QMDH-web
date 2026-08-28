@@ -116,6 +116,8 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   const [mediaPreview, setMediaPreview] = useState<{
     url: string;
     compareUrls?: string[];
+    taskId?: number;
+    assetId?: number;
   } | null>(null);
   const [runningAll, setRunningAll] = useState(false);
   const clipboardRef = useRef<{ nodes: CanvasFlowNode[]; edges: Edge[] } | null>(null);
@@ -867,13 +869,13 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
       uploadNodeImage,
       saveAnnotation,
       getUpstreamDeliverables,
-      previewMedia: (url: string, compareUrls?: string | string[] | null) => {
+      previewMedia: (url: string, compareUrls?: string | string[] | null, options?: { taskId?: number; assetId?: number }) => {
         const list = Array.isArray(compareUrls)
           ? uniqueMediaPaths(compareUrls)
           : compareUrls
             ? [compareUrls.trim()].filter(Boolean)
             : [];
-        setMediaPreview({ url, compareUrls: list });
+        setMediaPreview({ url, compareUrls: list, taskId: options?.taskId, assetId: options?.assetId });
       },
     }),
     [
@@ -1174,7 +1176,11 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
                     mediaPreview.url,
                     /\.(mp4|webm|mov)(\?|$)/i.test(mediaPreview.url)
                       ? "generated-video.mp4"
-                      : "generated-image.png"
+                      : "generated-image.png",
+                    {
+                      taskId: mediaPreview.taskId,
+                      assetId: mediaPreview.assetId,
+                    }
                   )
                 }
               >

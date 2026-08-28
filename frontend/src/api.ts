@@ -577,7 +577,8 @@ export type GenerationOutcomeType =
   | "bookmarked"
   | "shared_to_inspiration"
   | "applied_to_composer"
-  | "regenerated";
+  | "regenerated"
+  | "downloaded";
 
 export type GenerationOutcomePayload = {
   outcome_type: GenerationOutcomeType;
@@ -605,6 +606,11 @@ export type GenerationAnalyticsOverview = {
   high_explore_sessions: number;
   settled_sessions: number;
   outcome_totals: Record<string, number>;
+  download_event_count: number;
+  downloaded_intent_count: number;
+  download_rate: number;
+  download_only_settled_count: number;
+  download_settle_share: number;
   polish_event_count: number;
   polish_unique_users: number;
   polish_studio_count: number;

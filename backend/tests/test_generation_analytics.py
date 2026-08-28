@@ -13,6 +13,7 @@ from app.services.generation_intent_service import record_generation_intent_for_
 from app.services.generation_outcome_service import record_generation_outcome, record_generation_outcome_from_task_payload
 from app.services.generation_analytics_dashboard_service import (
     compute_template_quality_score,
+    get_download_usage_stats,
     get_generation_analytics_overview,
     get_prompt_polish_usage_stats,
     get_template_quality_scores,
@@ -189,6 +190,21 @@ class GenerationOutcomeTests(unittest.TestCase):
             self.assertEqual(signals["bookmarked"]["count"], 1)
             self.assertIn(42, signals["bookmarked"]["asset_ids"])
 
+    def test_record_download_outcome_marks_intent_settled(self) -> None:
+        with self.SessionLocal() as db:
+            intent = record_generation_outcome(
+                db,
+                task_id=self.task_id,
+                outcome_type="downloaded",
+                asset_id=99,
+            )
+            db.commit()
+            self.assertIsNotNone(intent)
+            assert intent is not None
+            signals = intent.outcome_signals
+            self.assertTrue(signals.get("settled"))
+            self.assertEqual(signals["downloaded"]["count"], 1)
+
     def test_upscale_payload_records_source_task_outcome(self) -> None:
         with self.SessionLocal() as db:
             user = db.query(User).one()
@@ -334,6 +350,70 @@ class GenerationAnalyticsDashboardTests(unittest.TestCase):
             self.assertEqual(row["template_id"], template_id)
             self.assertEqual(row["intent_count"], 3)
             self.assertGreater(row["quality_score"], 0.5)
+
+
+class DownloadUsageStatsTests(unittest.TestCase):
+    def test_overview_includes_download_metrics(self) -> None:
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(bind=engine)
+        SessionLocal = sessionmaker(bind=engine)
+
+        with SessionLocal() as db:
+            user = User(name="designer", role="designer", password_hash="unused", is_active=True, project_codes=["QMDH-001"])
+            project = Project(name="Demo", code="QMDH-001", classification=DataClassification.b)
+            workflow = Workflow(
+                key="image-generate",
+                name="Generate",
+                description="Generate",
+                category="demo",
+                priority="P1",
+                provider_capability="image.generate",
+                config={},
+            )
+            db.add_all([user, project, workflow])
+            db.flush()
+
+            def make_task(title: str) -> Task:
+                task = Task(
+                    title=title,
+                    status=TaskStatus.pending,
+                    workflow_id=workflow.id,
+                    project_id=project.id,
+                    user_id=user.id,
+                    requested_provider="test-provider",
+                    payload={"prompt": title},
+                    result={},
+                )
+                db.add(task)
+                db.flush()
+                record_generation_intent_for_task(db, task=task, workflow_key=workflow.key)
+                return task
+
+            download_only = make_task("download only")
+            bookmark_and_download = make_task("bookmark and download")
+            no_outcome = make_task("no outcome")
+            record_generation_outcome(db, task_id=download_only.id, outcome_type="downloaded", asset_id=1)
+            record_generation_outcome(db, task_id=download_only.id, outcome_type="downloaded", asset_id=1)
+            record_generation_outcome(db, task_id=bookmark_and_download.id, outcome_type="downloaded", asset_id=2)
+            record_generation_outcome(db, task_id=bookmark_and_download.id, outcome_type="bookmarked", asset_id=2)
+            db.commit()
+
+        with SessionLocal() as db:
+            stats = get_download_usage_stats(db, days=30)
+            self.assertEqual(stats["download_event_count"], 3)
+            self.assertEqual(stats["downloaded_intent_count"], 2)
+            self.assertAlmostEqual(stats["download_rate"], 2 / 3, places=4)
+            self.assertEqual(stats["download_only_settled_count"], 1)
+            self.assertAlmostEqual(stats["download_settle_share"], 0.5, places=4)
+
+            overview = get_generation_analytics_overview(db, days=30)
+            self.assertEqual(overview["download_event_count"], 3)
+            self.assertEqual(overview["outcome_totals"].get("downloaded"), 3)
+            self.assertGreaterEqual(overview["settled_intent_count"], 2)
 
 
 class PromptPolishUsageStatsTests(unittest.TestCase):

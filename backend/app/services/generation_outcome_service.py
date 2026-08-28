@@ -18,6 +18,7 @@ GenerationOutcomeType = Literal[
     "shared_to_inspiration",
     "applied_to_composer",
     "regenerated",
+    "downloaded",
 ]
 
 SETTLE_OUTCOME_TYPES: frozenset[str] = frozenset(
@@ -27,6 +28,7 @@ SETTLE_OUTCOME_TYPES: frozenset[str] = frozenset(
         "bookmarked",
         "shared_to_inspiration",
         "applied_to_composer",
+        "downloaded",
     }
 )
 

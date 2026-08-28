@@ -32,10 +32,19 @@ export const METRIC_GUIDES: MetricGuide[] = [
     key: "settle",
     title: "Settle（采纳率）",
     meaning:
-      "会话内出现正向 outcome 的比例：收藏、高清放大、置入参考、应用到创作区、分享灵感等。代表设计师认为「这张能用」。",
+      "会话内出现正向 outcome 的比例：收藏、高清放大、置入参考、应用到创作区、分享灵感、下载等。代表设计师认为「这张能用」。",
     good: "≥30% 说明产出可交付；模板质量分主要由此驱动。",
     bad: "接近 0%（如当前 0.1%）：大量生成但没有采纳信号，质量或方向可能有问题。",
-    action: "对照 Outcome 汇总，看设计师实际用什么动作；若几乎无收藏/放大，优先查模型、模板 prompt、参考图链路。",
+    action: "对照 Outcome 汇总，看设计师实际用什么动作；若几乎无收藏/放大/下载，优先查模型、模板 prompt、参考图链路。",
+  },
+  {
+    key: "download",
+    title: "下载（沉默采纳）",
+    meaning:
+      "设计师下载生成图/视频但未收藏、放大等显式操作时，视为「沉默满意」信号，计入 Settle。download_settle_share 表示采纳里仅下载、无其他正向动作的比例。",
+    good: "下载率稳步上升且 download_settle_share 较高：很多产出被直接取走使用，虽无显式表态但质量可用。",
+    bad: "整体 Settle 低且 download_rate 也接近 0：生成后既无收藏/放大，也很少下载，可能产出不可用或下载入口不明显。",
+    action: "对比「仅下载 settled」与显式 outcome；若前者占比较高，说明设计师习惯直接取图，可优化下载体验并继续观测 Settle。",
   },
 ];
 
@@ -56,7 +65,22 @@ export function buildPlaybook(overview: GenerationAnalyticsOverview): PlaybookIt
     items.push({
       title: "高抽卡、低采纳 — 方向可能对了，结果不够可用",
       detail:
-        "设计师愿意重复同 prompt，说明大方向不算错，但很少收藏/放大/置入参考。建议：优化模板默认词、开启提示词润色、检查模型与分辨率是否匹配场景，并抽样看失败/无效出图比例。",
+        "设计师愿意重复同 prompt，说明大方向不算错，但很少收藏/放大/置入参考/下载。建议：优化模板默认词、开启提示词润色、检查模型与分辨率是否匹配场景，并抽样看失败/无效出图比例。",
+    });
+  }
+
+  if (overview.downloaded_intent_count >= 3 && overview.download_settle_share >= 0.3) {
+    items.push({
+      title: "沉默采纳占比较高 — 设计师习惯直接下载",
+      detail: `窗口内 ${Math.round(overview.download_rate * 100)}% 生成被下载，其中 ${Math.round(overview.download_settle_share * 100)}% 的 settled 仅来自下载（无收藏/放大等显式动作）。说明不少产出被直接取走使用，可继续观测 download_rate 趋势。`,
+    });
+  }
+
+  if (overview.intent_count >= 50 && overview.download_rate < 0.02 && settle < 0.1) {
+    items.push({
+      title: "下载率极低 — 确认下载埋点或产出质量",
+      detail:
+        "大量生成但几乎无下载记录。若设计师实际有下载行为，请确认 Studio/画布下载埋点已上线；若确实无人下载，需结合 Gacha/Explore 排查出图是否可用。",
     });
   }
 
@@ -109,10 +133,11 @@ export function buildPlaybook(overview: GenerationAnalyticsOverview): PlaybookIt
 
 export const QUALITY_CONTROL_STEPS = [
   "每周打开本页，选 30 天窗口，先看 Settle 与 Outcome 汇总是否上升。",
+  "查看「下载次数 / 下载率 / 沉默采纳占比」：下载是显式收藏/放大之外的采纳信号，仅下载 settled 说明设计师直接取图使用。",
   "查看「润色次数 / 润色后提交率」：提交率 = 润色后立刻生成的比例，过低说明功能曝光或体验有问题。",
   "对比润色后采纳率与整体 Settle：若润色后采纳明显更高，说明功能有效，应加大引导。",
   "模板质量排行：quality ≥ 0.55 且样本 ≥ 3 的模板可置顶推荐；Explore 高且 Settle 低的模板需改默认 prompt。",
   "抽「高 Gacha + 低 Settle」会话，复制 dominant prompt 做润色/模板 A/B。",
   "新模板上线后要求设计师从模板入口进入（绑定 template_id），2 周后再看质量分。",
-  "Outcome 长期为 0 时，先确认埋点（收藏、放大、置入参考）在生产可用，再解读行为分。",
+  "Outcome 长期为 0 时，先确认埋点（收藏、放大、置入参考、下载）在生产可用，再解读行为分。",
 ];

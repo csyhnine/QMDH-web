@@ -405,9 +405,15 @@ export function useCanvasNodeGenerate(
       });
 
       try {
-        const draft = buildTaskSubmissionPayload({ form, provider, sourceSurface: "canvas", canvasNodeId: nodeId });
+        const draft = buildTaskSubmissionPayload({
+          form,
+          provider,
+          sourceSurface: "canvas",
+          canvasNodeId: nodeId,
+          promptPolished: Boolean(data.promptPolished),
+        });
         const task = await api.createTask(draft.payload);
-        patch(nodeId, { status: "pending", taskId: task.id });
+        patch(nodeId, { status: "pending", taskId: task.id, promptPolished: false });
         await pollTaskUntilDone(
           task.id,
           nodeId,

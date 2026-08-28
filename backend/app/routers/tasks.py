@@ -223,6 +223,7 @@ def create_task(
         template_id=payload.template_id,
         source_surface=payload.source_surface,
         canvas_node_id=payload.canvas_node_id,
+        prompt_polished=payload.prompt_polished,
     )
 
     db.add(

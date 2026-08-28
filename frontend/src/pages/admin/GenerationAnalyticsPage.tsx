@@ -6,6 +6,11 @@ import {
   type GenerationAnalyticsSessionRow,
   type TemplateQualityRow,
 } from "../../api";
+import {
+  buildPlaybook,
+  METRIC_GUIDES,
+  QUALITY_CONTROL_STEPS,
+} from "./generationAnalyticsGuide";
 
 const OUTCOME_LABELS: Record<string, string> = {
   reused_as_reference: "置入参考",
@@ -108,6 +113,8 @@ export default function GenerationAnalyticsPage() {
       .sort((left, right) => right[1] - left[1]);
   }, [overview]);
 
+  const playbook = useMemo(() => (overview ? buildPlaybook(overview) : []), [overview]);
+
   async function runMaintenance(action: "backfill" | "recompute") {
     setJobMessage("");
     setError("");
@@ -132,7 +139,7 @@ export default function GenerationAnalyticsPage() {
         <div>
           <h1>生成行为分析</h1>
           <p>
-            基于同参考图 + 短时间窗口内的提交模式，区分「抽卡」（同 prompt 反复生成）与「调词」（频繁改 prompt），并结合正向 outcome 估算模板质量。
+            基于同参考图 + 30 分钟内连续提交，衡量设计师是在「同 prompt 抽卡」还是「频繁改词」，并结合收藏/放大等采纳信号评估模板与出图质量。
           </p>
         </div>
         <div className="ops-toolbar">
@@ -163,6 +170,85 @@ export default function GenerationAnalyticsPage() {
 
       {overview ? (
         <>
+          <section className="ops-panel generation-analytics-guide">
+            <div className="ops-panel-head">
+              <h2>怎么读这些数</h2>
+              <span>Session = 同一用户、同一参考图指纹、30 分钟内的一组提交</span>
+            </div>
+            <div className="generation-analytics-guide-grid">
+              {METRIC_GUIDES.map((guide) => (
+                <article key={guide.key} className="generation-analytics-guide-card">
+                  <h3>{guide.title}</h3>
+                  <p>{guide.meaning}</p>
+                  <dl>
+                    <div>
+                      <dt>healthy</dt>
+                      <dd>{guide.good}</dd>
+                    </div>
+                    <div>
+                      <dt>需关注</dt>
+                      <dd>{guide.bad}</dd>
+                    </div>
+                    <div>
+                      <dt>怎么改</dt>
+                      <dd>{guide.action}</dd>
+                    </div>
+                  </dl>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="ops-panel generation-analytics-playbook">
+            <div className="ops-panel-head">
+              <h2>当前窗口建议（{days} 天）</h2>
+              <span>根据 KPI 自动生成的运维/模板动作</span>
+            </div>
+            <div className="generation-analytics-playbook-list">
+              {playbook.map((item) => (
+                <article key={item.title} className="generation-analytics-playbook-item">
+                  <strong>{item.title}</strong>
+                  <p>{item.detail}</p>
+                </article>
+              ))}
+            </div>
+            <details className="generation-analytics-quality-steps">
+              <summary>出图质量把控流程（运营 checklist）</summary>
+              <ol>
+                {QUALITY_CONTROL_STEPS.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </details>
+          </section>
+
+          <div className="ops-kpi-grid">
+            <article className="ops-kpi-card ops-kpi-blue">
+              <div>
+                <span>润色次数</span>
+                <strong>{formatCount(overview.polish_event_count)}</strong>
+                <small>{`${formatCount(overview.polish_unique_users)} 人使用 · Studio ${formatCount(overview.polish_studio_count)} / 画布 ${formatCount(overview.polish_canvas_count)}`}</small>
+              </div>
+              <i>润</i>
+            </article>
+            <article className="ops-kpi-card ops-kpi-purple">
+              <div>
+                <span>润色后提交率</span>
+                <strong>{formatPercent(overview.polish_adoption_rate)}</strong>
+                <small>{`${formatCount(overview.polished_intent_count)} / ${formatCount(overview.intent_count)} 次生成标记为润色后提交`}</small>
+              </div>
+              <i>采</i>
+            </article>
+            <article className="ops-kpi-card ops-kpi-green">
+              <div>
+                <span>润色后采纳率</span>
+                <strong>{formatPercent(overview.polish_settle_rate)}</strong>
+                <small>润色后提交且出现收藏/放大等正向 outcome 的比例</small>
+              </div>
+              <i>效</i>
+            </article>
+          </div>
+
           <div className="ops-kpi-grid">
             <article className="ops-kpi-card ops-kpi-blue">
               <div>
@@ -192,7 +278,7 @@ export default function GenerationAnalyticsPage() {
               <div>
                 <span>平均 Settle</span>
                 <strong>{formatPercent(overview.avg_settle_score)}</strong>
-                <small>{` settled intent ${formatCount(overview.settled_intent_count)} · settled 会话 ${formatCount(overview.settled_sessions)}`}</small>
+                <small>{`已 settled ${formatCount(overview.settled_intent_count)} 条 intent · ${formatCount(overview.settled_sessions)} 组会话有采纳`}</small>
               </div>
               <i>定</i>
             </article>
@@ -238,7 +324,7 @@ export default function GenerationAnalyticsPage() {
           <section className="admin-table-panel generation-analytics-table">
             <div className="ops-panel-head">
               <h2>模板质量排行</h2>
-              <span>{`quality = 0.35×Gacha + 0.40×Settle + 0.15×完成率 + 0.10×(1−Explore)`}</span>
+              <span>{`quality = 0.35×Gacha + 0.40×Settle + 0.15×完成率 + 0.10×(1−Explore) — 越高表示模板越易「少改词、多采纳」`}</span>
             </div>
             {templates.length > 0 ? (
               <>

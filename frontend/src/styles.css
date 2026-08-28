@@ -12710,6 +12710,106 @@ textarea:focus-visible {
   padding-bottom: 28px;
 }
 
+.generation-analytics-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.generation-analytics-guide-card {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.generation-analytics-guide-card h3 {
+  margin: 0 0 8px;
+  font-size: 0.98rem;
+}
+
+.generation-analytics-guide-card p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.generation-analytics-guide-card dl {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.generation-analytics-guide-card dt {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.generation-analytics-guide-card dd {
+  margin: 2px 0 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.generation-analytics-playbook-list {
+  display: grid;
+  gap: 10px;
+}
+
+.generation-analytics-playbook-item {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.generation-analytics-playbook-item strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.generation-analytics-playbook-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.generation-analytics-quality-steps {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.generation-analytics-quality-steps ol {
+  margin: 10px 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 6px;
+}
+
+.qmdh-canvas-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.qmdh-canvas-polish-button {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 0.78rem;
+}
+
+.qmdh-canvas-field-prompt .qmdh-canvas-node-error {
+  display: block;
+  margin-top: 6px;
+}
+
 .generation-analytics-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -12751,6 +12851,10 @@ textarea:focus-visible {
 }
 
 @media (max-width: 1280px) {
+  .generation-analytics-guide-grid {
+    grid-template-columns: 1fr;
+  }
+
   .generation-analytics-grid {
     grid-template-columns: 1fr;
   }

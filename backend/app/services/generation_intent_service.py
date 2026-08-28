@@ -82,6 +82,7 @@ def record_generation_intent_for_task(
     template_id: int | None = None,
     source_surface: str = "studio",
     canvas_node_id: str | None = None,
+    prompt_polished: bool = False,
 ) -> GenerationIntent | None:
     existing = db.scalar(select(GenerationIntent).where(GenerationIntent.task_id == task.id))
     if existing is not None:
@@ -112,6 +113,11 @@ def record_generation_intent_for_task(
         task_status=task.status.value if isinstance(task.status, TaskStatus) else str(task.status),
         has_asset=task_has_asset_result(task.result if isinstance(task.result, dict) else None),
     )
+    if prompt_polished:
+        intent.outcome_signals = {
+            **(intent.outcome_signals or {}),
+            "submission": {"prompt_polished": True},
+        }
     db.add(intent)
     db.flush()
     assign_intent_to_session(db, intent)

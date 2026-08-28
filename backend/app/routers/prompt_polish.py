@@ -19,6 +19,7 @@ class PromptPolishIn(BaseModel):
     prompt: str = Field(min_length=1, max_length=8000)
     creation_mode: Literal["generate", "edit", "video"] = "generate"
     reference_images: list[str] = Field(default_factory=list, max_length=8)
+    source_surface: Literal["studio", "canvas"] = "studio"
 
 
 class PromptPolishOut(BaseModel):
@@ -53,6 +54,7 @@ def polish_user_prompt(
         details={
             "model_name": result.model_name,
             "creation_mode": payload.creation_mode,
+            "source_surface": payload.source_surface,
             "reference_image_count": len(payload.reference_images),
             "prompt_preview": payload.prompt[:120],
             "polished_preview": result.polished_prompt[:240],

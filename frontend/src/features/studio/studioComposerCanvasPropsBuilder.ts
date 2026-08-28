@@ -222,7 +222,9 @@ export function buildStudioComposerCanvasProps({
       });
     },
     onOpenReferencePicker: referenceUpload.openReferencePicker,
-    onPromptChange: (value) => setStudioForm((current) => ({ ...current, prompt: value })),
+    onPromptChange: (value) =>
+      setStudioForm((current) => ({ ...current, prompt: value, promptPolished: false })),
+    onPromptPolished: () => setStudioForm((current) => ({ ...current, promptPolished: true })),
     onProviderSelect: handleProviderSelect,
     onReferenceDrop: referenceUpload.handleReferenceDrop,
     onReferenceInputChange: referenceUpload.handleReferenceInputChange,

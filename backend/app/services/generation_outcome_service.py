@@ -106,7 +106,7 @@ def summarize_session_outcomes(intents: list[GenerationIntent]) -> dict[str, int
     outcome_totals: Counter[str] = Counter()
     for intent in intents:
         for key, value in (intent.outcome_signals or {}).items():
-            if key == "settled" or not isinstance(value, dict):
+            if key in {"settled", "submission"} or not isinstance(value, dict):
                 continue
             outcome_totals[key] += int(value.get("count") or 0)
 

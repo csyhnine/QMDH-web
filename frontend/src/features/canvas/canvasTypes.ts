@@ -61,6 +61,7 @@ export type GenerateNodeData = {
   annotationColor: string;
   annotationWidth: number;
   annotationOpacity: number;
+  promptPolished?: boolean;
 };
 
 export type GroupNodeData = {

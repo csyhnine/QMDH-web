@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { resolveProviderResolutionOptions } from "../studio/studioConstants";
 import { aspectRatioOptionsFor } from "../studio/studioCanvasLinkage";
 import { isGrokHaodeyaProvider } from "../studio/grokVideoUtils";
@@ -9,7 +11,8 @@ import {
   upscaleStyleOptions,
 } from "../studio/studioUpscaleOptions";
 import type { Provider } from "../../api";
-import { CanvasDraftInput, CanvasDraftTextarea } from "./CanvasDraftField";
+import { CanvasDraftInput } from "./CanvasDraftField";
+import CanvasPromptPolishField from "./CanvasPromptPolishField";
 import CanvasModelSelect from "./CanvasModelSelect";
 import type { UpstreamDeliverables } from "./canvasNodeContext";
 import { useCanvasNodeActions } from "./canvasNodeContext";
@@ -93,7 +96,9 @@ export default function CanvasNodeInspector({
   }
 
   const data = node.data;
-  const busy = data.status === "submitting" || data.status === "pending" || data.status === "running";
+  const [polishingPrompt, setPolishingPrompt] = useState(false);
+  const taskBusy = data.status === "submitting" || data.status === "pending" || data.status === "running";
+  const busy = taskBusy || polishingPrompt;
   const canSync = canSyncCanvasNodeTask(data);
   const resultPreview = data.assetUrls[0] || data.previewImagePath || data.referenceImages[0] || "";
   const resultUrl = data.assetUrls[0] || "";
@@ -169,16 +174,19 @@ export default function CanvasNodeInspector({
           ) : null}
 
           {!isUpload && !isUpscale && !isAnnotate ? (
-            <label className="qmdh-canvas-field qmdh-canvas-field-prompt">
-              <span>提示词</span>
-              <CanvasDraftTextarea
-                rows={12}
-                value={data.prompt}
-                disabled={disabled || busy}
-                placeholder="描述生成内容…"
-                onCommit={(prompt) => patch({ prompt })}
-              />
-            </label>
+            <CanvasPromptPolishField
+              nodeKind={data.nodeKind}
+              prompt={data.prompt}
+              referenceImages={data.referenceImages}
+              upstreamImages={upstream.images}
+              disabled={disabled}
+              busy={taskBusy}
+              rows={12}
+              placeholder="描述生成内容…"
+              onPromptChange={(prompt) => patch({ prompt, promptPolished: false })}
+              onPolished={() => patch({ promptPolished: true })}
+              onPolishingChange={setPolishingPrompt}
+            />
           ) : null}
 
           {!isUpload && !isUpscale && !isAnnotate ? (
@@ -332,11 +340,13 @@ export default function CanvasNodeInspector({
               }}
             >
               {busy
-                ? isAnnotate
-                  ? "保存中…"
-                  : isUpscale
-                    ? "放大中…"
-                    : "生成中…"
+                ? taskBusy
+                  ? isAnnotate
+                    ? "保存中…"
+                    : isUpscale
+                      ? "放大中…"
+                      : "生成中…"
+                  : "润色中…"
                 : data.status === "failed"
                   ? "重试"
                   : isAnnotate

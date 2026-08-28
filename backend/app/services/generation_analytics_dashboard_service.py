@@ -8,7 +8,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import GenerationIntent, GenerationSession, PromptTemplate, User
+from app.core.audit import AuditEventType
+from app.models import AuditLog, GenerationIntent, GenerationSession, PromptTemplate, User
 
 DEFAULT_LOOKBACK_DAYS = 30
 
@@ -60,6 +61,58 @@ def _merge_outcome_totals(target: Counter[str], metrics: dict | None) -> None:
         target[key] += int(value or 0)
 
 
+def _intent_was_prompt_polished(intent: GenerationIntent) -> bool:
+    submission = (intent.outcome_signals or {}).get("submission")
+    if not isinstance(submission, dict):
+        return False
+    return bool(submission.get("prompt_polished"))
+
+
+def _intent_is_settled(intent: GenerationIntent) -> bool:
+    return bool((intent.outcome_signals or {}).get("settled"))
+
+
+def get_prompt_polish_usage_stats(db: Session, *, days: int = DEFAULT_LOOKBACK_DAYS) -> dict:
+    since = _since(days)
+    polish_logs = db.scalars(
+        select(AuditLog).where(
+            AuditLog.event_type == AuditEventType.STUDIO_PROMPT_POLISH,
+            AuditLog.created_at >= since,
+        )
+    ).all()
+    intents = db.scalars(select(GenerationIntent).where(GenerationIntent.submitted_at >= since)).all()
+
+    polish_count = len(polish_logs)
+    unique_users = len({log.actor_id for log in polish_logs if log.actor_id is not None})
+    studio_count = 0
+    canvas_count = 0
+    for log in polish_logs:
+        details = log.details if isinstance(log.details, dict) else {}
+        surface = str(details.get("source_surface") or "studio")
+        if surface == "canvas":
+            canvas_count += 1
+        else:
+            studio_count += 1
+
+    polished_intent_count = sum(1 for intent in intents if _intent_was_prompt_polished(intent))
+    polished_settled_count = sum(
+        1 for intent in intents if _intent_was_prompt_polished(intent) and _intent_is_settled(intent)
+    )
+    intent_count = len(intents)
+
+    return {
+        "polish_event_count": polish_count,
+        "polish_unique_users": unique_users,
+        "polish_studio_count": studio_count,
+        "polish_canvas_count": canvas_count,
+        "polished_intent_count": polished_intent_count,
+        "polish_adoption_rate": round(polished_intent_count / intent_count, 4) if intent_count else 0.0,
+        "polish_settle_rate": round(polished_settled_count / polished_intent_count, 4)
+        if polished_intent_count
+        else 0.0,
+    }
+
+
 def get_generation_analytics_overview(db: Session, *, days: int = DEFAULT_LOOKBACK_DAYS) -> dict:
     since = _since(days)
     sessions = db.scalars(
@@ -106,6 +159,7 @@ def get_generation_analytics_overview(db: Session, *, days: int = DEFAULT_LOOKBA
         "high_explore_sessions": high_explore_sessions,
         "settled_sessions": settled_sessions,
         "outcome_totals": dict(outcome_totals),
+        **get_prompt_polish_usage_stats(db, days=days),
     }
 
 

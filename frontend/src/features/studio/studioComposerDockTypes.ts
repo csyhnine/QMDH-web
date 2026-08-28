@@ -44,6 +44,7 @@ export type StudioComposerDockProps = {
   onModeChange: (mode: StudioFormState["creationMode"]) => void;
   onOpenReferencePicker: () => void;
   onPromptChange: (value: string) => void;
+  onPromptPolished?: () => void;
   onProviderSelect: (providerName: string) => void;
   onGrokVideoSkuSelect: (sku: import("./studioComposerGrokSkuMenuTypes").StudioVideoSku) => void;
   onRemoveReferenceUpload: (index: number) => void;

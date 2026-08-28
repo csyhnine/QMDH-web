@@ -36,6 +36,7 @@ export type StudioFormState = {
   referenceImages: string[];
   notes: string;
   grokVideoSku: string;
+  promptPolished: boolean;
 };
 
 export type ReferenceUploadItem = {

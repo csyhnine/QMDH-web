@@ -71,6 +71,7 @@ export function useStudioTaskSubmission({
 
     try {
       const createdTask = await api.createTask(submissionDraft.payload);
+      setStudioForm((current) => ({ ...current, promptPolished: false }));
       setSubmissionTracker(
         buildCreatedSubmissionTracker({
           form,

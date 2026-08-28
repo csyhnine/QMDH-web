@@ -16,6 +16,7 @@ export default function StudioComposerExpandedContent(props: StudioComposerExpan
     studioForm: props.studioForm,
     referenceUploads: props.referenceUploads,
     onPromptChange: props.onPromptChange,
+    onPolished: props.onPromptPolished,
   });
 
   return (

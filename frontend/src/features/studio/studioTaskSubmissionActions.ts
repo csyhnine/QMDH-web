@@ -10,6 +10,7 @@ type BuildTaskSubmissionPayloadOptions = {
   referenceUploads?: import("./studioTypes").ReferenceUploadItem[];
   sourceSurface?: "studio" | "canvas";
   canvasNodeId?: string;
+  promptPolished?: boolean;
 };
 
 type BuildPendingSubmissionTrackerOptions = BuildTaskSubmissionPayloadOptions & {
@@ -38,6 +39,7 @@ export function buildTaskSubmissionPayload({
   referenceUploads,
   sourceSurface = "studio",
   canvasNodeId,
+  promptPolished = false,
 }: BuildTaskSubmissionPayloadOptions): TaskSubmissionDraft {
   const workflowKey = getStudioWorkflowKeyForProvider(provider, form.creationMode);
   const taskTitle = deriveTaskTitleFromPrompt(form.prompt, form.title.trim() || defaultStudioForm.title);
@@ -59,6 +61,7 @@ export function buildTaskSubmissionPayload({
       template_id: form.activeTemplateId ?? undefined,
       source_surface: sourceSurface,
       canvas_node_id: canvasNodeId,
+      prompt_polished: promptPolished || form.promptPolished,
     },
   };
 }

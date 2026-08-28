@@ -192,4 +192,5 @@ export const defaultStudioForm: StudioFormState = {
   referenceImages: [],
   notes: "",
   grokVideoSku: "",
+  promptPolished: false,
 };

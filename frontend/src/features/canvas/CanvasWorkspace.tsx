@@ -13,6 +13,7 @@ import {
 import { api, type CanvasGraphJson, type CanvasTemplateSummary, type Provider } from "../../api";
 import MediaComparePanel from "../../components/shared/MediaComparePanel";
 import { useAuth } from "../../context/AuthContext";
+import { usePromptPolishEnabled } from "../../lib/usePromptPolishEnabled";
 import { isRuntimeUpscaleProvider, publicProviderDisplayName } from "../studio/modelAdminUtils";
 import { downloadMediaUrl } from "../studio/studioMediaDownload";
 import { uniqueMediaPaths } from "../studio/studioCompareUtils";
@@ -97,6 +98,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   const isTemplateMode = editTemplateId != null;
   const navigate = useNavigate();
   const { isGuest, canUseOpsViews } = useAuth();
+  const promptPolishEnabled = usePromptPolishEnabled();
   const canvas = useCanvasProject(!isTemplateMode);
   const templateEditor = useCanvasTemplateEditor(isTemplateMode ? editTemplateId : null);
   const [nodes, setNodes] = useState<CanvasFlowNode[]>([]);
@@ -857,6 +859,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     () => ({
       providers,
       disabled: sessionLoading || runningAll,
+      promptPolishEnabled,
       patchNode,
       patchNoteNode,
       generateNode: handleGenerate,
@@ -876,6 +879,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     [
       sessionLoading,
       runningAll,
+      promptPolishEnabled,
       getUpstreamDeliverables,
       handleGenerate,
       handleSyncNodeTask,

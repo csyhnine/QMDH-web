@@ -1,5 +1,5 @@
 import { Handle, Position, useUpdateNodeInternals, type Node, type NodeProps } from "@xyflow/react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { resolveProviderResolutionOptions } from "../studio/studioConstants";
 import { aspectRatioOptionsFor } from "../studio/studioCanvasLinkage";
@@ -12,7 +12,8 @@ import {
   upscaleStyleOptions,
 } from "../studio/studioUpscaleOptions";
 import AnnotateBoard from "./AnnotateBoard";
-import { CanvasDraftInput, CanvasDraftTextarea } from "./CanvasDraftField";
+import { CanvasDraftInput } from "./CanvasDraftField";
+import CanvasPromptPolishField from "./CanvasPromptPolishField";
 import CanvasModelSelect from "./CanvasModelSelect";
 import { useCanvasNodeActions } from "./canvasNodeContext";
 import { NODE_KIND_LABEL, type GenerateNodeData } from "./canvasTypes";
@@ -45,6 +46,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
   } = useCanvasNodeActions();
   const updateNodeInternals = useUpdateNodeInternals();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [polishingPrompt, setPolishingPrompt] = useState(false);
   const upstream = useMemo(() => getUpstreamDeliverables(id), [getUpstreamDeliverables, id]);
   const isUpload = data.nodeKind === "upload";
   const isUpscale = data.nodeKind === "upscale";
@@ -65,7 +67,8 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
   const preview = isAnnotate
     ? data.assetUrls[0] || baseImage
     : data.assetUrls[0] || data.previewImagePath || data.referenceImages[0] || "";
-  const busy = data.status === "submitting" || data.status === "pending" || data.status === "running";
+  const taskBusy = data.status === "submitting" || data.status === "pending" || data.status === "running";
+  const busy = taskBusy || polishingPrompt;
   const canSync = canSyncCanvasNodeTask(data);
   const resultUrl = data.assetUrls[0] || "";
   const compareUrls = resolveCanvasCompareOriginalUrls(data.referenceImages, upstream.images, resultUrl);
@@ -250,22 +253,25 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
             </label>
 
             {!isUpscale ? (
-              <label className="qmdh-canvas-field">
-                <span>提示词</span>
-                <CanvasDraftTextarea
-                  rows={4}
-                  value={data.prompt}
-                  disabled={disabled || busy}
-                  placeholder={
-                    data.nodeKind === "img2img"
-                      ? "描述如何修改上游参考图…"
-                      : data.nodeKind === "video"
-                        ? "描述要生成的视频…"
-                        : "描述想要生成的画面…"
-                  }
-                  onCommit={(prompt) => patch({ prompt })}
-                />
-              </label>
+              <CanvasPromptPolishField
+                nodeKind={data.nodeKind}
+                prompt={data.prompt}
+                referenceImages={data.referenceImages}
+                upstreamImages={upstream.images}
+                disabled={disabled}
+                busy={taskBusy}
+                rows={4}
+                placeholder={
+                  data.nodeKind === "img2img"
+                    ? "描述如何修改上游参考图…"
+                    : data.nodeKind === "video"
+                      ? "描述要生成的视频…"
+                      : "描述想要生成的画面…"
+                }
+                onPromptChange={(prompt) => patch({ prompt, promptPolished: false })}
+                onPolished={() => patch({ promptPolished: true })}
+                onPolishingChange={setPolishingPrompt}
+              />
             ) : null}
 
             {!isUpscale ? (
@@ -415,9 +421,11 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
             onClick={() => generateNode(id, data)}
           >
             {busy
-              ? isUpscale
-                ? "放大中…"
-                : "生成中…"
+              ? taskBusy
+                ? isUpscale
+                  ? "放大中…"
+                  : "生成中…"
+                : "润色中…"
               : data.status === "failed"
                 ? "重试"
                 : isUpscale

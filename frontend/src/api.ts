@@ -568,6 +568,7 @@ export type TaskCreatePayload = {
   template_id?: number;
   source_surface?: "studio" | "canvas" | "chat";
   canvas_node_id?: string;
+  prompt_polished?: boolean;
 };
 
 export type GenerationOutcomeType =
@@ -604,6 +605,13 @@ export type GenerationAnalyticsOverview = {
   high_explore_sessions: number;
   settled_sessions: number;
   outcome_totals: Record<string, number>;
+  polish_event_count: number;
+  polish_unique_users: number;
+  polish_studio_count: number;
+  polish_canvas_count: number;
+  polished_intent_count: number;
+  polish_adoption_rate: number;
+  polish_settle_rate: number;
 };
 
 export type GenerationAnalyticsSessionRow = {
@@ -1654,5 +1662,6 @@ export const api = {
     prompt: string;
     creation_mode: "generate" | "edit" | "video";
     reference_images?: string[];
+    source_surface?: "studio" | "canvas";
   }) => postJson<PromptPolishResponse>("/studio/prompt-polish", payload),
 };

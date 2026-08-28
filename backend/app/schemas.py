@@ -32,6 +32,7 @@ class TaskCreate(BaseModel):
     template_id: int | None = None
     source_surface: str = "studio"
     canvas_node_id: str | None = Field(default=None, max_length=80)
+    prompt_polished: bool = False
 
 
 class TaskDeleteIn(BaseModel):

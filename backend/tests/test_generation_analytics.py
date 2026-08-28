@@ -6,13 +6,15 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
-from app.models import DataClassification, GenerationIntent, GenerationSession, Project, PromptTemplate, Task, TaskStatus, User, Workflow
+from app.models import AuditLog, DataClassification, GenerationIntent, GenerationSession, Project, PromptTemplate, Task, TaskStatus, User, Workflow
+from app.core.audit import AuditEventType
 from app.services.generation_fingerprints import prompt_fingerprint, ref_fingerprint
 from app.services.generation_intent_service import record_generation_intent_for_task, sync_generation_intent_from_task
 from app.services.generation_outcome_service import record_generation_outcome, record_generation_outcome_from_task_payload
 from app.services.generation_analytics_dashboard_service import (
     compute_template_quality_score,
     get_generation_analytics_overview,
+    get_prompt_polish_usage_stats,
     get_template_quality_scores,
 )
 from app.services.generation_session_service import recompute_all_generation_sessions, recompute_session_metrics
@@ -332,6 +334,82 @@ class GenerationAnalyticsDashboardTests(unittest.TestCase):
             self.assertEqual(row["template_id"], template_id)
             self.assertEqual(row["intent_count"], 3)
             self.assertGreater(row["quality_score"], 0.5)
+
+
+class PromptPolishUsageStatsTests(unittest.TestCase):
+    def test_overview_includes_polish_metrics(self) -> None:
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(bind=engine)
+        SessionLocal = sessionmaker(bind=engine)
+
+        with SessionLocal() as db:
+            user = User(name="designer", role="designer", password_hash="unused", is_active=True, project_codes=["QMDH-001"])
+            project = Project(name="Demo", code="QMDH-001", classification=DataClassification.b)
+            workflow = Workflow(
+                key="image-generate",
+                name="Generate",
+                description="Generate",
+                category="demo",
+                priority="P1",
+                provider_capability="image.generate",
+                config={},
+            )
+            db.add_all([user, project, workflow])
+            db.flush()
+
+            db.add(
+                AuditLog(
+                    event_type=AuditEventType.STUDIO_PROMPT_POLISH,
+                    actor_name=user.name,
+                    actor_id=user.id,
+                    details={"source_surface": "studio", "creation_mode": "generate"},
+                )
+            )
+            db.add(
+                AuditLog(
+                    event_type=AuditEventType.STUDIO_PROMPT_POLISH,
+                    actor_name=user.name,
+                    actor_id=user.id,
+                    details={"source_surface": "canvas", "creation_mode": "edit"},
+                )
+            )
+
+            task = Task(
+                title="Polished task",
+                status=TaskStatus.pending,
+                workflow_id=workflow.id,
+                project_id=project.id,
+                user_id=user.id,
+                requested_provider="test-provider",
+                payload={"prompt": "polished prompt"},
+                result={},
+            )
+            db.add(task)
+            db.flush()
+            record_generation_intent_for_task(
+                db,
+                task=task,
+                workflow_key=workflow.key,
+                prompt_polished=True,
+            )
+            db.commit()
+
+        with SessionLocal() as db:
+            stats = get_prompt_polish_usage_stats(db, days=30)
+            self.assertEqual(stats["polish_event_count"], 2)
+            self.assertEqual(stats["polish_unique_users"], 1)
+            self.assertEqual(stats["polish_studio_count"], 1)
+            self.assertEqual(stats["polish_canvas_count"], 1)
+            self.assertEqual(stats["polished_intent_count"], 1)
+            self.assertEqual(stats["polish_adoption_rate"], 1.0)
+
+            overview = get_generation_analytics_overview(db, days=30)
+            self.assertEqual(overview["polish_event_count"], 2)
+            self.assertEqual(overview["polished_intent_count"], 1)
 
 
 if __name__ == "__main__":

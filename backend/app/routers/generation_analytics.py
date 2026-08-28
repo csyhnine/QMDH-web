@@ -42,6 +42,13 @@ class GenerationAnalyticsOverviewOut(BaseModel):
     high_explore_sessions: int
     settled_sessions: int
     outcome_totals: dict[str, int]
+    polish_event_count: int
+    polish_unique_users: int
+    polish_studio_count: int
+    polish_canvas_count: int
+    polished_intent_count: int
+    polish_adoption_rate: float
+    polish_settle_rate: float
 
 
 class GenerationSessionRowOut(BaseModel):

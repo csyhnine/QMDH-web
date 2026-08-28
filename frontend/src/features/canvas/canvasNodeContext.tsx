@@ -16,6 +16,7 @@ export type CanvasMediaPreview = {
 export type CanvasNodeActions = {
   providers: Provider[];
   disabled?: boolean;
+  promptPolishEnabled?: boolean | null;
   patchNode: (
     nodeId: string,
     patch: Partial<GenerateNodeData>,
@@ -53,6 +54,7 @@ export function useCanvasNodeActions(): CanvasNodeActions {
     return {
       providers: [],
       disabled: true,
+      promptPolishEnabled: false,
       patchNode: () => undefined,
       patchNoteNode: () => undefined,
       generateNode: () => undefined,

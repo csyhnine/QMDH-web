@@ -11051,6 +11051,76 @@ textarea:focus-visible {
   color: #b54708;
 }
 
+.qmdh-canvas-node-progress {
+  display: grid;
+  gap: 6px;
+  padding: 0 10px 8px;
+}
+
+.qmdh-canvas-node-progress.is-compact {
+  gap: 4px;
+  padding-bottom: 6px;
+}
+
+.qmdh-canvas-node-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.qmdh-canvas-node-progress-head strong {
+  font-size: 0.82rem;
+  color: #0f172a;
+}
+
+.qmdh-canvas-node-progress-head span {
+  font-size: 0.72rem;
+  color: #175cd3;
+  font-weight: 600;
+}
+
+.qmdh-canvas-node-progress.is-compact .qmdh-canvas-node-progress-head strong {
+  font-size: 0.76rem;
+}
+
+.qmdh-canvas-node-progress.is-compact .qmdh-canvas-node-progress-head span {
+  font-size: 0.68rem;
+}
+
+.qmdh-canvas-node-progress-track {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(191, 219, 254, 0.55);
+}
+
+.qmdh-canvas-node-progress-track b {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb 0%, #3b82f6 55%, #93c5fd 100%);
+  transition: width 420ms ease;
+}
+
+.qmdh-canvas-run-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+  padding: 0 10px;
+  min-height: 32px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .qmdh-canvas-node-body {
   display: grid;
   gap: 8px;

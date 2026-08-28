@@ -45,6 +45,7 @@ import type {
   NoteNodeData,
 } from "./canvasTypes";
 import { isGenerateNode, isGroupNode } from "./canvasTypes";
+import { isCanvasNodeTaskBusy } from "./canvasTaskProgressUtils";
 import { graphFromActiveProject, useCanvasProject } from "./useCanvasProject";
 import { graphFromTemplate, useCanvasTemplateEditor } from "./useCanvasTemplateEditor";
 import {
@@ -751,6 +752,20 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     [nodes]
   );
 
+  const generateRunStats = useMemo(() => {
+    let busy = 0;
+    let completed = 0;
+    let failed = 0;
+    for (const node of nodes) {
+      if (!isGenerateNode(node)) continue;
+      const status = node.data.status;
+      if (isCanvasNodeTaskBusy(status)) busy += 1;
+      else if (status === "completed") completed += 1;
+      else if (status === "failed") failed += 1;
+    }
+    return { busy, completed, failed };
+  }, [nodes]);
+
   const selectedRunnableCount = useMemo(
     () => listRunnableNodeIdsForSelection(nodes, edges, selectedNodeIds).order.length,
     [edges, nodes, selectedNodeIds]
@@ -975,6 +990,12 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
             </span>
           </div>
           <div className="qmdh-canvas-toolbar-right">
+            {!isTemplateMode && (generateRunStats.busy > 0 || runningAll) ? (
+              <span className="qmdh-canvas-run-stats" title="当前画布生成节点运行汇总">
+                运行中 {generateRunStats.busy} · 已完成 {generateRunStats.completed} · 失败{" "}
+                {generateRunStats.failed}
+              </span>
+            ) : null}
             {!isTemplateMode ? (
               <>
                 <button

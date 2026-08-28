@@ -62,6 +62,10 @@ export type GenerateNodeData = {
   annotationWidth: number;
   annotationOpacity: number;
   promptPolished?: boolean;
+  /** Client-side task wait start (ms epoch). Set on submit or restored from task.created_at. */
+  taskStartedAt?: number;
+  /** Wall-clock wait until terminal status (ms). */
+  taskDurationMs?: number;
 };
 
 export type GroupNodeData = {

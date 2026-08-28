@@ -65,6 +65,14 @@ function failureMessage(task: Task): string {
   return "生成失败，请重试";
 }
 
+function resolveTaskDurationMs(data: GenerateNodeData, task: Task): number | undefined {
+  const startedAt = data.taskStartedAt ?? new Date(task.created_at).getTime();
+  if (Number.isNaN(startedAt)) return undefined;
+  const endedAt = task.updated_at ? new Date(task.updated_at).getTime() : Date.now();
+  if (Number.isNaN(endedAt)) return Math.max(0, Date.now() - startedAt);
+  return Math.max(0, endedAt - startedAt);
+}
+
 export function isClientWaitTimeoutMessage(message: string | undefined): boolean {
   const text = (message || "").trim();
   if (!text) return false;
@@ -125,9 +133,20 @@ export async function pollTaskUntilDone(
 
   try {
     let lastBusyStatus: GenerateNodeData["status"] | "" = "";
-    const startedAt = Date.now();
+    let startedAt = Date.now();
     let attempt = 0;
     let softNotified = false;
+
+    try {
+      const initial = await api.getTask(taskId);
+      const createdAtMs = new Date(initial.created_at).getTime();
+      if (!Number.isNaN(createdAtMs)) {
+        startedAt = createdAtMs;
+        patchNode(nodeId, { taskStartedAt: createdAtMs, taskId });
+      }
+    } catch {
+      patchNode(nodeId, { taskStartedAt: startedAt, taskId });
+    }
 
     // Keep polling until the Studio task finishes. After POLL_DEADLINE_MS surface
     // awaiting_result so the user can sync / regenerate, but do not abandon the taskId.
@@ -165,7 +184,12 @@ export async function pollTaskUntilDone(
       }
 
       if (latest.status === "failed") {
-        patchNode(nodeId, { status: "failed", errorMessage: failureMessage(latest), taskId });
+        patchNode(nodeId, {
+          status: "failed",
+          errorMessage: failureMessage(latest),
+          taskId,
+          taskDurationMs: Math.max(0, Date.now() - startedAt),
+        });
         return;
       }
 
@@ -186,6 +210,7 @@ export async function pollTaskUntilDone(
           assetUrls: urls,
           errorMessage: undefined,
           taskId,
+          taskDurationMs: Math.max(0, Date.now() - startedAt),
         });
         return;
       }
@@ -224,7 +249,12 @@ export async function syncCanvasNodeTask(
   try {
     const latest = await api.getTask(taskId);
     if (latest.status === "failed") {
-      patchNode(nodeId, { status: "failed", errorMessage: failureMessage(latest), taskId });
+      patchNode(nodeId, {
+        status: "failed",
+        errorMessage: failureMessage(latest),
+        taskId,
+        taskDurationMs: resolveTaskDurationMs(data, latest),
+      });
       return;
     }
     if (latest.status === "completed") {
@@ -243,6 +273,7 @@ export async function syncCanvasNodeTask(
         assetUrls: urls,
         errorMessage: undefined,
         taskId,
+        taskDurationMs: resolveTaskDurationMs(data, latest),
       });
       return;
     }
@@ -336,6 +367,8 @@ export function useCanvasNodeGenerate(
           errorMessage: undefined,
           requestedProvider: provider.provider_name,
           referenceImages,
+          taskStartedAt: Date.now(),
+          taskDurationMs: undefined,
         });
 
         try {
@@ -402,6 +435,8 @@ export function useCanvasNodeGenerate(
         errorMessage: undefined,
         requestedProvider: provider.provider_name,
         referenceImages,
+        taskStartedAt: Date.now(),
+        taskDurationMs: undefined,
       });
 
       try {

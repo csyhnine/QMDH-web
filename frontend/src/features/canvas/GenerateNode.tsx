@@ -12,6 +12,7 @@ import {
   upscaleStyleOptions,
 } from "../studio/studioUpscaleOptions";
 import AnnotateBoard from "./AnnotateBoard";
+import CanvasNodeTaskProgress from "./CanvasNodeTaskProgress";
 import { CanvasDraftInput } from "./CanvasDraftField";
 import CanvasPromptPolishField from "./CanvasPromptPolishField";
 import CanvasModelSelect from "./CanvasModelSelect";
@@ -141,6 +142,15 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
               : statusLabel[data.status]}
         </span>
       </header>
+
+      {!isUpload && !isAnnotate ? (
+        <CanvasNodeTaskProgress
+          status={data.status}
+          taskStartedAt={data.taskStartedAt}
+          taskDurationMs={data.taskDurationMs}
+          compact={!selected}
+        />
+      ) : null}
 
       <div className="qmdh-canvas-node-body">
         {isUpload ? (

@@ -369,6 +369,7 @@ export function useCanvasNodeGenerate(
         creationMode: creationModeForNodeKind(data.nodeKind),
         title: data.label,
         prompt: data.prompt,
+        activeTemplateId: null,
         projectCode: data.projectCode || defaultStudioForm.projectCode,
         requestedProvider: data.requestedProvider,
         classification: data.classification || "B",
@@ -404,7 +405,7 @@ export function useCanvasNodeGenerate(
       });
 
       try {
-        const draft = buildTaskSubmissionPayload({ form, provider });
+        const draft = buildTaskSubmissionPayload({ form, provider, sourceSurface: "canvas", canvasNodeId: nodeId });
         const task = await api.createTask(draft.payload);
         patch(nodeId, { status: "pending", taskId: task.id });
         await pollTaskUntilDone(

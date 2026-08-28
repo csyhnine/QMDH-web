@@ -29,10 +29,26 @@ class TaskCreate(BaseModel):
     requested_provider: str
     classification: DataClassification = DataClassification.b
     payload: dict[str, Any] = Field(default_factory=dict)
+    template_id: int | None = None
+    source_surface: str = "studio"
+    canvas_node_id: str | None = Field(default=None, max_length=80)
 
 
 class TaskDeleteIn(BaseModel):
     reason: str = ""
+
+
+class GenerationOutcomeIn(BaseModel):
+    outcome_type: str = Field(min_length=1, max_length=64)
+    asset_id: int | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class GenerationOutcomeOut(BaseModel):
+    task_id: int
+    outcome_type: str
+    recorded: bool
+    outcome_signals: dict[str, Any]
 
 
 class TaskOut(BaseModel):

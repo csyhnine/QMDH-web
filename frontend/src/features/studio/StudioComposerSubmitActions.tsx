@@ -7,20 +7,28 @@ type StudioComposerSubmitActionsProps = {
   availableProviderCount: number;
   creationMode: StudioFormState["creationMode"];
   hasActiveProject: boolean;
+  prompt: string;
   referenceUploadCount: number;
   submitting: boolean;
   submissionProgress: SubmissionTracker | null;
   uploadingReference: boolean;
+  promptPolishEnabled?: boolean;
+  polishingPrompt?: boolean;
+  onPolishPrompt?: () => void;
 };
 
 export default function StudioComposerSubmitActions({
   availableProviderCount,
   creationMode,
   hasActiveProject,
+  prompt,
   referenceUploadCount,
   submitting,
   submissionProgress,
   uploadingReference,
+  promptPolishEnabled = false,
+  polishingPrompt = false,
+  onPolishPrompt,
 }: StudioComposerSubmitActionsProps) {
   const { isGuest } = useAuth();
   const editNeedsReference = creationMode === "edit" && referenceUploadCount === 0;
@@ -37,6 +45,7 @@ export default function StudioComposerSubmitActions({
     hasActiveProject &&
     availableProviderCount > 0 &&
     !uploadingReference;
+  const canPolish = promptPolishEnabled && prompt.trim().length > 0 && !polishingPrompt && !submitting;
 
   return (
     <div className="composer-toolbar-actions">
@@ -46,6 +55,18 @@ export default function StudioComposerSubmitActions({
         </div>
       ) : null}
 
+      {promptPolishEnabled ? (
+        <button
+          type="button"
+          className="composer-polish-button composer-toolbar-polish-button"
+          disabled={!canPolish}
+          onClick={() => onPolishPrompt?.()}
+          title="使用 LLM 优化当前提示词（会参考已上传图片）"
+        >
+          {polishingPrompt ? "润色中..." : "润色"}
+        </button>
+      ) : null}
+
       <button
         type="submit"
         className="submit-button composer-submit-button"
@@ -53,6 +74,7 @@ export default function StudioComposerSubmitActions({
           isGuest ||
           submitting ||
           uploadingReference ||
+          polishingPrompt ||
           availableProviderCount === 0 ||
           !hasActiveProject ||
           editNeedsReference
@@ -65,4 +87,3 @@ export default function StudioComposerSubmitActions({
     </div>
   );
 }
-

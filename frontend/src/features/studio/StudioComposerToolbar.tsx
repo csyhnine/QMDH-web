@@ -28,10 +28,14 @@ export default function StudioComposerToolbar(props: StudioComposerToolbarProps)
         availableProviderCount={availableProviderCount}
         creationMode={props.studioForm.creationMode}
         hasActiveProject={hasActiveProject}
+        prompt={props.studioForm.prompt}
         referenceUploadCount={referenceUploads.length}
         submitting={submitting}
         submissionProgress={submissionProgress}
         uploadingReference={uploadingReference}
+        promptPolishEnabled={props.promptPolishEnabled}
+        polishingPrompt={props.polishingPrompt}
+        onPolishPrompt={props.onPolishPrompt}
       />
     </div>
   );

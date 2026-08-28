@@ -71,7 +71,9 @@ class PlatformSettingsApiTests(unittest.TestCase):
     def test_public_read_defaults_disabled(self) -> None:
         response = self.client.get("/settings/platform")
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.json()["chat_agent_ui_enabled"])
+        body = response.json()
+        self.assertFalse(body["chat_agent_ui_enabled"])
+        self.assertFalse(body["prompt_polish_enabled"])
 
     def test_admin_can_enable_chat_agent_ui(self) -> None:
         updated = self.client.patch(

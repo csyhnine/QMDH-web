@@ -16,12 +16,14 @@ This file is the fast handoff baseline for the next agent. Read these first:
 
 ## Current Baseline
 
-- **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准；Studio/Canvas/Chat 主体已在生产，后续按产品优先级小步推进
-- Current branch: **`main`** @ **`9817ab5`**（ahead of `origin/main` by 1，2026-08-25）
-- Production: **`https://cityusbdisk.cn`** — 代码 **`f10188e`**（Studio UX rebuild 2026-08-18）；follow-source **`b55e280`**
-- **本地未提交 WIP（2026-08-25）**：Chat「设计助手」UI 默认隐藏 — `featureFlags.ts` + `docker-compose.yml` + `frontend/Dockerfile`；详档 `docs/archive/handoff-2026-08-25-billing-chat-agent-ui.md`
-- Alembic head：**`r9s0t1u2v3w4`**（`ai_tools`；前序 `q8r9s0t1u2v3`=`site_announcements`；更早删对话 FK=`p7q8r9s0t1u2`）
-- 最新交接：`docs/handoff.md` → **`[2026-08-25] 计费审计 + Chat 助手 UI 隐藏`**
+- **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准
+- Current branch: **`main`** @ **`c4f3812`**（Grok 图像、Chat Admin 开关、画布边缘 UX；**本批润色/分析/画布修复均未 commit**）
+- Production: **`https://cityusbdisk.cn`** — 应与 `origin/main` 同步；部署前以 `git log origin/main -1` 为准
+- **Deploy-ready WIP（2026-08-28）**：提示词润色 + 生成行为分析 + 画布复制/连线 — 详档 `docs/archive/handoff-2026-08-28-prompt-polish-generation-analytics-deploy-ready.md`
+- **下一对话**：commit → push → deploy → 迁移 `t1`+`u2` → Admin 配置润色
+- Alembic head（本批后）：**`u2v3w4x5y6z7`**（前序 `t1u2v3w4x5y6` 润色、`s0t1u2v3w4x5` platform_settings）
+- 最新交接：`docs/handoff.md` → **`[2026-08-28] 提示词润色 + 生成行为分析`**
+- **本地未提交 WIP（2026-08-25，仍有效）**：Chat 助手 UI 默认隐藏 — `featureFlags.ts` + docker 构建 env；详档 `docs/archive/handoff-2026-08-25-billing-chat-agent-ui.md`
 - **2026-08-14 本地待部署（摘要）**：
   - 运营看板：视频任务 / Chat 轮次纳入 KPI 与每日趋势；capability 推断修复
   - harness Slice B（`2f85bfb`）：memory 工具 opt-in；Skill 目录-only

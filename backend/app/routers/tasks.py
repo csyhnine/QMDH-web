@@ -12,11 +12,13 @@ from app.core.config import AuthUserProfile
 from app.core.config import settings
 from app.database import get_db
 from app.models import AuditLog, Project, Task, TaskStatus, User, Workflow
-from app.schemas import TaskCreate, TaskDeleteIn, TaskOut
+from app.schemas import GenerationOutcomeIn, GenerationOutcomeOut, TaskCreate, TaskDeleteIn, TaskOut
+from app.services.generation_outcome_service import record_generation_outcome
 from app.services.task_archive import ensure_task_archive
 from app.services.media_storage import resolve_storage_payload
 from app.services.billing import enforce_user_quota
 from app.services.model_registry import get_provider_definition, get_provider_map
+from app.services.generation_intent_service import record_generation_intent_for_task
 from app.services.task_executor import enqueue_task, execute_task, mark_task_enqueue_failed
 from app.services.task_stale_recovery import recover_stale_tasks
 from app.services.usage_ledger import ensure_usage_ledger_for_task
@@ -214,6 +216,15 @@ def create_task(
     db.add(task)
     db.flush()
 
+    record_generation_intent_for_task(
+        db,
+        task=task,
+        workflow_key=payload.workflow_key,
+        template_id=payload.template_id,
+        source_surface=payload.source_surface,
+        canvas_node_id=payload.canvas_node_id,
+    )
+
     db.add(
         AuditLog(
             event_type="task.created",
@@ -247,6 +258,44 @@ def create_task(
 
     db.refresh(task)
     return _to_task_out(task)
+
+
+@router.post("/{task_id}/generation-outcomes", response_model=GenerationOutcomeOut)
+def record_task_generation_outcome(
+    task_id: int,
+    payload: GenerationOutcomeIn,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> GenerationOutcomeOut:
+    task = db.get(Task, task_id)
+    if not task or task.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if not _is_task_visible_to_user(auth_user, task):
+        raise HTTPException(status_code=403, detail="Task access denied")
+
+    intent = record_generation_outcome(
+        db,
+        task_id=task.id,
+        outcome_type=payload.outcome_type.strip(),
+        asset_id=payload.asset_id,
+        metadata=payload.metadata,
+    )
+    db.commit()
+
+    if intent is None:
+        return GenerationOutcomeOut(
+            task_id=task.id,
+            outcome_type=payload.outcome_type,
+            recorded=False,
+            outcome_signals={},
+        )
+
+    return GenerationOutcomeOut(
+        task_id=task.id,
+        outcome_type=payload.outcome_type,
+        recorded=True,
+        outcome_signals=intent.outcome_signals if isinstance(intent.outcome_signals, dict) else {},
+    )
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)

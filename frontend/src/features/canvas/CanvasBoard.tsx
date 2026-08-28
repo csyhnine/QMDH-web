@@ -57,6 +57,7 @@ type BoardMenu = {
   y: number;
   flow: { x: number; y: number };
   connectFrom?: ConnectFrom;
+  disconnectEdgeId?: string;
 };
 
 type CanvasBoardProps = {
@@ -226,6 +227,28 @@ function CanvasBoardInner({
     [disabled, screenToFlowPosition]
   );
 
+  const onEdgeContextMenu = useCallback(
+    (event: MouseEvent | ReactMouseEvent, edge: Edge) => {
+      event.preventDefault();
+      if (disabled) return;
+      setMenu({
+        x: event.clientX,
+        y: event.clientY,
+        flow: screenToFlowPosition({ x: event.clientX, y: event.clientY }),
+        disconnectEdgeId: edge.id,
+      });
+    },
+    [disabled, screenToFlowPosition]
+  );
+
+  const disconnectEdge = useCallback(
+    (edgeId: string) => {
+      onEdgesReplace(edges.filter((edge) => edge.id !== edgeId));
+      setMenu(null);
+    },
+    [edges, onEdgesReplace]
+  );
+
   const addKind = useCallback(
     (kind: CanvasNodeKind) => {
       if (!menu) return;
@@ -354,13 +377,14 @@ function CanvasBoardInner({
           onMoveEnd={onMoveEnd}
           onSelectionChange={onSelectionChange}
           onPaneContextMenu={onPaneContextMenu}
+          onEdgeContextMenu={onEdgeContextMenu}
           onPaneClick={onPaneClick}
           onDoubleClick={onPaneDoubleClick}
           onInit={onFlowInit}
           defaultViewport={defaultViewport}
           minZoom={0.2}
           maxZoom={2}
-          deleteKeyCode={disabled ? null : "Delete"}
+          deleteKeyCode={disabled ? null : ["Delete", "Backspace"]}
           multiSelectionKeyCode={disabled ? null : ["Meta", "Control"]}
           selectionOnDrag={!disabled}
           selectionMode={SelectionMode.Partial}
@@ -391,7 +415,17 @@ function CanvasBoardInner({
         </ReactFlow>
       </CanvasEdgeInteractionProvider>
       {dragOver ? <div className="qmdh-canvas-drop-overlay">松开以创建「上传图片」节点</div> : null}
-      {menu ? (
+      {menu?.disconnectEdgeId ? (
+        <div className="qmdh-canvas-context-menu" style={{ left: menu.x, top: menu.y }} role="menu">
+          <header>连线</header>
+          <button type="button" role="menuitem" onClick={() => disconnectEdge(menu.disconnectEdgeId!)}>
+            断开连线
+          </button>
+          <button type="button" className="muted" onClick={() => setMenu(null)}>
+            取消
+          </button>
+        </div>
+      ) : menu ? (
         <CanvasContextMenu
           x={menu.x}
           y={menu.y}

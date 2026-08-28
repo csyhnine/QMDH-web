@@ -568,6 +568,74 @@ class PromptTemplateEvent(Base):
     user: Mapped[User | None] = relationship()
 
 
+class GenerationSession(Base):
+    """Aggregated designer behavior window: same user + ref images, short time span."""
+
+    __tablename__ = "generation_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    ref_fingerprint: Mapped[str] = mapped_column(String(64), default="", index=True)
+    session_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    session_ended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    submit_count: Mapped[int] = mapped_column(Integer, default=0)
+    prompt_variant_count: Mapped[int] = mapped_column(Integer, default=0)
+    dominant_prompt_fingerprint: Mapped[str] = mapped_column(String(64), default="")
+    dominant_template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("prompt_templates.id", ondelete="SET NULL"), nullable=True
+    )
+    gacha_score: Mapped[float] = mapped_column(Float, default=0.0)
+    explore_score: Mapped[float] = mapped_column(Float, default=0.0)
+    provider_switch_count: Mapped[int] = mapped_column(Integer, default=0)
+    completed_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship()
+    project: Mapped["Project | None"] = relationship()
+    dominant_template: Mapped[PromptTemplate | None] = relationship()
+    intents: Mapped[list["GenerationIntent"]] = relationship(back_populates="session")
+
+
+class GenerationIntent(Base):
+    """One generation task submission with prompt/ref fingerprints for behavior analysis."""
+
+    __tablename__ = "generation_intents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("generation_sessions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("prompt_templates.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    source_surface: Mapped[str] = mapped_column(String(32), default="studio")
+    canvas_node_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    creation_mode: Mapped[str] = mapped_column(String(32), default="generate")
+    workflow_key: Mapped[str] = mapped_column(String(80), default="")
+    prompt_raw: Mapped[str] = mapped_column(Text, default="")
+    prompt_fingerprint: Mapped[str] = mapped_column(String(64), default="", index=True)
+    ref_fingerprint: Mapped[str] = mapped_column(String(64), default="", index=True)
+    ref_paths: Mapped[list] = mapped_column(JSON, default=list)
+    requested_provider: Mapped[str] = mapped_column(String(80), default="")
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    task_status: Mapped[str] = mapped_column(String(32), default="pending")
+    has_asset: Mapped[bool] = mapped_column(Boolean, default=False)
+    outcome_signals: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    task: Mapped["Task"] = relationship()
+    user: Mapped["User"] = relationship()
+    project: Mapped["Project"] = relationship()
+    session: Mapped[GenerationSession | None] = relationship(back_populates="intents")
+    template: Mapped[PromptTemplate | None] = relationship()
+
+
 class ProviderProfile(Base):
     __tablename__ = "provider_profiles"
 
@@ -742,6 +810,11 @@ class PlatformSettings(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     chat_agent_ui_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    prompt_polish_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    prompt_polish_provider_id: Mapped[int | None] = mapped_column(
+        ForeignKey("provider_profiles.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    prompt_polish_system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

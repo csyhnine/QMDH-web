@@ -80,6 +80,7 @@ class AuditEventType:
 
     # Studio agent events
     STUDIO_AGENT_ASSIST = "studio_agent.assist"
+    STUDIO_PROMPT_POLISH = "studio.prompt_polish"
 
     # MCP events
     MCP_TOOL_CALL = "mcp.tool_call"

@@ -8,6 +8,8 @@ type BuildTaskSubmissionPayloadOptions = {
   form: StudioFormState;
   provider: Provider;
   referenceUploads?: import("./studioTypes").ReferenceUploadItem[];
+  sourceSurface?: "studio" | "canvas";
+  canvasNodeId?: string;
 };
 
 type BuildPendingSubmissionTrackerOptions = BuildTaskSubmissionPayloadOptions & {
@@ -34,6 +36,8 @@ export function buildTaskSubmissionPayload({
   form,
   provider,
   referenceUploads,
+  sourceSurface = "studio",
+  canvasNodeId,
 }: BuildTaskSubmissionPayloadOptions): TaskSubmissionDraft {
   const workflowKey = getStudioWorkflowKeyForProvider(provider, form.creationMode);
   const taskTitle = deriveTaskTitleFromPrompt(form.prompt, form.title.trim() || defaultStudioForm.title);
@@ -52,6 +56,9 @@ export function buildTaskSubmissionPayload({
       requested_provider: provider.provider_name,
       classification: form.classification,
       payload: taskPayload,
+      template_id: form.activeTemplateId ?? undefined,
+      source_surface: sourceSurface,
+      canvas_node_id: canvasNodeId,
     },
   };
 }

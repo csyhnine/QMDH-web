@@ -26,6 +26,7 @@ import { isStudioCanvasEnabled } from "../../lib/featureFlags";
 
 const adminNavItems: Array<{ key: AdminTab; label: string; path: string }> = [
   { key: "dashboard", label: "看板", path: "/admin/dashboard" },
+  { key: "generation-analytics", label: "生成分析", path: "/admin/generation-analytics" },
   { key: "usage-logs", label: "日志", path: "/admin/usage-logs" },
   { key: "inspiration", label: "灵感", path: "/admin/inspiration" },
   { key: "feedback", label: "反馈", path: "/admin/feedback" },

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -10,25 +10,7 @@ import {
 
 import { useCanvasEdgeInteraction } from "./canvasEdgeContext";
 
-function endpointBreakPosition(
-  sourceX: number,
-  sourceY: number,
-  targetX: number,
-  targetY: number,
-  end: "source" | "target",
-  ratio = 0.18
-) {
-  if (end === "source") {
-    return {
-      x: sourceX + (targetX - sourceX) * ratio,
-      y: sourceY + (targetY - sourceY) * ratio,
-    };
-  }
-  return {
-    x: targetX + (sourceX - targetX) * ratio,
-    y: targetY + (sourceY - targetY) * ratio,
-  };
-}
+const HOVER_HIDE_DELAY_MS = 220;
 
 type EdgeBreakButtonProps = {
   x: number;
@@ -53,7 +35,7 @@ function EdgeBreakButton({ x, y, visible, selected, onDelete, onHoverChange }: E
         <button
           type="button"
           className="qmdh-canvas-edge-break"
-          title="断开连线"
+          title="断开连线（Delete）"
           aria-label="断开连线"
           onClick={(event) => {
             event.stopPropagation();
@@ -82,7 +64,8 @@ export default function CanvasEdge({
   const { deleteElements } = useReactFlow();
   const { disabled } = useCanvasEdgeInteraction();
   const [hovered, setHovered] = useState(false);
-  const [edgePath] = getBezierPath({
+  const hideTimerRef = useRef<number | null>(null);
+  const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,
@@ -91,10 +74,31 @@ export default function CanvasEdge({
     targetPosition,
   });
 
-  const showBreak = !disabled && (hovered || selected);
-  const sourceBreak = endpointBreakPosition(sourceX, sourceY, targetX, targetY, "source");
-  const targetBreak = endpointBreakPosition(sourceX, sourceY, targetX, targetY, "target");
+  const setHoverActive = (active: boolean) => {
+    if (active) {
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+      setHovered(true);
+      return;
+    }
+    hideTimerRef.current = window.setTimeout(() => {
+      hideTimerRef.current = null;
+      setHovered(false);
+    }, HOVER_HIDE_DELAY_MS);
+  };
 
+  useEffect(
+    () => () => {
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+      }
+    },
+    []
+  );
+
+  const showBreak = !disabled && (hovered || selected);
   const deleteEdge = () => {
     void deleteElements({ edges: [{ id }] });
   };
@@ -106,33 +110,25 @@ export default function CanvasEdge({
         path={edgePath}
         markerEnd={markerEnd}
         style={style}
-        interactionWidth={32}
+        interactionWidth={40}
       />
       <path
         d={edgePath}
         fill="none"
         stroke="transparent"
-        strokeWidth={32}
+        strokeWidth={40}
         className="qmdh-canvas-edge-hit"
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        onMouseEnter={() => setHoverActive(true)}
+        onMouseLeave={() => setHoverActive(false)}
       />
       <EdgeLabelRenderer>
         <EdgeBreakButton
-          x={sourceBreak.x}
-          y={sourceBreak.y}
+          x={labelX}
+          y={labelY}
           visible={showBreak}
           selected={Boolean(selected)}
           onDelete={deleteEdge}
-          onHoverChange={setHovered}
-        />
-        <EdgeBreakButton
-          x={targetBreak.x}
-          y={targetBreak.y}
-          visible={showBreak}
-          selected={Boolean(selected)}
-          onDelete={deleteEdge}
-          onHoverChange={setHovered}
+          onHoverChange={setHoverActive}
         />
       </EdgeLabelRenderer>
     </>

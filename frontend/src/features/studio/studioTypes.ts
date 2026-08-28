@@ -24,6 +24,7 @@ export type StudioFormState = {
   creationMode: CreationMode;
   title: string;
   prompt: string;
+  activeTemplateId: number | null;
   projectCode: string;
   requestedProvider: string;
   classification: string;

@@ -88,8 +88,8 @@ export function useStudioTemplates({
     clearFeedback();
     setStudioForm((current) => {
       const next = applyTemplateToForm(nextTemplate, current);
-      if (!preserveResolution) return next;
-      return { ...next, resolution: current.resolution };
+      const merged = preserveResolution ? { ...next, resolution: current.resolution } : next;
+      return { ...merged, activeTemplateId: template.id };
     });
     if (closeMenu) {
       setActiveComposerMenu(null);

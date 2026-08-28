@@ -345,11 +345,23 @@ export type UsageLogQuery = {
 
 export type PlatformSettingsRecord = {
   chat_agent_ui_enabled: boolean;
+  prompt_polish_enabled: boolean;
+  prompt_polish_provider_id?: number | null;
+  prompt_polish_system_prompt?: string | null;
   updated_at?: string | null;
 };
 
 export type PlatformSettingsUpdatePayload = {
-  chat_agent_ui_enabled: boolean;
+  chat_agent_ui_enabled?: boolean;
+  prompt_polish_enabled?: boolean;
+  prompt_polish_provider_id?: number | null;
+  prompt_polish_system_prompt?: string | null;
+};
+
+export type PromptPolishResponse = {
+  polished_prompt: string;
+  provider_name: string;
+  model_name: string;
 };
 
 export type ProviderProfileRecord = {
@@ -553,6 +565,94 @@ export type TaskCreatePayload = {
   requested_provider: string;
   classification: string;
   payload: Record<string, unknown>;
+  template_id?: number;
+  source_surface?: "studio" | "canvas" | "chat";
+  canvas_node_id?: string;
+};
+
+export type GenerationOutcomeType =
+  | "reused_as_reference"
+  | "upscaled"
+  | "bookmarked"
+  | "shared_to_inspiration"
+  | "applied_to_composer"
+  | "regenerated";
+
+export type GenerationOutcomePayload = {
+  outcome_type: GenerationOutcomeType;
+  asset_id?: number;
+  metadata?: Record<string, unknown>;
+};
+
+export type GenerationOutcomeResult = {
+  task_id: number;
+  outcome_type: string;
+  recorded: boolean;
+  outcome_signals: Record<string, unknown>;
+};
+
+export type GenerationAnalyticsOverview = {
+  window_days: number;
+  intent_count: number;
+  session_count: number;
+  template_intent_count: number;
+  settled_intent_count: number;
+  avg_gacha_score: number;
+  avg_explore_score: number;
+  avg_settle_score: number;
+  high_gacha_sessions: number;
+  high_explore_sessions: number;
+  settled_sessions: number;
+  outcome_totals: Record<string, number>;
+};
+
+export type GenerationAnalyticsSessionRow = {
+  id: number;
+  user_name: string;
+  submit_count: number;
+  prompt_variant_count: number;
+  gacha_score: number;
+  explore_score: number;
+  settle_score: number;
+  settle_count: number;
+  completed_count: number;
+  failed_count: number;
+  dominant_template_id: number | null;
+  dominant_template_label: string;
+  outcome_totals: Record<string, number>;
+  session_started_at: string | null;
+  session_ended_at: string | null;
+};
+
+export type GenerationAnalyticsSessionList = {
+  total: number;
+  items: GenerationAnalyticsSessionRow[];
+};
+
+export type TemplateQualityRow = {
+  template_id: number;
+  label: string;
+  title: string;
+  category: string;
+  intent_count: number;
+  session_count: number;
+  settled_intent_count: number;
+  avg_gacha_score: number;
+  avg_explore_score: number;
+  avg_settle_score: number;
+  completion_rate: number;
+  quality_score: number;
+  outcome_totals: Record<string, number>;
+};
+
+export type TemplateQualityList = {
+  window_days: number;
+  items: TemplateQualityRow[];
+};
+
+export type GenerationAnalyticsJobResult = {
+  ok: boolean;
+  result: Record<string, number>;
 };
 
 export type PromptTemplateRecord = {
@@ -1248,6 +1348,24 @@ export const api = {
     const d = Math.min(365, Math.max(1, Math.floor(days)));
     return request<DashboardStats>(`/dashboard/stats?days=${d}`);
   },
+  generationAnalyticsOverview: (days = 30) => {
+    const d = Math.min(365, Math.max(1, Math.floor(days)));
+    return request<GenerationAnalyticsOverview>(`/admin/generation-analytics/overview?days=${d}`);
+  },
+  generationAnalyticsSessions: (days = 30, limit = 50, offset = 0) => {
+    const d = Math.min(365, Math.max(1, Math.floor(days)));
+    const params = new URLSearchParams({ days: String(d), limit: String(limit), offset: String(offset) });
+    return request<GenerationAnalyticsSessionList>(`/admin/generation-analytics/sessions?${params.toString()}`);
+  },
+  generationAnalyticsTemplateQuality: (days = 30, minIntents = 1) => {
+    const d = Math.min(365, Math.max(1, Math.floor(days)));
+    const params = new URLSearchParams({ days: String(d), min_intents: String(minIntents) });
+    return request<TemplateQualityList>(`/admin/generation-analytics/template-quality?${params.toString()}`);
+  },
+  backfillGenerationIntents: (limit = 1000) =>
+    postJson<GenerationAnalyticsJobResult>("/admin/generation-analytics/backfill-intents", { limit }),
+  recomputeGenerationSessions: () =>
+    postJson<GenerationAnalyticsJobResult>("/admin/generation-analytics/recompute-sessions", {}),
   usageLogs: (query: UsageLogQuery = {}) => {
     const params = new URLSearchParams();
     if (query.page) params.set("page", String(query.page));
@@ -1388,6 +1506,8 @@ export const api = {
       payload,
     ),
   createTask: (payload: TaskCreatePayload) => postJson<Task>("/tasks", payload),
+  recordGenerationOutcome: (taskId: number, payload: GenerationOutcomePayload) =>
+    postJson<GenerationOutcomeResult>(`/tasks/${taskId}/generation-outcomes`, payload),
   deleteTask: (taskId: number) => deleteRequest(`/tasks/${taskId}`),
   likeAsset: (assetId: number) => postJson<Asset>(`/assets/${assetId}/like`),
   bookmarkAsset: (assetId: number) => postJson<Asset>(`/assets/${assetId}/bookmark`),
@@ -1530,4 +1650,9 @@ export const api = {
     }>("/search/status"),
   studioAgentAssist: (payload: { message: string; provider_id: number }) =>
     postJson<{ reply: string; provider_name: string; model_name: string }>("/studio-agent/assist", payload),
+  polishPrompt: (payload: {
+    prompt: string;
+    creation_mode: "generate" | "edit" | "video";
+    reference_images?: string[];
+  }) => postJson<PromptPolishResponse>("/studio/prompt-polish", payload),
 };

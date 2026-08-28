@@ -180,6 +180,7 @@ export const defaultStudioForm: StudioFormState = {
   creationMode: "generate",
   title: "",
   prompt: "",
+  activeTemplateId: null,
   projectCode: "QMDH-001",
   requestedProvider: "",
   classification: "B",

@@ -11,6 +11,7 @@ import {
   scrollComposerIntoView,
 } from "./studioTaskActionUtils";
 import type { UseStudioTaskActionsOptions } from "./studioTaskActionsTypes";
+import { trackGenerationOutcome } from "./trackGenerationOutcome";
 import {
   buildUpscaleTaskCreatePayload,
   canUpscaleAsset,
@@ -58,7 +59,7 @@ export function useStudioTaskActions({
   });
 
   function applyTaskToComposer(task: Task, asset?: Asset): StudioFormState {
-    return applyTaskToComposerState({
+    const nextForm = applyTaskToComposerState({
       asset,
       buildUploadsFromPaths: referenceUpload.buildUploadsFromPaths,
       composerToolbarRef,
@@ -70,6 +71,8 @@ export function useStudioTaskActions({
       studioForm,
       task,
     });
+    trackGenerationOutcome(task.id, "applied_to_composer", { assetId: asset?.id });
+    return nextForm;
   }
 
   function copyTaskToComposer(task: Task, asset?: Asset) {
@@ -100,6 +103,9 @@ export function useStudioTaskActions({
       const submitted = await submitStudioTask(nextForm);
       const feedback = regenerateTaskFeedback(submitted);
       historyFeedback.pushFeedback(task.id, "reuse", feedback.tone, feedback.message);
+      if (submitted) {
+        trackGenerationOutcome(task.id, "regenerated", { assetId: asset?.id });
+      }
     } finally {
       setRegeneratingTaskId((current) => (current === task.id ? null : current));
       historyFeedback.setPendingAction(task.id, null);
@@ -169,6 +175,7 @@ export function useStudioTaskActions({
       result.message
     );
     if (result.ok) {
+      trackGenerationOutcome(task.id, "reused_as_reference", { assetId: asset.id });
       setActiveComposerMenu(null);
       window.requestAnimationFrame(() => {
         scrollComposerIntoView(composerToolbarRef, setComposerCollapsed);

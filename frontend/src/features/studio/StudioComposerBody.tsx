@@ -21,6 +21,8 @@ export default function StudioComposerBody({
   onRegisterSeedancePrivateAvatar,
   onStartSeedanceRealAvatar,
   onCompleteSeedanceRealAvatar,
+  polishingPrompt = false,
+  polishError = "",
 }: StudioComposerBodyProps) {
   return (
     <div className="composer-body">
@@ -36,16 +38,16 @@ export default function StudioComposerBody({
           <StudioReferenceDropzone
             creationMode={studioForm.creationMode}
             referenceUploads={referenceUploads}
-          maxReferenceCount={maxReferenceCount}
-          enableSeedanceAvatar={enableSeedanceAvatar}
-          onOpenReferencePicker={onOpenReferencePicker}
-          onReferenceDrop={onReferenceDrop}
-          onRemoveReferenceUpload={onRemoveReferenceUpload}
-          onReplaceReferenceUpload={onReplaceReferenceUpload}
-          onRegisterSeedancePrivateAvatar={onRegisterSeedancePrivateAvatar}
-          onStartSeedanceRealAvatar={onStartSeedanceRealAvatar}
-          onCompleteSeedanceRealAvatar={onCompleteSeedanceRealAvatar}
-        />
+            maxReferenceCount={maxReferenceCount}
+            enableSeedanceAvatar={enableSeedanceAvatar}
+            onOpenReferencePicker={onOpenReferencePicker}
+            onReferenceDrop={onReferenceDrop}
+            onRemoveReferenceUpload={onRemoveReferenceUpload}
+            onReplaceReferenceUpload={onReplaceReferenceUpload}
+            onRegisterSeedancePrivateAvatar={onRegisterSeedancePrivateAvatar}
+            onStartSeedanceRealAvatar={onStartSeedanceRealAvatar}
+            onCompleteSeedanceRealAvatar={onCompleteSeedanceRealAvatar}
+          />
         </div>
       </div>
 
@@ -55,6 +57,8 @@ export default function StudioComposerBody({
         studioForm={studioForm}
         onPromptChange={onPromptChange}
         onPromptSubmitShortcut={onPromptSubmitShortcut}
+        polishingPrompt={polishingPrompt}
+        polishError={polishError}
       />
     </div>
   );

@@ -67,6 +67,7 @@ from app.services.provider_strategy import (
     resolve_strategy_for_capability,
     profile_prefers_chat_completions_image,
 )
+from app.services.generation_intent_service import sync_generation_intent_from_task
 from app.services.usage_ledger import ensure_usage_ledger_for_task
 
 WHITE_CANVAS_DATA_URL = (
@@ -2917,6 +2918,7 @@ def execute_task(task_id: int) -> None:
             task,
             ledger_source="task.execute",
         )
+        sync_generation_intent_from_task(db, task)
         db.commit()
 
 

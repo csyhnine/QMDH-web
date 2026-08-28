@@ -7,6 +7,8 @@ export default function StudioPromptTextarea({
   studioForm,
   onPromptChange,
   onPromptSubmitShortcut,
+  polishingPrompt = false,
+  polishError = "",
 }: StudioPromptTextareaProps) {
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) {
@@ -32,8 +34,11 @@ export default function StudioPromptTextarea({
         onChange={(event) => onPromptChange(event.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={composerPromptPlaceholder(studioForm.creationMode)}
+        disabled={polishingPrompt}
       />
-      <span className="composer-textarea-hint">{referenceHint}</span>
+      <span className={`composer-textarea-hint${polishError ? " is-error" : ""}`}>
+        {polishError || referenceHint}
+      </span>
     </label>
   );
 }

@@ -2,34 +2,67 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_auth_user, require_ops_access
+from app.core.auth import get_current_auth_user, get_optional_auth_user, has_admin_access, require_ops_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
+from app.models import ProviderProfile
 from app.services.platform_settings_service import get_or_create_platform_settings
+from app.services.prompt_polish_service import DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 class PlatformSettingsOut(BaseModel):
     chat_agent_ui_enabled: bool
+    prompt_polish_enabled: bool
+    prompt_polish_provider_id: int | None = None
+    prompt_polish_system_prompt: str | None = None
     updated_at: datetime | None = None
 
 
 class PlatformSettingsUpdate(BaseModel):
-    chat_agent_ui_enabled: bool
+    chat_agent_ui_enabled: bool | None = None
+    prompt_polish_enabled: bool | None = None
+    prompt_polish_provider_id: int | None = None
+    prompt_polish_system_prompt: str | None = Field(default=None, max_length=12000)
+
+
+def _serialize_platform_settings(row, *, include_admin_fields: bool) -> PlatformSettingsOut:
+    system_prompt = None
+    if include_admin_fields:
+        configured = str(row.prompt_polish_system_prompt or "").strip()
+        system_prompt = configured or DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT
+    return PlatformSettingsOut(
+        chat_agent_ui_enabled=row.chat_agent_ui_enabled,
+        prompt_polish_enabled=row.prompt_polish_enabled,
+        prompt_polish_provider_id=row.prompt_polish_provider_id if include_admin_fields else None,
+        prompt_polish_system_prompt=system_prompt,
+        updated_at=row.updated_at,
+    )
+
+
+def _validate_prompt_polish_provider(db: Session, provider_id: int | None) -> None:
+    if provider_id is None:
+        return
+    provider = db.get(ProviderProfile, provider_id)
+    if provider is None or not provider.enabled:
+        raise HTTPException(status_code=400, detail="Prompt polish provider is missing or disabled.")
+    if "chat.completions" not in (provider.capabilities or []):
+        raise HTTPException(status_code=400, detail="Prompt polish provider must support chat.completions.")
 
 
 @router.get("/platform", response_model=PlatformSettingsOut)
-def get_platform_settings_public(db: Session = Depends(get_db)) -> PlatformSettingsOut:
+def get_platform_settings_public(
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile | None = Depends(get_optional_auth_user),
+) -> PlatformSettingsOut:
     row = get_or_create_platform_settings(db)
-    return PlatformSettingsOut(
-        chat_agent_ui_enabled=row.chat_agent_ui_enabled,
-        updated_at=row.updated_at,
-    )
+    include_admin_fields = auth_user is not None and has_admin_access(auth_user.role)
+    return _serialize_platform_settings(row, include_admin_fields=include_admin_fields)
 
 
 @router.patch("/platform", response_model=PlatformSettingsOut)
@@ -40,12 +73,22 @@ def update_platform_settings(
 ) -> PlatformSettingsOut:
     require_ops_access(auth_user)
     row = get_or_create_platform_settings(db)
-    row.chat_agent_ui_enabled = payload.chat_agent_ui_enabled
+    update_data = payload.model_dump(exclude_unset=True)
+
+    if "chat_agent_ui_enabled" in update_data:
+        row.chat_agent_ui_enabled = bool(update_data["chat_agent_ui_enabled"])
+    if "prompt_polish_enabled" in update_data:
+        row.prompt_polish_enabled = bool(update_data["prompt_polish_enabled"])
+    if "prompt_polish_provider_id" in update_data:
+        provider_id = update_data["prompt_polish_provider_id"]
+        _validate_prompt_polish_provider(db, provider_id)
+        row.prompt_polish_provider_id = provider_id
+    if "prompt_polish_system_prompt" in update_data:
+        cleaned = str(update_data["prompt_polish_system_prompt"] or "").strip()
+        row.prompt_polish_system_prompt = cleaned or None
+
     row.updated_by_user_id = auth_user.user_id
     row.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)
-    return PlatformSettingsOut(
-        chat_agent_ui_enabled=row.chat_agent_ui_enabled,
-        updated_at=row.updated_at,
-    )
+    return _serialize_platform_settings(row, include_admin_fields=True)

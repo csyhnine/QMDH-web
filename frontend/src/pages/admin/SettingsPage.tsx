@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { type ManagedUser, type PlatformSettingsRecord, type ProviderProfileRecord, type Task } from "../../api";
 import ChatAgentUiSettingsPanel from "./ChatAgentUiSettingsPanel";
+import PromptPolishSettingsPanel from "./PromptPolishSettingsPanel";
 import BigjpgIntegrationPanel, { bigjpgIntegrationStatus, isBigjpgProfile } from "./BigjpgIntegrationPanel";
 import { integrationMenuItems, type IntegrationMenuKey } from "./settingsIntegrationConstants";
 
@@ -143,6 +144,11 @@ export default function SettingsPage({
             <div className="settings-layout settings-layout-overview">
               <section className="settings-main settings-main-wide">
                 <ChatAgentUiSettingsPanel settings={platformSettings} onRefresh={onRefresh} />
+                <PromptPolishSettingsPanel
+                  settings={platformSettings}
+                  providerProfiles={providerProfiles}
+                  onRefresh={onRefresh}
+                />
               </section>
             </div>
           ) : (
@@ -185,6 +191,7 @@ export default function SettingsPage({
                       ["模型配置", "管理员可在模型管理维护 Provider。", true],
                       ["账号管理", "管理员可维护账号、角色与额度。", userCanManageUsers],
                       ["设计助手 UI", "在「功能开关」页对设计师开放 Chat 助手。", platformSettings?.chat_agent_ui_enabled ?? false],
+                      ["提示词润色", "Studio 生成区一键优化提示词。", platformSettings?.prompt_polish_enabled ?? false],
                     ] as const).map(([title, desc, enabled]) => (
                       <div key={title} className="settings-switch-row">
                         <span>

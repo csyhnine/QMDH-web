@@ -38,7 +38,11 @@ export type StudioComposerToolbarProps = Pick<
   | "onTemplateDraftLabelChange"
   | "onTemplateDraftTitleChange"
   | "onToggleComposerMenu"
->;
+> & {
+  promptPolishEnabled?: boolean;
+  polishingPrompt?: boolean;
+  onPolishPrompt?: () => void;
+};
 
 export type StudioComposerToolbarMenusProps = Pick<
   StudioComposerToolbarProps,

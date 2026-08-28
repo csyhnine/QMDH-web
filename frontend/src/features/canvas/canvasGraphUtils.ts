@@ -541,32 +541,26 @@ export function expandSelectionWithGroupChildren(
   return selected;
 }
 
-/**
- * Expand selection to include upstream nodes connected by incoming edges.
- * Copying a downstream node also copies its upstream chain and internal edges.
- */
-export function expandSelectionWithUpstreamConnections(
-  nodes: CanvasFlowNode[],
-  edges: Edge[],
-  selectedIds: string[]
-): Set<string> {
-  let selected = expandSelectionWithGroupChildren(nodes, selectedIds);
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const edge of edges) {
-      if (selected.has(edge.target) && !selected.has(edge.source)) {
-        selected.add(edge.source);
-        grew = true;
-      }
-    }
-    const withGroups = expandSelectionWithGroupChildren(nodes, [...selected]);
-    if (withGroups.size > selected.size) {
-      selected = withGroups;
-      grew = true;
-    }
-  }
-  return selected;
+/** Incoming edges whose target is selected but source is outside the selection. */
+function listIncomingEdgesFromOutsideSelection(edges: Edge[], selected: Set<string>): Edge[] {
+  return edges.filter((edge) => selected.has(edge.target) && !selected.has(edge.source));
+}
+
+function remapEdgeEndpoints(
+  edge: Edge,
+  idMap: Map<string, string>,
+  remapSource: boolean,
+  remapTarget: boolean
+): Edge {
+  const source = remapSource ? idMap.get(edge.source)! : edge.source;
+  const target = remapTarget ? idMap.get(edge.target)! : edge.target;
+  return {
+    ...edge,
+    id: `e-${source}-${target}-${nanoid(6)}`,
+    source,
+    target,
+    selected: false,
+  };
 }
 
 /** Runnable nodes inside the current selection (groups expand to children), in topo order. */
@@ -595,7 +589,8 @@ function resetClonedGenerateData(data: GenerateNodeData): GenerateNodeData {
 
 /**
  * Duplicate the current selection (including children of selected groups).
- * Remaps internal edges; clears in-flight task state on generate nodes.
+ * Remaps internal edges and wires direct upstream edges to the clones;
+ * clears in-flight task state on generate nodes.
  */
 export function duplicateCanvasSelection(
   nodes: CanvasFlowNode[],
@@ -603,7 +598,7 @@ export function duplicateCanvasSelection(
   selectedIds: string[],
   offset = { x: 48, y: 48 }
 ): { nodes: CanvasFlowNode[]; edges: Edge[]; createdIds: string[] } | null {
-  const selected = expandSelectionWithUpstreamConnections(nodes, edges, selectedIds);
+  const selected = expandSelectionWithGroupChildren(nodes, selectedIds);
   const toClone = nodes.filter((node) => selected.has(node.id));
   if (toClone.length === 0) return null;
 
@@ -667,19 +662,17 @@ export function duplicateCanvasSelection(
     ...created,
   ];
 
-  const remappedEdges: Edge[] = edges
+  const remappedInternalEdges: Edge[] = edges
     .filter((edge) => idMap.has(edge.source) && idMap.has(edge.target))
-    .map((edge) => ({
-      ...edge,
-      id: `e-${idMap.get(edge.source)}-${idMap.get(edge.target)}-${nanoid(6)}`,
-      source: idMap.get(edge.source)!,
-      target: idMap.get(edge.target)!,
-      selected: false,
-    }));
+    .map((edge) => remapEdgeEndpoints(edge, idMap, true, true));
+
+  const remappedIncomingEdges: Edge[] = listIncomingEdgesFromOutsideSelection(edges, selected).map(
+    (edge) => remapEdgeEndpoints(edge, idMap, false, true)
+  );
 
   return {
     nodes: nextNodes,
-    edges: edges.concat(remappedEdges),
+    edges: edges.concat(remappedInternalEdges, remappedIncomingEdges),
     createdIds: [...idMap.values()],
   };
 }
@@ -690,7 +683,7 @@ export function snapshotCanvasSelection(
   edges: Edge[],
   selectedIds: string[]
 ): { nodes: CanvasFlowNode[]; edges: Edge[] } | null {
-  const selected = expandSelectionWithUpstreamConnections(nodes, edges, selectedIds);
+  const selected = expandSelectionWithGroupChildren(nodes, selectedIds);
   const toCopy = nodes.filter((node) => selected.has(node.id));
   if (toCopy.length === 0) return null;
 
@@ -711,7 +704,8 @@ export function snapshotCanvasSelection(
   });
 
   const internalEdges = edges.filter((edge) => selected.has(edge.source) && selected.has(edge.target));
-  return { nodes: snapped, edges: internalEdges };
+  const incomingEdges = listIncomingEdgesFromOutsideSelection(edges, selected);
+  return { nodes: snapped, edges: [...internalEdges, ...incomingEdges] };
 }
 
 /** Paste a clipboard snapshot into the graph with fresh ids. */
@@ -763,15 +757,16 @@ export function pasteCanvasSnapshot(
     return { ...base, type: "group" as const, data: { ...node.data } };
   });
 
+  const existingNodeIds = new Set(currentNodes.map((node) => node.id));
   const remappedEdges: Edge[] = snapshot.edges
-    .filter((edge) => idMap.has(edge.source) && idMap.has(edge.target))
-    .map((edge) => ({
-      ...edge,
-      id: `e-${idMap.get(edge.source)}-${idMap.get(edge.target)}-${nanoid(6)}`,
-      source: idMap.get(edge.source)!,
-      target: idMap.get(edge.target)!,
-      selected: false,
-    }));
+    .filter(
+      (edge) =>
+        idMap.has(edge.target) &&
+        (idMap.has(edge.source) || existingNodeIds.has(edge.source))
+    )
+    .map((edge) =>
+      remapEdgeEndpoints(edge, idMap, idMap.has(edge.source), true)
+    );
 
   return {
     nodes: [...currentNodes.map((node) => ({ ...node, selected: false })), ...created],

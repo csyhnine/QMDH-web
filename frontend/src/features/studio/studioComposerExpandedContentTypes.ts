@@ -50,7 +50,10 @@ export type StudioComposerBodyProps = Pick<
   | "onRegisterSeedancePrivateAvatar"
   | "onStartSeedanceRealAvatar"
   | "onCompleteSeedanceRealAvatar"
->;
+> & {
+  polishingPrompt?: boolean;
+  polishError?: string;
+};
 
 export type StudioComposerModeSwitchProps = {
   creationMode: StudioFormState["creationMode"];
@@ -74,7 +77,10 @@ export type StudioReferenceDropzoneProps = {
 export type StudioPromptTextareaProps = Pick<
   StudioComposerBodyProps,
   "promptTextareaRef" | "referenceHint" | "studioForm" | "onPromptChange" | "onPromptSubmitShortcut"
->;
+> & {
+  polishingPrompt?: boolean;
+  polishError?: string;
+};
 
 export type StudioComposerReferenceFileInputProps = Pick<
   StudioComposerExpandedContentProps,

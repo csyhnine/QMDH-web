@@ -10,6 +10,7 @@ import {
   replaceGalleryAssetInState,
   replaceGalleryPreviewAsset,
 } from "./studioGalleryActionUtils";
+import { trackGenerationOutcome } from "./trackGenerationOutcome";
 
 export type StudioGalleryActions = ReturnType<typeof useStudioGalleryActions>;
 
@@ -31,6 +32,9 @@ export function useStudioGalleryActions({
       if (action === "bookmark") {
         const updatedAsset = await api.bookmarkAsset(assetId);
         replaceAssetInState(updatedAsset);
+        if (updatedAsset.is_bookmarked) {
+          trackGenerationOutcome(taskId, "bookmarked", { assetId });
+        }
         historyFeedback.pushFeedback(
           taskId,
           "bookmark",
@@ -40,6 +44,7 @@ export function useStudioGalleryActions({
       } else {
         const result = await api.shareAsset(assetId, { confirmed: true });
         replaceAssetInState(result.asset);
+        trackGenerationOutcome(taskId, "shared_to_inspiration", { assetId });
         historyFeedback.pushFeedback(
           taskId,
           "share",

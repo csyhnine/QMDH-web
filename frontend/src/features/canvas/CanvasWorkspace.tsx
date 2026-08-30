@@ -1172,16 +1172,11 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
                 type="button"
                 className="ghost-button"
                 onClick={() =>
-                  void downloadMediaUrl(
-                    mediaPreview.url,
-                    /\.(mp4|webm|mov)(\?|$)/i.test(mediaPreview.url)
-                      ? "generated-video.mp4"
-                      : "generated-image.png",
-                    {
-                      taskId: mediaPreview.taskId,
-                      assetId: mediaPreview.assetId,
-                    }
-                  )
+                  void downloadMediaUrl(mediaPreview.url, undefined, {
+                    taskId: mediaPreview.taskId,
+                    assetId: mediaPreview.assetId,
+                    mediaKind: /\.(mp4|webm|mov)(\?|$)/i.test(mediaPreview.url) ? "video" : "image",
+                  })
                 }
               >
                 {/\.(mp4|webm|mov)(\?|$)/i.test(mediaPreview.url) ? "下载视频" : "下载生成图"}

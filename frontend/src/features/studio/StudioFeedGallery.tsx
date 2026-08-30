@@ -97,11 +97,11 @@ export default function StudioFeedGallery({
                     onClick={() => {
                       if (isDownloading) return;
                       setDownloadingKey(assetKey);
-                      void downloadMediaUrl(
-                        mediaUrl,
-                        asset.name || (asset.asset_type === "video" ? "generated-video.mp4" : "generated-image.png"),
-                        { taskId: task.id, assetId: asset.id }
-                      ).finally(() => {
+                      void downloadMediaUrl(mediaUrl, asset.name || undefined, {
+                        taskId: task.id,
+                        assetId: asset.id,
+                        mediaKind: asset.asset_type === "video" ? "video" : "image",
+                      }).finally(() => {
                         setDownloadingKey((current) => (current === assetKey ? null : current));
                       });
                     }}

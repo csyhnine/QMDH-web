@@ -31,6 +31,8 @@ class AnalyticsJobOut(BaseModel):
 
 class GenerationAnalyticsOverviewOut(BaseModel):
     window_days: int
+    window_started_at: datetime
+    tracking_since: datetime
     intent_count: int
     session_count: int
     template_intent_count: int

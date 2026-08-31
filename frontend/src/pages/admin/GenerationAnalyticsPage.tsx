@@ -141,6 +141,16 @@ export default function GenerationAnalyticsPage() {
           <h1>生成行为分析</h1>
           <p>
             基于同参考图 + 30 分钟内连续提交，衡量设计师是在「同 prompt 抽卡」还是「频繁改词」，并结合收藏/放大/下载等采纳信号评估模板与出图质量。
+            {overview ? (
+              <>
+                {" "}
+                统计自{" "}
+                {formatDateTime(overview.tracking_since)}
+                {" "}
+                埋点上线日起（Outcome / 下载 / 润色）；当前窗口自{" "}
+                {formatDateTime(overview.window_started_at)}。
+              </>
+            ) : null}
           </p>
         </div>
         <div className="ops-toolbar">
@@ -344,7 +354,9 @@ export default function GenerationAnalyticsPage() {
                 <button type="button" className="ghost-button" onClick={() => void runMaintenance("recompute")}>
                   重算全部 Session
                 </button>
-                <p>新功能上线前的历史任务需先补录 intent；修改聚合规则或 outcome 逻辑后建议重算 session。</p>
+                <p>
+                  「补录历史 Intent」仅用于补 Gacha/Explore 的 session 聚类；下载、润色、Settle 等采纳指标只统计埋点上线日（2026-08-28）之后的提交。修改 outcome 规则后请点「重算全部 Session」。
+                </p>
               </div>
             </section>
           </div>

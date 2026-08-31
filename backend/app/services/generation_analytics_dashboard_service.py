@@ -14,6 +14,10 @@ from app.services.generation_outcome_service import SETTLE_OUTCOME_TYPES
 
 DEFAULT_LOOKBACK_DAYS = 30
 
+# Outcome / download / polish tracking shipped 2026-08-28 (614467f). Stats must not
+# include pre-rollout intents — backfill only helps Gacha/Explore session clustering.
+GENERATION_ANALYTICS_TRACKING_SINCE = datetime(2026, 8, 27, 16, 0, tzinfo=timezone.utc)
+
 SETTLE_OUTCOME_TYPES_EXCLUDING_DOWNLOAD = SETTLE_OUTCOME_TYPES - frozenset({"downloaded"})
 
 
@@ -27,6 +31,15 @@ def _utc(value: datetime | None) -> datetime | None:
 
 def _since(days: int) -> datetime:
     return datetime.now(timezone.utc) - timedelta(days=max(1, days))
+
+
+def get_analytics_tracking_since() -> datetime:
+    return GENERATION_ANALYTICS_TRACKING_SINCE
+
+
+def _window_start(days: int) -> datetime:
+    """Effective stats window: user lookback clipped to tracking rollout."""
+    return max(_since(days), get_analytics_tracking_since())
 
 
 def _weighted_average(pairs: list[tuple[float, int]]) -> float:
@@ -96,7 +109,7 @@ def _intent_has_explicit_settle(intent: GenerationIntent) -> bool:
 
 
 def get_download_usage_stats(db: Session, *, days: int = DEFAULT_LOOKBACK_DAYS) -> dict:
-    since = _since(days)
+    since = _window_start(days)
     intents = db.scalars(select(GenerationIntent).where(GenerationIntent.submitted_at >= since)).all()
 
     download_event_count = sum(_intent_download_count(intent) for intent in intents)
@@ -121,7 +134,7 @@ def get_download_usage_stats(db: Session, *, days: int = DEFAULT_LOOKBACK_DAYS) 
 
 
 def get_prompt_polish_usage_stats(db: Session, *, days: int = DEFAULT_LOOKBACK_DAYS) -> dict:
-    since = _since(days)
+    since = _window_start(days)
     polish_logs = db.scalars(
         select(AuditLog).where(
             AuditLog.event_type == AuditEventType.STUDIO_PROMPT_POLISH,
@@ -162,7 +175,7 @@ def get_prompt_polish_usage_stats(db: Session, *, days: int = DEFAULT_LOOKBACK_D
 
 
 def get_generation_analytics_overview(db: Session, *, days: int = DEFAULT_LOOKBACK_DAYS) -> dict:
-    since = _since(days)
+    since = _window_start(days)
     sessions = db.scalars(
         select(GenerationSession).where(GenerationSession.session_started_at >= since)
     ).all()
@@ -196,6 +209,8 @@ def get_generation_analytics_overview(db: Session, *, days: int = DEFAULT_LOOKBA
 
     return {
         "window_days": days,
+        "window_started_at": since,
+        "tracking_since": get_analytics_tracking_since(),
         "intent_count": len(intents),
         "session_count": len(sessions),
         "template_intent_count": template_intent_count,
@@ -219,7 +234,7 @@ def list_generation_sessions(
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
-    since = _since(days)
+    since = _window_start(days)
     total = db.scalar(
         select(func.count())
         .select_from(GenerationSession)
@@ -273,7 +288,7 @@ def list_generation_sessions(
 
 
 def get_template_quality_scores(db: Session, *, days: int = DEFAULT_LOOKBACK_DAYS, min_intents: int = 1) -> dict:
-    since = _since(days)
+    since = _window_start(days)
     intents = db.scalars(
         select(GenerationIntent)
         .where(

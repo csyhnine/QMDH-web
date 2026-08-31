@@ -132,7 +132,7 @@ export function buildPlaybook(overview: GenerationAnalyticsOverview): PlaybookIt
 }
 
 export const QUALITY_CONTROL_STEPS = [
-  "每周打开本页，选 30 天窗口，先看 Settle 与 Outcome 汇总是否上升。",
+  "每周打开本页，选 30 天窗口，先看 Settle 与 Outcome 汇总是否上升（仅含埋点上线后的数据）。",
   "查看「下载次数 / 下载率 / 沉默采纳占比」：下载是显式收藏/放大之外的采纳信号，仅下载 settled 说明设计师直接取图使用。",
   "查看「润色次数 / 润色后提交率」：提交率 = 润色后立刻生成的比例，过低说明功能曝光或体验有问题。",
   "对比润色后采纳率与整体 Settle：若润色后采纳明显更高，说明功能有效，应加大引导。",

@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -12,6 +12,7 @@ from app.services.generation_fingerprints import prompt_fingerprint, ref_fingerp
 from app.services.generation_intent_service import record_generation_intent_for_task, sync_generation_intent_from_task
 from app.services.generation_outcome_service import record_generation_outcome, record_generation_outcome_from_task_payload
 from app.services.generation_analytics_dashboard_service import (
+    GENERATION_ANALYTICS_TRACKING_SINCE,
     compute_template_quality_score,
     get_download_usage_stats,
     get_generation_analytics_overview,
@@ -490,6 +491,70 @@ class PromptPolishUsageStatsTests(unittest.TestCase):
             overview = get_generation_analytics_overview(db, days=30)
             self.assertEqual(overview["polish_event_count"], 2)
             self.assertEqual(overview["polished_intent_count"], 1)
+
+
+class AnalyticsTrackingWindowTests(unittest.TestCase):
+    def test_pre_rollout_intents_excluded_from_stats(self) -> None:
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(bind=engine)
+        SessionLocal = sessionmaker(bind=engine)
+
+        pre_rollout = GENERATION_ANALYTICS_TRACKING_SINCE - timedelta(days=10)
+        post_rollout = GENERATION_ANALYTICS_TRACKING_SINCE + timedelta(hours=1)
+
+        with SessionLocal() as db:
+            user = User(name="designer", role="designer", password_hash="unused", is_active=True, project_codes=["QMDH-001"])
+            project = Project(name="Demo", code="QMDH-001", classification=DataClassification.b)
+            workflow = Workflow(
+                key="image-generate",
+                name="Generate",
+                description="Generate",
+                category="demo",
+                priority="P1",
+                provider_capability="image.generate",
+                config={},
+            )
+            db.add_all([user, project, workflow])
+            db.flush()
+
+            def make_task(title: str, *, created_at: datetime) -> Task:
+                task = Task(
+                    title=title,
+                    status=TaskStatus.completed,
+                    workflow_id=workflow.id,
+                    project_id=project.id,
+                    user_id=user.id,
+                    requested_provider="test-provider",
+                    payload={"prompt": title},
+                    result={"asset_storage_path": "/media/out.png"},
+                    created_at=created_at,
+                    updated_at=created_at,
+                )
+                db.add(task)
+                db.flush()
+                record_generation_intent_for_task(db, task=task, workflow_key=workflow.key)
+                sync_generation_intent_from_task(db, task)
+                return task
+
+            legacy = make_task("legacy", created_at=pre_rollout)
+            tracked = make_task("tracked", created_at=post_rollout)
+            legacy_task_id = legacy.id
+            record_generation_outcome(db, task_id=tracked.id, outcome_type="downloaded", asset_id=1)
+            db.commit()
+
+        with SessionLocal() as db:
+            overview = get_generation_analytics_overview(db, days=365)
+            self.assertEqual(overview["intent_count"], 1)
+            self.assertEqual(overview["downloaded_intent_count"], 1)
+            self.assertAlmostEqual(overview["download_rate"], 1.0, places=4)
+            self.assertGreaterEqual(overview["window_started_at"], GENERATION_ANALYTICS_TRACKING_SINCE)
+
+            legacy_intent = db.scalar(select(GenerationIntent).where(GenerationIntent.task_id == legacy_task_id))
+            self.assertIsNotNone(legacy_intent)
 
 
 if __name__ == "__main__":

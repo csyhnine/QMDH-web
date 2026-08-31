@@ -595,6 +595,8 @@ export type GenerationOutcomeResult = {
 
 export type GenerationAnalyticsOverview = {
   window_days: number;
+  window_started_at: string;
+  tracking_since: string;
   intent_count: number;
   session_count: number;
   template_intent_count: number;

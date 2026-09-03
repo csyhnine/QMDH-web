@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Literal
 from urllib.error import HTTPError, URLError
@@ -15,6 +16,8 @@ from app.core.encryption import EncryptedValueDecodeError, EncryptionKeyUnavaila
 from app.models import PlatformSettings, ProviderProfile
 from app.services.platform_settings_service import get_or_create_platform_settings
 from app.services.task_executor import _extract_chat_message_content, _reference_image_to_model_url
+
+logger = logging.getLogger(__name__)
 
 CreationMode = Literal["generate", "edit", "video"]
 
@@ -68,6 +71,23 @@ def resolve_prompt_polish_provider(db: Session, settings: PlatformSettings) -> P
     return provider
 
 
+def _resolve_reference_image_urls_for_polish(reference_images: list[str]) -> list[str]:
+    """Best-effort reference URLs for multimodal polish; skip unreadable paths."""
+    urls: list[str] = []
+    for image_path in reference_images:
+        normalized = str(image_path or "").strip()
+        if not normalized:
+            continue
+        if normalized.lower().startswith("asset://"):
+            logger.info("Skipping asset:// reference for prompt polish: %s", normalized[:80])
+            continue
+        try:
+            urls.append(_reference_image_to_model_url(normalized))
+        except ValueError as exc:
+            logger.warning("Skipping unreadable reference for prompt polish (%s): %s", normalized[:80], exc)
+    return urls
+
+
 def _build_user_message(
     *,
     prompt: str,
@@ -81,16 +101,8 @@ def _build_user_message(
         "请输出优化后的提示词正文。"
     )
     content: list[dict] = [{"type": "text", "text": text}]
-    for image_path in reference_images:
-        normalized = str(image_path or "").strip()
-        if not normalized:
-            continue
-        content.append(
-            {
-                "type": "image_url",
-                "image_url": {"url": _reference_image_to_model_url(normalized)},
-            }
-        )
+    for image_url in _resolve_reference_image_urls_for_polish(reference_images):
+        content.append({"type": "image_url", "image_url": {"url": image_url}})
     return content
 
 

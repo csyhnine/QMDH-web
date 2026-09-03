@@ -99,6 +99,54 @@ class PromptPolishApiTests(unittest.TestCase):
         self.assertEqual(body["polished_prompt"], "优化后的城市夜景提示词")
         self.assertEqual(body["provider_name"], "polish-model")
 
+    @patch("app.services.prompt_polish_service.urlopen")
+    def test_polish_skips_missing_reference_images(self, mock_urlopen) -> None:
+        payload = {
+            "choices": [{"message": {"content": "优化后的图生图提示词"}}],
+        }
+        mock_response = mock_urlopen.return_value.__enter__.return_value
+        mock_response.read.return_value = json.dumps(payload).encode("utf-8")
+
+        response = self.client.post(
+            "/studio/prompt-polish",
+            headers=self.headers,
+            json={
+                "prompt": "城市夜景",
+                "creation_mode": "edit",
+                "reference_images": ["/media/missing-reference.png"],
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["polished_prompt"], "优化后的图生图提示词")
+
+        request_body = json.loads(mock_urlopen.call_args.args[0].data.decode("utf-8"))
+        user_content = request_body["messages"][1]["content"]
+        self.assertEqual(len(user_content), 1)
+        self.assertEqual(user_content[0]["type"], "text")
+
+    @patch("app.services.prompt_polish_service.urlopen")
+    def test_polish_skips_asset_protocol_reference_images(self, mock_urlopen) -> None:
+        payload = {
+            "choices": [{"message": {"content": "优化后的提示词"}}],
+        }
+        mock_response = mock_urlopen.return_value.__enter__.return_value
+        mock_response.read.return_value = json.dumps(payload).encode("utf-8")
+
+        response = self.client.post(
+            "/studio/prompt-polish",
+            headers=self.headers,
+            json={
+                "prompt": "城市夜景",
+                "creation_mode": "edit",
+                "reference_images": ["asset://pa_01KTEST"],
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        request_body = json.loads(mock_urlopen.call_args.args[0].data.decode("utf-8"))
+        user_content = request_body["messages"][1]["content"]
+        self.assertEqual(len(user_content), 1)
+
     def test_polish_disabled_returns_503(self) -> None:
         with self.SessionLocal() as db:
             row = db.get(PlatformSettings, 1)

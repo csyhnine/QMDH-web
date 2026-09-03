@@ -43,6 +43,8 @@ def polish_user_prompt(
         )
     except PromptPolishUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=f"参考图无法用于润色：{exc}") from exc
 
     write_audit_log(
         db,

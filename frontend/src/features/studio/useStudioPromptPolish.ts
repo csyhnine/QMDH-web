@@ -1,4 +1,5 @@
 import { usePromptPolish } from "../../lib/usePromptPolish";
+import { referenceUploadStoragePaths } from "./studioReferenceUtils";
 import type { ReferenceUploadItem, StudioFormState } from "./studioTypes";
 
 type UseStudioPromptPolishOptions = {
@@ -16,9 +17,7 @@ export function useStudioPromptPolish({
   onPolished,
   sourceSurface = "studio",
 }: UseStudioPromptPolishOptions) {
-  const referenceImages = referenceUploads
-    .map((item) => item.storagePath?.trim())
-    .filter((path): path is string => Boolean(path));
+  const referenceImages = referenceUploadStoragePaths(referenceUploads);
 
   return usePromptPolish({
     prompt: studioForm.prompt,

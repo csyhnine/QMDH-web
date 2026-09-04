@@ -803,7 +803,7 @@ def _grok_image_request_body(
     if reference_images:
         if len(reference_images) > 3:
             raise ValueError("Grok image accepts at most 3 reference images.")
-        body["image_urls"] = [_reference_image_to_public_url(item) for item in reference_images]
+        body["image_urls"] = [_grok_reference_image_value(item) for item in reference_images]
 
     return body
 
@@ -1104,6 +1104,42 @@ def _seedream_reference_image_value(reference_image: str) -> str:
     return f"data:image/{subtype};base64,{b64encode(image_bytes).decode('ascii')}"
 
 
+def _grok_reference_image_value(reference_image: str) -> str:
+    """Inline platform media for Grok ``image_urls`` when bytes are readable locally.
+
+    xAI often returns ``image_download_interrupted`` when fetching ``cityusbdisk.cn/media``
+    even though those URLs respond HTTP 200 externally. Data URLs avoid upstream fetches.
+    """
+    normalized = reference_image.strip()
+    if not normalized:
+        raise ValueError("Grok reference image path is empty.")
+    if normalized.startswith("data:image/"):
+        return normalized
+    if normalized.startswith("http://"):
+        raise ValueError("Grok reference images require HTTPS URLs or platform media paths.")
+
+    if normalized.startswith("https://"):
+        public_base = settings.public_media_base_url.strip().rstrip("/")
+        media_prefix = settings.media_url_prefix.rstrip("/")
+        if public_base and normalized.startswith(f"{public_base}{media_prefix}/"):
+            normalized = f"{media_prefix}/{normalized.removeprefix(public_base + media_prefix).lstrip('/')}"
+        else:
+            return encode_public_http_url(normalized)
+
+    try:
+        image_bytes, _filename, content_type = _load_reference_image_bytes(normalized)
+    except ValueError:
+        public_url = _reference_image_to_public_url(normalized)
+        if not public_url.startswith("https://"):
+            raise ValueError("Grok reference images require readable local media or public HTTPS URLs.")
+        return encode_public_http_url(public_url)
+
+    subtype = "png"
+    if "/" in content_type:
+        subtype = content_type.split("/", 1)[1].split(";", 1)[0].strip() or "png"
+    return f"data:image/{subtype};base64,{b64encode(image_bytes).decode('ascii')}"
+
+
 def _haodeya_short_images_body(
     *,
     profile: ImageProviderProfile,
@@ -1367,7 +1403,9 @@ def _upstream_request_excerpt(body: dict[str, object]) -> dict[str, object]:
     if body.get("aspect_ratio"):
         excerpt["aspect_ratio"] = body.get("aspect_ratio")
     if body.get("image_urls"):
-        excerpt["image_urls"] = body.get("image_urls")
+        excerpt["image_urls"] = [
+            _redact_upstream_image_reference(str(item)) for item in body.get("image_urls") or []
+        ]
     if body.get("images"):
         excerpt["images"] = body.get("images")
     if body.get("resolution"):
@@ -1380,6 +1418,14 @@ def _upstream_request_excerpt(body: dict[str, object]) -> dict[str, object]:
     if isinstance(image_config, dict):
         excerpt["image_config"] = image_config
     return excerpt
+
+
+def _redact_upstream_image_reference(value: str) -> str:
+    normalized = str(value or "").strip()
+    if normalized.startswith("data:image/") and ";base64," in normalized:
+        header, _, encoded = normalized.partition(";base64,")
+        return f"{header};base64,<{len(encoded)} chars>"
+    return normalized
 
 
 def _strip_image_model_2k_suffix(model_name: str) -> str:
@@ -1557,10 +1603,15 @@ def _build_openai_images_plan(
         body = _grok_image_request_body(profile=profile, payload=payload, prompt=prompt)
         reference_result = _image_generation_result_fields(profile, payload)
         if reference_images:
+            grok_ref_mode = (
+                "haodeya_grok_image_inline"
+                if any(str(item).startswith("data:image/") for item in body.get("image_urls") or [])
+                else "haodeya_grok_image"
+            )
             reference_result = {
                 **reference_result,
                 "reference_image_used": True,
-                "reference_image_mode": "haodeya_grok_image",
+                "reference_image_mode": grok_ref_mode,
                 "reference_image_count": len(reference_images),
             }
         if requested_capability != effective_capability:
@@ -2600,7 +2651,10 @@ def _build_failure_result(exc: Exception, *, capability: str, provider_name: str
         upstream_body = _sanitize_error_text(http_match.group("detail"), limit=380)
         upstream_is_html = bool(_HTML_ERROR_PATTERN.search(http_match.group("detail")))
 
-        if status_code in {401, 403}:
+        if "image_download_interrupted" in upstream_body or "image_download_error" in upstream_body:
+            summary = f"{stage_label}失败：上游无法稳定下载参考图。"
+            hint = "请稍后重试；若仍失败，请换更小的参考图或重新上传后再提交。"
+        elif status_code in {401, 403}:
             summary = f"{stage_label}失败：上游拒绝了当前凭证或权限。"
             hint = "请在后台模型管理检查 API Key、模型权限和账号状态。"
         elif status_code == 404:

@@ -6,6 +6,7 @@ from app.services.model_registry import ImageProviderProfile, ProviderDefinition
 from app.services.task_executor import (
     _build_image_request_plan,
     _grok_image_request_body,
+    _grok_reference_image_value,
     _should_use_chat_modalities_plan_for_2k,
     _uses_haodeya_grok_image,
     _uses_haodeya_seedream_image,
@@ -116,6 +117,45 @@ class HaodeyaGrokImageTests(unittest.TestCase):
         self.assertEqual(plan.body["aspect_ratio"], "16:9")
         self.assertEqual(plan.reference_result.get("reference_image_mode"), "haodeya_grok_image")
         self.assertFalse(plan.multipart_files)
+
+    def test_i2i_inlines_local_media_as_data_urls(self) -> None:
+        profile = self._profile()
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8
+        with patch(
+            "app.services.task_executor._load_reference_image_bytes",
+            return_value=(png, "ref.png", "image/png"),
+        ):
+            value = _grok_reference_image_value("/media/references/ref.png")
+            self.assertTrue(value.startswith("data:image/png;base64,"))
+
+            plan = _build_image_request_plan(
+                profile=profile,
+                definition=self._definition(profile),
+                capability="image.edit",
+                payload={
+                    "prompt": "change outfit",
+                    "resolution": "2k",
+                    "aspect_ratio": "16:9",
+                    "reference_images": ["/media/references/ref.png"],
+                },
+                prompt="change outfit",
+            )
+        self.assertTrue(str(plan.body["image_urls"][0]).startswith("data:image/png;base64,"))
+        self.assertEqual(plan.reference_result.get("reference_image_mode"), "haodeya_grok_image_inline")
+
+    def test_i2i_inlines_own_public_https_media_paths(self) -> None:
+        profile = self._profile()
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8
+        public_url = "https://cityusbdisk.cn/media/references/ref.png"
+        with patch("app.services.task_executor.settings.public_media_base_url", "https://cityusbdisk.cn"):
+            with patch("app.services.task_executor.settings.media_url_prefix", "/media"):
+                with patch(
+                    "app.services.task_executor._load_reference_image_bytes",
+                    return_value=(png, "ref.png", "image/png"),
+                ) as load_mock:
+                    value = _grok_reference_image_value(public_url)
+        load_mock.assert_called_once()
+        self.assertTrue(value.startswith("data:image/png;base64,"))
 
     def test_follow_source_2k_infers_aspect_from_reference(self) -> None:
         profile = self._profile()

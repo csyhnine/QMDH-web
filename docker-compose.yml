@@ -143,6 +143,9 @@ services:
         condition: service_healthy
     ports:
       - "${QMDH_FRONTEND_HOST_PORT:-8080}:80"
+    volumes:
+      # studio-perf-002: nginx serves /media from the same volume as backend (read-only).
+      - backend_media:/var/media:ro
 
 volumes:
   postgres_data:

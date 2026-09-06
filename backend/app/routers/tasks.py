@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -122,6 +122,8 @@ def _to_task_out(task: Task) -> TaskOut:
 
 @router.get("", response_model=list[TaskOut])
 def list_tasks(
+    limit: int | None = Query(default=None, ge=1, le=500),
+    status: list[TaskStatus] | None = Query(default=None),
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile | None = Depends(get_optional_auth_user),
 ) -> list[TaskOut]:
@@ -141,6 +143,10 @@ def list_tasks(
         query = query.where(Task.user_id == auth_user.user_id)
     else:
         query = query.where(User.name == auth_user.name)
+    if status:
+        query = query.where(Task.status.in_(status))
+    if limit is not None:
+        query = query.limit(limit)
     tasks = db.scalars(query).all()
     return [_to_task_out(task) for task in tasks]
 

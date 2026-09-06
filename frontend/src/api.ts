@@ -1252,6 +1252,27 @@ function buildQuery(params: Record<string, string | undefined>): string {
   return query ? `?${query}` : "";
 }
 
+export type TasksQuery = {
+  limit?: number;
+  status?: string[];
+};
+
+export type AssetsQuery = {
+  limit?: number;
+};
+
+function buildTasksQuery(params: TasksQuery = {}): string {
+  const search = new URLSearchParams();
+  if (params.limit != null) {
+    search.set("limit", String(params.limit));
+  }
+  for (const value of params.status ?? []) {
+    if (value) search.append("status", value);
+  }
+  const query = search.toString();
+  return query ? `?${query}` : "";
+}
+
 export const api = {
   login: async (username: string, password: string) => {
     const response = await fetch(buildApiUrl("/auth/login"), {

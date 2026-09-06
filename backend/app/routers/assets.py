@@ -3,7 +3,7 @@ from datetime import datetime
 from random import randint
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -186,10 +186,14 @@ def list_assets(
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile | None = Depends(get_optional_auth_user),
     bookmarked: bool | None = None,
+    limit: int | None = Query(default=None, ge=1, le=500),
 ) -> list[AssetOut]:
     if auth_user is None:
         return []
-    assets = db.scalars(select(Asset).order_by(Asset.created_at.desc())).all()
+    query = select(Asset).order_by(Asset.created_at.desc())
+    if limit is not None:
+        query = query.limit(limit)
+    assets = db.scalars(query).all()
     owned_task_ids = _owned_task_ids(db, auth_user)
     accessible = [
         asset

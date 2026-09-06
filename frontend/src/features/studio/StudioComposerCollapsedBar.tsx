@@ -21,7 +21,7 @@ export default function StudioComposerCollapsedBar({
           {referenceUploads.length > 0 ? (
             <div className="composer-collapsed-thumbs">
               {referenceUploads.slice(0, 3).map((item) => (
-                <img key={item.storagePath} src={item.previewUrl} alt="" />
+                <img key={item.storagePath} src={item.previewUrl} alt="" loading="lazy" decoding="async" />
               ))}
             </div>
           ) : (

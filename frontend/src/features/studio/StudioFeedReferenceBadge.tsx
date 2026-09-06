@@ -20,7 +20,7 @@ export default function StudioFeedReferenceBadge({
       aria-label={`本任务使用了 ${imageCount} 张参考图，悬停可查看原图`}
     >
       <div className="feed-card-reference-stack">
-        <img src={primaryImage} alt="参考图缩略图" />
+        <img src={primaryImage} alt="参考图缩略图" loading="lazy" decoding="async" />
         {imageCount > 1 ? <span className="feed-card-reference-count">+{imageCount - 1}</span> : null}
       </div>
       <div className="feed-card-reference-copy">
@@ -37,7 +37,7 @@ export default function StudioFeedReferenceBadge({
         >
           {previewImages.map((src, index) => (
             <figure key={`${src}-${index}`} className="feed-card-reference-hover-figure">
-              <img src={src} alt="" />
+              <img src={src} alt="" loading="lazy" decoding="async" />
               {previewImages.length > 1 ? (
                 <figcaption>参考图 {index + 1}</figcaption>
               ) : null}

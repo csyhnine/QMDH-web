@@ -38,7 +38,11 @@ export function useStudioDefaults({
     if (studioForm.title.trim() || studioForm.prompt.trim()) return;
     hasAppliedInitialTemplateRef.current = true;
     // Keep product default resolution (1K); do not inherit template 2K on cold start.
-    onApplyTemplate(sharedTemplates[0], { closeMenu: false, preserveResolution: true });
+    onApplyTemplate(sharedTemplates[0], {
+      closeMenu: false,
+      preserveResolution: true,
+      bindTemplate: false,
+    });
   }, [onApplyTemplate, sharedTemplates, studioForm.prompt, studioForm.title]);
 
   useEffect(() => {

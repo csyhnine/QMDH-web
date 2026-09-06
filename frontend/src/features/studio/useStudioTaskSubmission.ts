@@ -55,10 +55,12 @@ export function useStudioTaskSubmission({
       return false;
     }
 
+    const promptTemplates = [...studioTemplates.sharedTemplates, ...studioTemplates.customTemplates];
     const submissionDraft = buildTaskSubmissionPayload({
       form,
       provider: providerForSubmit,
       referenceUploads,
+      templates: promptTemplates,
     });
     setSubmissionTracker(
       buildPendingSubmissionTracker({

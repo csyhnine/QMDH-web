@@ -30,9 +30,11 @@ import {
 } from "./seedanceVideoUtils";
 import { isRuntimeStudioProvider } from "./modelAdminUtils";
 import { pickPreferredStudioProvider } from "./studioProviderDefaults";
+import { applyTemplateBindingGuard } from "./studioTemplateBindingUtils";
 import type { StudioVideoSku } from "./studioComposerGrokSkuMenuTypes";
 import type { StudioComposerCanvasProps } from "./studioComposerCanvasTypes";
 import type { StudioDesignerViewProps } from "./studioDesignerViewTypes";
+import type { StudioFormState } from "./studioTypes";
 
 function videoSkuForProviderSelection(
   provider: Parameters<typeof isHappyHorseProvider>[0],
@@ -73,8 +75,13 @@ export function buildStudioComposerCanvasProps({
     workspaceName,
   } = derivedState;
 
+  const promptTemplates = [...studioTemplates.sharedTemplates, ...studioTemplates.customTemplates];
+  const patchStudioForm = (patch: Partial<StudioFormState>) => {
+    setStudioForm((current) => applyTemplateBindingGuard(current, patch, promptTemplates));
+  };
+
   const handleImageCountSelect = (count: number) => {
-    setStudioForm((current) => ({ ...current, imageCount: count }));
+    patchStudioForm({ imageCount: count });
     setActiveComposerMenu(null);
   };
 
@@ -84,12 +91,15 @@ export function buildStudioComposerCanvasProps({
       const nextOptions = resolveProviderResolutionOptions(provider, {
         creationMode: current.creationMode,
       });
-      return {
-        ...current,
-        requestedProvider: providerName,
-        resolution: clampResolutionToOptions(current.resolution, nextOptions),
-        grokVideoSku: videoSkuForProviderSelection(provider, current.grokVideoSku),
-      };
+      return applyTemplateBindingGuard(
+        current,
+        {
+          requestedProvider: providerName,
+          resolution: clampResolutionToOptions(current.resolution, nextOptions),
+          grokVideoSku: videoSkuForProviderSelection(provider, current.grokVideoSku),
+        },
+        promptTemplates
+      );
     });
     setActiveComposerMenu(null);
   };
@@ -121,7 +131,7 @@ export function buildStudioComposerCanvasProps({
 
   return {
     activeComposerMenu,
-    activeTemplateId: studioTemplates.activeTemplate?.id ?? null,
+    activeTemplateId: studioForm.activeTemplateId,
     aspectRatioOptions: composerAspectRatioOptions,
     availableProviderCount: availableProviders.length,
     composerCollapsed: studioView.composerCollapsed,
@@ -155,7 +165,7 @@ export function buildStudioComposerCanvasProps({
     uploadingReference: referenceUpload.uploadingReference,
     workspaceName,
     onApplyTemplate: studioTemplates.applyTemplate,
-    onAspectRatioSelect: (ratio) => setStudioForm((current) => ({ ...current, aspectRatio: ratio })),
+    onAspectRatioSelect: (ratio) => patchStudioForm({ aspectRatio: ratio }),
     onCancelTemplateEdit: studioTemplates.cancelTemplateEdit,
     onComposerExpand: () => studioView.setComposerCollapsed(false),
     onComposerFocusChange: setComposerFocused,
@@ -211,19 +221,21 @@ export function buildStudioComposerCanvasProps({
         const nextResolutionOptions = resolveProviderResolutionOptions(provider, {
           creationMode: mode,
         });
-        return {
-          ...current,
-          creationMode: mode,
-          requestedProvider: resolvedProviderName,
-          aspectRatio: nextAspectRatio,
-          resolution: clampResolutionToOptions(current.resolution, nextResolutionOptions),
-          grokVideoSku: nextGrokSku,
-        };
+        return applyTemplateBindingGuard(
+          current,
+          {
+            creationMode: mode,
+            requestedProvider: resolvedProviderName,
+            aspectRatio: nextAspectRatio,
+            resolution: clampResolutionToOptions(current.resolution, nextResolutionOptions),
+            grokVideoSku: nextGrokSku,
+          },
+          promptTemplates
+        );
       });
     },
     onOpenReferencePicker: referenceUpload.openReferencePicker,
-    onPromptChange: (value) =>
-      setStudioForm((current) => ({ ...current, prompt: value, promptPolished: false })),
+    onPromptChange: (value) => patchStudioForm({ prompt: value, promptPolished: false }),
     onPromptPolished: () => setStudioForm((current) => ({ ...current, promptPolished: true })),
     onProviderSelect: handleProviderSelect,
     onReferenceDrop: referenceUpload.handleReferenceDrop,
@@ -233,8 +245,7 @@ export function buildStudioComposerCanvasProps({
     onRegisterSeedancePrivateAvatar: referenceUpload.registerSeedancePrivateAvatar,
     onStartSeedanceRealAvatar: referenceUpload.startSeedanceRealAvatar,
     onCompleteSeedanceRealAvatar: referenceUpload.completeSeedanceRealAvatar,
-    onResolutionSelect: (resolutionId) =>
-      setStudioForm((current) => ({ ...current, resolution: resolutionId })),
+    onResolutionSelect: (resolutionId) => patchStudioForm({ resolution: resolutionId }),
     onSaveCustomTemplate: () => void studioTemplates.saveCustomTemplate(),
     onSubmit: taskActions.handleSubmit,
     onTemplateDraftLabelChange: studioTemplates.setTemplateDraftLabel,

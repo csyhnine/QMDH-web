@@ -6,6 +6,7 @@ import type {
   SharedPromptTemplate,
   StudioFormState,
 } from "./studioTypes";
+import { findBoundTemplate } from "./studioTemplateBindingUtils";
 import {
   applyTemplateToForm,
   sortTemplatesByUpdatedAt,
@@ -26,6 +27,8 @@ type ApplyTemplateOptions = {
   closeMenu?: boolean;
   /** Keep current form resolution (used for cold-start auto-apply so default stays 1K). */
   preserveResolution?: boolean;
+  /** When false, prefill fields only — do not bind template_id for analytics until user picks a template. */
+  bindTemplate?: boolean;
 };
 
 export type StudioTemplatesState = ReturnType<typeof useStudioTemplates>;
@@ -64,14 +67,15 @@ export function useStudioTemplates({
     workspaceName,
   });
 
-  const activeTemplate =
-    useMemo(
-      () =>
-        [...sharedTemplates, ...customTemplates].find(
-          (template) => template.title === studioForm.title && template.prompt === studioForm.prompt
-        ) ?? null,
-      [customTemplates, sharedTemplates, studioForm.prompt, studioForm.title]
-    );
+  const allTemplates = useMemo(
+    () => [...sharedTemplates, ...customTemplates],
+    [customTemplates, sharedTemplates]
+  );
+
+  const activeTemplate = useMemo(
+    () => findBoundTemplate(studioForm, allTemplates),
+    [allTemplates, studioForm]
+  );
 
   const setPromptTemplates = useCallback((templates: PromptTemplateRecord[]) => {
     setSharedTemplates(sortTemplatesByUpdatedAt(templates.filter((template) => template.scope === "shared")));
@@ -83,13 +87,13 @@ export function useStudioTemplates({
   }, [activeTemplate, syncCustomTemplateDraftWithCurrentForm]);
 
   const applyTemplate = useCallback((template: PromptTemplateRecord, options: ApplyTemplateOptions = {}) => {
-    const { closeMenu = true, preserveResolution = false } = options;
+    const { closeMenu = true, preserveResolution = false, bindTemplate = true } = options;
     const nextTemplate = toTemplateFormValue(template);
     clearFeedback();
     setStudioForm((current) => {
       const next = applyTemplateToForm(nextTemplate, current);
       const merged = preserveResolution ? { ...next, resolution: current.resolution } : next;
-      return { ...merged, activeTemplateId: template.id };
+      return { ...merged, activeTemplateId: bindTemplate ? template.id : null };
     });
     if (closeMenu) {
       setActiveComposerMenu(null);

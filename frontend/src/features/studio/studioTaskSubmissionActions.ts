@@ -1,6 +1,7 @@
 import type { PromptTemplateRecord, Provider, Task, TaskCreatePayload } from "../../api";
 import { defaultStudioForm } from "./studioConstants";
 import { publicProviderDisplayName } from "./modelAdminUtils";
+import { resolveBoundTemplateId } from "./studioTemplateBindingUtils";
 import type { StudioFormState, SubmissionTracker } from "./studioTypes";
 import { buildImagePayload, buildVideoPayload, clampImageCount, deriveTaskTitleFromPrompt, getStudioWorkflowKeyForProvider } from "./studioUtils";
 
@@ -10,7 +11,9 @@ type BuildTaskSubmissionPayloadOptions = {
   referenceUploads?: import("./studioTypes").ReferenceUploadItem[];
   sourceSurface?: "studio" | "canvas";
   canvasNodeId?: string;
+  workflowType?: string;
   promptPolished?: boolean;
+  templates?: PromptTemplateRecord[];
 };
 
 type BuildPendingSubmissionTrackerOptions = BuildTaskSubmissionPayloadOptions & {
@@ -39,7 +42,9 @@ export function buildTaskSubmissionPayload({
   referenceUploads,
   sourceSurface = "studio",
   canvasNodeId,
+  workflowType,
   promptPolished = false,
+  templates = [],
 }: BuildTaskSubmissionPayloadOptions): TaskSubmissionDraft {
   const workflowKey = getStudioWorkflowKeyForProvider(provider, form.creationMode);
   const taskTitle = deriveTaskTitleFromPrompt(form.prompt, form.title.trim() || defaultStudioForm.title);
@@ -47,6 +52,7 @@ export function buildTaskSubmissionPayload({
     form.creationMode === "video"
       ? buildVideoPayload(form, provider, referenceUploads)
       : buildImagePayload(form, workflowKey);
+  const templateId = templates.length > 0 ? resolveBoundTemplateId(form, templates) : form.activeTemplateId ?? undefined;
 
   return {
     taskTitle,
@@ -58,9 +64,10 @@ export function buildTaskSubmissionPayload({
       requested_provider: provider.provider_name,
       classification: form.classification,
       payload: taskPayload,
-      template_id: form.activeTemplateId ?? undefined,
+      template_id: templateId,
       source_surface: sourceSurface,
       canvas_node_id: canvasNodeId,
+      workflow_type: workflowType,
       prompt_polished: promptPolished || form.promptPolished,
     },
   };

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { createPortal } from "react-dom";
 import {
   Background,
   BackgroundVariant,
@@ -36,6 +37,7 @@ import type { CanvasFlowNode, CanvasNodeKind } from "./canvasTypes";
 
 const FIT_VIEW_OPTIONS = { padding: 0.2, duration: 240 } as const;
 const MIDDLE_DOUBLE_MS = 380;
+const MENU_PANE_SUPPRESS_MS = 480;
 
 const nodeTypes = {
   generate: GenerateNode,
@@ -117,17 +119,91 @@ function CanvasBoardInner({
   const { screenToFlowPosition, fitView, setCenter, getZoom, getNodes } = useReactFlow();
   const boardInnerRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<BoardMenu | null>(null);
+  const menuRef = useRef<BoardMenu | null>(null);
+  const suppressPaneUntilRef = useRef(0);
   const [dragOver, setDragOver] = useState(false);
   const lastMiddleClickRef = useRef(0);
 
   useEffect(() => {
+    menuRef.current = menu;
+  }, [menu]);
+
+  const openMenu = useCallback((next: BoardMenu) => {
+    menuRef.current = next;
+    setMenu(next);
+  }, []);
+
+  const closeMenu = useCallback(() => {
+    menuRef.current = null;
+    setMenu(null);
+  }, []);
+
+  const executeMenuAction = useCallback(
+    (action: (currentMenu: BoardMenu) => void) => {
+      const currentMenu = menuRef.current;
+      if (!currentMenu) return;
+      suppressPaneUntilRef.current = Date.now() + MENU_PANE_SUPPRESS_MS;
+      action(currentMenu);
+      window.setTimeout(() => closeMenu(), 0);
+    },
+    [closeMenu]
+  );
+
+  useEffect(() => {
+    if (!menu) return;
+
+    function isMenuTarget(target: EventTarget | null) {
+      return target instanceof Element && Boolean(target.closest(".qmdh-canvas-context-menu"));
+    }
+
+    function onDocumentPointerDown(event: PointerEvent) {
+      if (isMenuTarget(event.target)) {
+        return;
+      }
+      if (event.button === 0) {
+        closeMenu();
+      }
+    }
+
+    function onDocumentClickCapture(event: MouseEvent) {
+      if (Date.now() < suppressPaneUntilRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }
+    }
+
+    document.addEventListener("pointerdown", onDocumentPointerDown, true);
+    document.addEventListener("click", onDocumentClickCapture, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDocumentPointerDown, true);
+      document.removeEventListener("click", onDocumentClickCapture, true);
+    };
+  }, [closeMenu, menu]);
+
+  const placeNodeFromMenu = useCallback(
+    (node: CanvasFlowNode, currentMenu: BoardMenu) => {
+      if (currentMenu.connectFrom) {
+        const connection =
+          currentMenu.connectFrom.handleType === "source"
+            ? { source: currentMenu.connectFrom.nodeId, target: node.id }
+            : { source: node.id, target: currentMenu.connectFrom.nodeId };
+        onAddConnectedNode(node, connection);
+      } else {
+        onAddNode(node);
+      }
+    },
+    [onAddConnectedNode, onAddNode]
+  );
+
+  useEffect(() => {
     if (!menu) return;
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setMenu(null);
+      if (event.key === "Escape") closeMenu();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [menu]);
+  }, [closeMenu, menu]);
 
   const fitToNodes = useCallback(() => {
     if (getNodes().length === 0) return;
@@ -190,7 +266,7 @@ function CanvasBoardInner({
       if (!point) return;
       const target = event.target as Element | null;
       if (target?.closest?.(".react-flow__handle")) return;
-      setMenu({
+      openMenu({
         x: point.x,
         y: point.y,
         flow: screenToFlowPosition(point),
@@ -200,7 +276,7 @@ function CanvasBoardInner({
         },
       });
     },
-    [disabled, screenToFlowPosition]
+    [disabled, openMenu, screenToFlowPosition]
   );
 
   const onMoveEnd: OnMoveEnd = useCallback(
@@ -222,56 +298,47 @@ function CanvasBoardInner({
       event.preventDefault();
       if (disabled) return;
       const flow = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      setMenu({ x: event.clientX, y: event.clientY, flow });
+      openMenu({ x: event.clientX, y: event.clientY, flow });
     },
-    [disabled, screenToFlowPosition]
+    [disabled, openMenu, screenToFlowPosition]
   );
 
   const onEdgeContextMenu = useCallback(
     (event: MouseEvent | ReactMouseEvent, edge: Edge) => {
       event.preventDefault();
       if (disabled) return;
-      setMenu({
+      openMenu({
         x: event.clientX,
         y: event.clientY,
         flow: screenToFlowPosition({ x: event.clientX, y: event.clientY }),
         disconnectEdgeId: edge.id,
       });
     },
-    [disabled, screenToFlowPosition]
+    [disabled, openMenu, screenToFlowPosition]
   );
 
   const disconnectEdge = useCallback(
     (edgeId: string) => {
       onEdgesReplace(edges.filter((edge) => edge.id !== edgeId));
-      setMenu(null);
     },
     [edges, onEdgesReplace]
   );
 
   const addKind = useCallback(
     (kind: CanvasNodeKind) => {
-      if (!menu) return;
-      const node = createBlankGenerateNode(kind, menu.flow, nodeDefaults);
-      if (menu.connectFrom) {
-        const connection =
-          menu.connectFrom.handleType === "source"
-            ? { source: menu.connectFrom.nodeId, target: node.id }
-            : { source: node.id, target: menu.connectFrom.nodeId };
-        onAddConnectedNode(node, connection);
-      } else {
-        onAddNode(node);
-      }
-      setMenu(null);
+      executeMenuAction((currentMenu) => {
+        const node = createBlankGenerateNode(kind, currentMenu.flow, nodeDefaults);
+        placeNodeFromMenu(node, currentMenu);
+      });
     },
-    [menu, nodeDefaults, onAddConnectedNode, onAddNode]
+    [executeMenuAction, nodeDefaults, placeNodeFromMenu]
   );
 
   const addNote = useCallback(() => {
-    if (!menu) return;
-    onAddNode(createBlankNoteNode(menu.flow));
-    setMenu(null);
-  }, [menu, onAddNode]);
+    executeMenuAction((currentMenu) => {
+      onAddNode(createBlankNoteNode(currentMenu.flow));
+    });
+  }, [executeMenuAction, onAddNode]);
 
   const handleDragOver = useCallback(
     (event: DragEvent) => {
@@ -327,7 +394,15 @@ function CanvasBoardInner({
 
   const onPaneClick = useCallback(
     (event: ReactMouseEvent | MouseEvent) => {
-      setMenu(null);
+      if (menuRef.current) return;
+      if (Date.now() < suppressPaneUntilRef.current) return;
+      if ("button" in event && event.button !== 0) return;
+
+      const target = event.target;
+      if (target instanceof Element && target.closest(".qmdh-canvas-context-menu")) {
+        return;
+      }
+      closeMenu();
       if (disabled) return;
       if (!isBlankCanvasTarget(event.target)) return;
       const now = Date.now();
@@ -339,7 +414,7 @@ function CanvasBoardInner({
       }
       lastPaneClickRef.current = now;
     },
-    [addNoteAtClientPoint, disabled, isBlankCanvasTarget]
+    [addNoteAtClientPoint, closeMenu, disabled, isBlankCanvasTarget]
   );
 
   const onPaneDoubleClick = useCallback(
@@ -354,6 +429,66 @@ function CanvasBoardInner({
   );
 
   const defaultViewport = useMemo(() => viewport, [viewport]);
+
+  const contextMenuPortal =
+    menu && typeof document !== "undefined"
+      ? createPortal(
+          menu.disconnectEdgeId ? (
+            <div
+              className="qmdh-canvas-context-menu"
+              style={{ left: menu.x, top: menu.y }}
+              role="menu"
+              onPointerDownCapture={(event) => event.stopPropagation()}
+            >
+              <header>连线</header>
+              <button
+                type="button"
+                role="menuitem"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  executeMenuAction((currentMenu) => {
+                    if (currentMenu.disconnectEdgeId) {
+                      disconnectEdge(currentMenu.disconnectEdgeId);
+                    }
+                  });
+                }}
+              >
+                断开连线
+              </button>
+              <button
+                type="button"
+                className="muted"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  closeMenu();
+                }}
+              >
+                取消
+              </button>
+            </div>
+          ) : (
+            <CanvasContextMenu
+              x={menu.x}
+              y={menu.y}
+              title={menu.connectFrom ? "添加并连接节点" : "画布菜单"}
+              canGroup={!menu.connectFrom && canGroup}
+              canUngroup={!menu.connectFrom && canUngroup}
+              onAdd={addKind}
+              onAddNote={addNote}
+              onGroup={() => {
+                executeMenuAction(() => onGroupSelection());
+              }}
+              onUngroup={() => {
+                executeMenuAction(() => onUngroupSelection());
+              }}
+              onClose={closeMenu}
+            />
+          ),
+          document.body
+        )
+      : null;
 
   return (
     <div
@@ -415,36 +550,7 @@ function CanvasBoardInner({
         </ReactFlow>
       </CanvasEdgeInteractionProvider>
       {dragOver ? <div className="qmdh-canvas-drop-overlay">松开以创建「上传图片」节点</div> : null}
-      {menu?.disconnectEdgeId ? (
-        <div className="qmdh-canvas-context-menu" style={{ left: menu.x, top: menu.y }} role="menu">
-          <header>连线</header>
-          <button type="button" role="menuitem" onClick={() => disconnectEdge(menu.disconnectEdgeId!)}>
-            断开连线
-          </button>
-          <button type="button" className="muted" onClick={() => setMenu(null)}>
-            取消
-          </button>
-        </div>
-      ) : menu ? (
-        <CanvasContextMenu
-          x={menu.x}
-          y={menu.y}
-          title={menu.connectFrom ? "添加并连接节点" : "画布菜单"}
-          canGroup={!menu.connectFrom && canGroup}
-          canUngroup={!menu.connectFrom && canUngroup}
-          onAdd={addKind}
-          onAddNote={addNote}
-          onGroup={() => {
-            onGroupSelection();
-            setMenu(null);
-          }}
-          onUngroup={() => {
-            onUngroupSelection();
-            setMenu(null);
-          }}
-          onClose={() => setMenu(null)}
-        />
-      ) : null}
+      {contextMenuPortal}
     </div>
   );
 }

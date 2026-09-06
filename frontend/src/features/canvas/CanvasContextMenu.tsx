@@ -13,6 +13,16 @@ type CanvasContextMenuProps = {
   onClose: () => void;
 };
 
+function stopMenuPointerEvent(event: React.MouseEvent | React.PointerEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function runMenuAction(event: React.PointerEvent, action: () => void) {
+  stopMenuPointerEvent(event);
+  action();
+}
+
 export default function CanvasContextMenu({
   x,
   y,
@@ -26,28 +36,39 @@ export default function CanvasContextMenu({
   onClose,
 }: CanvasContextMenuProps) {
   return (
-    <div className="qmdh-canvas-context-menu" style={{ left: x, top: y }} role="menu">
+    <div
+      className="qmdh-canvas-context-menu"
+      style={{ left: x, top: y }}
+      role="menu"
+      onPointerDownCapture={stopMenuPointerEvent}
+      onContextMenu={(event) => event.preventDefault()}
+    >
       <header>{title}</header>
       {canGroup ? (
-        <button type="button" role="menuitem" onClick={() => onGroup?.()}>
+        <button type="button" role="menuitem" onPointerDown={(event) => runMenuAction(event, () => onGroup?.())}>
           编组所选
         </button>
       ) : null}
       {canUngroup ? (
-        <button type="button" role="menuitem" onClick={() => onUngroup?.()}>
+        <button type="button" role="menuitem" onPointerDown={(event) => runMenuAction(event, () => onUngroup?.())}>
           解散编组
         </button>
       ) : null}
       {(canGroup || canUngroup) && <div className="qmdh-canvas-context-menu-sep" />}
       {ADDABLE_NODE_KINDS.map((kind) => (
-        <button key={kind} type="button" role="menuitem" onClick={() => onAdd(kind)}>
+        <button
+          key={kind}
+          type="button"
+          role="menuitem"
+          onPointerDown={(event) => runMenuAction(event, () => onAdd(kind))}
+        >
           {NODE_KIND_LABEL[kind]}
         </button>
       ))}
-      <button type="button" role="menuitem" onClick={() => onAddNote?.()}>
+      <button type="button" role="menuitem" onPointerDown={(event) => runMenuAction(event, () => onAddNote?.())}>
         备注文字
       </button>
-      <button type="button" className="muted" onClick={onClose}>
+      <button type="button" className="muted" onPointerDown={(event) => runMenuAction(event, onClose)}>
         取消
       </button>
     </div>

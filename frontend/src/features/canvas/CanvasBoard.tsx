@@ -438,7 +438,6 @@ function CanvasBoardInner({
               className="qmdh-canvas-context-menu"
               style={{ left: menu.x, top: menu.y }}
               role="menu"
-              onPointerDownCapture={(event) => event.stopPropagation()}
             >
               <header>连线</header>
               <button

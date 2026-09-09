@@ -40,7 +40,6 @@ export default function CanvasContextMenu({
       className="qmdh-canvas-context-menu"
       style={{ left: x, top: y }}
       role="menu"
-      onPointerDownCapture={stopMenuPointerEvent}
       onContextMenu={(event) => event.preventDefault()}
     >
       <header>{title}</header>

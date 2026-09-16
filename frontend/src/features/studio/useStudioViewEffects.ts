@@ -1,6 +1,19 @@
-import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react";
 
 import type { Project, PromptTemplateRecord, Provider, Task } from "../../api";
+import type { FeedFilterState } from "./studioHistoryPaneTypes";
+import {
+  isHistoryScrolledToLatest,
+  scrollHistoryPaneToEdge,
+  scrollToLatestHistoryPosition,
+} from "./studioHistoryScrollUtils";
 import type { ComposerMenuKey, GalleryPreviewState, StudioFormState } from "./studioTypes";
 import { useStudioComposerCollapse } from "./useStudioComposerCollapse";
 import { useStudioDefaults } from "./useStudioDefaults";
@@ -13,6 +26,7 @@ type UseStudioViewEffectsOptions = {
   currentUserName: string | undefined;
   galleryPreview: GalleryPreviewState | null;
   hasFilteredHistory: boolean;
+  historySort: FeedFilterState["sort"];
   isStudioDockLayout: boolean;
   latestTask: Task | null;
   projects: Project[];
@@ -39,6 +53,7 @@ export function useStudioViewEffects({
   currentUserName,
   galleryPreview,
   hasFilteredHistory,
+  historySort,
   isStudioDockLayout,
   latestTask,
   projects,
@@ -58,7 +73,6 @@ export function useStudioViewEffects({
     activeComposerMenu,
     composerFocused,
     isStudioDockLayout,
-    latestTaskId: latestTask?.id,
     setActiveComposerMenu,
     submitting,
     uploadingReference,
@@ -76,22 +90,70 @@ export function useStudioViewEffects({
 
   useEffect(() => {
     hasAutoPositionedRef.current = false;
-  }, [studioForm.projectCode]);
+  }, [historySort, studioForm.projectCode]);
 
-  useEffect(() => {
-    if (!stateReady || !hasFilteredHistory || hasAutoPositionedRef.current) return;
+  useLayoutEffect(() => {
+    if (!stateReady || !hasFilteredHistory || hasAutoPositionedRef.current) return undefined;
 
-    window.requestAnimationFrame(() => {
-      latestTaskRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
-      hasAutoPositionedRef.current = true;
-    });
-  }, [hasFilteredHistory, latestTask?.id, stateReady]);
+    const pane = composerCollapse.studioScrollPaneRef.current;
+    if (!pane) return undefined;
+
+    let cancelled = false;
+    let attempts = 0;
+    let lastScrollHeight = -1;
+    const maxAttempts = 16;
+
+    const tryScroll = () => {
+      if (cancelled || hasAutoPositionedRef.current) return;
+
+      scrollToLatestHistoryPosition(pane, latestTaskRef.current, historySort);
+      attempts += 1;
+
+      const scrollHeightStable = lastScrollHeight >= 0 && pane.scrollHeight === lastScrollHeight;
+      lastScrollHeight = pane.scrollHeight;
+
+      if (
+        isHistoryScrolledToLatest(pane, historySort) &&
+        (scrollHeightStable || attempts >= 3)
+      ) {
+        hasAutoPositionedRef.current = true;
+        return;
+      }
+
+      if (attempts >= maxAttempts) {
+        hasAutoPositionedRef.current = true;
+        return;
+      }
+
+      window.requestAnimationFrame(tryScroll);
+    };
+
+    tryScroll();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasFilteredHistory, historySort, latestTask?.id, stateReady, studioForm.projectCode]);
+
+  const scrollHistoryToTop = useCallback(() => {
+    const pane = composerCollapse.studioScrollPaneRef.current;
+    if (!pane) return;
+    scrollHistoryPaneToEdge(pane, "top");
+  }, []);
+
+  const scrollHistoryToBottom = useCallback(() => {
+    const pane = composerCollapse.studioScrollPaneRef.current;
+    if (!pane) return;
+    scrollHistoryPaneToEdge(pane, "bottom");
+  }, []);
 
   return {
     composerCollapsed: composerCollapse.composerCollapsed,
     composerToolbarRef: composerCollapse.composerToolbarRef,
     hasAutoPositionedRef,
     latestTaskRef,
+    scrollHistoryToBottom,
+    scrollHistoryToTop,
     setComposerCollapsed: composerCollapse.setComposerCollapsed,
     studioScrollPaneRef: composerCollapse.studioScrollPaneRef,
   };

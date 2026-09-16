@@ -34,6 +34,8 @@ export function getStudioHistoryCanvasProps({
   onUseAssetAsReference,
   onBookmarkAsset,
   onChangeFilters,
+  onScrollHistoryToBottom,
+  onScrollHistoryToTop,
   onDeleteTask,
   onPreviewAsset,
   onRegenerateTask,
@@ -54,6 +56,8 @@ export function getStudioHistoryCanvasProps({
       hasProjectHistory,
       workspaceName,
       onChangeFilters,
+      onScrollHistoryToBottom,
+      onScrollHistoryToTop,
     },
     feedProps: {
       tasks,

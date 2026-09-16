@@ -11,6 +11,8 @@ export default function StudioHistoryPane({
   hasProjectHistory,
   workspaceName,
   onChangeFilters,
+  onScrollHistoryToBottom,
+  onScrollHistoryToTop,
   children,
 }: StudioHistoryPaneProps) {
   return (
@@ -20,6 +22,8 @@ export default function StudioHistoryPane({
           availableProviders={availableProviders}
           filters={filters}
           onChangeFilters={onChangeFilters}
+          onScrollHistoryToBottom={onScrollHistoryToBottom}
+          onScrollHistoryToTop={onScrollHistoryToTop}
         />
       ) : null}
 

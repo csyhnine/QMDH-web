@@ -974,6 +974,24 @@ button {
   justify-content: flex-end;
 }
 
+.canvas-topbar-history .toolbar-row {
+  width: 100%;
+}
+
+.history-scroll-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+}
+
+.history-scroll-button {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
 .canvas-title h1 {
   margin-top: 8px;
   font-size: clamp(2rem, 4vw, 3rem);

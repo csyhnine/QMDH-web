@@ -55,6 +55,8 @@ export function buildStudioHistoryCanvasProps({
     onUseAssetAsReference: taskActions.applyResultAsReference,
     onBookmarkAsset: (taskId, assetId) => void galleryActions.bookmarkAsset(taskId, assetId),
     onChangeFilters: setFilters,
+    onScrollHistoryToBottom: studioView.scrollHistoryToBottom,
+    onScrollHistoryToTop: studioView.scrollHistoryToTop,
     onDeleteTask: (task: Task) => void galleryActions.deleteHistoryTask(task),
     onPreviewAsset: (task: Task, asset: Asset) => setGalleryPreview({ task, asset }),
     onRegenerateTask: (task, asset) => void taskActions.regenerateTask(task, asset),

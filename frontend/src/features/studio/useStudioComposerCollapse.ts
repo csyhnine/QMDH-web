@@ -2,11 +2,19 @@ import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from 
 
 import type { ComposerMenuKey } from "./studioTypes";
 
+/** Scroll down far enough before auto-collapsing the composer. */
+const COLLAPSE_MIN_SCROLL_TOP = 220;
+/** Require extra headroom below the viewport before collapsing. */
+const COLLAPSE_MIN_DISTANCE_FROM_BOTTOM = 360;
+/** Scrolling back near the top always expands the composer. */
+const EXPAND_MAX_SCROLL_TOP = 140;
+/** Ignore rapid collapse/expand flips while layout settles. */
+const COLLAPSE_LOCK_MS = 400;
+
 type UseStudioComposerCollapseOptions = {
   activeComposerMenu: ComposerMenuKey;
   composerFocused: boolean;
   isStudioDockLayout: boolean;
-  latestTaskId: number | null | undefined;
   setActiveComposerMenu: Dispatch<SetStateAction<ComposerMenuKey>>;
   submitting: boolean;
   uploadingReference: boolean;
@@ -16,7 +24,6 @@ export function useStudioComposerCollapse({
   activeComposerMenu,
   composerFocused,
   isStudioDockLayout,
-  latestTaskId,
   setActiveComposerMenu,
   submitting,
   uploadingReference,
@@ -55,21 +62,26 @@ export function useStudioComposerCollapse({
       const engaged = composerFocused || activeComposerMenu !== null || submitting || uploadingReference;
       setComposerCollapsed((current) => {
         if (engaged) return false;
-        if (scrollTop < 140) return false;
+        if (scrollTop < EXPAND_MAX_SCROLL_TOP) return false;
 
         if (now < composerCollapseLockUntilRef.current) {
           return current;
         }
 
-        let next = false;
+        let next = current;
         if (current) {
-          next = distanceFromBottom >= 220;
-        } else if (scrollTop > 220 && distanceFromBottom > 300) {
+          // Once collapsed, stay collapsed until the user scrolls back toward the top.
+          // Do not use distanceFromBottom here: collapsing shrinks the dock and would
+          // otherwise re-trigger an immediate expand (layout feedback loop).
           next = true;
+        } else if (scrollTop > COLLAPSE_MIN_SCROLL_TOP && distanceFromBottom > COLLAPSE_MIN_DISTANCE_FROM_BOTTOM) {
+          next = true;
+        } else {
+          next = false;
         }
 
         if (next !== current) {
-          composerCollapseLockUntilRef.current = now + 220;
+          composerCollapseLockUntilRef.current = now + COLLAPSE_LOCK_MS;
         }
         return next;
       });
@@ -85,7 +97,7 @@ export function useStudioComposerCollapse({
       pane.removeEventListener("scroll", evaluateComposerCollapse);
       window.removeEventListener("resize", evaluateComposerCollapse);
     };
-  }, [activeComposerMenu, composerCollapsed, composerFocused, isStudioDockLayout, latestTaskId, submitting, uploadingReference]);
+  }, [activeComposerMenu, composerFocused, isStudioDockLayout, submitting, uploadingReference]);
 
   return {
     composerCollapsed,

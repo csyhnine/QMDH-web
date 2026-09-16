@@ -22,12 +22,14 @@ export type StudioHistoryPaneProps = {
   hasProjectHistory: boolean;
   workspaceName: string;
   onChangeFilters: (next: FeedFilterState) => void;
+  onScrollHistoryToBottom: () => void;
+  onScrollHistoryToTop: () => void;
   children: ReactNode;
 };
 
 export type StudioHistoryFiltersProps = Pick<
   StudioHistoryPaneProps,
-  "availableProviders" | "filters" | "onChangeFilters"
+  "availableProviders" | "filters" | "onChangeFilters" | "onScrollHistoryToBottom" | "onScrollHistoryToTop"
 >;
 
 export type StudioHistoryFilterOption = {

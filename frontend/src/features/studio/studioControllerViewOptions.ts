@@ -30,6 +30,7 @@ export function buildStudioViewEffectsOptions({
     currentUserName: currentUser?.name,
     galleryPreview: controllerState.galleryPreview,
     hasFilteredHistory: derivedState.hasFilteredHistory,
+    historySort: controllerState.filters.sort,
     isStudioDockLayout: true,
     latestTask: derivedState.latestTask,
     projects: controllerState.state.projects,

@@ -40,8 +40,10 @@
 |----|------|------|------|
 | **haodeya-doc-review-001** | Haodeya 文档 v2 核对（gpt-image-vip / sd2.0 入库） | **DONE** | 协议无实质改动；VIP 不接 4K；Fast 已走 `seedance-2-fast-*` SKU；详档 `handoff-2026-09-04-haodeya-doc-grok-ref-hotpatch.md` |
 | **grok-ref-download-001** | Grok 多参考图生图 xAI 拉参考图失败 400 | **DONE（hotpatch + 验收 5858）** | inline data URL 已上生产；分支 `hotfix/grok-ref-download-001` **未 merge main**；可选后续 merge + 固化镜像 |
+| **studio-scroll-001** | 创作区收纳抽动 + 历史滚底 + 右侧悬浮 ↑↓ 钮 | **DONE（2026-09-16 已 deploy）** | `9d862bc`/`be7daa1`；详档 `handoff-2026-09-16-studio-ops-storage.md` |
+| **ops-storage-001** | 生产磁盘/媒体增长与清理 | **TODO** | 2026-09-16：82% 使用、media ~23GB、Docker 安全清理已做；下一步：升盘或 OSS（`prod-008`）、可选媒体孤儿审计（只报告） |
 | **studio-perf-001** | 生产 ECS 内存/CPU 偏紧导致页面卡顿 | **TODO** | 3.4GB RAM、无 swap、backend CPU 常 90%+；评估升配或加 swap |
-| **studio-perf-002** | nginx `/media` 直出静态文件 | **TODO** | 现走 frontend→backend 双跳；单图日志最慢 ~7s；19GB media volume；也缓解参考图 upstream 拉取 |
+| **studio-perf-002** | nginx `/media` 直出静态文件 | **TODO** | 现走 frontend→backend 双跳；单图日志最慢 ~7s；**media ~23GB**；也缓解参考图 upstream 拉取 |
 | **studio-perf-003** | Studio tasks/assets 全量轮询 + 无分页 | **TODO** | admin ~734 任务 ~4MB JSON；running 时 2.5s 轮询 |
 | **studio-perf-004** | 历史列表缩略图 / lazy-load 补全 | **TODO** | 参考图 badge 等仍 eager load 原图 |
 | **video-grok-timeout-001** | Grok 视频 900s 轮询超时（pending/in_progress） | **TODO（上游）** | 近 7 天 failed 15 / completed 30；与生图 hotpatch 无关 |

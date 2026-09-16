@@ -17,13 +17,15 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准
-- GitHub **`main`** @ **`b6edfd2`**（Chat 模型切换 + 上下文统计阶段 1）
-- Production: **`https://cityusbdisk.cn`** — git HEAD **`28c0f2ba`**（含 Banana 本地热补丁 + merge Chat 功能）；health **200**
+- GitHub **`main`** @ **`be7daa1`**（Studio 收纳/历史滚底/悬浮滚动钮 + 前序 Chat 上下文阶段 1）
+- Production: **`https://cityusbdisk.cn`** — git HEAD **`4c1ca8ae`**（merge origin + Banana 热补丁）；health **200**
 - Alembic head（生产已应用）：**`a8b9c0d1e2f3`**
-- 最新交接：`docs/handoff.md` → **`[2026-09-16] Chat 模型切换 + 上下文统计`**
-- 详档：`docs/archive/handoff-2026-09-16-chat-model-switch-context-stats.md`
-- **Chat 生产态：** 助手 UI **关**；Chat 模型仅 **claude-opus-4-6** / **gemini-3.7-flash-high**；GPT Chat **禁用**
-- **本地 WIP（未上生产）：** 符号链/画布等 — 可能在 git stash；勿误 deploy
+- 最新交接：`docs/handoff.md` → **`[2026-09-16] Studio 滚动/创作区 + 生产运维清理`**
+- 详档：`docs/archive/handoff-2026-09-16-studio-ops-storage.md`（Studio+运维）；Chat 见 `docs/archive/handoff-2026-09-16-chat-model-switch-context-stats.md`
+- **Studio 生产态（2026-09-16）：** 默认排序 **最早优先**（最新在底部）；进入项目自动滚底；历史区右侧灰色圆形 ↑↓ 悬浮钮
+- **Chat 生产态：** 助手 UI **关**；Chat 模型 **claude-opus-4-6** / **gemini-3.7-flash-high**；禁用模型对话已迁 claude
+- **磁盘（2026-09-16）：** 根分区 **82%**，可用 **~8.5GB**；媒体卷 **~23GB**（8141 assets）；已做 Docker 安全清理（**未删 media**）；约 **+7~8GB/月** → 需升盘或 OSS（`prod-008`）
+- **本地 WIP（未上生产）：** 符号链/画布等 — git stash（如 `wip-before-chat-deploy`）；勿误 deploy
 - **本地未提交 WIP（2026-08-25，仍有效）**：Chat 助手 UI 默认隐藏 — `featureFlags.ts` + docker 构建 env；详档 `docs/archive/handoff-2026-08-25-billing-chat-agent-ui.md`
 - **2026-08-14 本地待部署（摘要）**：
   - 运营看板：视频任务 / Chat 轮次纳入 KPI 与每日趋势；capability 推断修复

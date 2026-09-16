@@ -11,27 +11,29 @@
 
 ## Latest Handoffs
 
+### [2026-09-16] Studio 滚动/创作区 + 生产运维清理 — **DONE（已部署 + 运维完成）**
+
+- **Studio（已上生产）：** 创作区收纳抽动修复；进入项目自动滚历史**最下方**；右侧灰色圆形悬浮 ↑↓ 钮（`StudioHistoryScrollFab`）
+- **GitHub main：** `be7daa1`（`9d862bc` + `be7daa1`）
+- **生产 HEAD：** `4c1ca8ae`（merge origin + Banana 热补丁）
+- **运维已做：** 僵尸 task #8/#9 关闭；worker 重建；31 条 Chat 对话迁 claude；Docker 安全清理（~0.9GB，**未动 media**）
+- **磁盘：** 82% 使用，~8.5GB 可用；媒体卷 **~23GB**（8141 assets）；约 **+7~8GB/月** 增长 → 需规划升盘或 OSS
+- **详档：** `docs/archive/handoff-2026-09-16-studio-ops-storage.md`
+- **deploy 前端：** merge → `docker compose build frontend` → `up -d --no-deps frontend`
+- Safe to hand off: **Yes**
+
 ### [2026-09-16] Chat 模型切换 + 上下文统计（阶段 1）— **DONE（已部署生产）**
 
-- **功能：** 会话内 PATCH 切换模型；消息 `estimated_input_tokens`；conversation context 快照；`GET …/context-stats` breakdown
-- **GitHub main：** `b6edfd2`（`5777b1e` + 迁移修复 `b6edfd2`）
-- **生产 HEAD：** `28c0f2ba`（merge origin + 保留 Banana 热补丁 `759f35ef`/`d16cc3c4`）
-- **Migration：** `a8b9c0d1e2f3`（已 `alembic upgrade head`）
-- **Chat 运营态：** 助手 UI **关**；可用模型 **claude-opus-4-6** / **gemini-3.7-flash-high**；GPT Chat **已禁用**
+- **功能：** 会话内 PATCH 切换模型；context 快照 + `GET …/context-stats`
+- **GitHub main：** 已含于 `be7daa1` 历史（功能 commit `b6edfd2`）
+- **Migration：** `a8b9c0d1e2f3`
 - **详档：** `docs/archive/handoff-2026-09-16-chat-model-switch-context-stats.md`
-- **deploy 要点：** 先 `docker compose build backend` 再 alembic；生产 git 用 **merge** 非 ff-only
 - Safe to hand off: **Yes**
 
 ### [2026-09-04] 符号主题链 + 豆包检索 + Grok/润色 hotfix — **DONE（本地 main；生产未 deploy 符号主题）**
 
-- **符号主题：** `b935b58` 链式 5 节点 + C2 豆包两阶段检索 + Region 参考图
-- **生产：** 符号主题 **未部署**；Grok hotpatch 曾 docker cp
-- **详档：** `docs/archive/handoff-2026-09-03-session-end-cold-start.md`、`docs/archive/handoff-2026-09-04-haodeya-doc-grok-ref-hotpatch.md`
-- Safe to hand off: **Yes**（符号主题 WIP 勿误 deploy）
+- **符号主题 WIP** 在 stash；生产 **未 deploy**
+- **详档：** `docs/archive/handoff-2026-09-03-session-end-cold-start.md`
+- Safe to hand off: **Yes**（勿误 deploy 符号主题）
 
-### [2026-09-04] Haodeya 文档核对 + Grok 多参考图 hotpatch — **DONE（生产 hotpatch）**
-
-- **详档：** `docs/archive/handoff-2026-09-04-haodeya-doc-grok-ref-hotpatch.md`
-- Safe to hand off: **Yes**
-
-（更早条目见 `docs/archive/`；灵感库搁置见 `docs/tasks.md` → `inspiration-001`）
+（Haodeya/Grok 2026-09-04 条目已归档至 `docs/archive/`；灵感库搁置见 `docs/tasks.md`）

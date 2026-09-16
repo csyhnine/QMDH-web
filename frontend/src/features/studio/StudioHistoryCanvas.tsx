@@ -1,5 +1,6 @@
 import StudioHistoryFeed from "./StudioHistoryFeed";
 import StudioHistoryPane from "./StudioHistoryPane";
+import StudioHistoryScrollFab from "./StudioHistoryScrollFab";
 import { getStudioHistoryCanvasProps } from "./studioHistoryCanvasProps";
 import type { StudioHistoryCanvasProps } from "./studioHistoryCanvasTypes";
 
@@ -16,11 +17,19 @@ export default function StudioHistoryCanvas(props: StudioHistoryCanvasProps) {
       }
     >
       {scrollProps.isStudioDockLayout ? (
-        <div className="studio-scroll-content">
-          <StudioHistoryPane {...paneProps}>
-            <StudioHistoryFeed {...feedProps} />
-          </StudioHistoryPane>
-        </div>
+        <>
+          <div className="studio-scroll-content">
+            <StudioHistoryPane {...paneProps}>
+              <StudioHistoryFeed {...feedProps} />
+            </StudioHistoryPane>
+          </div>
+          {scrollProps.showScrollFab ? (
+            <StudioHistoryScrollFab
+              onScrollHistoryToTop={scrollProps.onScrollHistoryToTop}
+              onScrollHistoryToBottom={scrollProps.onScrollHistoryToBottom}
+            />
+          ) : null}
+        </>
       ) : (
         <StudioHistoryPane {...paneProps}>
           <StudioHistoryFeed {...feedProps} />

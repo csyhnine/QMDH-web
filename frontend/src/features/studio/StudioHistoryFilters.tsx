@@ -10,21 +10,10 @@ export default function StudioHistoryFilters({
   availableProviders,
   filters,
   onChangeFilters,
-  onScrollHistoryToBottom,
-  onScrollHistoryToTop,
 }: StudioHistoryFiltersProps) {
   return (
     <header className="canvas-topbar canvas-topbar-history">
       <div className="toolbar-row">
-        <div className="history-scroll-actions" role="group" aria-label="历史列表滚动">
-          <button type="button" className="ghost-button history-scroll-button" onClick={onScrollHistoryToTop}>
-            到最上方
-          </button>
-          <button type="button" className="ghost-button history-scroll-button" onClick={onScrollHistoryToBottom}>
-            到最下方
-          </button>
-        </div>
-
         <StudioHistoryFilterSelect
           label="时间"
           options={STUDIO_HISTORY_SORT_OPTIONS}

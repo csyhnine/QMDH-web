@@ -44,7 +44,11 @@ export function getStudioHistoryCanvasProps({
 }: StudioHistoryCanvasProps): StudioHistoryCanvasParts {
   return {
     scrollProps: {
+      hasProjectHistory,
       isStudioDockLayout,
+      onScrollHistoryToBottom,
+      onScrollHistoryToTop,
+      showScrollFab: isStudioDockLayout && hasProjectHistory,
       studioScrollPaneRef,
     },
     paneProps: {
@@ -56,8 +60,6 @@ export function getStudioHistoryCanvasProps({
       hasProjectHistory,
       workspaceName,
       onChangeFilters,
-      onScrollHistoryToBottom,
-      onScrollHistoryToTop,
     },
     feedProps: {
       tasks,

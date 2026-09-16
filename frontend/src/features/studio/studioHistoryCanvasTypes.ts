@@ -42,5 +42,11 @@ export type StudioHistoryCanvasProps = {
 
 export type StudioHistoryScrollProps = Pick<
   StudioHistoryCanvasProps,
-  "isStudioDockLayout" | "studioScrollPaneRef"
->;
+  | "hasProjectHistory"
+  | "isStudioDockLayout"
+  | "onScrollHistoryToBottom"
+  | "onScrollHistoryToTop"
+  | "studioScrollPaneRef"
+> & {
+  showScrollFab: boolean;
+};

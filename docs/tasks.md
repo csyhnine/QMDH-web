@@ -219,6 +219,13 @@
 - 状态：**DONE（已部署生产 `3ff220b`，前端热更约 `cb85fc6`）**
 - 留档：`docs/archive/deploy-2026-07-20-main-canvas-chat-b1.md`
 
+### Task: [chat-context-stats-001] Chat 上下文统计（阶段 1）+ 会话内切换模型
+
+- **Status:** **DONE**（2026-09-16 已 deploy 生产）
+- **Scope:** `estimated_input_tokens`、conversation context 快照、`GET /context-stats`、PATCH 切换模型
+- **留档：** `docs/archive/handoff-2026-09-16-chat-model-switch-context-stats.md`
+- **Next（可选阶段 2）：** 上游 `prompt_tokens` 校准、Admin breakdown UI
+
 ### Task: [chat-004] Chat Agent B1 切片
 - 状态：**DONE（已合 main 且已部署）**；**UI 默认隐藏**
 - Migration：`k2l3m4n5o6p7`

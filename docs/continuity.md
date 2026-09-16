@@ -17,12 +17,13 @@ This file is the fast handoff baseline for the next agent. Read these first:
 ## Current Baseline
 
 - **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准
-- Current branch: **`main`** @ **`c4f3812`**（Grok 图像、Chat Admin 开关、画布边缘 UX；**本批润色/分析/画布修复均未 commit**）
-- Production: **`https://cityusbdisk.cn`** — 应与 `origin/main` 同步；部署前以 `git log origin/main -1` 为准
-- **Deploy-ready WIP（2026-08-28）**：提示词润色 + 生成行为分析 + 画布复制/连线 — 详档 `docs/archive/handoff-2026-08-28-prompt-polish-generation-analytics-deploy-ready.md`
-- **下一对话**：commit → push → deploy → 迁移 `t1`+`u2` → Admin 配置润色
-- Alembic head（本批后）：**`u2v3w4x5y6z7`**（前序 `t1u2v3w4x5y6` 润色、`s0t1u2v3w4x5` platform_settings）
-- 最新交接：`docs/handoff.md` → **`[2026-08-28] 提示词润色 + 生成行为分析`**
+- GitHub **`main`** @ **`b6edfd2`**（Chat 模型切换 + 上下文统计阶段 1）
+- Production: **`https://cityusbdisk.cn`** — git HEAD **`28c0f2ba`**（含 Banana 本地热补丁 + merge Chat 功能）；health **200**
+- Alembic head（生产已应用）：**`a8b9c0d1e2f3`**
+- 最新交接：`docs/handoff.md` → **`[2026-09-16] Chat 模型切换 + 上下文统计`**
+- 详档：`docs/archive/handoff-2026-09-16-chat-model-switch-context-stats.md`
+- **Chat 生产态：** 助手 UI **关**；Chat 模型仅 **claude-opus-4-6** / **gemini-3.7-flash-high**；GPT Chat **禁用**
+- **本地 WIP（未上生产）：** 符号链/画布等 — 可能在 git stash；勿误 deploy
 - **本地未提交 WIP（2026-08-25，仍有效）**：Chat 助手 UI 默认隐藏 — `featureFlags.ts` + docker 构建 env；详档 `docs/archive/handoff-2026-08-25-billing-chat-agent-ui.md`
 - **2026-08-14 本地待部署（摘要）**：
   - 运营看板：视频任务 / Chat 轮次纳入 KPI 与每日趋势；capability 推断修复
@@ -58,7 +59,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
   - 归档：`docs/archive/handoff-2026-07-26-happyhorse-admin-defaults.md`
 - **Chat Agent（重要）**：
   - **B1 / gov / harness / memory** 已合 main 并已上生产
-  - **「设计助手」UI 默认隐藏**（本地 WIP：`VITE_CHAT_AGENT_UI_ENABLED` 须显式 `true` 才显示；生产尚未 rebuild）
+  - **「设计助手」UI 生产已关**（`platform_settings.chat_agent_ui_enabled=false`）；**勿 reopen** 直至 pydantic-ai / opentelemetry 依赖修复（见 2026-09-16 详档）
+  - **普通 Chat** 已支持会话内切换模型 + 上下文统计快照（2026-09-16 已 deploy）
   - **GPT 计费（2026-08-25）：** 用户 Admin 已将 `gpt-image-2` 改为 `per_image`；历史 ledger 不重算
   - **产品定调**：QMDH UI 壳 + Codex **风格 harness**（非换 GPT）+ Admin Skill 发版 + 跨对话记忆 + HITL 生图/视频
   - **记忆写入策略**：停写每轮 turn summary；长期记忆含 preference/feedback/thought/fact/**experience**；会话 compact；存量 scrub 已在生产执行

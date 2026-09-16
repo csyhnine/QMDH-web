@@ -38,8 +38,10 @@ from app.schemas import (
     ChatMessageOut,
     ChatModelOut,
     ChatWordExportIn,
+    ChatConversationContextStatsOut,
     ConversationCreate,
     ConversationOut,
+    ConversationUpdate,
     TaskOut,
 )
 from app.services.chat_attachment_upload import (
@@ -55,7 +57,12 @@ from app.services.chat_message_content import (
 )
 from app.services.chat_word_export import build_chat_word_document, default_chat_word_file_name
 from app.services.media_storage import resolve_storage_path, write_binary_asset
-from app.services.chat_context import estimate_conversation_context, pack_chat_context
+from app.services.chat_context import (
+    apply_message_input_tokens,
+    compute_context_breakdown,
+    estimate_conversation_context,
+    pack_chat_context,
+)
 from app.services.chat_agent_service import (
     embed_agent_message_meta,
     format_agent_thinking_sse,
@@ -144,6 +151,7 @@ def _persist_agent_assistant_message(
         content=stored_content,
         token_count=max(int(token_count or 0), 0),
     )
+    apply_message_input_tokens(assistant_message)
     db.add(assistant_message)
     conversation.updated_at = datetime.now(timezone.utc)
     db.commit()
@@ -220,6 +228,20 @@ def _verify_owner(db: Session, conversation_id: int, user_id: int) -> Conversati
     return conversation
 
 
+def _resolve_enabled_chat_provider(db: Session, provider_id: int) -> ProviderProfile:
+    provider = db.get(ProviderProfile, provider_id)
+    if not provider or not provider.enabled:
+        raise HTTPException(status_code=400, detail="Model is disabled or missing")
+    if "chat.completions" not in (provider.capabilities or []):
+        raise HTTPException(status_code=400, detail="Model does not support chat")
+    if not provider_profile_has_usable_api_key(provider):
+        raise HTTPException(
+            status_code=503,
+            detail="该模型的 API Key 当前不可用，请检查 QMDH_ENCRYPTION_KEY 或在模型管理页重新录入密钥。",
+        )
+    return provider
+
+
 @router.get("/models", response_model=list[ChatModelOut])
 def list_chat_models(
     db: Session = Depends(get_db),
@@ -285,6 +307,22 @@ def create_conversation(
     return _conversation_out(db, conversation)
 
 
+@router.patch("/conversations/{conversation_id}", response_model=ConversationOut)
+def update_conversation(
+    conversation_id: int,
+    payload: ConversationUpdate,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> ConversationOut:
+    conversation = _verify_owner(db, conversation_id, auth_user.user_id)
+    _resolve_enabled_chat_provider(db, payload.model_provider_id)
+    conversation.model_provider_id = payload.model_provider_id
+    conversation.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(conversation)
+    return _conversation_out(db, conversation)
+
+
 @router.get("/conversations", response_model=list[ConversationOut])
 def list_conversations(
     db: Session = Depends(get_db),
@@ -298,6 +336,39 @@ def list_conversations(
         .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
     ).all()
     return [_conversation_out(db, conversation) for conversation in conversations]
+
+
+@router.get("/conversations/{conversation_id}/context-stats", response_model=ChatConversationContextStatsOut)
+def get_conversation_context_stats(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> ChatConversationContextStatsOut:
+    conversation = _verify_owner(db, conversation_id, auth_user.user_id)
+    provider = (
+        db.get(ProviderProfile, conversation.model_provider_id)
+        if conversation.model_provider_id is not None
+        else None
+    )
+    messages = list(
+        db.scalars(
+            select(ChatMessage)
+            .where(ChatMessage.conversation_id == conversation_id)
+            .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
+        )
+    )
+    packed_tokens = int(conversation.context_packed_tokens or 0) or None
+    breakdown = compute_context_breakdown(
+        conversation,
+        messages,
+        provider_profile=provider,
+        packed_tokens=packed_tokens,
+    )
+    return ChatConversationContextStatsOut(
+        conversation_id=conversation.id,
+        stats_updated_at=conversation.context_stats_updated_at,
+        **breakdown.as_dict(),
+    )
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=list[ChatMessageOut])
@@ -554,14 +625,7 @@ async def send_message(
 
     if not conversation.model_provider_id:
         raise HTTPException(status_code=400, detail="Conversation is not linked to a model")
-    provider = db.get(ProviderProfile, conversation.model_provider_id)
-    if not provider or not provider.enabled:
-        raise HTTPException(status_code=400, detail="Model is disabled or missing")
-    if not provider_profile_has_usable_api_key(provider):
-        raise HTTPException(
-            status_code=503,
-            detail="该模型的 API Key 当前不可用，请检查 QMDH_ENCRYPTION_KEY 或在模型管理页重新录入密钥。",
-        )
+    provider = _resolve_enabled_chat_provider(db, conversation.model_provider_id)
     provider_name = provider.provider_name
     provider_model_name = provider.model_name
     provider_profile_id = conversation.model_provider_id
@@ -588,6 +652,7 @@ async def send_message(
         content=content,
         attachments_json=attachments,
     )
+    apply_message_input_tokens(user_message)
     db.add(user_message)
 
     if conversation.title == "新对话":
@@ -882,6 +947,7 @@ async def send_message(
                 content=full_content,
                 token_count=last_usage_payload["total_tokens"],
             )
+            apply_message_input_tokens(assistant_message)
             db.add(assistant_message)
             conversation_row.updated_at = datetime.now(timezone.utc)
             db.commit()
@@ -917,6 +983,7 @@ async def send_message(
                 content=format_chat_error_message(last_error_payload),
                 token_count=last_usage_payload["total_tokens"],
             )
+            apply_message_input_tokens(assistant_message)
             db.add(assistant_message)
             conversation_row.updated_at = datetime.now(timezone.utc)
             db.commit()

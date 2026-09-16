@@ -253,6 +253,10 @@ export default function ChatPage() {
       setContextUsagePercent(listed.context_usage_percent ?? 0);
       setContextTokens(listed.context_tokens ?? 0);
       setContextWindowTokens(listed.context_window_tokens ?? 0);
+      if (listed.model_provider_id != null) {
+        setSelectedModel(listed.model_provider_id);
+        localStorage.setItem("qmdh_chat_model", String(listed.model_provider_id));
+      }
     }
     try {
       const nextMessages = await api.getChatMessages(conversationId);
@@ -379,6 +383,38 @@ export default function ChatPage() {
 
     previousMessageCountRef.current = messageCount;
   }, [activeChatId, chatMessages.length, lastMessageContent]);
+
+  async function handleModelChange(nextProviderId: number) {
+    setSelectedModel(nextProviderId);
+    localStorage.setItem("qmdh_chat_model", String(nextProviderId));
+    if (activeChatId == null) {
+      return;
+    }
+    try {
+      const updated = await api.updateChatConversation(activeChatId, { model_provider_id: nextProviderId });
+      setConversations((current) =>
+        current.map((conversation) =>
+          conversation.id === activeChatId
+            ? {
+                ...conversation,
+                model_provider_id: updated.model_provider_id,
+                has_context_summary: updated.has_context_summary ?? conversation.has_context_summary,
+                context_usage_percent: updated.context_usage_percent ?? conversation.context_usage_percent,
+                context_tokens: updated.context_tokens ?? conversation.context_tokens,
+                context_window_tokens: updated.context_window_tokens ?? conversation.context_window_tokens,
+                updated_at: updated.updated_at,
+              }
+            : conversation,
+        ),
+      );
+      setContextUsagePercent(updated.context_usage_percent ?? null);
+      setContextTokens(updated.context_tokens ?? null);
+      setContextWindowTokens(updated.context_window_tokens ?? null);
+      setChatError("");
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : "切换模型失败");
+    }
+  }
 
   async function handleCreateConversation() {
     if (isGuest) {
@@ -590,10 +626,13 @@ export default function ChatPage() {
             <select
               className="chat-model-select"
               value={selectedModel || ""}
+              title={activeChatId ? "切换后，后续回答将使用新模型" : "新建对话时将使用所选模型"}
               onChange={(event) => {
                 const value = parseInt(event.target.value, 10);
-                setSelectedModel(value);
-                localStorage.setItem("qmdh_chat_model", String(value));
+                if (Number.isNaN(value)) {
+                  return;
+                }
+                void handleModelChange(value);
               }}
             >
               <option value="" disabled>
@@ -617,7 +656,7 @@ export default function ChatPage() {
                 </span>
                 <div
                   className={`chat-context-meter${displayUsagePercent >= 85 ? " is-high" : ""}`}
-                  title={`上下文约 ${displayContextTokens} / ${displayContextWindow || "?"} tokens`}
+                  title={`上下文约 ${displayContextTokens} / ${displayContextWindow || "?"} tokens（摘要+最近原文估算；发消息后更新）`}
                 >
                   <span className="chat-context-meter-label">上下文 {displayUsagePercent}%</span>
                   <span className="chat-context-meter-track" aria-hidden="true">

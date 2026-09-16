@@ -694,6 +694,11 @@ class Conversation(Base):
     context_summary: Mapped[str] = mapped_column(Text, default="")
     context_summary_until_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     context_summary_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    context_summary_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    context_recent_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    context_uncovered_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    context_packed_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    context_stats_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -711,6 +716,7 @@ class ChatMessage(Base):
     content: Mapped[str] = mapped_column(Text)
     attachments_json: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
     token_count: Mapped[int] = mapped_column(Integer, default=0)
+    estimated_input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")

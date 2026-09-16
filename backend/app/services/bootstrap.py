@@ -160,6 +160,20 @@ def ensure_schema(engine: Engine) -> None:
             connection.execute(text("ALTER TABLE conversations ADD COLUMN context_summary_until_message_id INTEGER"))
         if conversation_columns and "context_summary_updated_at" not in conversation_columns:
             connection.execute(text("ALTER TABLE conversations ADD COLUMN context_summary_updated_at DATETIME"))
+        if conversation_columns and "context_summary_tokens" not in conversation_columns:
+            connection.execute(text("ALTER TABLE conversations ADD COLUMN context_summary_tokens INTEGER NOT NULL DEFAULT 0"))
+        if conversation_columns and "context_recent_tokens" not in conversation_columns:
+            connection.execute(text("ALTER TABLE conversations ADD COLUMN context_recent_tokens INTEGER NOT NULL DEFAULT 0"))
+        if conversation_columns and "context_uncovered_tokens" not in conversation_columns:
+            connection.execute(text("ALTER TABLE conversations ADD COLUMN context_uncovered_tokens INTEGER NOT NULL DEFAULT 0"))
+        if conversation_columns and "context_packed_tokens" not in conversation_columns:
+            connection.execute(text("ALTER TABLE conversations ADD COLUMN context_packed_tokens INTEGER NOT NULL DEFAULT 0"))
+        if conversation_columns and "context_stats_updated_at" not in conversation_columns:
+            connection.execute(text("ALTER TABLE conversations ADD COLUMN context_stats_updated_at DATETIME"))
+        if chat_message_columns and "estimated_input_tokens" not in chat_message_columns:
+            connection.execute(
+                text("ALTER TABLE chat_messages ADD COLUMN estimated_input_tokens INTEGER NOT NULL DEFAULT 0")
+            )
         if agent_skill_release_columns and "system_prompt_template" not in agent_skill_release_columns:
             connection.execute(
                 text("ALTER TABLE agent_skill_releases ADD COLUMN system_prompt_template TEXT NOT NULL DEFAULT ''")

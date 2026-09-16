@@ -1588,6 +1588,38 @@ export const api = {
       created_at: string;
       updated_at: string;
     }>("/chat/conversations", { model_provider_id, title: title || "" }),
+  updateChatConversation: (convId: number, payload: { model_provider_id: number }) =>
+    patchJson<{
+      id: number;
+      title: string;
+      model_provider_id: number | null;
+      has_context_summary?: boolean;
+      context_usage_percent?: number;
+      context_tokens?: number;
+      context_window_tokens?: number;
+      created_at: string;
+      updated_at: string;
+    }>(`/chat/conversations/${convId}`, payload),
+  getChatConversationContextStats: (convId: number) =>
+    request<{
+      conversation_id: number;
+      summary_tokens: number;
+      recent_tokens: number;
+      uncovered_tokens: number;
+      packed_tokens: number;
+      total_estimated_tokens: number;
+      window_tokens: number;
+      budget_tokens: number;
+      usage_percent: number;
+      compressed: boolean;
+      summary_until_message_id: number | null;
+      message_count_total: number;
+      message_count_recent: number;
+      message_count_uncovered: number;
+      message_count_covered: number;
+      will_compress_soon: boolean;
+      stats_updated_at: string | null;
+    }>(`/chat/conversations/${convId}/context-stats`),
   getChatMessages: (convId: number) =>
     request<
       {

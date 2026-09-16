@@ -10,6 +10,8 @@ from app.core.config import settings
 from app.database import Base
 from app.models import ChatMessage, Conversation, User
 from app.services.chat_context import (
+    apply_message_input_tokens,
+    compute_context_breakdown,
     estimate_message_tokens,
     estimate_text_tokens,
     pack_chat_context,
@@ -83,6 +85,34 @@ class ChatContextUnitTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(resolve_context_window(hinted), 128_000)
 
+    def test_apply_message_input_tokens_persists_estimate(self) -> None:
+        message = ChatMessage(conversation_id=1, role="user", content="你好，请帮我整理规划要点。")
+        tokens = apply_message_input_tokens(message)
+        self.assertGreater(tokens, 0)
+        self.assertEqual(message.estimated_input_tokens, tokens)
+
+    def test_compute_context_breakdown_splits_summary_recent_uncovered(self) -> None:
+        conversation = self._conversation()
+        early = []
+        for index in range(4):
+            early.append(self._add_message(conversation.id, "user", f"早期 {index} " + ("内容" * 20)))
+            early.append(self._add_message(conversation.id, "assistant", f"早期答 {index} " + ("内容" * 20)))
+        conversation.context_summary = "已有摘要"
+        conversation.context_summary_until_message_id = early[-1].id
+        self.db.commit()
+
+        self._add_message(conversation.id, "user", "最新问题 " + ("细节" * 30))
+        self._add_message(conversation.id, "assistant", "最新回答 " + ("细节" * 30))
+        messages = self.db.query(ChatMessage).order_by(ChatMessage.id.asc()).all()
+
+        breakdown = compute_context_breakdown(conversation, messages, provider_profile=self.provider)
+        self.assertTrue(breakdown.compressed)
+        self.assertGreater(breakdown.summary_tokens, 0)
+        self.assertGreater(breakdown.recent_tokens, 0)
+        self.assertEqual(breakdown.message_count_total, len(messages))
+        self.assertEqual(breakdown.message_count_covered, 8)
+        self.assertEqual(breakdown.message_count_uncovered, 0)
+
     async def test_short_conversation_skips_summary(self) -> None:
         conversation = self._conversation()
         self._add_message(conversation.id, "user", "你好")
@@ -140,6 +170,9 @@ class ChatContextUnitTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(conversation.context_summary_until_message_id)
         self.assertEqual(packed.api_messages[0]["role"], "system")
         self.assertIn("压缩摘要", str(packed.api_messages[0]["content"]))
+        self.assertGreater(conversation.context_packed_tokens, 0)
+        self.assertIsNotNone(conversation.context_stats_updated_at)
+        self.assertGreater(conversation.context_recent_tokens, 0)
 
         from app.models import UsageLedger
         from sqlalchemy import select

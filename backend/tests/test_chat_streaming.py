@@ -229,6 +229,84 @@ class ChatStreamingTests(unittest.TestCase):
             self.assertEqual(usage_ledger.uncached_input_tokens, 0)
             self.assertEqual(usage_ledger.cost, 0.0)
 
+    def test_get_conversation_context_stats(self) -> None:
+        token = self.login()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        create_response = self.client.post(
+            "/chat/conversations",
+            headers=headers,
+            json={"model_provider_id": 1, "title": "stats"},
+        )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        conversation_id = create_response.json()["id"]
+
+        async def fake_stream(provider, messages):
+            del provider, messages
+            yield f"data: {json.dumps({'delta': 'ok'})}\n\n"
+            yield "data: [DONE]\n\n"
+
+        with patch("app.routers.chat.stream_chat_completion", fake_stream):
+            send_response = self.client.post(
+                f"/chat/conversations/{conversation_id}/messages",
+                headers={**headers, "Content-Type": "application/json"},
+                json={"content": "hello stats"},
+            )
+        self.assertEqual(send_response.status_code, 200, send_response.text)
+
+        stats_response = self.client.get(
+            f"/chat/conversations/{conversation_id}/context-stats",
+            headers=headers,
+        )
+        self.assertEqual(stats_response.status_code, 200, stats_response.text)
+        body = stats_response.json()
+        self.assertEqual(body["conversation_id"], conversation_id)
+        self.assertGreaterEqual(body["message_count_total"], 2)
+        self.assertIn("recent_tokens", body)
+        self.assertIn("will_compress_soon", body)
+
+    def test_update_conversation_switches_chat_model(self) -> None:
+        token = self.login()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        with self.SessionLocal() as db:
+            db.add(
+                ProviderProfile(
+                    provider_name="ms_qwen3",
+                    api_key=encrypt_value("test-key-2"),
+                    base_url="https://example.com/v1",
+                    model_name="Qwen3",
+                    adapter_kind="openai_compatible",
+                    capabilities=["chat.completions"],
+                    enabled=True,
+                )
+            )
+            db.commit()
+            second_provider = db.scalar(select(ProviderProfile).where(ProviderProfile.provider_name == "ms_qwen3"))
+            assert second_provider is not None
+            second_provider_id = second_provider.id
+
+        create_response = self.client.post(
+            "/chat/conversations",
+            headers=headers,
+            json={"model_provider_id": 1, "title": "切换模型"},
+        )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        conversation_id = create_response.json()["id"]
+
+        update_response = self.client.patch(
+            f"/chat/conversations/{conversation_id}",
+            headers=headers,
+            json={"model_provider_id": second_provider_id},
+        )
+        self.assertEqual(update_response.status_code, 200, update_response.text)
+        self.assertEqual(update_response.json()["model_provider_id"], second_provider_id)
+
+        with self.SessionLocal() as db:
+            conversation = db.get(Conversation, conversation_id)
+            assert conversation is not None
+            self.assertEqual(conversation.model_provider_id, second_provider_id)
+
     def test_conversation_list_reorders_by_latest_message_activity(self) -> None:
         token = self.login()
         headers = {"Authorization": f"Bearer {token}"}

@@ -785,6 +785,10 @@ class ConversationCreate(BaseModel):
     title: str = ""
 
 
+class ConversationUpdate(BaseModel):
+    model_provider_id: int
+
+
 class ConversationOut(BaseModel):
     id: int
     title: str
@@ -795,6 +799,26 @@ class ConversationOut(BaseModel):
     context_window_tokens: int = 0
     created_at: datetime
     updated_at: datetime
+
+
+class ChatConversationContextStatsOut(BaseModel):
+    conversation_id: int
+    summary_tokens: int = 0
+    recent_tokens: int = 0
+    uncovered_tokens: int = 0
+    packed_tokens: int = 0
+    total_estimated_tokens: int = 0
+    window_tokens: int = 0
+    budget_tokens: int = 0
+    usage_percent: int = 0
+    compressed: bool = False
+    summary_until_message_id: int | None = None
+    message_count_total: int = 0
+    message_count_recent: int = 0
+    message_count_uncovered: int = 0
+    message_count_covered: int = 0
+    will_compress_soon: bool = False
+    stats_updated_at: datetime | None = None
 
 
 class ChatMessageCreate(BaseModel):

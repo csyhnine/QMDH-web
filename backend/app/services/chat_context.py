@@ -70,6 +70,44 @@ class ConversationContextStats:
         }
 
 
+@dataclass(frozen=True)
+class ContextBreakdown:
+    summary_tokens: int
+    recent_tokens: int
+    uncovered_tokens: int
+    packed_tokens: int
+    total_estimated_tokens: int
+    window_tokens: int
+    budget_tokens: int
+    usage_percent: int
+    compressed: bool
+    summary_until_message_id: int | None
+    message_count_total: int
+    message_count_recent: int
+    message_count_uncovered: int
+    message_count_covered: int
+    will_compress_soon: bool
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "summary_tokens": self.summary_tokens,
+            "recent_tokens": self.recent_tokens,
+            "uncovered_tokens": self.uncovered_tokens,
+            "packed_tokens": self.packed_tokens,
+            "total_estimated_tokens": self.total_estimated_tokens,
+            "window_tokens": self.window_tokens,
+            "budget_tokens": self.budget_tokens,
+            "usage_percent": self.usage_percent,
+            "compressed": self.compressed,
+            "summary_until_message_id": self.summary_until_message_id,
+            "message_count_total": self.message_count_total,
+            "message_count_recent": self.message_count_recent,
+            "message_count_uncovered": self.message_count_uncovered,
+            "message_count_covered": self.message_count_covered,
+            "will_compress_soon": self.will_compress_soon,
+        }
+
+
 def estimate_text_tokens(text: str) -> int:
     if not text:
         return 0
@@ -77,6 +115,19 @@ def estimate_text_tokens(text: str) -> int:
     other = max(len(text) - cjk, 0)
     # CJK denser than Latin; keep a small floor for short strings.
     return max(1, int(cjk / 1.5 + other / 4.0))
+
+
+def message_context_tokens(message: ChatMessage) -> int:
+    stored = int(message.estimated_input_tokens or 0)
+    if stored > 0:
+        return stored
+    return estimate_message_tokens(message)
+
+
+def apply_message_input_tokens(message: ChatMessage) -> int:
+    tokens = estimate_message_tokens(message)
+    message.estimated_input_tokens = max(tokens, 0)
+    return message.estimated_input_tokens
 
 
 def estimate_message_tokens(message: ChatMessage) -> int:
@@ -262,6 +313,113 @@ def _trim_api_messages_to_budget(
     return leading + rest
 
 
+def _summary_tokens(summary: str) -> int:
+    body = summary.strip()
+    if not body:
+        return 0
+    return estimate_text_tokens(body) + 4
+
+
+def _split_context_messages(
+    conversation: Conversation,
+    messages: list[ChatMessage],
+    *,
+    provider_profile: ProviderProfile | ChatProviderConfig | None = None,
+) -> tuple[list[ChatMessage], list[ChatMessage], list[ChatMessage], int, int]:
+    context_window = resolve_context_window(provider_profile)
+    budget = input_token_budget(context_window)
+    summary_budget = summary_token_budget()
+    recent_budget = max(budget - summary_budget, budget // 2)
+
+    ordered = sorted(messages, key=lambda item: (item.created_at, item.id or 0))
+    recent = _select_recent_messages(ordered, token_budget=recent_budget)
+    recent_ids = {message.id for message in recent if message.id is not None}
+    older = [message for message in ordered if message.id not in recent_ids]
+
+    until_id = conversation.context_summary_until_message_id
+    uncovered = [
+        message
+        for message in older
+        if until_id is None or (message.id is not None and message.id > until_id)
+    ]
+    if until_id is None:
+        covered_count = 0
+    else:
+        covered_count = sum(
+            1
+            for message in ordered
+            if message.id is not None and message.id <= until_id
+        )
+    return recent, uncovered, ordered, context_window, covered_count
+
+
+def compute_context_breakdown(
+    conversation: Conversation,
+    messages: list[ChatMessage],
+    *,
+    provider_profile: ProviderProfile | ChatProviderConfig | None = None,
+    packed_tokens: int | None = None,
+) -> ContextBreakdown:
+    """Structured context stats for UI/admin without calling the LLM."""
+    recent, uncovered, ordered, context_window, covered_count = _split_context_messages(
+        conversation,
+        messages,
+        provider_profile=provider_profile,
+    )
+    budget = input_token_budget(context_window)
+    summary = (conversation.context_summary or "").strip()
+    summary_tokens = _summary_tokens(summary)
+    recent_tokens = sum(message_context_tokens(message) for message in recent)
+    uncovered_tokens = sum(message_context_tokens(message) for message in uncovered)
+    total_estimated = min(budget, summary_tokens + recent_tokens + uncovered_tokens)
+    projected = recent_tokens + uncovered_tokens + summary_tokens
+
+    trigger_ratio = float(settings.chat_summary_trigger_ratio or 0.75)
+    trigger_ratio = min(max(trigger_ratio, 0.45), 0.98)
+    trigger_budget = int(budget * trigger_ratio)
+    summary_budget = summary_token_budget()
+    will_compress_soon = bool(
+        uncovered
+        and (
+            projected > trigger_budget
+            or uncovered_tokens > summary_budget
+            or len(uncovered) >= 6
+        )
+    )
+
+    usage_basis = packed_tokens if packed_tokens is not None and packed_tokens > 0 else total_estimated
+    percent = 0 if budget <= 0 else min(100, max(0, round(100 * usage_basis / budget)))
+
+    return ContextBreakdown(
+        summary_tokens=summary_tokens,
+        recent_tokens=recent_tokens,
+        uncovered_tokens=uncovered_tokens,
+        packed_tokens=max(int(packed_tokens or 0), 0),
+        total_estimated_tokens=total_estimated,
+        window_tokens=context_window,
+        budget_tokens=budget,
+        usage_percent=percent,
+        compressed=bool(summary),
+        summary_until_message_id=conversation.context_summary_until_message_id,
+        message_count_total=len(ordered),
+        message_count_recent=len(recent),
+        message_count_uncovered=len(uncovered),
+        message_count_covered=covered_count,
+        will_compress_soon=will_compress_soon,
+    )
+
+
+def persist_conversation_context_stats(
+    conversation: Conversation,
+    breakdown: ContextBreakdown,
+) -> None:
+    conversation.context_summary_tokens = breakdown.summary_tokens
+    conversation.context_recent_tokens = breakdown.recent_tokens
+    conversation.context_uncovered_tokens = breakdown.uncovered_tokens
+    conversation.context_packed_tokens = breakdown.packed_tokens
+    conversation.context_stats_updated_at = datetime.now(timezone.utc)
+
+
 def estimate_conversation_context(
     conversation: Conversation,
     messages: list[ChatMessage],
@@ -269,28 +427,19 @@ def estimate_conversation_context(
     provider_profile: ProviderProfile | ChatProviderConfig | None = None,
 ) -> ConversationContextStats:
     """Cheap estimate for UI (no LLM). Uses summary + recent-ish raw history."""
-    context_window = resolve_context_window(provider_profile)
-    budget = input_token_budget(context_window)
-    summary = (conversation.context_summary or "").strip()
-    summary_tokens = estimate_text_tokens(summary) + (4 if summary else 0)
-    until_id = conversation.context_summary_until_message_id
-    ordered = sorted(messages, key=lambda item: (item.created_at, item.id or 0))
-    visible = [
-        message
-        for message in ordered
-        if until_id is None or message.id is None or message.id > until_id
-    ]
-    # Cap estimate scan to last 80 visible messages for list performance.
-    visible = visible[-80:]
-    message_tokens = sum(estimate_message_tokens(message) for message in visible)
-    estimated = min(budget, summary_tokens + message_tokens)
-    percent = 0 if budget <= 0 else min(100, max(0, round(100 * estimated / budget)))
+    packed_tokens = int(conversation.context_packed_tokens or 0) or None
+    breakdown = compute_context_breakdown(
+        conversation,
+        messages,
+        provider_profile=provider_profile,
+        packed_tokens=packed_tokens,
+    )
     return ConversationContextStats(
-        tokens=estimated,
-        window_tokens=context_window,
-        budget_tokens=budget,
-        usage_percent=percent,
-        compressed=bool(summary),
+        tokens=breakdown.total_estimated_tokens,
+        window_tokens=breakdown.window_tokens,
+        budget_tokens=breakdown.budget_tokens,
+        usage_percent=breakdown.usage_percent,
+        compressed=breakdown.compressed,
     )
 
 
@@ -418,6 +567,17 @@ async def pack_chat_context(
                     estimated += estimate_text_tokens(str(part.get("text") or ""))
                 elif isinstance(part, dict) and part.get("type") == "image_url":
                     estimated += int(settings.chat_image_token_estimate or 765)
+
+    breakdown = compute_context_breakdown(
+        conversation,
+        ordered,
+        provider_profile=provider_profile or provider_config,
+        packed_tokens=estimated,
+    )
+    persist_conversation_context_stats(conversation, breakdown)
+    db.add(conversation)
+    db.commit()
+    db.refresh(conversation)
 
     return PackedChatContext(
         api_messages=api_messages,

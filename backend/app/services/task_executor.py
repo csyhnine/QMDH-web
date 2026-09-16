@@ -30,6 +30,7 @@ from app.services.image_aspect_ratio import (
     read_image_dimensions,
     resolve_image_aspect_ratio,
     resolve_size_aspect_for_reference,
+    snap_sunburst_pixel_size,
 )
 from app.services.media_storage import (
     encode_public_http_url,
@@ -65,6 +66,9 @@ from app.services.provider_strategy import (
     VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY,
     VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY,
     resolve_strategy_for_capability,
+    profile_is_haodeya_gpt_sunburst,
+    profile_is_haodeya_gpt_sync_20,
+    profile_is_legacy_gpt_image_count,
     profile_prefers_chat_completions_image,
 )
 from app.services.generation_intent_service import sync_generation_intent_from_task
@@ -921,15 +925,50 @@ def _uses_haodeya_async_image_gateway(profile: ImageProviderProfile) -> bool:
     )
 
 
+def _profile_adapter_config(profile: ImageProviderProfile) -> dict:
+    return profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+
+
+def _sync_profile_kwargs(profile: ImageProviderProfile) -> dict[str, object]:
+    adapter_config = _profile_adapter_config(profile)
+    return {
+        "provider_name": profile.provider_name,
+        "model_name": profile.model_name,
+        "base_url": profile.base_url,
+        "adapter_config": adapter_config,
+    }
+
+
+def _uses_legacy_count_sync_gateway(profile: ImageProviderProfile) -> bool:
+    return profile_is_legacy_gpt_image_count(**_sync_profile_kwargs(profile))
+
+
+def _uses_haodeya_gpt_20_sync_gateway(profile: ImageProviderProfile) -> bool:
+    return profile_is_haodeya_gpt_sync_20(**_sync_profile_kwargs(profile))
+
+
+def _uses_haodeya_sunburst_gateway(profile: ImageProviderProfile) -> bool:
+    return profile_is_haodeya_gpt_sunburst(**_sync_profile_kwargs(profile))
+
+
 def _uses_haodeya_sync_image_gateway(profile: ImageProviderProfile) -> bool:
-    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    adapter_config = _profile_adapter_config(profile)
     flavor = str(adapter_config.get("provider_flavor") or "").strip().lower()
-    if flavor in {"haodeya_sync_image", "deepkey"}:
+    if flavor in {
+        "haodeya_sync_image",
+        "deepkey",
+        "gpt_image_20_sync",
+        "haodeya_gpt_20_sync",
+        "gpt_image_25_sunburst",
+        "haodeya_gpt_sunburst",
+        "sunburst",
+    }:
         return True
     identity = f"{profile.provider_name} {profile.model_name} {profile.base_url}".lower()
     return (
-        "gpt-image-2-count" in identity
-        or "gpt-image-count" in identity
+        _uses_legacy_count_sync_gateway(profile)
+        or _uses_haodeya_gpt_20_sync_gateway(profile)
+        or _uses_haodeya_sunburst_gateway(profile)
         or "haodeya_sync_image" in identity
     )
 
@@ -1033,19 +1072,77 @@ def _normalize_toapis_base_model(model_name: str) -> str:
     return _normalize_haodeya_async_base_model(model_name)
 
 
+def _normalize_gpt_20_sync_stem(model_name: str) -> str:
+    normalized = str(model_name or "").strip()
+    lowered = normalized.lower()
+    if "gpt-image-2" not in lowered or "count" in lowered or "vip" in lowered or "2.5" in lowered:
+        return normalized
+    for suffix in ("-4k", "-2k", "-1k"):
+        if lowered.endswith(suffix):
+            return normalized[: -len(suffix)]
+    return normalized
+
+
+def _resolve_gpt_20_sync_upstream_model(profile: ImageProviderProfile, resolution: str) -> str:
+    tier = _normalize_image_resolution({"resolution": resolution})
+    adapter_config = _profile_adapter_config(profile)
+    override_key = f"upstream_model_{tier}"
+    override = adapter_config.get(override_key)
+    if isinstance(override, str) and override.strip():
+        return override.strip()
+    stem = _normalize_gpt_20_sync_stem(profile.model_name)
+    if not stem or "gpt-image-2" not in stem.lower():
+        stem = "gpt-image-2"
+    return f"{stem}-{tier}"
+
+
+def _resolve_sunburst_upstream_model(profile: ImageProviderProfile) -> str:
+    adapter_config = _profile_adapter_config(profile)
+    for key in ("upstream_model", "upstream_model_1k"):
+        override = adapter_config.get(key)
+        if isinstance(override, str) and override.strip():
+            return override.strip()
+    model_name = str(profile.model_name or "").strip()
+    return model_name or "gpt-image-2.5-sunburst"
+
+
 def _resolve_haodeya_async_upstream_model(profile: ImageProviderProfile, resolution: str) -> str:
-    """Map VIP/count short-body profile + resolution to upstream model IDs.
+    """Map VIP short-body profile + resolution to upstream model IDs.
 
     Billing is by model name (handbook §0): 2K must be `*-2k` SKU, not body resolution alone.
     """
     tier = _normalize_image_resolution({"resolution": resolution})
-    adapter_config = profile.adapter_config if isinstance(profile.adapter_config, dict) else {}
+    adapter_config = _profile_adapter_config(profile)
     override_key = f"upstream_model_{tier}"
     override = adapter_config.get(override_key)
     if isinstance(override, str) and override.strip():
         return override.strip()
 
-    default_base = "gpt-image-2-vip" if _uses_haodeya_async_image_gateway(profile) else "gpt-image-2-count"
+    default_base = "gpt-image-2-vip"
+    base_model = _normalize_haodeya_async_base_model(profile.model_name) or default_base
+    if tier == "1k":
+        return base_model
+    return f"{base_model}-{tier}"
+
+
+def _resolve_haodeya_sync_upstream_model(profile: ImageProviderProfile, resolution: str) -> str:
+    """Map GPT sync profile + resolution to upstream model IDs."""
+    if _uses_haodeya_sunburst_gateway(profile):
+        return _resolve_sunburst_upstream_model(profile)
+    if _uses_haodeya_gpt_20_sync_gateway(profile):
+        return _resolve_gpt_20_sync_upstream_model(profile, resolution)
+    return _resolve_legacy_count_upstream_model(profile, resolution)
+
+
+def _resolve_legacy_count_upstream_model(profile: ImageProviderProfile, resolution: str) -> str:
+    tier = _normalize_image_resolution({"resolution": resolution})
+    adapter_config = _profile_adapter_config(profile)
+    override_key = f"upstream_model_{tier}"
+    override = adapter_config.get(override_key)
+    if isinstance(override, str) and override.strip():
+        return override.strip()
+
+    default_base = "gpt-image-2-count"
     base_model = _normalize_haodeya_async_base_model(profile.model_name) or default_base
     if tier == "1k":
         return base_model
@@ -1140,6 +1237,35 @@ def _grok_reference_image_value(reference_image: str) -> str:
     return f"data:image/{subtype};base64,{b64encode(image_bytes).decode('ascii')}"
 
 
+def _haodeya_sync_pixel_size(
+    *,
+    profile: ImageProviderProfile,
+    payload: dict,
+    resolution: str,
+    reference_images: list[str],
+    follow_source: bool,
+) -> str:
+    pixel_resolution = "1k" if _uses_legacy_count_sync_gateway(profile) else resolution
+    if follow_source and reference_images:
+        pixel_size = pixel_size_from_reference_images(reference_images)
+        if pixel_size and _uses_haodeya_sunburst_gateway(profile):
+            width_text, height_text = pixel_size.lower().split("x", 1)
+            return snap_sunburst_pixel_size(int(width_text), int(height_text))
+        if pixel_size and _uses_legacy_count_sync_gateway(profile):
+            return pixel_size
+        aspect_ratio = resolve_size_aspect_for_reference(
+            str(payload.get("aspect_ratio") or "").strip(),
+            provider_name=profile.provider_name,
+            model_name=profile.model_name,
+            base_url=profile.base_url,
+            reference_images=reference_images,
+            follow_source=True,
+        )
+        return openai_pixel_size_for_aspect_ratio(aspect_ratio, resolution=pixel_resolution)
+    aspect_ratio = _resolved_image_aspect_ratio(profile, payload)
+    return openai_pixel_size_for_aspect_ratio(aspect_ratio, resolution=pixel_resolution)
+
+
 def _haodeya_short_images_body(
     *,
     profile: ImageProviderProfile,
@@ -1148,7 +1274,7 @@ def _haodeya_short_images_body(
     poll: bool,
     reference_images: list[str],
 ) -> dict[str, object]:
-    """Shared model/prompt/size fields for Haodeya VIP async + DeepKey count sync."""
+    """Shared model/prompt/size fields for Haodeya VIP async + GPT sync (2.0 / 2.5 / legacy count)."""
     resolution = _normalize_image_resolution(payload)
     prompt_text = prompt
     detail = str(payload.get("prompt_supplement") or "").strip()
@@ -1156,8 +1282,12 @@ def _haodeya_short_images_body(
         prompt_text = f"{prompt}\n\nAdditional guidance: {detail}"
 
     follow_source = _should_follow_source_for_size(payload)
+    if poll:
+        upstream_model = _resolve_haodeya_async_upstream_model(profile, resolution)
+    else:
+        upstream_model = _resolve_haodeya_sync_upstream_model(profile, resolution)
     body: dict[str, object] = {
-        "model": _resolve_haodeya_async_upstream_model(profile, resolution),
+        "model": upstream_model,
         "prompt": prompt_text,
     }
 
@@ -1166,22 +1296,18 @@ def _haodeya_short_images_body(
         pass
     elif poll:
         body["size"] = _resolved_image_aspect_ratio(profile, payload)
-    elif follow_source and reference_images:
-        pixel_size = pixel_size_from_reference_images(reference_images)
-        if pixel_size:
-            body["size"] = pixel_size
-        else:
-            aspect_ratio = resolve_size_aspect_for_reference(
-                str(payload.get("aspect_ratio") or "").strip(),
-                provider_name=profile.provider_name,
-                model_name=profile.model_name,
-                base_url=profile.base_url,
-                reference_images=reference_images,
-                follow_source=True,
-            )
-            body["size"] = openai_pixel_size_for_aspect_ratio(aspect_ratio)
     else:
-        body["size"] = openai_pixel_size_for_aspect_ratio(_resolved_image_aspect_ratio(profile, payload))
+        body["size"] = _haodeya_sync_pixel_size(
+            profile=profile,
+            payload=payload,
+            resolution=resolution,
+            reference_images=reference_images,
+            follow_source=follow_source,
+        )
+    if not poll and _uses_haodeya_sunburst_gateway(profile):
+        adapter_config = _profile_adapter_config(profile)
+        default_quality = str(adapter_config.get("default_quality") or "medium").strip().lower()
+        body["quality"] = str(profile.quality or default_quality).strip().lower() or "medium"
     return body
 
 
@@ -1256,7 +1382,7 @@ def _build_haodeya_short_images_plan(
     DeepKey (sync): size must be `WIDTHxHEIGHT` pixels — ratio strings return HTTP 400.
     """
     reference_images = _extract_reference_images(payload)
-    if not poll and reference_images:
+    if not poll and reference_images and _uses_legacy_count_sync_gateway(profile):
         return _build_haodeya_count_image_edits_plan(
             profile=profile,
             requested_capability=requested_capability,
@@ -1277,14 +1403,16 @@ def _build_haodeya_short_images_plan(
     native_follow_source = bool(poll and follow_source and reference_images)
 
     reference_result = _image_generation_result_fields(profile, payload)
-    # VIP async only — DeepKey sync refs use /images/edits (see _build_haodeya_count_image_edits_plan).
-    if poll and reference_images:
+    if reference_images and (poll or not _uses_legacy_count_sync_gateway(profile)):
         body["image_urls"] = [_reference_image_to_public_url(item) for item in reference_images]
-        ref_mode = (
-            "haodeya_async_image_urls_follow_source"
-            if native_follow_source
-            else "haodeya_async_image_urls"
-        )
+        if poll:
+            ref_mode = (
+                "haodeya_async_image_urls_follow_source"
+                if native_follow_source
+                else "haodeya_async_image_urls"
+            )
+        else:
+            ref_mode = "haodeya_sync_image_urls"
         reference_result = {
             **reference_result,
             "reference_image_used": True,

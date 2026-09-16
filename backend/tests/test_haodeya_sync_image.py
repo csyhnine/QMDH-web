@@ -525,6 +525,147 @@ class HaodeyaSyncImageTests(unittest.TestCase):
         self.assertEqual(outcome.model_name, "gpt-image-2-count-2k")
         self.assertEqual(outcome.result["billing"]["resolution_tier"], "2k")
 
+    def test_gpt_20_sync_2k_uses_tiered_model_and_pixel_size(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="gpt-image-2-1k",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="gpt-image-2-1k",
+            timeout_seconds=30,
+            quality="high",
+            adapter_config={
+                "provider_flavor": "gpt_image_20_sync",
+                "upstream_model_1k": "gpt-image-2-1k",
+                "upstream_model_2k": "gpt-image-2-2k",
+            },
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                profile.provider_name,
+                profile.model_name,
+                ["image.generate"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        sync_payload = {
+            "data": [{"url": "https://cdn.example.test/gpt20-2k.png"}],
+            "model": "gpt-image-2-2k",
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[
+                _FakeResponse(sync_payload),
+                _FakeBinaryResponse(b"png-gpt20-2k"),
+            ],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {"prompt": "dancer", "aspect_ratio": "16:9", "resolution": "2k"},
+                    )
+
+        submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        self.assertEqual(submit_body["model"], "gpt-image-2-2k")
+        self.assertEqual(submit_body["size"], "2048x1136")
+        self.assertEqual(outcome.result["adapter_mode"], "haodeya_sync_image")
+
+    def test_gpt_20_sync_with_ref_uses_generations_image_urls(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="gpt-image-2-1k",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="gpt-image-2-1k",
+            timeout_seconds=30,
+            quality="high",
+            adapter_config={"provider_flavor": "gpt_image_20_sync"},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                profile.provider_name,
+                profile.model_name,
+                ["image.generate", "image.edit"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        sync_payload = {
+            "data": [{"url": "https://cdn.example.test/gpt20-ref.png"}],
+            "model": "gpt-image-2-1k",
+        }
+        ref_url = "https://cityusbdisk.cn/media/refs/army.png"
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[
+                _FakeResponse(sync_payload),
+                _FakeBinaryResponse(b"png-gpt20-ref"),
+            ],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    outcome = adapter.execute(
+                        "image.generate",
+                        {
+                            "prompt": "配上复杂的说明性文字",
+                            "aspect_ratio": "16:9",
+                            "resolution": "1k",
+                            "reference_images": [ref_url],
+                        },
+                    )
+
+        submit_request = mocked_urlopen.call_args_list[0].args[0]
+        self.assertTrue(submit_request.full_url.endswith("/images/generations"))
+        submit_body = json.loads(submit_request.data.decode("utf-8"))
+        self.assertEqual(submit_body["model"], "gpt-image-2-1k")
+        self.assertEqual(submit_body["image_urls"], [ref_url])
+        self.assertEqual(outcome.result.get("reference_image_mode"), "haodeya_sync_image_urls")
+
+    def test_sunburst_includes_quality_and_resolution_pixel_size(self) -> None:
+        profile = ImageProviderProfile(
+            provider_name="gpt-image-2.5-sunburst",
+            api_key="test-key",
+            base_url="https://newapi.haodeya.xyz/v1",
+            model_name="gpt-image-2.5-sunburst",
+            timeout_seconds=30,
+            quality="high",
+            adapter_config={"provider_flavor": "gpt_image_25_sunburst"},
+        )
+        adapter = OpenAIImageProviderAdapter(
+            ProviderDefinition(
+                profile.provider_name,
+                profile.model_name,
+                ["image.generate"],
+                adapter_kind="openai_compatible",
+            ),
+            profile,
+        )
+        sync_payload = {
+            "data": [{"url": "https://cdn.example.test/sunburst-2k.png"}],
+            "model": "gpt-image-2.5-sunburst",
+        }
+
+        with patch(
+            "app.services.task_executor.urlopen",
+            side_effect=[
+                _FakeResponse(sync_payload),
+                _FakeBinaryResponse(b"png-sunburst"),
+            ],
+        ) as mocked_urlopen:
+            with patch("app.services.task_executor.settings.media_root", self.tempdir):
+                with patch("app.services.task_executor.settings.storage_backend", "local"):
+                    adapter.execute(
+                        "image.generate",
+                        {"prompt": "brand visual", "aspect_ratio": "1:1", "resolution": "2k"},
+                    )
+
+        submit_body = json.loads(mocked_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        self.assertEqual(submit_body["model"], "gpt-image-2.5-sunburst")
+        self.assertEqual(submit_body["size"], "2048x2048")
+        self.assertEqual(submit_body["quality"], "high")
+
 
 if __name__ == "__main__":
     unittest.main()

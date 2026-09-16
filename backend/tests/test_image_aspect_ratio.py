@@ -127,6 +127,13 @@ class ImageAspectRatioTests(unittest.TestCase):
     def test_openai_pixel_size_maps_landscape_ratio(self) -> None:
         self.assertEqual(openai_pixel_size_for_aspect_ratio("16:9"), "1536x1024")
         self.assertEqual(openai_pixel_size_for_aspect_ratio("unknown"), "1024x1024")
+        self.assertEqual(openai_pixel_size_for_aspect_ratio("16:9", resolution="2k"), "2048x1136")
+        self.assertEqual(openai_pixel_size_for_aspect_ratio("1:1", resolution="2k"), "2048x2048")
+
+    def test_snap_sunburst_pixel_size_rounds_to_sixteen(self) -> None:
+        from app.services.image_aspect_ratio import snap_sunburst_pixel_size
+
+        self.assertEqual(snap_sunburst_pixel_size(1023, 767), "1024x768")
 
     def test_pixel_size_from_reference_images_returns_exact_dimensions(self) -> None:
         with patch(

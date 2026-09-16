@@ -196,7 +196,7 @@ const IMAGE_STRATEGY_PRESETS: StrategyPresetOption[] = [
     id: "sync_short",
     label: "同步短 body",
     strategy: "haodeya_sync_image",
-    hint: "DeepKey count：size 用 1024x1024 等像素，勿用 1:1",
+    hint: "GPT 2.0/2.5 同步：size 用 1024x1024 等像素，勿用 1:1",
   },
   {
     id: "async",
@@ -317,13 +317,92 @@ const modelPresets: ModelPreset[] = [
     },
   },
   {
-    id: "haodeya-gpt-image-count",
-    label: "GPT Image Count（DeepKey）",
+    id: "haodeya-gpt-image-20-sync",
+    label: "GPT Image 2.0 同步",
     category: "生图",
-    description: "同步短 body；2K 映射上游 gpt-image-2-count-2k；size 用像素。",
+    description: "同步短 body；1K/2K/4K 靠 model 后缀（gpt-image-2-1k 等）；图生图走 image_urls。",
+    draft: {
+      providerName: "gpt-image-2-1k",
+      displayName: "GPT Image 2.0 Sync",
+      baseUrl: HAODEYA_BASE_URL,
+      modelName: "gpt-image-2-1k",
+      adapterKind: "openai_compatible",
+      capabilities: "image.generate, image.edit",
+      strategies: JSON.stringify(
+        {
+          "image.generate": "haodeya_sync_image",
+          "image.edit": "haodeya_sync_image",
+        },
+        null,
+        2
+      ),
+      adapterConfig: JSON.stringify(
+        {
+          provider_flavor: "gpt_image_20_sync",
+          unit_price_1k: 1.62,
+          unit_price_2k: 2.67,
+          supported_resolutions: ["1k", "2k", "4k"],
+          upstream_model_1k: "gpt-image-2-1k",
+          upstream_model_2k: "gpt-image-2-2k",
+          upstream_model_4k: "gpt-image-2-4k",
+        },
+        null,
+        2
+      ),
+      pricingCurrency: "CNY",
+      pricingUnit: "per_image",
+      outputFormat: "png",
+      timeoutSeconds: 300,
+      referenceMode: "disabled",
+    },
+  },
+  {
+    id: "haodeya-gpt-image-25-sunburst",
+    label: "GPT Image 2.5 Sunburst",
+    category: "生图",
+    description: "单 model gpt-image-2.5-sunburst；1K/2K/4K 靠 body size 像素；可选 quality。",
+    draft: {
+      providerName: "gpt-image-2.5-sunburst",
+      displayName: "GPT Image 2.5 Sunburst",
+      baseUrl: HAODEYA_BASE_URL,
+      modelName: "gpt-image-2.5-sunburst",
+      adapterKind: "openai_compatible",
+      capabilities: "image.generate, image.edit",
+      strategies: JSON.stringify(
+        {
+          "image.generate": "haodeya_sync_image",
+          "image.edit": "haodeya_sync_image",
+        },
+        null,
+        2
+      ),
+      adapterConfig: JSON.stringify(
+        {
+          provider_flavor: "gpt_image_25_sunburst",
+          unit_price_1k: 1.62,
+          unit_price_2k: 2.67,
+          supported_resolutions: ["1k", "2k", "4k"],
+          upstream_model: "gpt-image-2.5-sunburst",
+          default_quality: "medium",
+        },
+        null,
+        2
+      ),
+      pricingCurrency: "CNY",
+      pricingUnit: "per_image",
+      outputFormat: "png",
+      timeoutSeconds: 300,
+      referenceMode: "disabled",
+    },
+  },
+  {
+    id: "haodeya-gpt-image-count",
+    label: "GPT Image Count（已废弃）",
+    category: "生图",
+    description: "上游已废弃 count 系列；仅保留兼容。新接入请用 2.0 同步或 2.5 Sunburst。",
     draft: {
       providerName: "gpt-image-2-count",
-      displayName: "GPT Image 2 Count",
+      displayName: "GPT Image 2 Count (legacy)",
       baseUrl: HAODEYA_BASE_URL,
       modelName: "gpt-image-2-count",
       adapterKind: "openai_compatible",

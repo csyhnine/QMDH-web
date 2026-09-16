@@ -74,6 +74,26 @@ IMAGE_MODEL_PRICES: dict[str, dict[str, Any]] = {
         "unit_price_2k": 2.67,
         "pricing_unit": "per_image",
     },
+    "gpt-image-2-1k": {
+        "unit_price_1k": 1.62,
+        "unit_price_2k": 2.67,
+        "pricing_unit": "per_image",
+    },
+    "gpt-image-2-2k": {
+        "unit_price_1k": 1.62,
+        "unit_price_2k": 2.67,
+        "pricing_unit": "per_image",
+    },
+    "gpt-image-2-4k": {
+        "unit_price_1k": 1.62,
+        "unit_price_2k": 2.67,
+        "pricing_unit": "per_image",
+    },
+    "gpt-image-2.5-sunburst": {
+        "unit_price_1k": 1.62,
+        "unit_price_2k": 2.67,
+        "pricing_unit": "per_image",
+    },
     "wan2.7-image": {
         "unit_price_1k": 0.2,
         "unit_price_2k": 0.2,

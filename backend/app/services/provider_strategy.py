@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urlparse
@@ -220,10 +221,97 @@ def profile_prefers_bigjpg_upscale(*, provider_name: str, model_name: str, base_
     return "bigjpg" in identity
 
 
+def _sync_image_identity(
+    *,
+    provider_name: str,
+    model_name: str,
+    base_url: str = "",
+    adapter_config: Mapping[str, Any] | None = None,
+) -> str:
+    flavor = ""
+    if isinstance(adapter_config, Mapping):
+        flavor = str(adapter_config.get("provider_flavor") or "").strip().lower()
+    return f"{provider_name} {model_name} {base_url} {flavor}".lower()
+
+
+def profile_is_legacy_gpt_image_count(
+    *,
+    provider_name: str,
+    model_name: str,
+    base_url: str = "",
+    adapter_config: Mapping[str, Any] | None = None,
+) -> bool:
+    """Deprecated upstream SKU — sync generations + multipart /images/edits for i2i."""
+    identity = _sync_image_identity(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+        adapter_config=adapter_config,
+    )
+    return "gpt-image-2-count" in identity or "gpt-image-count" in identity
+
+
+def profile_is_haodeya_gpt_sunburst(
+    *,
+    provider_name: str,
+    model_name: str,
+    base_url: str = "",
+    adapter_config: Mapping[str, Any] | None = None,
+) -> bool:
+    identity = _sync_image_identity(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+        adapter_config=adapter_config,
+    )
+    flavor = ""
+    if isinstance(adapter_config, Mapping):
+        flavor = str(adapter_config.get("provider_flavor") or "").strip().lower()
+    return (
+        "gpt-image-2.5-sunburst" in identity
+        or flavor in {"gpt_image_25_sunburst", "haodeya_gpt_sunburst", "sunburst"}
+    )
+
+
+def profile_is_haodeya_gpt_sync_20(
+    *,
+    provider_name: str,
+    model_name: str,
+    base_url: str = "",
+    adapter_config: Mapping[str, Any] | None = None,
+) -> bool:
+    if profile_is_legacy_gpt_image_count(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+        adapter_config=adapter_config,
+    ):
+        return False
+    if profile_is_haodeya_gpt_sunburst(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+        adapter_config=adapter_config,
+    ):
+        return False
+    identity = _sync_image_identity(
+        provider_name=provider_name,
+        model_name=model_name,
+        base_url=base_url,
+        adapter_config=adapter_config,
+    )
+    flavor = ""
+    if isinstance(adapter_config, Mapping):
+        flavor = str(adapter_config.get("provider_flavor") or "").strip().lower()
+    if flavor in {"gpt_image_20_sync", "haodeya_gpt_20_sync"}:
+        return True
+    return bool(re.search(r"gpt-image-2-(?:1k|2k|4k)\b", identity))
+
+
 def profile_prefers_haodeya_async_image(*, provider_name: str, model_name: str, base_url: str) -> bool:
     """ToAPI VIP only — async `/images/generations` + poll (handbook §5).
 
-    DeepKey `gpt-image-2-count` is sync (§6) → `haodeya_sync_image`.
+    GPT sync (2.0 / 2.5 / legacy count) → `haodeya_sync_image`.
     Gemini CPA stays on chat strategies. Wan2.7 stays on openai_images / edits.
     """
     identity = f"{provider_name} {model_name} {base_url}".lower()
@@ -242,14 +330,36 @@ def profile_prefers_haodeya_async_image(*, provider_name: str, model_name: str, 
     )
 
 
-def profile_prefers_haodeya_sync_image(*, provider_name: str, model_name: str, base_url: str) -> bool:
-    """DeepKey count SKUs — sync `/images/generations`, short body, no poll (handbook §6)."""
+def profile_prefers_haodeya_sync_image(
+    *,
+    provider_name: str,
+    model_name: str,
+    base_url: str = "",
+    adapter_config: Mapping[str, Any] | None = None,
+) -> bool:
+    """GPT sync SKUs — `/images/generations` short body, pixel size, no poll."""
     identity = f"{provider_name} {model_name} {base_url}".lower()
     if "wan2.7" in identity or "wan2_7" in identity:
         return False
     return (
-        "gpt-image-2-count" in identity
-        or "gpt-image-count" in identity
+        profile_is_legacy_gpt_image_count(
+            provider_name=provider_name,
+            model_name=model_name,
+            base_url=base_url,
+            adapter_config=adapter_config,
+        )
+        or profile_is_haodeya_gpt_sync_20(
+            provider_name=provider_name,
+            model_name=model_name,
+            base_url=base_url,
+            adapter_config=adapter_config,
+        )
+        or profile_is_haodeya_gpt_sunburst(
+            provider_name=provider_name,
+            model_name=model_name,
+            base_url=base_url,
+            adapter_config=adapter_config,
+        )
         or "haodeya_sync_image" in identity
     )
 

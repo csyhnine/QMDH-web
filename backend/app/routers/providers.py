@@ -202,7 +202,7 @@ def _preview_strategy_label(strategy: str, adapter_mode: str, endpoint_path: str
     if "haodeya_async" in normalized or "toapis" in normalized:
         return "异步生图（短 body：model + prompt + size）· VIP 轮询"
     if "haodeya_sync" in normalized:
-        return "同步生图（短 body：model + prompt + WIDTHxHEIGHT）· DeepKey count"
+        return "同步生图（短 body：model + prompt + WIDTHxHEIGHT）· GPT 2.0 / 2.5 Sunburst"
     if "chat_modalities" in normalized:
         return "聊天多模态生图（长 body：messages / modalities / image_config）"
     if "chat_completions" in normalized:

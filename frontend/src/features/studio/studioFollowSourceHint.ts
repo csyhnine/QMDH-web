@@ -12,6 +12,12 @@ export function resolveFollowSourceBehavior(provider: Provider | undefined): Fol
   if (identity.includes("gpt-image-2-count") || identity.includes("gpt-image-count")) {
     return "infer_pixels";
   }
+  if (identity.includes("sunburst") || identity.includes("gpt-image-2.5")) {
+    return "infer_pixels";
+  }
+  if (identity.includes("gpt-image-2-1k") || identity.includes("gpt-image-2-2k") || identity.includes("gpt-image-2-4k")) {
+    return "infer_ratio";
+  }
   if (identity.includes("gpt-image-2") || identity.includes("gpt-image")) {
     return "infer_ratio";
   }
@@ -28,6 +34,9 @@ export function followSourceHintForProvider(provider: Provider | undefined): str
     case "infer_pixels":
       if (providerIdentity(provider).includes("count")) {
         return "按参考图真实像素出图（如横图 1024×768）。";
+      }
+      if (providerIdentity(provider).includes("sunburst") || providerIdentity(provider).includes("gpt-image-2.5")) {
+        return "按参考图像素对齐到 16 倍数尺寸（Sunburst 约束）。";
       }
       return "按参考图比例换算为对应像素尺寸（如横图 2560×1440）。";
     case "infer_ratio":

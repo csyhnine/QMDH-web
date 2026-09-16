@@ -76,6 +76,42 @@ class HaodeyaImageStrategySplitTests(unittest.TestCase):
             CHAT_MODALITIES_IMAGE_STRATEGY,
         )
 
+    def test_gpt_20_sync_prefers_haodeya_sync_image(self) -> None:
+        self.assertTrue(
+            profile_prefers_haodeya_sync_image(
+                provider_name="gpt-image-2-1k",
+                model_name="gpt-image-2-1k",
+                base_url="https://newapi.haodeya.xyz/v1",
+            )
+        )
+        self.assertEqual(
+            default_strategy_for_capability(
+                capability="image.generate",
+                provider_name="gpt-image-2-1k",
+                model_name="gpt-image-2-1k",
+                base_url="https://newapi.haodeya.xyz/v1",
+            ),
+            HAODEYA_SYNC_IMAGE_STRATEGY,
+        )
+
+    def test_sunburst_prefers_haodeya_sync_image(self) -> None:
+        self.assertTrue(
+            profile_prefers_haodeya_sync_image(
+                provider_name="gpt-image-2.5-sunburst",
+                model_name="gpt-image-2.5-sunburst",
+                base_url="https://newapi.haodeya.xyz/v1",
+            )
+        )
+        self.assertEqual(
+            default_strategy_for_capability(
+                capability="image.generate",
+                provider_name="gpt-image-2.5-sunburst",
+                model_name="gpt-image-2.5-sunburst",
+                base_url="https://newapi.haodeya.xyz/v1",
+            ),
+            HAODEYA_SYNC_IMAGE_STRATEGY,
+        )
+
     def test_vip_still_async(self) -> None:
         self.assertEqual(
             default_strategy_for_capability(

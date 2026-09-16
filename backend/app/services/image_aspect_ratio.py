@@ -50,13 +50,31 @@ GPT_IMAGE_ASPECT_RATIOS: tuple[str, ...] = (
     "21:9",
 )
 
-_OPENAI_PIXEL_SIZE_BY_RATIO: dict[str, str] = {
+_OPENAI_PIXEL_SIZE_1K_BY_RATIO: dict[str, str] = {
     "1:1": "1024x1024",
     "16:9": "1536x1024",
     "4:3": "1536x1024",
     "3:2": "1536x1024",
     "2:3": "1024x1536",
     "9:16": "1024x1536",
+}
+
+_OPENAI_PIXEL_SIZE_2K_BY_RATIO: dict[str, str] = {
+    "1:1": "2048x2048",
+    "16:9": "2048x1136",
+    "4:3": "2048x1536",
+    "3:2": "2048x1365",
+    "2:3": "1365x2048",
+    "9:16": "1152x2048",
+}
+
+_OPENAI_PIXEL_SIZE_4K_BY_RATIO: dict[str, str] = {
+    "1:1": "3840x3840",
+    "16:9": "3840x2160",
+    "4:3": "3840x2880",
+    "3:2": "3840x2560",
+    "2:3": "2560x3840",
+    "9:16": "2160x3840",
 }
 
 _MAX_REFERENCE_PROBE_BYTES = 512 * 1024
@@ -86,9 +104,38 @@ def allowed_image_aspect_ratios(*, provider_name: str, model_name: str, base_url
     return GPT_IMAGE_ASPECT_RATIOS
 
 
-def openai_pixel_size_for_aspect_ratio(aspect_ratio: str) -> str:
-    """DeepKey count sync SKUs require WIDTHxHEIGHT pixels (handbook §6)."""
-    return _OPENAI_PIXEL_SIZE_BY_RATIO.get(aspect_ratio, "1024x1024")
+def openai_pixel_size_for_aspect_ratio(aspect_ratio: str, *, resolution: str = "1k") -> str:
+    """Haodeya GPT sync SKUs require WIDTHxHEIGHT pixels (handbook § GPT sync 2.0 / 2.5)."""
+    tier = str(resolution or "1k").strip().lower()
+    if tier == "4k":
+        mapping = _OPENAI_PIXEL_SIZE_4K_BY_RATIO
+        default = "3840x3840"
+    elif tier == "2k":
+        mapping = _OPENAI_PIXEL_SIZE_2K_BY_RATIO
+        default = "2048x2048"
+    else:
+        mapping = _OPENAI_PIXEL_SIZE_1K_BY_RATIO
+        default = "1024x1024"
+    return mapping.get(aspect_ratio, default)
+
+
+def snap_sunburst_pixel_size(width: int, height: int) -> str:
+    """Snap reference dimensions to GPT 2.5 Sunburst constraints (multiples of 16, max 3840)."""
+
+    def snap(value: int) -> int:
+        bounded = max(16, min(int(value), 3840))
+        return max(16, round(bounded / 16) * 16)
+
+    snapped_width = snap(width)
+    snapped_height = snap(height)
+    ratio = snapped_width / snapped_height if snapped_height else 1.0
+    if ratio > 3.0:
+        snapped_width = min(3840, snapped_height * 3)
+        snapped_width = max(16, round(snapped_width / 16) * 16)
+    elif ratio < 1.0 / 3.0:
+        snapped_height = min(3840, snapped_width * 3)
+        snapped_height = max(16, round(snapped_height / 16) * 16)
+    return f"{snapped_width}x{snapped_height}"
 
 
 def pixel_size_from_reference_images(reference_images: list[str]) -> str | None:

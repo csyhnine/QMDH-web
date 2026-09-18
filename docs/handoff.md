@@ -11,6 +11,16 @@
 
 ## Latest Handoffs
 
+### [2026-09-18] 润色分模式优化 — **DONE（已部署 + 生产 prompt 已写入）**
+
+- **动机：** 生成分析 30 天窗口润色后采纳率 **25.5%** 低于整体；图生图易被扩写偏离参考图
+- **上线：** 文生图/图生图/视频三套 system prompt + 润色历史 + 参考图 warning；画布取消双击备注、禁止节点内拖图误建上传节点；日志刷新修复
+- **GitHub main：** `3dca3ca` · **生产 HEAD：** `9392c447` · **Migration：** `v3w4x5y6z7a8`
+- **生产润色模型：** Provider **51** `gemini-3.7-flash-high`；三列 prompt 已覆盖旧通用文案，legacy 字段已清空
+- **观察期：** 2–4 周后对比 Admin **生成分析** 的 `polish_settle_rate` vs 基线 25.5%
+- **详档：** `docs/archive/handoff-2026-09-18-prompt-polish-optimization-deploy.md`
+- Safe to hand off: **Yes**
+
 ### [2026-09-16] Studio 滚动/创作区 + 生产运维清理 — **DONE（已部署 + 运维完成）**
 
 - **Studio（已上生产）：** 创作区收纳抽动修复；进入项目自动滚历史**最下方**；右侧灰色圆形悬浮 ↑↓ 钮（`StudioHistoryScrollFab`）
@@ -30,10 +40,4 @@
 - **详档：** `docs/archive/handoff-2026-09-16-chat-model-switch-context-stats.md`
 - Safe to hand off: **Yes**
 
-### [2026-09-04] 符号主题链 + 豆包检索 + Grok/润色 hotfix — **DONE（本地 main；生产未 deploy 符号主题）**
-
-- **符号主题 WIP** 在 stash；生产 **未 deploy**
-- **详档：** `docs/archive/handoff-2026-09-03-session-end-cold-start.md`
-- Safe to hand off: **Yes**（勿误 deploy 符号主题）
-
-（Haodeya/Grok 2026-09-04 条目已归档至 `docs/archive/`；灵感库搁置见 `docs/tasks.md`）
+（2026-09-04 符号主题 / Grok hotfix 等更早条目见 `docs/archive/`；灵感库搁置见 `docs/tasks.md`）

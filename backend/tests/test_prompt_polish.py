@@ -13,6 +13,14 @@ from app.core.security import hash_password
 from app.database import Base, get_db
 from app.models import PlatformSettings, ProviderProfile, User
 from app.routers import auth, platform_settings, prompt_polish
+from app.models import PlatformSettings
+from app.services.prompt_polish_service import (
+    ReferenceImageResolution,
+    _reference_image_warning,
+    _trim_polished_output,
+    configured_prompt_polish_system_prompt,
+    resolve_prompt_polish_system_prompt,
+)
 
 
 class PromptPolishApiTests(unittest.TestCase):
@@ -98,6 +106,32 @@ class PromptPolishApiTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["polished_prompt"], "优化后的城市夜景提示词")
         self.assertEqual(body["provider_name"], "polish-model")
+
+        request_body = json.loads(mock_urlopen.call_args.args[0].data.decode("utf-8"))
+        self.assertEqual(request_body["max_tokens"], 500)
+        self.assertIn("文生图", request_body["messages"][0]["content"])
+
+    @patch("app.services.prompt_polish_service.urlopen")
+    def test_polish_edit_mode_uses_edit_prompt_and_lower_max_tokens(self, mock_urlopen) -> None:
+        payload = {
+            "choices": [{"message": {"content": "将外立面改为白色"}}],
+        }
+        mock_response = mock_urlopen.return_value.__enter__.return_value
+        mock_response.read.return_value = json.dumps(payload).encode("utf-8")
+
+        response = self.client.post(
+            "/studio/prompt-polish",
+            headers=self.headers,
+            json={
+                "prompt": "衣服改白色",
+                "creation_mode": "edit",
+                "reference_images": [],
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        request_body = json.loads(mock_urlopen.call_args.args[0].data.decode("utf-8"))
+        self.assertEqual(request_body["max_tokens"], 280)
+        self.assertIn("图生图", request_body["messages"][0]["content"])
 
     @patch("app.services.prompt_polish_service.urlopen")
     def test_polish_skips_missing_reference_images(self, mock_urlopen) -> None:
@@ -222,14 +256,50 @@ class PlatformSettingsPromptPolishTests(unittest.TestCase):
             json={
                 "prompt_polish_enabled": True,
                 "prompt_polish_provider_id": self.provider_id,
-                "prompt_polish_system_prompt": "自定义系统提示词",
+                "prompt_polish_system_prompts": {
+                    "generate": "文生图自定义提示词",
+                    "edit": "图生图自定义提示词",
+                    "video": "视频自定义提示词",
+                },
             },
         )
         self.assertEqual(updated.status_code, 200)
         body = updated.json()
         self.assertTrue(body["prompt_polish_enabled"])
         self.assertEqual(body["prompt_polish_provider_id"], self.provider_id)
-        self.assertEqual(body["prompt_polish_system_prompt"], "自定义系统提示词")
+        self.assertEqual(body["prompt_polish_system_prompts"]["generate"], "文生图自定义提示词")
+        self.assertEqual(body["prompt_polish_system_prompts"]["edit"], "图生图自定义提示词")
+        self.assertEqual(body["prompt_polish_system_prompts"]["video"], "视频自定义提示词")
+        self.assertIn("图生图", body["prompt_polish_builtin_prompts"]["edit"])
+
+
+class PromptPolishServiceUnitTests(unittest.TestCase):
+    def test_trim_polished_output_limits_edit_mode_by_original_length(self) -> None:
+        original = "将女孩的上衣改成白色并保持原有光影"
+        verbose = "将参考图中女孩的上衣材质改为纯白色，保持原有剪裁与光影，不要改变背景与构图。" * 3
+        trimmed = _trim_polished_output(verbose, creation_mode="edit", original_prompt=original)
+        expected_limit = min(200, max(int(len(original) * 1.8), 40))
+        self.assertLessEqual(len(trimmed), expected_limit + 1)
+
+    def test_reference_image_warning_for_edit_without_resolved_images(self) -> None:
+        warning = _reference_image_warning(
+            creation_mode="edit",
+            resolution=ReferenceImageResolution(urls=[], requested_count=1, skipped_count=1),
+        )
+        self.assertIsNotNone(warning)
+        self.assertIn("参考图", warning or "")
+
+    def test_resolve_prompt_polish_system_prompt_uses_mode_specific_config(self) -> None:
+        settings = PlatformSettings(
+            id=1,
+            chat_agent_ui_enabled=False,
+            prompt_polish_enabled=True,
+            prompt_polish_system_prompt_edit="只改图生图",
+        )
+        self.assertEqual(configured_prompt_polish_system_prompt(settings, "edit"), "只改图生图")
+        self.assertIsNone(configured_prompt_polish_system_prompt(settings, "generate"))
+        self.assertIn("文生图", resolve_prompt_polish_system_prompt(settings, "generate"))
+        self.assertEqual(resolve_prompt_polish_system_prompt(settings, "edit"), "只改图生图")
 
 
 if __name__ == "__main__":

@@ -122,6 +122,7 @@ function CanvasBoardInner({
   const menuRef = useRef<BoardMenu | null>(null);
   const suppressPaneUntilRef = useRef(0);
   const [dragOver, setDragOver] = useState(false);
+  const suppressFileDropRef = useRef(false);
   const lastMiddleClickRef = useRef(0);
 
   useEffect(() => {
@@ -340,9 +341,23 @@ function CanvasBoardInner({
     });
   }, [executeMenuAction, onAddNode]);
 
+  const handleNodeMediaDragStartCapture = useCallback((event: DragEvent) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (!target.closest(".qmdh-canvas-node")) return;
+    if (!(target instanceof HTMLImageElement || target instanceof HTMLVideoElement)) return;
+    event.preventDefault();
+    suppressFileDropRef.current = true;
+  }, []);
+
+  const handleNodeMediaDragEndCapture = useCallback(() => {
+    suppressFileDropRef.current = false;
+    setDragOver(false);
+  }, []);
+
   const handleDragOver = useCallback(
     (event: DragEvent) => {
-      if (disabled) return;
+      if (disabled || suppressFileDropRef.current) return;
       if (![...event.dataTransfer.types].includes("Files")) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
@@ -360,7 +375,10 @@ function CanvasBoardInner({
     (event: DragEvent) => {
       event.preventDefault();
       setDragOver(false);
-      if (disabled) return;
+      if (disabled || suppressFileDropRef.current) {
+        suppressFileDropRef.current = false;
+        return;
+      }
       const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith("image/"));
       if (files.length === 0) return;
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
@@ -368,29 +386,6 @@ function CanvasBoardInner({
     },
     [disabled, onDropImages, screenToFlowPosition]
   );
-
-  const lastPaneClickRef = useRef(0);
-
-  const addNoteAtClientPoint = useCallback(
-    (clientX: number, clientY: number) => {
-      if (disabled) return;
-      const flow = screenToFlowPosition({ x: clientX, y: clientY });
-      onAddNode(createBlankNoteNode(flow, "备注"));
-    },
-    [disabled, onAddNode, screenToFlowPosition]
-  );
-
-  const isBlankCanvasTarget = useCallback((target: EventTarget | null) => {
-    if (!(target instanceof Element)) return false;
-    if (
-      target.closest(
-        ".react-flow__node, .react-flow__edge, .react-flow__handle, .react-flow__controls, .react-flow__minimap, .react-flow__panel, .qmdh-canvas-context-menu, .qmdh-canvas-drop-overlay"
-      )
-    ) {
-      return false;
-    }
-    return Boolean(target.closest(".react-flow, .react-flow__pane, .react-flow__viewport, .react-flow__container"));
-  }, []);
 
   const onPaneClick = useCallback(
     (event: ReactMouseEvent | MouseEvent) => {
@@ -403,29 +398,8 @@ function CanvasBoardInner({
         return;
       }
       closeMenu();
-      if (disabled) return;
-      if (!isBlankCanvasTarget(event.target)) return;
-      const now = Date.now();
-      if (now - lastPaneClickRef.current < 350) {
-        lastPaneClickRef.current = 0;
-        event.preventDefault();
-        addNoteAtClientPoint(event.clientX, event.clientY);
-        return;
-      }
-      lastPaneClickRef.current = now;
     },
-    [addNoteAtClientPoint, closeMenu, disabled, isBlankCanvasTarget]
-  );
-
-  const onPaneDoubleClick = useCallback(
-    (event: ReactMouseEvent | MouseEvent) => {
-      if (disabled) return;
-      if (!isBlankCanvasTarget(event.target)) return;
-      event.preventDefault();
-      lastPaneClickRef.current = 0;
-      addNoteAtClientPoint(event.clientX, event.clientY);
-    },
-    [addNoteAtClientPoint, disabled, isBlankCanvasTarget]
+    [closeMenu]
   );
 
   const defaultViewport = useMemo(() => viewport, [viewport]);
@@ -493,6 +467,8 @@ function CanvasBoardInner({
     <div
       ref={boardInnerRef}
       className={`qmdh-canvas-board-inner${dragOver ? " is-file-drag" : ""}`}
+      onDragStartCapture={handleNodeMediaDragStartCapture}
+      onDragEndCapture={handleNodeMediaDragEndCapture}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -513,7 +489,6 @@ function CanvasBoardInner({
           onPaneContextMenu={onPaneContextMenu}
           onEdgeContextMenu={onEdgeContextMenu}
           onPaneClick={onPaneClick}
-          onDoubleClick={onPaneDoubleClick}
           onInit={onFlowInit}
           defaultViewport={defaultViewport}
           minZoom={0.2}

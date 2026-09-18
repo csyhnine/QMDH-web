@@ -1,7 +1,18 @@
 import type { DragEvent, RefObject } from "react";
 
+import type { PromptPolishHistoryEntry } from "../../lib/promptPolishHistory";
 import type { StudioComposerDockProps } from "./studioComposerDockTypes";
 import type { ReferenceUploadItem, StudioFormState } from "./studioTypes";
+
+export type StudioPromptPolishUiProps = {
+  polishingPrompt?: boolean;
+  polishError?: string;
+  polishNotice?: string;
+  polishHistory?: PromptPolishHistoryEntry[];
+  activePolishHistoryId?: string | null;
+  onSelectPolishHistory?: (entryId: string) => void;
+  promptPolishEnabled?: boolean;
+};
 
 export type StudioComposerExpandedContentProps = StudioComposerDockProps & {
   modeLabel: string;
@@ -50,10 +61,8 @@ export type StudioComposerBodyProps = Pick<
   | "onRegisterSeedancePrivateAvatar"
   | "onStartSeedanceRealAvatar"
   | "onCompleteSeedanceRealAvatar"
-> & {
-  polishingPrompt?: boolean;
-  polishError?: string;
-};
+> &
+  StudioPromptPolishUiProps;
 
 export type StudioComposerModeSwitchProps = {
   creationMode: StudioFormState["creationMode"];
@@ -77,10 +86,8 @@ export type StudioReferenceDropzoneProps = {
 export type StudioPromptTextareaProps = Pick<
   StudioComposerBodyProps,
   "promptTextareaRef" | "referenceHint" | "studioForm" | "onPromptChange" | "onPromptSubmitShortcut"
-> & {
-  polishingPrompt?: boolean;
-  polishError?: string;
-};
+> &
+  StudioPromptPolishUiProps;
 
 export type StudioComposerReferenceFileInputProps = Pick<
   StudioComposerExpandedContentProps,

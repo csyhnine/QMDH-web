@@ -8,6 +8,26 @@ type PromptPolishSettingsPanelProps = {
   onRefresh: () => Promise<void>;
 };
 
+type ModePromptState = {
+  generate: string;
+  edit: string;
+  video: string;
+};
+
+const MODE_PROMPT_LABELS: Record<keyof ModePromptState, string> = {
+  generate: "文生图",
+  edit: "图生图",
+  video: "视频",
+};
+
+function readModePromptState(settings: PlatformSettingsRecord | null): ModePromptState {
+  return {
+    generate: settings?.prompt_polish_system_prompts?.generate ?? "",
+    edit: settings?.prompt_polish_system_prompts?.edit ?? "",
+    video: settings?.prompt_polish_system_prompts?.video ?? "",
+  };
+}
+
 export default function PromptPolishSettingsPanel({
   settings,
   providerProfiles,
@@ -25,16 +45,17 @@ export default function PromptPolishSettingsPanel({
   const [providerId, setProviderId] = useState<string>(
     settings?.prompt_polish_provider_id ? String(settings.prompt_polish_provider_id) : ""
   );
-  const [systemPrompt, setSystemPrompt] = useState(settings?.prompt_polish_system_prompt ?? "");
+  const [modePrompts, setModePrompts] = useState<ModePromptState>(() => readModePromptState(settings));
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
 
   const selectedProvider = chatProviders.find((profile) => String(profile.id) === providerId) ?? null;
+  const builtinPrompts = settings?.prompt_polish_builtin_prompts ?? null;
 
   useEffect(() => {
     setEnabled(settings?.prompt_polish_enabled ?? false);
     setProviderId(settings?.prompt_polish_provider_id ? String(settings.prompt_polish_provider_id) : "");
-    setSystemPrompt(settings?.prompt_polish_system_prompt ?? "");
+    setModePrompts(readModePromptState(settings));
   }, [settings]);
 
   async function handleSave() {
@@ -57,7 +78,11 @@ export default function PromptPolishSettingsPanel({
       await api.updatePlatformSettings({
         prompt_polish_enabled: enabled,
         prompt_polish_provider_id: providerId ? Number(providerId) : null,
-        prompt_polish_system_prompt: systemPrompt.trim(),
+        prompt_polish_system_prompts: {
+          generate: modePrompts.generate.trim(),
+          edit: modePrompts.edit.trim(),
+          video: modePrompts.video.trim(),
+        },
       });
       await onRefresh();
       setFeedback({ tone: "success", message: "提示词润色配置已保存。" });
@@ -71,11 +96,17 @@ export default function PromptPolishSettingsPanel({
     }
   }
 
+  function updateModePrompt(mode: keyof ModePromptState, value: string) {
+    setModePrompts((current) => ({ ...current, [mode]: value }));
+  }
+
   return (
     <article className="admin-table-panel settings-switch-card">
       <div className="admin-detail-head">
         <h2>提示词润色</h2>
-        <p>Studio 生成区「润色」按钮会调用专用 LLM，结合参考图与用户提示词输出优化文案。</p>
+        <p>
+          Studio / 画布「润色」会按当前创作模式调用对应提示词：文生图补全场景，图生图只写修改点并读取参考图，视频强调动作与镜头。
+        </p>
       </div>
 
       <div className="settings-switch-grid">
@@ -102,18 +133,31 @@ export default function PromptPolishSettingsPanel({
               </option>
             ))}
           </select>
-          <small>需具备 chat.completions；若支持视觉，将同时读取参考图。</small>
+          <small>需具备 chat.completions；图生图 / 视频润色建议选用支持视觉的模型。</small>
         </label>
+      </div>
 
-        <label className="composer-menu-field settings-field-span-2">
-          <span>系统提示词</span>
-          <textarea
-            rows={10}
-            value={systemPrompt}
-            onChange={(event) => setSystemPrompt(event.target.value)}
-            placeholder="留空则使用内置默认润色指令。"
-          />
-        </label>
+      <div className="prompt-polish-mode-prompt-grid">
+        {(Object.keys(MODE_PROMPT_LABELS) as Array<keyof ModePromptState>).map((mode) => (
+          <section key={mode} className="prompt-polish-mode-prompt-card">
+            <div className="prompt-polish-mode-prompt-head">
+              <strong>{MODE_PROMPT_LABELS[mode]} 润色提示词</strong>
+              <small>{modePrompts[mode].trim() ? "已自定义" : "使用内置默认"}</small>
+            </div>
+            <textarea
+              rows={8}
+              value={modePrompts[mode]}
+              onChange={(event) => updateModePrompt(mode, event.target.value)}
+              placeholder={`留空则使用「${MODE_PROMPT_LABELS[mode]}」内置默认润色指令。`}
+            />
+            {builtinPrompts ? (
+              <details className="prompt-polish-builtin-details">
+                <summary>查看内置默认</summary>
+                <pre>{builtinPrompts[mode]}</pre>
+              </details>
+            ) : null}
+          </section>
+        ))}
       </div>
 
       {selectedProvider ? (

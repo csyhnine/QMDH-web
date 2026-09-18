@@ -1,3 +1,4 @@
+import PromptPolishHistoryPanel from "../../components/shared/PromptPolishHistoryPanel";
 import { composerPromptPlaceholder } from "./studioComposerDockUtils";
 import type { StudioPromptTextareaProps } from "./studioComposerExpandedContentTypes";
 
@@ -9,6 +10,11 @@ export default function StudioPromptTextarea({
   onPromptSubmitShortcut,
   polishingPrompt = false,
   polishError = "",
+  polishNotice = "",
+  polishHistory = [],
+  activePolishHistoryId = null,
+  onSelectPolishHistory,
+  promptPolishEnabled = false,
 }: StudioPromptTextareaProps) {
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) {
@@ -25,6 +31,15 @@ export default function StudioPromptTextarea({
     event.stopPropagation();
   }
 
+  const hintMessage = polishError || polishNotice || referenceHint;
+  const hintClassName = [
+    "composer-textarea-hint",
+    polishError ? "is-error" : "",
+    polishNotice && !polishError ? "is-notice" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <label className="composer-textarea">
       <textarea
@@ -36,9 +51,15 @@ export default function StudioPromptTextarea({
         placeholder={composerPromptPlaceholder(studioForm.creationMode)}
         disabled={polishingPrompt}
       />
-      <span className={`composer-textarea-hint${polishError ? " is-error" : ""}`}>
-        {polishError || referenceHint}
-      </span>
+      <PromptPolishHistoryPanel
+        className="composer-polish-history"
+        history={polishHistory}
+        activeEntryId={activePolishHistoryId}
+        disabled={polishingPrompt}
+        showWhenEmpty={promptPolishEnabled}
+        onSelect={(entryId) => onSelectPolishHistory?.(entryId)}
+      />
+      <span className={hintClassName}>{hintMessage}</span>
     </label>
   );
 }

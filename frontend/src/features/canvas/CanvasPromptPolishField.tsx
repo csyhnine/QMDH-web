@@ -2,6 +2,7 @@ import type { TextareaHTMLAttributes } from "react";
 import { useEffect } from "react";
 
 import PromptPolishButton from "../../components/shared/PromptPolishButton";
+import PromptPolishHistoryPanel from "../../components/shared/PromptPolishHistoryPanel";
 import { usePromptPolish } from "../../lib/usePromptPolish";
 import { creationModeForNodeKind } from "../studio/studioCanvasLinkage";
 import { CanvasDraftTextarea } from "./CanvasDraftField";
@@ -42,7 +43,15 @@ export default function CanvasPromptPolishField({
 }: CanvasPromptPolishFieldProps) {
   const { promptPolishEnabled } = useCanvasNodeActions();
   const refs = resolveCanvasInputReferenceImages(referenceImages, upstreamImages);
-  const { polishing, polishPrompt, error } = usePromptPolish({
+  const {
+    polishing,
+    polishPrompt,
+    error,
+    notice,
+    history,
+    activeHistoryId,
+    applyHistoryEntry,
+  } = usePromptPolish({
     prompt,
     creationMode: creationModeForNodeKind(nodeKind),
     referenceImages: refs,
@@ -52,6 +61,7 @@ export default function CanvasPromptPolishField({
   });
   const fieldDisabled = disabled || busy || polishing;
   const canPolish = promptPolishEnabled === true && prompt.trim().length > 0 && !busy;
+  const feedback = error || notice;
 
   useEffect(() => {
     onPolishingChange?.(polishing);
@@ -77,7 +87,17 @@ export default function CanvasPromptPolishField({
         placeholder={placeholder}
         onCommit={onPromptChange}
       />
-      {error ? <small className="qmdh-canvas-node-error">{error}</small> : null}
+      <PromptPolishHistoryPanel
+        className="qmdh-canvas-polish-history"
+        history={history}
+        activeEntryId={activeHistoryId}
+        disabled={polishing}
+        showWhenEmpty={promptPolishEnabled === true}
+        onSelect={applyHistoryEntry}
+      />
+      {feedback ? (
+        <small className={`qmdh-canvas-node-error${notice && !error ? " is-notice" : ""}`}>{feedback}</small>
+      ) : null}
     </label>
   );
 }

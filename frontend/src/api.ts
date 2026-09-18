@@ -343,11 +343,25 @@ export type UsageLogQuery = {
   include_task_summary?: boolean;
 };
 
+export type PromptPolishModePromptsRecord = {
+  generate?: string | null;
+  edit?: string | null;
+  video?: string | null;
+};
+
+export type PromptPolishBuiltinPromptsRecord = {
+  generate: string;
+  edit: string;
+  video: string;
+};
+
 export type PlatformSettingsRecord = {
   chat_agent_ui_enabled: boolean;
   prompt_polish_enabled: boolean;
   prompt_polish_provider_id?: number | null;
   prompt_polish_system_prompt?: string | null;
+  prompt_polish_system_prompts?: PromptPolishModePromptsRecord | null;
+  prompt_polish_builtin_prompts?: PromptPolishBuiltinPromptsRecord | null;
   updated_at?: string | null;
 };
 
@@ -356,12 +370,15 @@ export type PlatformSettingsUpdatePayload = {
   prompt_polish_enabled?: boolean;
   prompt_polish_provider_id?: number | null;
   prompt_polish_system_prompt?: string | null;
+  prompt_polish_system_prompts?: PromptPolishModePromptsRecord;
 };
 
 export type PromptPolishResponse = {
   polished_prompt: string;
   provider_name: string;
   model_name: string;
+  reference_images_used?: number;
+  reference_image_warning?: string | null;
 };
 
 export type ProviderProfileRecord = {
@@ -1417,8 +1434,9 @@ export const api = {
     if (query.entry_type) params.set("entry_type", query.entry_type);
     if (query.status) params.set("status", query.status);
     if (query.include_task_summary === false) params.set("include_task_summary", "false");
+    params.set("_", String(Date.now()));
     const suffix = params.toString();
-    return request<UsageLogPage>(`/dashboard/usage-logs${suffix ? `?${suffix}` : ""}`);
+    return request<UsageLogPage>(`/dashboard/usage-logs?${suffix}`, { cache: "no-store" });
   },
   health: () => request<{ status: string; service: string }>("/health"),
   platformSettings: () => request<PlatformSettingsRecord>("/settings/platform"),

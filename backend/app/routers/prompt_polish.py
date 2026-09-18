@@ -26,6 +26,8 @@ class PromptPolishOut(BaseModel):
     polished_prompt: str
     provider_name: str
     model_name: str
+    reference_images_used: int = 0
+    reference_image_warning: str | None = None
 
 
 @router.post("/prompt-polish", response_model=PromptPolishOut)
@@ -68,4 +70,6 @@ def polish_user_prompt(
         polished_prompt=result.polished_prompt,
         provider_name=result.provider_name,
         model_name=result.model_name,
+        reference_images_used=result.reference_images_used,
+        reference_image_warning=result.reference_image_warning,
     )

@@ -135,6 +135,8 @@ export default function UsageLogsPage() {
   const [data, setData] = useState<UsageLogPage | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
 
   const loadLogs = useCallback(async (nextPage: number, nextFilters: FilterDraft, nextPageSize: number) => {
     setLoading(true);
@@ -155,6 +157,7 @@ export default function UsageLogsPage() {
         include_task_summary: nextFilters.includeTaskSummary,
       });
       setData(response);
+      setLastRefreshedAt(new Date());
       if (response.page !== nextPage) {
         setPage(response.page);
       }
@@ -168,7 +171,14 @@ export default function UsageLogsPage() {
 
   useEffect(() => {
     void loadLogs(page, appliedFilters, pageSize);
-  }, [appliedFilters, loadLogs, page, pageSize]);
+  }, [appliedFilters, loadLogs, page, pageSize, reloadKey]);
+
+  function handleRefresh() {
+    const nowEnd = defaultEndAt();
+    setFilters((current) => ({ ...current, endAt: nowEnd }));
+    setAppliedFilters((current) => ({ ...current, endAt: nowEnd }));
+    setReloadKey((current) => current + 1);
+  }
 
   const totalPages = data?.total_pages ?? 1;
   const safePage = data?.page ?? page;
@@ -201,7 +211,10 @@ export default function UsageLogsPage() {
           <p>查看模型调用、对话与任务计费的明细记录，支持按用户、模型与时间筛选。</p>
         </div>
         <div className="admin-head-actions">
-          <button type="button" onClick={() => void loadLogs(page, appliedFilters, pageSize)} disabled={loading}>
+          {lastRefreshedAt ? (
+            <span className="usage-logs-refreshed-at">刷新于 {formatDateTime(lastRefreshedAt.toISOString())}</span>
+          ) : null}
+          <button type="button" className="ghost-button" onClick={handleRefresh} disabled={loading}>
             {loading ? "刷新中..." : "刷新"}
           </button>
         </div>

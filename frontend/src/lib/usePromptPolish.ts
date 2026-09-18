@@ -1,6 +1,12 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api } from "../api";
+import {
+  appendPromptPolishHistory,
+  createPromptPolishHistoryEntry,
+  resolveActivePromptPolishHistoryId,
+  type PromptPolishHistoryEntry,
+} from "./promptPolishHistory";
 
 type CreationMode = "generate" | "edit" | "video";
 
@@ -23,6 +29,33 @@ export function usePromptPolish({
 }: UsePromptPolishOptions) {
   const [polishing, setPolishing] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [history, setHistory] = useState<PromptPolishHistoryEntry[]>([]);
+
+  useEffect(() => {
+    setHistory([]);
+    setNotice("");
+    setError("");
+  }, [creationMode]);
+
+  const activeHistoryId = useMemo(
+    () => resolveActivePromptPolishHistoryId(history, prompt),
+    [history, prompt]
+  );
+
+  const applyHistoryEntry = useCallback(
+    (entryId: string) => {
+      const entry = history.find((item) => item.id === entryId);
+      if (!entry) {
+        return;
+      }
+      onPromptChange(entry.polishedPrompt);
+      onPolished?.();
+      setError("");
+      setNotice("");
+    },
+    [history, onPolished, onPromptChange]
+  );
 
   const polishPrompt = useCallback(async () => {
     const trimmed = prompt.trim();
@@ -33,6 +66,7 @@ export function usePromptPolish({
 
     setPolishing(true);
     setError("");
+    setNotice("");
     try {
       const result = await api.polishPrompt({
         prompt: trimmed,
@@ -40,8 +74,14 @@ export function usePromptPolish({
         reference_images: referenceImages.filter(Boolean),
         source_surface: sourceSurface,
       });
-      onPromptChange(result.polished_prompt.trim());
+      const polished = result.polished_prompt.trim();
+      const entry = createPromptPolishHistoryEntry(trimmed, polished);
+      setHistory((current) => appendPromptPolishHistory(current, entry));
+      onPromptChange(polished);
       onPolished?.();
+      if (result.reference_image_warning) {
+        setNotice(result.reference_image_warning);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "提示词润色失败");
     } finally {
@@ -49,5 +89,15 @@ export function usePromptPolish({
     }
   }, [creationMode, onPolished, onPromptChange, prompt, referenceImages, sourceSurface]);
 
-  return { polishing, polishPrompt, error, clearError: () => setError("") };
+  return {
+    polishing,
+    polishPrompt,
+    error,
+    notice,
+    history,
+    activeHistoryId,
+    applyHistoryEntry,
+    clearError: () => setError(""),
+    clearNotice: () => setNotice(""),
+  };
 }

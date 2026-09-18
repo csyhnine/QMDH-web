@@ -12,7 +12,15 @@ export default function StudioComposerExpandedContent(props: StudioComposerExpan
   const { fileInputRef, onReferenceInputChange } = referenceInputProps;
 
   const promptPolishEnabled = usePromptPolishEnabled();
-  const { polishing, polishPrompt, error: polishError } = useStudioPromptPolish({
+  const {
+    polishing,
+    polishPrompt,
+    error: polishError,
+    notice: polishNotice,
+    history: polishHistory,
+    activeHistoryId: activePolishHistoryId,
+    applyHistoryEntry,
+  } = useStudioPromptPolish({
     studioForm: props.studioForm,
     referenceUploads: props.referenceUploads,
     onPromptChange: props.onPromptChange,
@@ -23,7 +31,16 @@ export default function StudioComposerExpandedContent(props: StudioComposerExpan
     <>
       <StudioComposerLeading {...leadingProps} />
 
-      <StudioComposerBody {...bodyProps} polishingPrompt={polishing} polishError={polishError} />
+      <StudioComposerBody
+        {...bodyProps}
+        polishingPrompt={polishing}
+        polishError={polishError}
+        polishNotice={polishNotice}
+        polishHistory={polishHistory}
+        activePolishHistoryId={activePolishHistoryId}
+        onSelectPolishHistory={applyHistoryEntry}
+        promptPolishEnabled={promptPolishEnabled ?? false}
+      />
 
       <input ref={fileInputRef} type="file" accept="image/*" multiple hidden onChange={onReferenceInputChange} />
 

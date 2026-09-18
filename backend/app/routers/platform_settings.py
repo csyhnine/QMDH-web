@@ -11,9 +11,21 @@ from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import ProviderProfile
 from app.services.platform_settings_service import get_or_create_platform_settings
-from app.services.prompt_polish_service import DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT
+from app.services.prompt_polish_service import prompt_polish_builtin_prompts
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+
+class PromptPolishModePromptsOut(BaseModel):
+    generate: str | None = None
+    edit: str | None = None
+    video: str | None = None
+
+
+class PromptPolishBuiltinPromptsOut(BaseModel):
+    generate: str
+    edit: str
+    video: str
 
 
 class PlatformSettingsOut(BaseModel):
@@ -21,7 +33,15 @@ class PlatformSettingsOut(BaseModel):
     prompt_polish_enabled: bool
     prompt_polish_provider_id: int | None = None
     prompt_polish_system_prompt: str | None = None
+    prompt_polish_system_prompts: PromptPolishModePromptsOut | None = None
+    prompt_polish_builtin_prompts: PromptPolishBuiltinPromptsOut | None = None
     updated_at: datetime | None = None
+
+
+class PromptPolishModePromptsUpdate(BaseModel):
+    generate: str | None = Field(default=None, max_length=12000)
+    edit: str | None = Field(default=None, max_length=12000)
+    video: str | None = Field(default=None, max_length=12000)
 
 
 class PlatformSettingsUpdate(BaseModel):
@@ -29,18 +49,38 @@ class PlatformSettingsUpdate(BaseModel):
     prompt_polish_enabled: bool | None = None
     prompt_polish_provider_id: int | None = None
     prompt_polish_system_prompt: str | None = Field(default=None, max_length=12000)
+    prompt_polish_system_prompts: PromptPolishModePromptsUpdate | None = None
+
+
+def _clean_optional_prompt(value: str | None) -> str | None:
+    cleaned = str(value or "").strip()
+    return cleaned or None
 
 
 def _serialize_platform_settings(row, *, include_admin_fields: bool) -> PlatformSettingsOut:
-    system_prompt = None
+    mode_prompts = None
+    builtin_prompts = None
+    legacy_prompt = None
     if include_admin_fields:
-        configured = str(row.prompt_polish_system_prompt or "").strip()
-        system_prompt = configured or DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT
+        mode_prompts = PromptPolishModePromptsOut(
+            generate=_clean_optional_prompt(row.prompt_polish_system_prompt_generate),
+            edit=_clean_optional_prompt(row.prompt_polish_system_prompt_edit),
+            video=_clean_optional_prompt(row.prompt_polish_system_prompt_video),
+        )
+        defaults = prompt_polish_builtin_prompts()
+        builtin_prompts = PromptPolishBuiltinPromptsOut(
+            generate=defaults["generate"],
+            edit=defaults["edit"],
+            video=defaults["video"],
+        )
+        legacy_prompt = _clean_optional_prompt(row.prompt_polish_system_prompt)
     return PlatformSettingsOut(
         chat_agent_ui_enabled=row.chat_agent_ui_enabled,
         prompt_polish_enabled=row.prompt_polish_enabled,
         prompt_polish_provider_id=row.prompt_polish_provider_id if include_admin_fields else None,
-        prompt_polish_system_prompt=system_prompt,
+        prompt_polish_system_prompt=legacy_prompt,
+        prompt_polish_system_prompts=mode_prompts,
+        prompt_polish_builtin_prompts=builtin_prompts,
         updated_at=row.updated_at,
     )
 
@@ -84,8 +124,16 @@ def update_platform_settings(
         _validate_prompt_polish_provider(db, provider_id)
         row.prompt_polish_provider_id = provider_id
     if "prompt_polish_system_prompt" in update_data:
-        cleaned = str(update_data["prompt_polish_system_prompt"] or "").strip()
-        row.prompt_polish_system_prompt = cleaned or None
+        row.prompt_polish_system_prompt = _clean_optional_prompt(update_data["prompt_polish_system_prompt"])
+    if "prompt_polish_system_prompts" in update_data and update_data["prompt_polish_system_prompts"] is not None:
+        mode_prompts = update_data["prompt_polish_system_prompts"]
+        if "generate" in mode_prompts:
+            row.prompt_polish_system_prompt_generate = _clean_optional_prompt(mode_prompts["generate"])
+        if "edit" in mode_prompts:
+            row.prompt_polish_system_prompt_edit = _clean_optional_prompt(mode_prompts["edit"])
+        if "video" in mode_prompts:
+            row.prompt_polish_system_prompt_video = _clean_optional_prompt(mode_prompts["video"])
+        row.prompt_polish_system_prompt = None
 
     row.updated_by_user_id = auth_user.user_id
     row.updated_at = datetime.now(timezone.utc)

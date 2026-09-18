@@ -160,7 +160,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
               className="qmdh-canvas-node-preview-hit nodrag nopan"
               onClick={() => openPreview(preview)}
             >
-              <img src={preview} alt="" className="qmdh-canvas-node-preview is-fill" />
+              <img src={preview} alt="" draggable={false} className="qmdh-canvas-node-preview is-fill" />
             </button>
           ) : (
             <div className="qmdh-canvas-node-preview is-empty is-fill">点击下方按钮上传图片</div>
@@ -187,7 +187,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
               className="qmdh-canvas-node-preview-hit nodrag nopan"
               onClick={() => openPreview(preview)}
             >
-              <img src={preview} alt="" className="qmdh-canvas-node-preview is-fill" />
+              <img src={preview} alt="" draggable={false} className="qmdh-canvas-node-preview is-fill" />
             </button>
           ) : (
             <div className="qmdh-canvas-node-preview is-empty is-fill">连接上游图片后选中本节点开始标注</div>
@@ -201,7 +201,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
                   className="qmdh-canvas-node-preview-hit nodrag nopan"
                   onClick={() => openPreview(preview)}
                 >
-                  <video src={preview} className="qmdh-canvas-node-preview" muted playsInline />
+                  <video src={preview} className="qmdh-canvas-node-preview" muted playsInline draggable={false} />
                 </button>
               ) : (
                 <button
@@ -209,7 +209,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
                   className="qmdh-canvas-node-preview-hit nodrag nopan"
                   onClick={() => openPreview(preview)}
                 >
-                  <img src={preview} alt="" className="qmdh-canvas-node-preview" />
+                  <img src={preview} alt="" draggable={false} className="qmdh-canvas-node-preview" />
                 </button>
               )
             ) : (
@@ -252,7 +252,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
                 className="qmdh-canvas-node-preview-hit is-compact nodrag nopan"
                 onClick={() => openPreview(preview)}
               >
-                <img src={preview} alt="" className="qmdh-canvas-node-preview is-compact" />
+                <img src={preview} alt="" draggable={false} className="qmdh-canvas-node-preview is-compact" />
               </button>
             ) : null}
 

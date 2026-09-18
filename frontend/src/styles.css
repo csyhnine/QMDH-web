@@ -3797,6 +3797,144 @@ button {
   color: #b42318;
 }
 
+.composer-textarea-hint.is-notice {
+  color: #b45309;
+}
+
+.prompt-polish-history {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.prompt-polish-history-label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.prompt-polish-history.is-empty {
+  opacity: 0.92;
+}
+
+.prompt-polish-history-empty {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.prompt-polish-history-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.prompt-polish-history-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(248, 250, 252, 0.95);
+  color: #334155;
+  border-radius: 999px;
+  padding: 2px 8px 2px 6px;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.prompt-polish-history-item:hover:not(:disabled) {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: rgba(239, 246, 255, 0.95);
+}
+
+.prompt-polish-history-item.is-active {
+  border-color: rgba(37, 99, 235, 0.55);
+  background: rgba(219, 234, 254, 0.95);
+  color: #1d4ed8;
+}
+
+.prompt-polish-history-item:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.prompt-polish-history-item-label {
+  font-weight: 700;
+  color: inherit;
+}
+
+.prompt-polish-history-item-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-polish-history {
+  width: 100%;
+}
+
+.prompt-polish-mode-prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.prompt-polish-mode-prompt-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.75);
+}
+
+.prompt-polish-mode-prompt-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.prompt-polish-mode-prompt-head small {
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.prompt-polish-mode-prompt-card textarea {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+}
+
+.prompt-polish-builtin-details {
+  font-size: 0.82rem;
+  color: #475569;
+}
+
+.prompt-polish-builtin-details pre {
+  margin: 8px 0 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+}
+
+@media (max-width: 1200px) {
+  .prompt-polish-mode-prompt-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .composer-textarea textarea,
 .composer-notes textarea {
   min-height: 0;
@@ -9937,6 +10075,12 @@ textarea:focus-visible {
   }
 }
 
+.usage-logs-refreshed-at {
+  font-size: 0.82rem;
+  color: #667085;
+  white-space: nowrap;
+}
+
 .usage-logs-page .usage-logs-toolbar {
   align-items: flex-end;
 }
@@ -11182,6 +11326,14 @@ textarea:focus-visible {
   border-radius: 12px;
   object-fit: contain;
   background: rgba(241, 245, 249, 0.95);
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.qmdh-canvas-node img,
+.qmdh-canvas-node video {
+  -webkit-user-drag: none;
+  user-select: none;
 }
 
 .qmdh-canvas-node-preview.is-empty {
@@ -12926,6 +13078,14 @@ textarea:focus-visible {
 
 .qmdh-canvas-field-prompt .qmdh-canvas-node-error {
   display: block;
+  margin-top: 6px;
+}
+
+.qmdh-canvas-field-prompt .qmdh-canvas-node-error.is-notice {
+  color: #b45309;
+}
+
+.qmdh-canvas-polish-history {
   margin-top: 6px;
 }
 

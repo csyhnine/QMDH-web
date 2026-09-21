@@ -128,38 +128,25 @@ DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT = DEFAULT_PROMPT_POLISH_SYSTEM_PROMPT_GENERA
 
 
 
-MODE_MAX_TOKENS: dict[CreationMode, int] = {
-
-    "generate": 500,
-
-    "edit": 280,
-
-    "video": 420,
-
-}
+@dataclass(frozen=True)
+class PromptPolishModeLimits:
+    max_tokens: int
+    max_output_chars: int
+    length_multiplier: float | None = None
+    compact_original_chars: int | None = None
+    compact_output_chars: int | None = None
 
 
-
-MODE_MAX_OUTPUT_CHARS: dict[CreationMode, int] = {
-
-    "generate": 320,
-
-    "edit": 200,
-
-    "video": 360,
-
-}
-
-
-
-MODE_LENGTH_MULTIPLIER: dict[CreationMode, float | None] = {
-
-    "generate": None,
-
-    "edit": 1.8,
-
-    "video": 2.0,
-
+DEFAULT_PROMPT_POLISH_MODE_LIMITS: dict[CreationMode, PromptPolishModeLimits] = {
+    "generate": PromptPolishModeLimits(max_tokens=500, max_output_chars=320),
+    "edit": PromptPolishModeLimits(
+        max_tokens=420,
+        max_output_chars=500,
+        length_multiplier=1.5,
+        compact_original_chars=80,
+        compact_output_chars=120,
+    ),
+    "video": PromptPolishModeLimits(max_tokens=420, max_output_chars=360, length_multiplier=2.0),
 }
 
 
@@ -245,6 +232,116 @@ def resolve_prompt_polish_system_prompt(settings: PlatformSettings, creation_mod
 
 def prompt_polish_builtin_prompts() -> dict[CreationMode, str]:
     return dict(DEFAULT_PROMPT_POLISH_SYSTEM_PROMPTS)
+
+
+def prompt_polish_default_mode_limits() -> dict[CreationMode, PromptPolishModeLimits]:
+    return dict(DEFAULT_PROMPT_POLISH_MODE_LIMITS)
+
+
+def _normalize_limit_value(value: object, *, field: str) -> int | float | None:
+    if value is None:
+        return None
+    if field == "length_multiplier":
+        numeric = float(value)
+        return None if numeric <= 0 else numeric
+    return int(value)
+
+
+def _merge_mode_limits(mode: CreationMode, override: dict | None) -> PromptPolishModeLimits:
+    defaults = DEFAULT_PROMPT_POLISH_MODE_LIMITS[mode]
+    if not override:
+        return defaults
+    merged = {
+        "max_tokens": _normalize_limit_value(override.get("max_tokens", defaults.max_tokens), field="max_tokens")
+        or defaults.max_tokens,
+        "max_output_chars": _normalize_limit_value(
+            override.get("max_output_chars", defaults.max_output_chars),
+            field="max_output_chars",
+        )
+        or defaults.max_output_chars,
+        "length_multiplier": _normalize_limit_value(
+            override.get("length_multiplier", defaults.length_multiplier),
+            field="length_multiplier",
+        ),
+        "compact_original_chars": _normalize_limit_value(
+            override.get("compact_original_chars", defaults.compact_original_chars),
+            field="compact_original_chars",
+        ),
+        "compact_output_chars": _normalize_limit_value(
+            override.get("compact_output_chars", defaults.compact_output_chars),
+            field="compact_output_chars",
+        ),
+    }
+    return PromptPolishModeLimits(
+        max_tokens=max(16, min(int(merged["max_tokens"]), 4096)),
+        max_output_chars=max(40, min(int(merged["max_output_chars"]), 4000)),
+        length_multiplier=merged["length_multiplier"],
+        compact_original_chars=(
+            None
+            if merged["compact_original_chars"] is None
+            else max(0, min(int(merged["compact_original_chars"]), 2000))
+        ),
+        compact_output_chars=(
+            None
+            if merged["compact_output_chars"] is None
+            else max(40, min(int(merged["compact_output_chars"]), 4000))
+        ),
+    )
+
+
+def parse_prompt_polish_mode_limit_overrides(raw_json: str | None) -> dict[CreationMode, dict]:
+    if not raw_json or not str(raw_json).strip():
+        return {}
+    try:
+        payload = json.loads(raw_json)
+    except json.JSONDecodeError:
+        logger.warning("Invalid prompt_polish_mode_limits_json; falling back to defaults.")
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    parsed: dict[CreationMode, dict] = {}
+    for mode in ("generate", "edit", "video"):
+        value = payload.get(mode)
+        if isinstance(value, dict):
+            parsed[mode] = value
+    return parsed
+
+
+def resolve_prompt_polish_mode_limits(
+    settings: PlatformSettings,
+    creation_mode: CreationMode,
+) -> PromptPolishModeLimits:
+    overrides = parse_prompt_polish_mode_limit_overrides(settings.prompt_polish_mode_limits_json)
+    return _merge_mode_limits(creation_mode, overrides.get(creation_mode))
+
+
+def resolved_prompt_polish_mode_limits(settings: PlatformSettings) -> dict[CreationMode, PromptPolishModeLimits]:
+    overrides = parse_prompt_polish_mode_limit_overrides(settings.prompt_polish_mode_limits_json)
+    return {mode: _merge_mode_limits(mode, overrides.get(mode)) for mode in ("generate", "edit", "video")}
+
+
+def serialize_prompt_polish_mode_limits(limits: dict[CreationMode, PromptPolishModeLimits]) -> str:
+    payload = {
+        mode: {
+            "max_tokens": config.max_tokens,
+            "max_output_chars": config.max_output_chars,
+            "length_multiplier": config.length_multiplier,
+            "compact_original_chars": config.compact_original_chars,
+            "compact_output_chars": config.compact_output_chars,
+        }
+        for mode, config in limits.items()
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def mode_limits_to_dict(config: PromptPolishModeLimits) -> dict[str, int | float | None]:
+    return {
+        "max_tokens": config.max_tokens,
+        "max_output_chars": config.max_output_chars,
+        "length_multiplier": config.length_multiplier,
+        "compact_original_chars": config.compact_original_chars,
+        "compact_output_chars": config.compact_output_chars,
+    }
 
 
 
@@ -360,8 +457,36 @@ def _reference_image_warning(
 
 
 
-def _trim_polished_output(text: str, *, creation_mode: CreationMode, original_prompt: str) -> str:
+def _resolve_max_output_chars(
+    limits: PromptPolishModeLimits,
+    *,
+    creation_mode: CreationMode,
+    original_prompt: str,
+) -> int:
+    ceiling = limits.max_output_chars
+    multiplier = limits.length_multiplier
+    original_len = len(original_prompt.strip())
 
+    if multiplier is None or original_len <= 0:
+        return ceiling
+
+    if creation_mode == "edit":
+        compact_original = limits.compact_original_chars or 80
+        compact_output = limits.compact_output_chars or 120
+        if original_len <= compact_original:
+            return min(compact_output, ceiling)
+        return min(ceiling, max(int(original_len * multiplier), 80))
+
+    return min(ceiling, max(int(original_len * multiplier), 40))
+
+
+def _trim_polished_output(
+    text: str,
+    *,
+    limits: PromptPolishModeLimits,
+    creation_mode: CreationMode,
+    original_prompt: str,
+) -> str:
     cleaned = str(text or "").strip()
 
     if not cleaned:
@@ -370,19 +495,7 @@ def _trim_polished_output(text: str, *, creation_mode: CreationMode, original_pr
 
 
 
-    max_chars = MODE_MAX_OUTPUT_CHARS.get(creation_mode, 320)
-
-    multiplier = MODE_LENGTH_MULTIPLIER.get(creation_mode)
-
-    if multiplier is not None:
-
-        original_len = len(original_prompt.strip())
-
-        if original_len > 0:
-
-            max_chars = min(max_chars, max(int(original_len * multiplier), 40))
-
-
+    max_chars = _resolve_max_output_chars(limits, creation_mode=creation_mode, original_prompt=original_prompt)
 
     if len(cleaned) <= max_chars:
 
@@ -392,7 +505,7 @@ def _trim_polished_output(text: str, *, creation_mode: CreationMode, original_pr
 
     truncated = cleaned[:max_chars]
 
-    for separator in ("。", "！", "？", "；", ".", "!", "?", ";", "，", ","):
+    for separator in ("。", "！", "？", "；", ".", "!", "?", ";", "，", ",", "、", " ", "：", ":"):
 
         index = truncated.rfind(separator)
 
@@ -400,7 +513,7 @@ def _trim_polished_output(text: str, *, creation_mode: CreationMode, original_pr
 
             return truncated[: index + 1].strip()
 
-    return truncated.rstrip("，,;； ") + "…"
+    return truncated.rstrip("，,;；、 ") + "…"
 
 
 
@@ -497,6 +610,7 @@ def polish_prompt(
 
 
     system_prompt = resolve_prompt_polish_system_prompt(settings, creation_mode)
+    mode_limits = resolve_prompt_polish_mode_limits(settings, creation_mode)
 
     images = [path for path in (reference_images or []) if str(path or "").strip()]
 
@@ -532,7 +646,7 @@ def polish_prompt(
 
         ],
 
-        "max_tokens": MODE_MAX_TOKENS.get(creation_mode, 500),
+        "max_tokens": mode_limits.max_tokens,
 
         "temperature": 0.35,
 
@@ -592,7 +706,12 @@ def polish_prompt(
 
 
 
-    polished = _trim_polished_output(polished_raw, creation_mode=creation_mode, original_prompt=cleaned_prompt)
+    polished = _trim_polished_output(
+        polished_raw,
+        limits=mode_limits,
+        creation_mode=creation_mode,
+        original_prompt=cleaned_prompt,
+    )
 
 
 

@@ -824,6 +824,7 @@ class PlatformSettings(Base):
     prompt_polish_system_prompt_generate: Mapped[str | None] = mapped_column(Text, nullable=True)
     prompt_polish_system_prompt_edit: Mapped[str | None] = mapped_column(Text, nullable=True)
     prompt_polish_system_prompt_video: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prompt_polish_mode_limits_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

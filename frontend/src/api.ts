@@ -355,6 +355,20 @@ export type PromptPolishBuiltinPromptsRecord = {
   video: string;
 };
 
+export type PromptPolishModeLimitRecord = {
+  max_tokens: number;
+  max_output_chars: number;
+  length_multiplier?: number | null;
+  compact_original_chars?: number | null;
+  compact_output_chars?: number | null;
+};
+
+export type PromptPolishModeLimitsRecord = {
+  generate: PromptPolishModeLimitRecord;
+  edit: PromptPolishModeLimitRecord;
+  video: PromptPolishModeLimitRecord;
+};
+
 export type PlatformSettingsRecord = {
   chat_agent_ui_enabled: boolean;
   prompt_polish_enabled: boolean;
@@ -362,6 +376,8 @@ export type PlatformSettingsRecord = {
   prompt_polish_system_prompt?: string | null;
   prompt_polish_system_prompts?: PromptPolishModePromptsRecord | null;
   prompt_polish_builtin_prompts?: PromptPolishBuiltinPromptsRecord | null;
+  prompt_polish_mode_limits?: PromptPolishModeLimitsRecord | null;
+  prompt_polish_default_mode_limits?: PromptPolishModeLimitsRecord | null;
   updated_at?: string | null;
 };
 
@@ -371,6 +387,8 @@ export type PlatformSettingsUpdatePayload = {
   prompt_polish_provider_id?: number | null;
   prompt_polish_system_prompt?: string | null;
   prompt_polish_system_prompts?: PromptPolishModePromptsRecord;
+  prompt_polish_mode_limits?: PromptPolishModeLimitsRecord;
+  reset_prompt_polish_mode_limits?: boolean;
 };
 
 export type PromptPolishResponse = {
@@ -1143,6 +1161,10 @@ export type FeedbackAdminUpdatePayload = {
   admin_reply: string;
 };
 
+export type FeedbackAdminPendingCount = {
+  count: number;
+};
+
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api/v1").replace(/\/$/, "");
 const AUTH_STORAGE_KEY = "qmdh.session.token";
 const LEGACY_AUTH_USER = import.meta.env.VITE_QMDH_LEGACY_USER ?? "";
@@ -1334,6 +1356,7 @@ export const api = {
   appendFeedbackMessage: (feedbackId: number, payload: FeedbackMessageCreatePayload) =>
     postJson<FeedbackRecord>(`/feedback/${feedbackId}/messages`, payload),
   adminFeedback: () => request<FeedbackRecord[]>("/feedback/admin"),
+  adminFeedbackPendingCount: () => request<FeedbackAdminPendingCount>("/feedback/admin/pending-count"),
   replyFeedback: (feedbackId: number, payload: FeedbackAdminUpdatePayload) =>
     patchJson<FeedbackRecord>(`/feedback/admin/${feedbackId}`, payload),
   agentClients: () => request<AgentClientRecord[]>("/agent/admin/clients"),

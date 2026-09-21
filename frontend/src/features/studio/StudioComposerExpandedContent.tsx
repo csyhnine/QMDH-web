@@ -3,29 +3,11 @@ import StudioComposerLeading from "./StudioComposerLeading";
 import StudioComposerToolbar from "./StudioComposerToolbar";
 import { getStudioComposerExpandedContentProps } from "./studioComposerExpandedContentProps";
 import type { StudioComposerExpandedContentProps } from "./studioComposerExpandedContentTypes";
-import { usePromptPolishEnabled } from "../../lib/usePromptPolishEnabled";
-import { useStudioPromptPolish } from "./useStudioPromptPolish";
 
 export default function StudioComposerExpandedContent(props: StudioComposerExpandedContentProps) {
   const { bodyProps, leadingProps, referenceInputProps, toolbarProps } =
     getStudioComposerExpandedContentProps(props);
   const { fileInputRef, onReferenceInputChange } = referenceInputProps;
-
-  const promptPolishEnabled = usePromptPolishEnabled();
-  const {
-    polishing,
-    polishPrompt,
-    error: polishError,
-    notice: polishNotice,
-    history: polishHistory,
-    activeHistoryId: activePolishHistoryId,
-    applyHistoryEntry,
-  } = useStudioPromptPolish({
-    studioForm: props.studioForm,
-    referenceUploads: props.referenceUploads,
-    onPromptChange: props.onPromptChange,
-    onPolished: props.onPromptPolished,
-  });
 
   return (
     <>
@@ -33,22 +15,18 @@ export default function StudioComposerExpandedContent(props: StudioComposerExpan
 
       <StudioComposerBody
         {...bodyProps}
-        polishingPrompt={polishing}
-        polishError={polishError}
-        polishNotice={polishNotice}
-        polishHistory={polishHistory}
-        activePolishHistoryId={activePolishHistoryId}
-        onSelectPolishHistory={applyHistoryEntry}
-        promptPolishEnabled={promptPolishEnabled ?? false}
+        polishingPrompt={props.polishingPrompt}
+        polishError={props.polishError}
+        polishNotice={props.polishNotice}
       />
 
       <input ref={fileInputRef} type="file" accept="image/*" multiple hidden onChange={onReferenceInputChange} />
 
       <StudioComposerToolbar
         {...toolbarProps}
-        promptPolishEnabled={promptPolishEnabled ?? false}
-        polishingPrompt={polishing}
-        onPolishPrompt={() => void polishPrompt()}
+        promptPolishEnabled={props.promptPolishEnabled ?? false}
+        polishingPrompt={props.polishingPrompt ?? false}
+        onPolishPrompt={props.onPolishPrompt ?? (() => undefined)}
       />
     </>
   );

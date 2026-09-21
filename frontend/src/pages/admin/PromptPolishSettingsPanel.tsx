@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { api, type PlatformSettingsRecord, type ProviderProfileRecord } from "../../api";
+import {
+  api,
+  type PlatformSettingsRecord,
+  type PromptPolishModeLimitRecord,
+  type PromptPolishModeLimitsRecord,
+  type ProviderProfileRecord,
+} from "../../api";
 
 type PromptPolishSettingsPanelProps = {
   settings: PlatformSettingsRecord | null;
@@ -14,10 +20,24 @@ type ModePromptState = {
   video: string;
 };
 
-const MODE_PROMPT_LABELS: Record<keyof ModePromptState, string> = {
+type ModeKey = keyof ModePromptState;
+
+const MODE_PROMPT_LABELS: Record<ModeKey, string> = {
   generate: "文生图",
   edit: "图生图",
   video: "视频",
+};
+
+const EMPTY_LIMITS: PromptPolishModeLimitsRecord = {
+  generate: { max_tokens: 500, max_output_chars: 320, length_multiplier: null },
+  edit: {
+    max_tokens: 420,
+    max_output_chars: 500,
+    length_multiplier: 1.5,
+    compact_original_chars: 80,
+    compact_output_chars: 120,
+  },
+  video: { max_tokens: 420, max_output_chars: 360, length_multiplier: 2 },
 };
 
 function readModePromptState(settings: PlatformSettingsRecord | null): ModePromptState {
@@ -26,6 +46,28 @@ function readModePromptState(settings: PlatformSettingsRecord | null): ModePromp
     edit: settings?.prompt_polish_system_prompts?.edit ?? "",
     video: settings?.prompt_polish_system_prompts?.video ?? "",
   };
+}
+
+function readModeLimitState(settings: PlatformSettingsRecord | null): PromptPolishModeLimitsRecord {
+  return settings?.prompt_polish_mode_limits ?? settings?.prompt_polish_default_mode_limits ?? EMPTY_LIMITS;
+}
+
+function formatMultiplier(value: number | null | undefined): string {
+  return value == null || Number.isNaN(value) ? "" : String(value);
+}
+
+function parseMultiplier(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parsePositiveInt(value: string, fallback: number): number {
+  const parsed = Number(value.trim());
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : fallback;
 }
 
 export default function PromptPolishSettingsPanel({
@@ -46,16 +88,19 @@ export default function PromptPolishSettingsPanel({
     settings?.prompt_polish_provider_id ? String(settings.prompt_polish_provider_id) : ""
   );
   const [modePrompts, setModePrompts] = useState<ModePromptState>(() => readModePromptState(settings));
+  const [modeLimits, setModeLimits] = useState<PromptPolishModeLimitsRecord>(() => readModeLimitState(settings));
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
 
   const selectedProvider = chatProviders.find((profile) => String(profile.id) === providerId) ?? null;
   const builtinPrompts = settings?.prompt_polish_builtin_prompts ?? null;
+  const defaultLimits = settings?.prompt_polish_default_mode_limits ?? EMPTY_LIMITS;
 
   useEffect(() => {
     setEnabled(settings?.prompt_polish_enabled ?? false);
     setProviderId(settings?.prompt_polish_provider_id ? String(settings.prompt_polish_provider_id) : "");
     setModePrompts(readModePromptState(settings));
+    setModeLimits(readModeLimitState(settings));
   }, [settings]);
 
   async function handleSave() {
@@ -83,6 +128,7 @@ export default function PromptPolishSettingsPanel({
           edit: modePrompts.edit.trim(),
           video: modePrompts.video.trim(),
         },
+        prompt_polish_mode_limits: modeLimits,
       });
       await onRefresh();
       setFeedback({ tone: "success", message: "提示词润色配置已保存。" });
@@ -96,8 +142,39 @@ export default function PromptPolishSettingsPanel({
     }
   }
 
-  function updateModePrompt(mode: keyof ModePromptState, value: string) {
+  async function handleResetLimits() {
+    setSaving(true);
+    setFeedback(null);
+    try {
+      await api.updatePlatformSettings({ reset_prompt_polish_mode_limits: true });
+      await onRefresh();
+      setFeedback({ tone: "success", message: "润色长度限制已恢复默认。" });
+    } catch (err) {
+      setFeedback({
+        tone: "error",
+        message: err instanceof Error ? err.message : "恢复默认失败",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function updateModePrompt(mode: ModeKey, value: string) {
     setModePrompts((current) => ({ ...current, [mode]: value }));
+  }
+
+  function updateModeLimit(mode: ModeKey, patch: Partial<PromptPolishModeLimitRecord>) {
+    setModeLimits((current) => ({
+      ...current,
+      [mode]: { ...current[mode], ...patch },
+    }));
+  }
+
+  function restoreModeLimits(mode: ModeKey) {
+    setModeLimits((current) => ({
+      ...current,
+      [mode]: { ...defaultLimits[mode] },
+    }));
   }
 
   return (
@@ -137,8 +214,104 @@ export default function PromptPolishSettingsPanel({
         </label>
       </div>
 
+      <div className="prompt-polish-section-head">
+        <div>
+          <strong>润色长度与 Token 限制</strong>
+          <small>保存后立即生效，无需重新部署。留空倍数表示不按原文长度缩放。</small>
+        </div>
+        <button type="button" className="ghost-button" onClick={() => void handleResetLimits()} disabled={saving}>
+          恢复全部默认
+        </button>
+      </div>
+
       <div className="prompt-polish-mode-prompt-grid">
-        {(Object.keys(MODE_PROMPT_LABELS) as Array<keyof ModePromptState>).map((mode) => (
+        {(Object.keys(MODE_PROMPT_LABELS) as ModeKey[]).map((mode) => (
+          <section key={mode} className="prompt-polish-mode-prompt-card prompt-polish-limit-card">
+            <div className="prompt-polish-mode-prompt-head">
+              <strong>{MODE_PROMPT_LABELS[mode]} 限制</strong>
+              <button type="button" className="ghost-button" onClick={() => restoreModeLimits(mode)}>
+                恢复默认
+              </button>
+            </div>
+            <label className="composer-menu-field">
+              <span>max_tokens</span>
+              <input
+                type="number"
+                min={16}
+                max={4096}
+                value={modeLimits[mode].max_tokens}
+                onChange={(event) =>
+                  updateModeLimit(mode, { max_tokens: parsePositiveInt(event.target.value, modeLimits[mode].max_tokens) })
+                }
+              />
+              <small>模型输出 token 上限，过小会导致句子被截断。</small>
+            </label>
+            <label className="composer-menu-field">
+              <span>结果字数上限</span>
+              <input
+                type="number"
+                min={40}
+                max={4000}
+                value={modeLimits[mode].max_output_chars}
+                onChange={(event) =>
+                  updateModeLimit(mode, {
+                    max_output_chars: parsePositiveInt(event.target.value, modeLimits[mode].max_output_chars),
+                  })
+                }
+              />
+              <small>润色结果的后处理硬上限（字符数）。</small>
+            </label>
+            <label className="composer-menu-field">
+              <span>相对原文倍数</span>
+              <input
+                type="number"
+                min={0}
+                max={5}
+                step={0.1}
+                value={formatMultiplier(modeLimits[mode].length_multiplier)}
+                onChange={(event) => updateModeLimit(mode, { length_multiplier: parseMultiplier(event.target.value) })}
+              />
+              <small>例如 1.5 表示不超过原文 × 1.5；填 0 或留空表示关闭。</small>
+            </label>
+            {mode === "edit" ? (
+              <>
+                <label className="composer-menu-field">
+                  <span>短文判定阈值</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={2000}
+                    value={modeLimits.edit.compact_original_chars ?? 80}
+                    onChange={(event) =>
+                      updateModeLimit("edit", {
+                        compact_original_chars: parsePositiveInt(event.target.value, 80),
+                      })
+                    }
+                  />
+                  <small>原文不超过该字数时，按「短文输出上限」控制。</small>
+                </label>
+                <label className="composer-menu-field">
+                  <span>短文输出上限</span>
+                  <input
+                    type="number"
+                    min={40}
+                    max={4000}
+                    value={modeLimits.edit.compact_output_chars ?? 120}
+                    onChange={(event) =>
+                      updateModeLimit("edit", {
+                        compact_output_chars: parsePositiveInt(event.target.value, 120),
+                      })
+                    }
+                  />
+                </label>
+              </>
+            ) : null}
+          </section>
+        ))}
+      </div>
+
+      <div className="prompt-polish-mode-prompt-grid">
+        {(Object.keys(MODE_PROMPT_LABELS) as ModeKey[]).map((mode) => (
           <section key={mode} className="prompt-polish-mode-prompt-card">
             <div className="prompt-polish-mode-prompt-head">
               <strong>{MODE_PROMPT_LABELS[mode]} 润色提示词</strong>

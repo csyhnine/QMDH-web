@@ -37,10 +37,14 @@ export function resolveActivePromptPolishHistoryId(
   return history.find((entry) => entry.polishedPrompt === trimmed)?.id ?? null;
 }
 
-export function previewPromptPolishHistoryEntry(entry: PromptPolishHistoryEntry): string {
-  const text = entry.polishedPrompt.replace(/\s+/g, " ").trim();
-  if (text.length <= 28) {
-    return text;
+export function previewPromptText(text: string, maxLength = 28): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
   }
-  return `${text.slice(0, 28)}…`;
+  return `${normalized.slice(0, maxLength)}…`;
+}
+
+export function previewPromptPolishHistoryEntry(entry: PromptPolishHistoryEntry): string {
+  return previewPromptText(entry.polishedPrompt);
 }

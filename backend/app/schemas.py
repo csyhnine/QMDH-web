@@ -413,6 +413,10 @@ class UserFeedbackOut(BaseModel):
     messages: list[FeedbackMessageOut] = Field(default_factory=list)
 
 
+class FeedbackAdminPendingCountOut(BaseModel):
+    count: int
+
+
 class ProviderCapability(BaseModel):
     provider_name: str
     display_name: str

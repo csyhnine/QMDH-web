@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
 import GuestLoginBanner from "../../features/studio/GuestLoginBanner";
-import { BrandIcon } from "./Brand";
 import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from "../../features/access/roleAccess";
+import { useAdminFeedbackPendingCount } from "../../lib/useAdminFeedbackPendingCount";
+import { BrandIcon } from "./Brand";
 
 type StudioTab = "generate" | "inspiration" | "feedback" | "chat" | "canvas" | "nav";
 type AdminTab = AdminModuleKey;
@@ -55,6 +56,11 @@ export default function AppShell(props: AppShellProps) {
   const navigate = useNavigate();
   const { currentUser, canUseOpsViews, isGuest, logout } = useAuth();
   const backofficeHome = defaultAdminHomePath(currentUser?.role);
+  const canSeeFeedbackNav =
+    props.kind === "admin" && canAccessAdminModule(currentUser?.role, "feedback");
+  const feedbackPendingCount = useAdminFeedbackPendingCount(canSeeFeedbackNav);
+  const showFeedbackPendingDot =
+    canSeeFeedbackNav && feedbackPendingCount > 0 && props.active !== "feedback";
 
   const className =
     props.kind === "admin"
@@ -117,6 +123,13 @@ export default function AppShell(props: AppShellProps) {
                     }}
                   >
                     <span>{item.label}</span>
+                    {item.key === "feedback" && showFeedbackPendingDot ? (
+                      <em
+                        className="rail-item-dot"
+                        aria-label={`${feedbackPendingCount} 条待处理反馈`}
+                        title={`${feedbackPendingCount} 条待处理反馈`}
+                      />
+                    ) : null}
                     {!allowed ? (
                       <em className="rail-item-lock" aria-hidden="true">
                         🔒

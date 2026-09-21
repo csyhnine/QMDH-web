@@ -57,6 +57,20 @@ export function usePromptPolish({
     [history, onPolished, onPromptChange]
   );
 
+  const applySourceEntry = useCallback(
+    (entryId: string) => {
+      const entry = history.find((item) => item.id === entryId);
+      if (!entry) {
+        return;
+      }
+      onPromptChange(entry.sourcePrompt);
+      onPolished?.();
+      setError("");
+      setNotice("");
+    },
+    [history, onPolished, onPromptChange]
+  );
+
   const polishPrompt = useCallback(async () => {
     const trimmed = prompt.trim();
     if (!trimmed) {
@@ -97,6 +111,7 @@ export function usePromptPolish({
     history,
     activeHistoryId,
     applyHistoryEntry,
+    applySourceEntry,
     clearError: () => setError(""),
     clearNotice: () => setNotice(""),
   };

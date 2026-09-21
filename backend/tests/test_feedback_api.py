@@ -128,6 +128,44 @@ class FeedbackApiTests(unittest.TestCase):
         self.assertEqual(listed.status_code, 200, listed.text)
         self.assertEqual([item["title"] for item in listed.json()], ["Mine"])
 
+    def test_admin_pending_count_tracks_open_feedback(self) -> None:
+        empty = self.client.get("/feedback/admin/pending-count", headers=self._admin_headers())
+        self.assertEqual(empty.status_code, 200, empty.text)
+        self.assertEqual(empty.json()["count"], 0)
+
+        created = self.client.post(
+            "/feedback",
+            headers=self._designer_headers(),
+            json={"title": "Need help", "message": "Please check my generation history."},
+        )
+        feedback_id = created.json()["id"]
+
+        pending = self.client.get("/feedback/admin/pending-count", headers=self._admin_headers())
+        self.assertEqual(pending.status_code, 200, pending.text)
+        self.assertEqual(pending.json()["count"], 1)
+
+        replied = self.client.patch(
+            f"/feedback/admin/{feedback_id}",
+            headers=self._admin_headers(),
+            json={"status": "replied", "admin_reply": "We fixed this and deployed a patch."},
+        )
+        self.assertEqual(replied.status_code, 200, replied.text)
+
+        cleared = self.client.get("/feedback/admin/pending-count", headers=self._admin_headers())
+        self.assertEqual(cleared.status_code, 200, cleared.text)
+        self.assertEqual(cleared.json()["count"], 0)
+
+        follow_up = self.client.post(
+            f"/feedback/{feedback_id}/messages",
+            headers=self._designer_headers(),
+            json={"message": "It still happens after refresh."},
+        )
+        self.assertEqual(follow_up.status_code, 200, follow_up.text)
+
+        reopened = self.client.get("/feedback/admin/pending-count", headers=self._admin_headers())
+        self.assertEqual(reopened.status_code, 200, reopened.text)
+        self.assertEqual(reopened.json()["count"], 1)
+
     def test_admin_can_reply_and_user_can_see_reply(self) -> None:
         created = self.client.post(
             "/feedback",

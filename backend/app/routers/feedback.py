@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.audit import write_audit_log
@@ -12,6 +12,7 @@ from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import User, UserFeedback, UserFeedbackMessage
 from app.schemas import (
+    FeedbackAdminPendingCountOut,
     FeedbackMessageOut,
     UserFeedbackAdminUpdate,
     UserFeedbackCreate,
@@ -244,6 +245,16 @@ def append_my_feedback_message(
     feedback = db.scalar(_feedback_query().where(UserFeedback.id == feedback.id))
     assert feedback is not None
     return _to_feedback_out(feedback)
+
+
+@router.get("/admin/pending-count", response_model=FeedbackAdminPendingCountOut)
+def admin_feedback_pending_count(
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> FeedbackAdminPendingCountOut:
+    require_content_ops_access(auth_user)
+    count = db.scalar(select(func.count()).select_from(UserFeedback).where(UserFeedback.status == "open")) or 0
+    return FeedbackAdminPendingCountOut(count=count)
 
 
 @router.get("/admin", response_model=list[UserFeedbackOut])

@@ -15,11 +15,13 @@ from app.models import PlatformSettings, ProviderProfile, User
 from app.routers import auth, platform_settings, prompt_polish
 from app.models import PlatformSettings
 from app.services.prompt_polish_service import (
+    DEFAULT_PROMPT_POLISH_MODE_LIMITS,
     ReferenceImageResolution,
     _reference_image_warning,
     _trim_polished_output,
     configured_prompt_polish_system_prompt,
     resolve_prompt_polish_system_prompt,
+    resolved_prompt_polish_mode_limits,
 )
 
 
@@ -130,7 +132,7 @@ class PromptPolishApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
         request_body = json.loads(mock_urlopen.call_args.args[0].data.decode("utf-8"))
-        self.assertEqual(request_body["max_tokens"], 280)
+        self.assertEqual(request_body["max_tokens"], 420)
         self.assertIn("图生图", request_body["messages"][0]["content"])
 
     @patch("app.services.prompt_polish_service.urlopen")
@@ -271,15 +273,79 @@ class PlatformSettingsPromptPolishTests(unittest.TestCase):
         self.assertEqual(body["prompt_polish_system_prompts"]["edit"], "图生图自定义提示词")
         self.assertEqual(body["prompt_polish_system_prompts"]["video"], "视频自定义提示词")
         self.assertIn("图生图", body["prompt_polish_builtin_prompts"]["edit"])
+        self.assertEqual(body["prompt_polish_mode_limits"]["edit"]["max_output_chars"], 500)
+
+    def test_admin_can_configure_prompt_polish_mode_limits(self) -> None:
+        updated = self.client.patch(
+            "/settings/platform",
+            headers=self.headers,
+            json={
+                "prompt_polish_mode_limits": {
+                    "edit": {
+                        "max_tokens": 512,
+                        "max_output_chars": 640,
+                        "length_multiplier": 1.6,
+                    }
+                }
+            },
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        body = updated.json()
+        self.assertEqual(body["prompt_polish_mode_limits"]["edit"]["max_tokens"], 512)
+        self.assertEqual(body["prompt_polish_mode_limits"]["edit"]["max_output_chars"], 640)
+        self.assertEqual(body["prompt_polish_mode_limits"]["edit"]["length_multiplier"], 1.6)
+
+        reset = self.client.patch(
+            "/settings/platform",
+            headers=self.headers,
+            json={"reset_prompt_polish_mode_limits": True},
+        )
+        self.assertEqual(reset.status_code, 200, reset.text)
+        self.assertEqual(reset.json()["prompt_polish_mode_limits"]["edit"]["max_output_chars"], 500)
 
 
 class PromptPolishServiceUnitTests(unittest.TestCase):
     def test_trim_polished_output_limits_edit_mode_by_original_length(self) -> None:
         original = "将女孩的上衣改成白色并保持原有光影"
         verbose = "将参考图中女孩的上衣材质改为纯白色，保持原有剪裁与光影，不要改变背景与构图。" * 3
-        trimmed = _trim_polished_output(verbose, creation_mode="edit", original_prompt=original)
-        expected_limit = min(200, max(int(len(original) * 1.8), 40))
+        limits = DEFAULT_PROMPT_POLISH_MODE_LIMITS["edit"]
+        trimmed = _trim_polished_output(
+            verbose,
+            limits=limits,
+            creation_mode="edit",
+            original_prompt=original,
+        )
+        expected_limit = 120
         self.assertLessEqual(len(trimmed), expected_limit + 1)
+
+    def test_trim_polished_output_allows_longer_edit_prompts_for_long_originals(self) -> None:
+        original = (
+            "保持平面结构与分区不变，在各色块区域细化绘制规范的室内家具平面图："
+            "儿童青少年区布置桌椅，争议调解区布置沙发，就业辅助区布置办公桌。"
+        )
+        verbose = original + "补充材质标注与动线说明，保持 CAD 线框风格。"
+        limits = DEFAULT_PROMPT_POLISH_MODE_LIMITS["edit"]
+        trimmed = _trim_polished_output(
+            verbose,
+            limits=limits,
+            creation_mode="edit",
+            original_prompt=original,
+        )
+        expected_limit = min(500, max(int(len(original) * 1.5), 80))
+        self.assertLessEqual(len(trimmed), expected_limit + 1)
+        self.assertNotIn("…", trimmed)
+
+    def test_resolved_prompt_polish_mode_limits_uses_platform_overrides(self) -> None:
+        settings = PlatformSettings(
+            id=1,
+            chat_agent_ui_enabled=False,
+            prompt_polish_enabled=True,
+            prompt_polish_mode_limits_json='{"edit":{"max_output_chars":880,"length_multiplier":1.7}}',
+        )
+        limits = resolved_prompt_polish_mode_limits(settings)
+        self.assertEqual(limits["edit"].max_output_chars, 880)
+        self.assertEqual(limits["edit"].length_multiplier, 1.7)
+        self.assertEqual(limits["edit"].max_tokens, DEFAULT_PROMPT_POLISH_MODE_LIMITS["edit"].max_tokens)
 
     def test_reference_image_warning_for_edit_without_resolved_images(self) -> None:
         warning = _reference_image_warning(

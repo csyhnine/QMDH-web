@@ -1,7 +1,7 @@
 # 交接档 — 2026-09-22（Chat UX 修复 + 埋点 P0–P3）
 
 Date: **2026-09-22**  
-Status: **WIP — 本地已完成，未 commit / 未部署**  
+Status: **DONE — 已 commit / 已部署（2026-09-22）**  
 Production: `https://cityusbdisk.cn`  
 本地 Git 分支: **`main`** @ **`10daf55`**（远端同步状态部署前需再 `git fetch` 确认）  
 Safe to hand off: **Yes（给审查 + 提交 + 部署 Agent）**

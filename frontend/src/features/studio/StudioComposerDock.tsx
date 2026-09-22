@@ -1,13 +1,10 @@
 import { useRef } from "react";
 
-import PromptPolishHistoryPanel from "../../components/shared/PromptPolishHistoryPanel";
-import { usePromptPolishEnabled } from "../../lib/usePromptPolishEnabled";
 import StudioComposerCollapsedBar from "./StudioComposerCollapsedBar";
 import StudioComposerExpandedContent from "./StudioComposerExpandedContent";
 import { getStudioComposerDockProps } from "./studioComposerDockProps";
 import type { StudioComposerDockProps } from "./studioComposerDockTypes";
 import { isComposerBlurWithinForm } from "./studioComposerDockUtils";
-import { useStudioPromptPolish } from "./useStudioPromptPolish";
 
 export default function StudioComposerDock(props: StudioComposerDockProps) {
   const {
@@ -15,30 +12,9 @@ export default function StudioComposerDock(props: StudioComposerDockProps) {
     onComposerExpand,
     onComposerFocusChange,
     onSubmit,
-    studioForm,
-    referenceUploads,
-    onPromptChange,
-    onPromptPolished,
   } = props;
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
-
-  const promptPolishEnabled = usePromptPolishEnabled();
-  const {
-    polishing,
-    polishPrompt,
-    error: polishError,
-    notice: polishNotice,
-    history: polishHistory,
-    activeHistoryId: activePolishHistoryId,
-    applyHistoryEntry,
-    applySourceEntry,
-  } = useStudioPromptPolish({
-    studioForm,
-    referenceUploads,
-    onPromptChange,
-    onPolished: onPromptPolished,
-  });
 
   function focusPromptAfterExpand() {
     onComposerExpand();
@@ -63,54 +39,19 @@ export default function StudioComposerDock(props: StudioComposerDockProps) {
     onComposerFocusChange(false);
   }
 
-  const showPolishSidebar = (promptPolishEnabled ?? false) && !composerCollapsed;
-
   return (
     <form
       ref={formRef}
-      className={[
-        composerCollapsed ? "composer-dock is-collapsed" : "composer-dock",
-        showPolishSidebar ? "has-polish-sidebar" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      className={composerCollapsed ? "composer-dock is-collapsed" : "composer-dock"}
       onSubmit={onSubmit}
       onFocusCapture={() => onComposerFocusChange(true)}
       onBlurCapture={handleComposerBlur}
     >
       {composerCollapsed ? (
         <StudioComposerCollapsedBar {...collapsedBarProps} />
-      ) : (
-        <div className="composer-dock-row">
-          <div className="composer-dock-main">
-            <StudioComposerExpandedContent
-              {...expandedContentProps}
-              polishingPrompt={polishing}
-              polishError={polishError}
-              polishNotice={polishNotice}
-              polishHistory={polishHistory}
-              activePolishHistoryId={activePolishHistoryId}
-              onSelectPolishHistory={applyHistoryEntry}
-              onRestorePolishSource={applySourceEntry}
-              promptPolishEnabled={promptPolishEnabled ?? false}
-              onPolishPrompt={() => void polishPrompt()}
-            />
-          </div>
-          {showPolishSidebar ? (
-            <PromptPolishHistoryPanel
-              className="composer-polish-sidebar"
-              variant="sidebar"
-              history={polishHistory}
-              activeEntryId={activePolishHistoryId}
-              currentPrompt={studioForm.prompt}
-              disabled={polishing}
-              showWhenEmpty
-              onSelect={applyHistoryEntry}
-              onRestoreSource={applySourceEntry}
-            />
-          ) : null}
-        </div>
-      )}
+      ) : null}
+
+      <StudioComposerExpandedContent {...expandedContentProps} />
     </form>
   );
 }

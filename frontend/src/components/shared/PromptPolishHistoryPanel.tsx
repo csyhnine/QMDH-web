@@ -60,7 +60,9 @@ export default function PromptPolishHistoryPanel({
         <div className="prompt-polish-sidebar-source">
           <span className="prompt-polish-sidebar-heading">待润色原文</span>
           {preservedSource ? (
-            <p className="prompt-polish-sidebar-source-body">{preservedSource}</p>
+            <p className="prompt-polish-sidebar-source-body" title={preservedSource}>
+              {previewPromptText(preservedSource, 48)}
+            </p>
           ) : (
             <p className="prompt-polish-sidebar-empty">输入提示词后，原文会保留在这里</p>
           )}
@@ -96,7 +98,7 @@ export default function PromptPolishHistoryPanel({
                   >
                     <span className="prompt-polish-sidebar-item-label">{label}</span>
                     <span className="prompt-polish-sidebar-item-preview">
-                      {previewPromptText(entry.polishedPrompt, 96)}
+                      {previewPromptText(entry.polishedPrompt, 36)}
                     </span>
                   </button>
                 );

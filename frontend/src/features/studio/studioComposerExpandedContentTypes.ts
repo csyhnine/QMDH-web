@@ -11,18 +11,15 @@ export type StudioPromptPolishUiProps = {
   polishHistory?: PromptPolishHistoryEntry[];
   activePolishHistoryId?: string | null;
   onSelectPolishHistory?: (entryId: string) => void;
-  onRestorePolishSource?: (entryId: string) => void;
   promptPolishEnabled?: boolean;
-  onPolishPrompt?: () => void;
 };
 
-export type StudioComposerExpandedContentProps = StudioComposerDockProps &
-  StudioPromptPolishUiProps & {
-    modeLabel: string;
-    promptTextareaRef: RefObject<HTMLTextAreaElement | null>;
-    referenceHint: string;
-    onPromptSubmitShortcut: () => void;
-  };
+export type StudioComposerExpandedContentProps = StudioComposerDockProps & {
+  modeLabel: string;
+  promptTextareaRef: RefObject<HTMLTextAreaElement | null>;
+  referenceHint: string;
+  onPromptSubmitShortcut: () => void;
+};
 
 export type StudioComposerCollapsedBarProps = Pick<
   StudioComposerExpandedContentProps,
@@ -65,7 +62,7 @@ export type StudioComposerBodyProps = Pick<
   | "onStartSeedanceRealAvatar"
   | "onCompleteSeedanceRealAvatar"
 > &
-  Pick<StudioPromptPolishUiProps, "polishingPrompt" | "polishError" | "polishNotice">;
+  StudioPromptPolishUiProps;
 
 export type StudioComposerModeSwitchProps = {
   creationMode: StudioFormState["creationMode"];
@@ -88,15 +85,9 @@ export type StudioReferenceDropzoneProps = {
 
 export type StudioPromptTextareaProps = Pick<
   StudioComposerBodyProps,
-  | "promptTextareaRef"
-  | "referenceHint"
-  | "studioForm"
-  | "onPromptChange"
-  | "onPromptSubmitShortcut"
-  | "polishingPrompt"
-  | "polishError"
-  | "polishNotice"
->;
+  "promptTextareaRef" | "referenceHint" | "studioForm" | "onPromptChange" | "onPromptSubmitShortcut"
+> &
+  StudioPromptPolishUiProps;
 
 export type StudioComposerReferenceFileInputProps = Pick<
   StudioComposerExpandedContentProps,

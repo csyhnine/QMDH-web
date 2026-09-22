@@ -734,24 +734,6 @@ button {
   max-width: 100%;
 }
 
-.canvas-area.canvas-studio-layout .composer-dock.has-polish-sidebar {
-  width: 100%;
-  max-width: none;
-}
-
-.canvas-area.canvas-studio-layout .composer-dock-row {
-  grid-template-columns: minmax(0, 1fr) min(var(--studio-content-max), 100%) minmax(200px, 240px);
-}
-
-.canvas-area.canvas-studio-layout .composer-dock-main {
-  grid-column: 2;
-}
-
-.canvas-area.canvas-studio-layout .composer-polish-sidebar {
-  grid-column: 3;
-  min-height: 360px;
-}
-
 .canvas-area.canvas-studio-layout .studio-scroll-pane {
   gap: 0;
 }
@@ -3097,7 +3079,6 @@ button {
 
 .composer-dock.is-collapsed .composer-leading,
 .composer-dock.is-collapsed .composer-body,
-.composer-dock.is-collapsed .composer-dock-row,
 .composer-dock.is-collapsed > input,
 .composer-dock.is-collapsed .composer-toolbar {
   display: none;
@@ -3895,37 +3876,6 @@ button {
 
 .composer-polish-history {
   width: 100%;
-}
-
-.composer-dock.has-polish-sidebar {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-}
-
-.composer-dock-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(200px, 240px);
-  gap: 12px;
-  align-items: stretch;
-}
-
-.composer-dock-main {
-  display: grid;
-  grid-template-rows: auto 276px auto;
-  gap: 14px;
-  min-height: 0;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.12);
-  overflow: hidden;
 }
 
 .prompt-polish-sidebar {

@@ -24,6 +24,10 @@ export default function StudioComposerBody({
   polishingPrompt = false,
   polishError = "",
   polishNotice = "",
+  polishHistory = [],
+  activePolishHistoryId = null,
+  onSelectPolishHistory,
+  promptPolishEnabled = false,
 }: StudioComposerBodyProps) {
   return (
     <div className="composer-body">
@@ -61,6 +65,10 @@ export default function StudioComposerBody({
         polishingPrompt={polishingPrompt}
         polishError={polishError}
         polishNotice={polishNotice}
+        polishHistory={polishHistory}
+        activePolishHistoryId={activePolishHistoryId}
+        onSelectPolishHistory={onSelectPolishHistory}
+        promptPolishEnabled={promptPolishEnabled}
       />
     </div>
   );

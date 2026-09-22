@@ -17,9 +17,10 @@ from app.core.middleware import (
 )
 from app.core.rate_limit import RateLimitMiddleware
 from app.database import Base, SessionLocal, engine
-from app.routers import agent, ai_tools, announcements, assets, auth, canvas_projects, canvas_templates, chat, dashboard, feedback, generation_analytics, health, inspiration, platform_settings, projects, prompt_polish, prompt_templates, providers, search, seedance_avatar, studio_agent, tasks, users, workflows
+from app.routers import agent, ai_tools, announcements, assets, auth, canvas_projects, canvas_templates, chat, chat_experience, dashboard, feedback, generation_analytics, health, inspiration, platform_settings, projects, prompt_polish, prompt_templates, providers, search, seedance_avatar, studio_agent, tasks, users, workflows
 from app.services.bootstrap import ensure_schema, seed_initial_data
 from app.services.media_storage import media_root_path, validate_storage_backend_configuration
+from app.services.chat_telemetry_alert_service import run_chat_telemetry_alerts_once
 from app.services.session_cleanup import run_session_cleanup_once
 from app.services.task_stale_recovery import recover_stale_tasks
 
@@ -32,6 +33,8 @@ validate_storage_backend_configuration()
 
 SESSION_CLEANUP_LOCK_KEY = "qmdh:session-cleanup-lock"
 SESSION_CLEANUP_LOCK_TTL_SECONDS = 300
+CHAT_TELEMETRY_ALERT_LOCK_KEY = "qmdh:chat-telemetry-alert-lock"
+CHAT_TELEMETRY_ALERT_LOCK_TTL_SECONDS = 600
 SESSION_CLEANUP_UNLOCK_SCRIPT = """
 if redis.call("get", KEYS[1]) == ARGV[1] then
     return redis.call("del", KEYS[1])
@@ -65,6 +68,39 @@ def _run_session_cleanup_job() -> None:
                 client.eval(SESSION_CLEANUP_UNLOCK_SCRIPT, 1, SESSION_CLEANUP_LOCK_KEY, lock_token)
             except Exception:
                 logger.exception("Failed to release session cleanup lock")
+        client.close()
+
+
+def _run_chat_telemetry_alert_job() -> None:
+    logger = logging.getLogger(__name__)
+    if not settings.get_chat_telemetry_alerts_enabled():
+        return
+
+    lock_token = uuid.uuid4().hex
+    client = Redis.from_url(settings.redis_url, decode_responses=True)
+    acquired = False
+
+    try:
+        acquired = bool(client.set(
+            CHAT_TELEMETRY_ALERT_LOCK_KEY,
+            lock_token,
+            nx=True,
+            ex=CHAT_TELEMETRY_ALERT_LOCK_TTL_SECONDS,
+        ))
+        if not acquired:
+            logger.info("Chat telemetry alert evaluation skipped because lock is already held")
+            return
+        result = run_chat_telemetry_alerts_once(SessionLocal)
+        if result.get("created") or result.get("updated") or result.get("resolved"):
+            logger.info("Chat telemetry alert evaluation finished", extra=result)
+    except Exception:
+        logger.exception("Chat telemetry alert evaluation failed")
+    finally:
+        if acquired:
+            try:
+                client.eval(SESSION_CLEANUP_UNLOCK_SCRIPT, 1, CHAT_TELEMETRY_ALERT_LOCK_KEY, lock_token)
+            except Exception:
+                logger.exception("Failed to release chat telemetry alert lock")
         client.close()
 
 
@@ -108,6 +144,14 @@ async def lifespan(_: FastAPI):
         "interval",
         seconds=120,
         id="stale_task_recovery",
+        replace_existing=True,
+        max_instances=1,
+    )
+    scheduler.add_job(
+        _run_chat_telemetry_alert_job,
+        "interval",
+        seconds=settings.get_chat_telemetry_alert_interval_seconds(),
+        id="chat_telemetry_alerts",
         replace_existing=True,
         max_instances=1,
     )
@@ -162,6 +206,7 @@ app.include_router(inspiration.router, prefix=settings.api_prefix)
 app.include_router(chat.router, prefix=settings.api_prefix)
 app.include_router(prompt_polish.router, prefix=settings.api_prefix)
 app.include_router(generation_analytics.router, prefix=settings.api_prefix)
+app.include_router(chat_experience.router, prefix=settings.api_prefix)
 app.include_router(search.router, prefix=settings.api_prefix)
 if settings.studio_agent_enabled:
     app.include_router(studio_agent.router, prefix=settings.api_prefix)

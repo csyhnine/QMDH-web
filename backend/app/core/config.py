@@ -143,6 +143,15 @@ class Settings(BaseSettings):
     rate_limit_generation_per_minute: int = 10
     rate_limit_login_per_minute: int = 10
     session_cleanup_interval_seconds: int = 3600
+    chat_telemetry_alerts_enabled: bool = True
+    chat_telemetry_alert_interval_seconds: int = 3600
+    chat_telemetry_alert_window_hours: int = 1
+    chat_telemetry_alert_min_turns: int = 10
+    chat_telemetry_alert_min_attachment_turns: int = 3
+    chat_telemetry_alert_upstream_call_rate_min: float = 0.90
+    chat_telemetry_alert_success_rate_min: float = 0.85
+    chat_telemetry_alert_interrupted_rate_max: float = 0.10
+    chat_telemetry_alert_pack_p95_ms_max: int = 30000
     meilisearch_enabled: bool = False
     meilisearch_url: str = "http://meilisearch:7700"
     meilisearch_api_key: str = ""
@@ -291,6 +300,48 @@ class Settings(BaseSettings):
         if not 60 <= interval <= 86400:
             raise ValueError("QMDH_SESSION_CLEANUP_INTERVAL_SECONDS must be between 60 and 86400")
         return interval
+
+    def get_chat_telemetry_alerts_enabled(self) -> bool:
+        return bool(self.chat_telemetry_alerts_enabled)
+
+    def get_chat_telemetry_alert_interval_seconds(self) -> int:
+        interval = int(self.chat_telemetry_alert_interval_seconds)
+        if not 300 <= interval <= 86400:
+            raise ValueError("QMDH_CHAT_TELEMETRY_ALERT_INTERVAL_SECONDS must be between 300 and 86400")
+        return interval
+
+    def get_chat_telemetry_alert_window_hours(self) -> int:
+        hours = int(self.chat_telemetry_alert_window_hours)
+        if not 1 <= hours <= 168:
+            raise ValueError("QMDH_CHAT_TELEMETRY_ALERT_WINDOW_HOURS must be between 1 and 168")
+        return hours
+
+    def get_chat_telemetry_alert_min_turns(self) -> int:
+        return max(int(self.chat_telemetry_alert_min_turns), 1)
+
+    def get_chat_telemetry_alert_min_attachment_turns(self) -> int:
+        return max(int(self.chat_telemetry_alert_min_attachment_turns), 1)
+
+    def get_chat_telemetry_alert_upstream_call_rate_min(self) -> float:
+        value = float(self.chat_telemetry_alert_upstream_call_rate_min)
+        if not 0 < value <= 1:
+            raise ValueError("QMDH_CHAT_TELEMETRY_ALERT_UPSTREAM_CALL_RATE_MIN must be between 0 and 1")
+        return value
+
+    def get_chat_telemetry_alert_success_rate_min(self) -> float:
+        value = float(self.chat_telemetry_alert_success_rate_min)
+        if not 0 < value <= 1:
+            raise ValueError("QMDH_CHAT_TELEMETRY_ALERT_SUCCESS_RATE_MIN must be between 0 and 1")
+        return value
+
+    def get_chat_telemetry_alert_interrupted_rate_max(self) -> float:
+        value = float(self.chat_telemetry_alert_interrupted_rate_max)
+        if not 0 <= value < 1:
+            raise ValueError("QMDH_CHAT_TELEMETRY_ALERT_INTERRUPTED_RATE_MAX must be between 0 and 1")
+        return value
+
+    def get_chat_telemetry_alert_pack_p95_ms_max(self) -> int:
+        return max(int(self.chat_telemetry_alert_pack_p95_ms_max), 1000)
 
     def get_image_provider_profile(self, provider_name: str) -> ImageProviderProfile:
         profiles = self.get_image_provider_profiles()

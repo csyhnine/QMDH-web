@@ -722,6 +722,65 @@ class ChatMessage(Base):
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
 
 
+class ChatTurnTelemetry(Base):
+    """Per-turn Chat funnel metrics for UX diagnostics (no message body stored)."""
+
+    __tablename__ = "chat_turn_telemetry"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    correlation_id: Mapped[str] = mapped_column(String(64), index=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    user_message_id: Mapped[int | None] = mapped_column(ForeignKey("chat_messages.id"), nullable=True, index=True)
+    assistant_message_id: Mapped[int | None] = mapped_column(ForeignKey("chat_messages.id"), nullable=True)
+
+    provider_name: Mapped[str] = mapped_column(String(100), default="")
+    model_name: Mapped[str] = mapped_column(String(120), default="")
+    agent_mode: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    outcome: Mapped[str] = mapped_column(String(40), default="in_progress", index=True)
+    error_code: Mapped[str] = mapped_column(String(80), default="")
+    error_summary: Mapped[str] = mapped_column(String(255), default="")
+
+    attachment_count: Mapped[int] = mapped_column(Integer, default=0)
+    attachment_types_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    attachment_total_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    content_length: Mapped[int] = mapped_column(Integer, default=0)
+
+    pack_duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    upstream_duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    ttft_ms: Mapped[int] = mapped_column(Integer, default=0)
+    total_duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    upstream_called: Mapped[bool] = mapped_column(Boolean, default=False)
+    context_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    context_usage_percent: Mapped[int] = mapped_column(Integer, default=0)
+
+    stage_events_json: Mapped[list[dict[str, object]]] = mapped_column(JSON, default=list)
+    client_events_json: Mapped[list[dict[str, object]]] = mapped_column(JSON, default=list)
+
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ChatTelemetryAlert(Base):
+    """Open/resolved Chat UX alert snapshots for ops monitoring."""
+
+    __tablename__ = "chat_telemetry_alerts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    alert_key: Mapped[str] = mapped_column(String(80), index=True)
+    severity: Mapped[str] = mapped_column(String(20), default="warning")
+    title: Mapped[str] = mapped_column(String(120), default="")
+    message: Mapped[str] = mapped_column(String(500), default="")
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    window_hours: Mapped[int] = mapped_column(Integer, default=1)
+    metrics_json: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
+    occurrence_count: Mapped[int] = mapped_column(Integer, default=1)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 def default_canvas_graph() -> dict:
     return {
         "version": 1,

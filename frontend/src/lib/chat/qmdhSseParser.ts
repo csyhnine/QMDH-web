@@ -31,6 +31,7 @@ export type ChatTaskProposal = {
 };
 
 export type QmdhSsePayload = {
+  correlation_id?: string;
   delta?: string;
   error?: ChatStreamError | string;
   usage?: Record<string, number>;

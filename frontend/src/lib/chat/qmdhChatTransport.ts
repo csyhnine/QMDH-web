@@ -9,6 +9,7 @@ import {
   type ChatToolCall,
   type QmdhSsePayload,
 } from "./qmdhSseParser";
+import { rememberChatCorrelationId } from "./chatTelemetry";
 import { type ChatStreamError, formatStreamError } from "./types";
 
 type SendMessagesOptions = Parameters<ChatTransport<UIMessage>["sendMessages"]>[0];
@@ -120,6 +121,10 @@ function parseQmdhSseStream(
           return;
         }
 
+        if (parsed.correlation_id) {
+          rememberChatCorrelationId(parsed.correlation_id);
+        }
+
         if (parsed.status || parsed.context || parsed.label || parsed.policy_version || parsed.release_display_name) {
           callbacks?.onMeta?.({
             status: parsed.status,
@@ -131,7 +136,9 @@ function parseQmdhSseStream(
           if (
             parsed.status === "generating" ||
             parsed.status === "preparing" ||
-            parsed.status === "thinking"
+            parsed.status === "compressing" ||
+            parsed.status === "thinking" ||
+            parsed.label
           ) {
             await ensureStarted();
           }
@@ -279,6 +286,7 @@ export class QmdhChatTransport extends HttpChatTransport<UIMessage> {
     if (!response.ok) {
       throw new Error((await response.text()) || "Failed to fetch the chat response.");
     }
+    rememberChatCorrelationId(response.headers.get("X-Request-ID"));
     if (!response.body) {
       throw new Error("The response body is empty.");
     }

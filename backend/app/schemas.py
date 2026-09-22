@@ -842,6 +842,18 @@ class ChatMessageCreate(BaseModel):
         return self
 
 
+class ChatTelemetryClientEventIn(BaseModel):
+    event: str = Field(min_length=1, max_length=80)
+    detail: str = Field(default="", max_length=500)
+    client_ts_ms: int | None = None
+    correlation_id: str = Field(min_length=1, max_length=64)
+    conversation_id: int | None = None
+
+
+class ChatTelemetryBatchIn(BaseModel):
+    events: list[ChatTelemetryClientEventIn] = Field(min_length=1, max_length=20)
+
+
 class ChatAgentToolCallOut(BaseModel):
     name: str
     summary: str

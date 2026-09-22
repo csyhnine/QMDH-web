@@ -496,7 +496,7 @@ async def pack_chat_context(
 
     if should_summarize:
         if callable(on_status):
-            maybe = on_status("compressing")
+            maybe = on_status("正在压缩早期对话…")
             if hasattr(maybe, "__await__"):
                 await maybe  # type: ignore[misc]
         try:
@@ -552,7 +552,8 @@ async def pack_chat_context(
     if existing_summary:
         api_messages.append(_summary_system_message(existing_summary))
         used_summary = True
-    api_messages.extend(build_provider_messages(recent))
+    stage_callback = on_status if callable(on_status) else None
+    api_messages.extend(build_provider_messages(recent, on_stage=stage_callback))
     api_messages = _trim_api_messages_to_budget(api_messages, budget=budget)
 
     estimated = 0

@@ -31,6 +31,7 @@ import { isStudioCanvasEnabled } from "./lib/featureFlags";
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/admin/DashboardPage"));
 const GenerationAnalyticsPage = lazy(() => import("./pages/admin/GenerationAnalyticsPage"));
+const ChatExperiencePage = lazy(() => import("./pages/admin/ChatExperiencePage"));
 const UsageLogsPage = lazy(() => import("./pages/admin/UsageLogsPage"));
 const UsersPage = lazy(() => import("./pages/admin/UsersPage"));
 const ModelsPage = lazy(() => import("./pages/admin/ModelsPage"));
@@ -580,6 +581,18 @@ export default function AppRouter() {
                 <AdminOnlyRoute>
                   <AppShell kind="admin" active="generation-analytics">
                     <GenerationAnalyticsPage />
+                  </AppShell>
+                </AdminOnlyRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/chat-experience"
+            element={
+              <ProtectedRoute>
+                <AdminOnlyRoute>
+                  <AppShell kind="admin" active="chat-experience">
+                    <ChatExperiencePage />
                   </AppShell>
                 </AdminOnlyRoute>
               </ProtectedRoute>

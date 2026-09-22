@@ -388,6 +388,42 @@ class ChatStreamingTests(unittest.TestCase):
         self.assertIn("当前 Chat 接口地址或模型名称不存在", payload[-1]["content"])
         self.assertIn("错误码：chat_upstream_http_404", payload[-1]["content"])
 
+    def test_chat_message_route_persists_interrupted_stream_message(self) -> None:
+        token = self.login()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        create_response = self.client.post(
+            "/chat/conversations",
+            headers=headers,
+            json={"model_provider_id": 1, "title": ""},
+        )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        conversation_id = create_response.json()["id"]
+
+        async def fake_stream(provider, messages):
+            del provider, messages
+            yield "data: [DONE]\n\n"
+
+        with patch("app.routers.chat.stream_chat_completion", fake_stream):
+            response = self.client.post(
+                f"/chat/conversations/{conversation_id}/messages",
+                headers={**headers, "Content-Type": "application/json"},
+                json={"content": "hello"},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIn("chat_stream_interrupted", response.text)
+
+        messages_response = self.client.get(
+            f"/chat/conversations/{conversation_id}/messages",
+            headers=headers,
+        )
+        self.assertEqual(messages_response.status_code, 200, messages_response.text)
+        payload = messages_response.json()
+        self.assertEqual(payload[-1]["role"], "assistant")
+        self.assertIn("对话中断", payload[-1]["content"])
+        self.assertIn("chat_stream_interrupted", payload[-1]["content"])
+
 
 if __name__ == "__main__":
     unittest.main()

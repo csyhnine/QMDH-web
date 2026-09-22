@@ -706,6 +706,79 @@ export type GenerationAnalyticsJobResult = {
   result: Record<string, number>;
 };
 
+export type ChatExperienceOverview = {
+  window_days: number;
+  window_started_at: string;
+  turn_count: number;
+  success_rate: number;
+  upstream_call_rate: number;
+  attachment_turn_count: number;
+  attachment_turn_share: number;
+  agent_mode_share: number;
+  avg_pack_duration_ms: number;
+  p95_pack_duration_ms: number;
+  avg_ttft_ms: number;
+  p95_ttft_ms: number;
+  avg_total_duration_ms: number;
+  outcome_totals: Record<string, number>;
+  client_event_totals: Record<string, number>;
+};
+
+export type ChatExperienceTurnRow = {
+  id: number;
+  correlation_id: string;
+  conversation_id: number;
+  user_name: string;
+  user_display_name: string;
+  provider_name: string;
+  model_name: string;
+  agent_mode: boolean;
+  outcome: string;
+  error_code: string;
+  error_summary: string;
+  attachment_count: number;
+  attachment_total_bytes: number;
+  pack_duration_ms: number;
+  upstream_called: boolean;
+  ttft_ms: number;
+  total_duration_ms: number;
+  client_event_count: number;
+  started_at: string;
+};
+
+export type ChatExperienceTurnList = {
+  total: number;
+  items: ChatExperienceTurnRow[];
+};
+
+export type ChatTelemetryAlertRecord = {
+  id: number;
+  alert_key: string;
+  severity: string;
+  title: string;
+  message: string;
+  status: string;
+  window_hours: number;
+  metrics: Record<string, unknown>;
+  occurrence_count: number;
+  first_seen_at: string;
+  last_seen_at: string;
+  resolved_at: string | null;
+};
+
+export type ChatTelemetryAlertList = {
+  items: ChatTelemetryAlertRecord[];
+};
+
+export type ChatTelemetryAlertEvaluateResult = {
+  window_hours: number;
+  metrics: Record<string, unknown>;
+  triggered_keys: string[];
+  created: number;
+  updated: number;
+  resolved: number;
+};
+
 export type PromptTemplateRecord = {
   id: number;
   user_name: string;
@@ -1425,6 +1498,21 @@ export const api = {
     const d = Math.min(365, Math.max(1, Math.floor(days)));
     return request<DashboardStats>(`/dashboard/stats?days=${d}`);
   },
+  chatExperienceOverview: (days = 30) => {
+    const d = Math.min(365, Math.max(1, Math.floor(days)));
+    return request<ChatExperienceOverview>(`/admin/chat-experience/overview?days=${d}`);
+  },
+  chatExperienceTurns: (days = 30, limit = 50, offset = 0) => {
+    const d = Math.min(365, Math.max(1, Math.floor(days)));
+    const params = new URLSearchParams({ days: String(d), limit: String(limit), offset: String(offset) });
+    return request<ChatExperienceTurnList>(`/admin/chat-experience/turns?${params.toString()}`);
+  },
+  chatExperienceAlerts: (status = "open", limit = 20) => {
+    const params = new URLSearchParams({ status, limit: String(limit) });
+    return request<ChatTelemetryAlertList>(`/admin/chat-experience/alerts?${params.toString()}`);
+  },
+  chatExperienceEvaluateAlerts: () =>
+    postJson<ChatTelemetryAlertEvaluateResult>("/admin/chat-experience/alerts/evaluate", {}),
   generationAnalyticsOverview: (days = 30) => {
     const d = Math.min(365, Math.max(1, Math.floor(days)));
     return request<GenerationAnalyticsOverview>(`/admin/generation-analytics/overview?days=${d}`);
@@ -1583,6 +1671,16 @@ export const api = {
       "/chat/attachments/upload",
       payload,
     ),
+  postChatTelemetry: (payload: {
+    events: Array<{
+      event: string;
+      detail?: string;
+      client_ts_ms?: number;
+      correlation_id: string;
+      conversation_id?: number | null;
+    }>;
+  }) =>
+    postJson<void>("/chat/telemetry", payload),
   createTask: (payload: TaskCreatePayload) => postJson<Task>("/tasks", payload),
   recordGenerationOutcome: (taskId: number, payload: GenerationOutcomePayload) =>
     postJson<GenerationOutcomeResult>(`/tasks/${taskId}/generation-outcomes`, payload),

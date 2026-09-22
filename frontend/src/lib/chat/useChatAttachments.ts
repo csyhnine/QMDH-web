@@ -11,13 +11,16 @@ import {
   uploadChatAttachmentFile,
   yieldToBrowserPaint,
 } from "./chatAttachmentUtils";
+import { reportChatTelemetry } from "./chatTelemetry";
 
 type UseChatAttachmentsOptions = {
   disabled?: boolean;
+  conversationId?: number | null;
 };
 
 export function useChatAttachments(options: UseChatAttachmentsOptions = {}) {
   const disabled = options.disabled ?? false;
+  const conversationId = options.conversationId ?? null;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragDepthRef = useRef(0);
   const [attachments, setAttachments] = useState<ChatPendingAttachment[]>([]);
@@ -75,8 +78,18 @@ export function useChatAttachments(options: UseChatAttachmentsOptions = {}) {
       const results = await Promise.all(
         selectedFiles.map(async (file, index) => {
           const localId = pendingItems[index].localId;
+          reportChatTelemetry({
+            event: "chat.attachment.upload.start",
+            detail: `${file.name} (${file.size}B)`,
+            conversation_id: conversationId,
+          });
           try {
             const uploaded = await uploadChatAttachmentFile(file);
+            reportChatTelemetry({
+              event: "chat.attachment.upload.success",
+              detail: `${uploaded.file_name} (${file.size}B)`,
+              conversation_id: conversationId,
+            });
             setAttachments((current) =>
               current.map((item) =>
                 item.localId === localId
@@ -94,6 +107,11 @@ export function useChatAttachments(options: UseChatAttachmentsOptions = {}) {
             return { localId, ok: true as const };
           } catch (err) {
             const message = err instanceof Error ? err.message : "上传附件失败";
+            reportChatTelemetry({
+              event: "chat.attachment.upload.error",
+              detail: `${file.name}: ${message}`.slice(0, 500),
+              conversation_id: conversationId,
+            });
             failures.push(message);
             setAttachments((current) => {
               const target = current.find((item) => item.localId === localId);

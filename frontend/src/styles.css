@@ -9761,6 +9761,18 @@ textarea:focus-visible {
   border-top: 1px solid rgba(224, 227, 232, 0.9);
 }
 
+.chat-streaming-hint {
+  width: min(100%, 1120px);
+  margin: 0 auto 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  color: #1e40af;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .chat-attachment-bar {
   width: min(100%, 1120px);
   margin: 0 auto 10px;
@@ -13193,6 +13205,42 @@ textarea:focus-visible {
 
 .generation-analytics-page {
   padding-bottom: 28px;
+}
+
+.chat-experience-alert-list {
+  display: grid;
+  gap: 12px;
+}
+
+.chat-experience-alert {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.chat-experience-alert.is-warning {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.chat-experience-alert.is-critical {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.chat-experience-alert strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.chat-experience-alert p {
+  margin: 0 0 8px;
+  line-height: 1.55;
+}
+
+.chat-experience-alert small {
+  color: var(--muted);
 }
 
 .generation-analytics-guide-grid {

@@ -11,6 +11,22 @@
 
 ## Latest Handoffs
 
+### [2026-09-22] Chat UX 修复 + 埋点 P0–P3 — **WIP（本地完成，待审查 / commit / 部署）**
+
+- **动机：** 生产用户许潇上传大 PDF 后 Chat 无回复（pack 耗时 + SSE 中断 + 无错误提示）；需可量化漏斗与告警
+- **本地已完成：**
+  - **UX：** 分步 SSE status、防重复发送、失败/中断 assistant 错误落库
+  - **P0：** `chat_turn_telemetry` 表 + 后端漏斗 + `POST /chat/telemetry`
+  - **P1：** 前端 send/upload/error/status/switch 事件 + correlation 缓冲关联
+  - **P2：** Admin **Chat 体验** 看板（`/admin/chat-experience`）
+  - **P3：** `chat_telemetry_alerts` + 每小时评估 + Admin 告警展示
+- **测试：** `pytest` chat 相关 **19 passed**（见详档命令）
+- **Migration head：** `y0z1a2b3c4d5`（链：`w4x5y6z7a8b9` → `x9y0z1a2b3c4` → `y0z1a2b3c4d5`）
+- **Git：** 本地 `main` @ `10daf55`，**大量未 commit 改动**；`scripts/_tmp_*` **勿提交**
+- **下一对话：** Code Review → commit → push → 生产 `alembic upgrade head` + rebuild
+- **详档：** `docs/archive/handoff-2026-09-22-chat-telemetry-ux-wip.md`
+- Safe to hand off: **Yes（给审查部署 Agent）**
+
 ### [2026-09-18] 润色分模式优化 — **DONE（已部署 + 生产 prompt 已写入）**
 
 - **动机：** 生成分析 30 天窗口润色后采纳率 **25.5%** 低于整体；图生图易被扩写偏离参考图
@@ -30,14 +46,6 @@
 - **磁盘：** 82% 使用，~8.5GB 可用；媒体卷 **~23GB**（8141 assets）；约 **+7~8GB/月** 增长 → 需规划升盘或 OSS
 - **详档：** `docs/archive/handoff-2026-09-16-studio-ops-storage.md`
 - **deploy 前端：** merge → `docker compose build frontend` → `up -d --no-deps frontend`
-- Safe to hand off: **Yes**
-
-### [2026-09-16] Chat 模型切换 + 上下文统计（阶段 1）— **DONE（已部署生产）**
-
-- **功能：** 会话内 PATCH 切换模型；context 快照 + `GET …/context-stats`
-- **GitHub main：** 已含于 `be7daa1` 历史（功能 commit `b6edfd2`）
-- **Migration：** `a8b9c0d1e2f3`
-- **详档：** `docs/archive/handoff-2026-09-16-chat-model-switch-context-stats.md`
 - Safe to hand off: **Yes**
 
 （2026-09-04 符号主题 / Grok hotfix 等更早条目见 `docs/archive/`；灵感库搁置见 `docs/tasks.md`）

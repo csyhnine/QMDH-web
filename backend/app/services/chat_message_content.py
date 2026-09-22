@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from base64 import b64encode
+from collections.abc import Callable
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -98,7 +99,11 @@ def chat_attachment_out(item: dict[str, str]) -> dict[str, str]:
     }
 
 
-def build_provider_message_content(message: ChatMessage) -> str | list[dict[str, object]]:
+def build_provider_message_content(
+    message: ChatMessage,
+    *,
+    on_stage: Callable[[str], None] | None = None,
+) -> str | list[dict[str, object]]:
     attachments = [item for item in (message.attachments_json or []) if isinstance(item, dict)]
     text = str(message.content or "").strip()
 
@@ -114,8 +119,12 @@ def build_provider_message_content(message: ChatMessage) -> str | list[dict[str,
         file_name = str(item.get("file_name") or Path(storage_path).name).strip()
         kind = attachment_kind_for_path(storage_path, str(item.get("kind") or ""))
         if kind == "image":
+            if on_stage is not None:
+                on_stage(f"正在读取图片：{file_name}…")
             image_items.append(item)
             continue
+        if on_stage is not None:
+            on_stage(f"正在读取附件：{file_name}…")
         extracted = extract_attachment_text(storage_path, file_name=file_name)
         file_sections.append(format_file_attachment_context(file_name, extracted))
 
@@ -146,11 +155,15 @@ def build_provider_message_content(message: ChatMessage) -> str | list[dict[str,
     return parts
 
 
-def build_provider_messages(messages: list[ChatMessage]) -> list[dict[str, object]]:
+def build_provider_messages(
+    messages: list[ChatMessage],
+    *,
+    on_stage: Callable[[str], None] | None = None,
+) -> list[dict[str, object]]:
     return [
         {
             "role": message.role,
-            "content": build_provider_message_content(message),
+            "content": build_provider_message_content(message, on_stage=on_stage),
         }
         for message in messages
     ]

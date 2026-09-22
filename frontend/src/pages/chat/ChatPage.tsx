@@ -14,6 +14,13 @@ import {
   toUiMessages,
 } from "../../lib/chat/qmdhChatMessageUtils";
 import { chatRoundElementId, extractChatRounds } from "../../lib/chat/chatRoundUtils";
+import {
+  flushChatTelemetry,
+  mapClientStreamErrorMessage,
+  reportChatStreamStatus,
+  reportChatTelemetry,
+  resetChatStreamStatusTelemetry,
+} from "../../lib/chat/chatTelemetry";
 import { QmdhChatTransport } from "../../lib/chat/qmdhChatTransport";
 import type { ChatTaskProposal, ChatThinkingStep, ChatToolCall } from "../../lib/chat/qmdhSseParser";
 import { chatAgentModeDefaultFor } from "../../lib/featureFlags";
@@ -82,6 +89,7 @@ export default function ChatPage() {
   const [chatError, setChatError] = useState("");
   const [exportingMessageId, setExportingMessageId] = useState<string | null>(null);
   const [streamStatusLabel, setStreamStatusLabel] = useState("");
+  const [replyPending, setReplyPending] = useState(false);
   const [contextUsagePercent, setContextUsagePercent] = useState<number | null>(null);
   const [contextTokens, setContextTokens] = useState<number | null>(null);
   const [contextWindowTokens, setContextWindowTokens] = useState<number | null>(null);
@@ -104,6 +112,7 @@ export default function ChatPage() {
   const pendingInitialScrollRef = useRef(false);
   const activeChatIdRef = useRef<number | null>(activeChatId);
   activeChatIdRef.current = activeChatId;
+  const busyReplyRef = useRef(false);
 
   const effectiveAgentMode = showChatAgentUi && agentMode;
   const agentModeRef = useRef(effectiveAgentMode);
@@ -175,34 +184,69 @@ export default function ChatPage() {
     experimental_throttle: 50,
     onFinish: () => {
       setStreamStatusLabel("");
+      resetChatStreamStatusTelemetry();
       setAgentThinking(false);
       setActiveThinkingSteps([]);
       setActiveTaskProposals([]);
       setActiveToolCalls([]);
-      const conversationId = activeChatIdRef.current;
-      if (conversationId == null) {
-        return;
-      }
-      void refreshConversations(conversationId);
-      void (async () => {
-        try {
-          const nextMessages = await api.getChatMessages(conversationId);
-          setChatMessages(toUiMessages(nextMessages));
-        } catch {
-          // Keep the streamed transcript if sync fails.
-        }
-      })();
+      void syncChatMessagesFromServer();
+      void flushChatTelemetry();
+    },
+    onError: (error) => {
+      setStreamStatusLabel("");
+      resetChatStreamStatusTelemetry();
+      setAgentThinking(false);
+      setActiveThinkingSteps([]);
+      setActiveTaskProposals([]);
+      setActiveToolCalls([]);
+      const message = error instanceof Error ? error.message : String(error);
+      const friendly = mapClientStreamErrorMessage(message);
+      reportChatTelemetry({
+        event: "chat.stream.client_error",
+        detail: message.slice(0, 500),
+        conversation_id: activeChatIdRef.current,
+      });
+      setChatError(friendly);
+      void syncChatMessagesFromServer();
+      void flushChatTelemetry();
     },
   });
 
+  async function syncChatMessagesFromServer() {
+    const conversationId = activeChatIdRef.current;
+    if (conversationId == null) {
+      setReplyPending(false);
+      return;
+    }
+    try {
+      await refreshConversations(conversationId);
+      const nextMessages = await api.getChatMessages(conversationId);
+      setChatMessages(toUiMessages(nextMessages));
+    } catch {
+      // Keep the streamed transcript if sync fails.
+    } finally {
+      setReplyPending(false);
+    }
+  }
+
   const streaming = status === "streaming" || status === "submitted";
+  const busyReply = streaming || replyPending;
+  busyReplyRef.current = busyReply;
   const activeConversation = conversations.find((conversation) => conversation.id === activeChatId) ?? null;
   const displayUsagePercent = contextUsagePercent ?? activeConversation?.context_usage_percent ?? 0;
   const displayContextTokens = contextTokens ?? activeConversation?.context_tokens ?? 0;
   const displayContextWindow = contextWindowTokens ?? activeConversation?.context_window_tokens ?? 0;
   const attachmentState = useChatAttachments({
-    disabled: isGuest || streaming || activeChatId == null,
+    disabled: isGuest || busyReply || activeChatId == null,
+    conversationId: activeChatId,
   });
+
+  useEffect(() => {
+    if (!busyReply || !streamStatusLabel.trim()) {
+      return;
+    }
+    reportChatStreamStatus(streamStatusLabel, activeChatIdRef.current);
+  }, [busyReply, streamStatusLabel]);
 
   function updateAutoScrollState() {
     const element = messagesRef.current;
@@ -243,8 +287,18 @@ export default function ChatPage() {
   }
 
   async function loadConversation(conversationId: number) {
+    const previousConversationId = activeChatIdRef.current;
+    if (busyReplyRef.current && previousConversationId != null && previousConversationId !== conversationId) {
+      reportChatTelemetry({
+        event: "chat.conversation.switch",
+        detail: `from=${previousConversationId} to=${conversationId}`,
+        conversation_id: previousConversationId,
+      });
+      void flushChatTelemetry();
+    }
     setChatError("");
     setStreamStatusLabel("");
+    resetChatStreamStatusTelemetry();
     setActiveChatId(conversationId);
     pendingInitialScrollRef.current = true;
     previousMessageCountRef.current = 0;
@@ -358,8 +412,8 @@ export default function ChatPage() {
     if (!streamError) {
       return;
     }
-    const message = streamError.message;
-    setChatError((current) => (current === message ? current : message));
+    const friendly = mapClientStreamErrorMessage(streamError.message);
+    setChatError((current) => (current === friendly ? current : friendly));
   }, [streamError]);
 
   const lastMessage = chatMessages[chatMessages.length - 1];
@@ -490,7 +544,15 @@ export default function ChatPage() {
     }
     const hasText = Boolean(chatInput.trim());
     const hasAttachments = attachmentState.readyCount > 0;
-    if ((!hasText && !hasAttachments) || !activeChatId || streaming || attachmentState.uploading) {
+    if ((!hasText && !hasAttachments) || !activeChatId || busyReply || attachmentState.uploading) {
+      if (busyReply) {
+        setChatError("上一条消息仍在处理中，请稍候，不要重复发送。");
+        reportChatTelemetry({
+          event: "chat.send.blocked_busy",
+          conversation_id: activeChatId,
+        });
+        void flushChatTelemetry();
+      }
       return;
     }
 
@@ -507,7 +569,13 @@ export default function ChatPage() {
     const attachments = attachmentState.toSendPayload();
     setChatInput("");
     setChatError("");
-    setStreamStatusLabel("整理上下文…");
+    setReplyPending(true);
+    setStreamStatusLabel("准备处理您的消息…");
+    reportChatTelemetry({
+      event: "chat.send.clicked",
+      detail: hasAttachments ? `attachments=${attachmentState.readyCount}` : "",
+      conversation_id: activeChatId,
+    });
     attachmentState.setError("");
     shouldAutoScrollRef.current = true;
     setActiveToolCalls([]);
@@ -541,12 +609,14 @@ export default function ChatPage() {
         })
         .catch((error: unknown) => {
           setAgentThinking(false);
+          setReplyPending(false);
           const message = error instanceof Error ? error.message : "未知错误";
           setChatError(message);
           setStreamStatusLabel("");
         });
     } catch (error: unknown) {
       setAgentThinking(false);
+      setReplyPending(false);
       const message = error instanceof Error ? error.message : "未知错误";
       setChatError(message);
       setStreamStatusLabel("");
@@ -556,7 +626,7 @@ export default function ChatPage() {
   const canSendMessage =
     !isGuest &&
     Boolean(activeChatId) &&
-    !streaming &&
+    !busyReply &&
     !attachmentState.uploading &&
     (Boolean(chatInput.trim()) || attachmentState.readyCount > 0);
 
@@ -889,7 +959,7 @@ export default function ChatPage() {
                     </div>
                   );
                 })}
-                {streaming && lastMessage?.role === "user" ? (
+                {busyReply && lastMessage?.role === "user" ? (
                   <div className="chat-msg assistant" aria-live="polite">
                     <div className="chat-msg-avatar">AI</div>
                     <div className="chat-msg-bubble">
@@ -914,6 +984,11 @@ export default function ChatPage() {
             </div>
 
             <div className="chat-input-area">
+              {busyReply ? (
+                <p className="chat-streaming-hint" role="status" aria-live="polite">
+                  {streamStatusLabel || "正在处理中…"} 大附件可能需要数十秒，请勿重复点击发送。
+                </p>
+              ) : null}
               {attachmentState.attachments.length > 0 ||
               attachmentState.uploading ||
               attachmentState.error ? (
@@ -956,7 +1031,7 @@ export default function ChatPage() {
                               className="chat-attachment-remove"
                               aria-label={`移除 ${attachment.fileName}`}
                               onClick={() => attachmentState.removeAttachment(index)}
-                              disabled={streaming || attachmentState.uploading}
+                              disabled={busyReply || attachmentState.uploading}
                             >
                               ×
                             </button>
@@ -976,13 +1051,13 @@ export default function ChatPage() {
                   multiple
                   className="chat-file-input"
                   onChange={attachmentState.handleFileInputChange}
-                  disabled={streaming || attachmentState.uploading || !attachmentState.canAddMore}
+                  disabled={busyReply || attachmentState.uploading || !attachmentState.canAddMore}
                 />
                 <button
                   type="button"
                   className="chat-attach-btn"
                   aria-label="上传图片或文档"
-                  disabled={streaming || attachmentState.uploading || !attachmentState.canAddMore}
+                  disabled={busyReply || attachmentState.uploading || !attachmentState.canAddMore}
                   onClick={() => attachmentState.fileInputRef.current?.click()}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1004,14 +1079,22 @@ export default function ChatPage() {
                   }}
                   placeholder={isGuest ? "登录后可发送消息" : "和我聊聊吧，可附带图片或文档"}
                   rows={1}
-                  disabled={isGuest || streaming || attachmentState.uploading}
+                  disabled={isGuest || busyReply || attachmentState.uploading}
                 />
                 <button
                   type="button"
                   className="chat-send-btn"
                   disabled={!canSendMessage}
-                  aria-label={attachmentState.uploading ? "附件上传中" : "发送"}
-                  title={attachmentState.uploading ? "附件上传中，请稍候" : "发送"}
+                  aria-label={
+                    busyReply ? "正在处理中" : attachmentState.uploading ? "附件上传中" : "发送"
+                  }
+                  title={
+                    busyReply
+                      ? "正在处理上一条消息，请稍候"
+                      : attachmentState.uploading
+                        ? "附件上传中，请稍候"
+                        : "发送"
+                  }
                   onClick={() => void handleSendMessage()}
                 >
                   {attachmentState.uploading ? (

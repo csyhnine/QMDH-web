@@ -3,6 +3,7 @@ export type UserRole = "admin" | "ops" | "designer";
 export type AdminModuleKey =
   | "dashboard"
   | "generation-analytics"
+  | "chat-experience"
   | "usage-logs"
   | "inspiration"
   | "feedback"

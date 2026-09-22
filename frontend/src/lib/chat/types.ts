@@ -11,12 +11,8 @@ export function formatStreamError(error: string | ChatStreamError) {
   }
 
   const summary = (error.summary || "对话失败，请稍后重试。").trim();
-  const detail = (error.detail || "").trim();
   const code = (error.code || "").trim();
   const lines = [summary];
-  if (detail && detail !== summary) {
-    lines.push(`排查线索：${detail}`);
-  }
   if (code) {
     lines.push(`错误码：${code}`);
   }

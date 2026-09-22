@@ -90,6 +90,7 @@ from app.services.chat_agent_task_service import proposal_from_confirm_payload, 
 from app.services.chat_service import (
     chat_error_payload,
     format_chat_error_message,
+    _sanitize_error_text,
     get_chat_models,
     provider_profile_has_usable_api_key,
     snapshot_chat_provider_config,
@@ -110,16 +111,17 @@ logger = logging.getLogger(__name__)
 
 
 def _format_agent_run_error(exc: Exception) -> tuple[str, str]:
-    detail = str(exc).strip()
+    """Return (user_summary, telemetry_detail)."""
+    detail = _sanitize_error_text(str(exc), limit=480)
     lowered = detail.lower()
     if "max retries" in lowered:
         return (
             "助手工具调用失败，常见原因是模型名称或生图参数不正确。"
             "请先让它「列出可用模型」，或前往 Studio 生图。",
-            detail[:320],
+            detail,
         )
     if "provider not found" in lowered:
-        return ("未找到指定的生图模型，请先列出可用模型后再试。", detail[:320])
+        return ("未找到指定的生图模型，请先列出可用模型后再试。", detail)
     if (
         "402" in detail
         or "max_tokens" in lowered
@@ -129,9 +131,9 @@ def _format_agent_run_error(exc: Exception) -> tuple[str, str]:
         return (
             "上游按过大的 max_tokens 预扣费失败（常见于未限制输出上限）。"
             "请稍后重试；若仍失败，检查 Admin 里该 Chat 模型的网关额度或换模型。",
-            detail[:480],
+            detail,
         )
-    return ("助手调用失败，请稍后重试。", detail[:320])
+    return ("助手调用失败，请稍后重试。", detail)
 
 
 def _persist_agent_assistant_message(
@@ -810,205 +812,261 @@ async def send_message(
         policy_version = (payload.policy_version or "").strip() or None
 
         async def generate_agent():
-            yield f"data: {json.dumps({'correlation_id': get_correlation_id()}, ensure_ascii=False)}\n\n"
-            loop = asyncio.get_running_loop()
-            thinking_queue: asyncio.Queue[dict[str, str] | None] = asyncio.Queue()
-            collected_thinking_steps: list[dict[str, object]] = []
-            harness_audit_holder: dict[str, object] = {}
+            assistant_message_id: int | None = None
+            try:
+                yield f"data: {json.dumps({'correlation_id': get_correlation_id()}, ensure_ascii=False)}\n\n"
+                loop = asyncio.get_running_loop()
+                thinking_queue: asyncio.Queue[dict[str, str] | None] = asyncio.Queue()
+                collected_thinking_steps: list[dict[str, object]] = []
+                harness_audit_holder: dict[str, object] = {}
 
-            def upsert_thinking_step(step: dict[str, object]) -> None:
-                key = step.get("key")
-                if isinstance(key, str) and key:
-                    for index, existing in enumerate(collected_thinking_steps):
-                        if existing.get("key") == key:
-                            collected_thinking_steps[index] = step
-                            return
-                collected_thinking_steps.append(step)
+                def upsert_thinking_step(step: dict[str, object]) -> None:
+                    key = step.get("key")
+                    if isinstance(key, str) and key:
+                        for index, existing in enumerate(collected_thinking_steps):
+                            if existing.get("key") == key:
+                                collected_thinking_steps[index] = step
+                                return
+                    collected_thinking_steps.append(step)
 
-            def thinking_callback(step: ChatAgentThinkingStep) -> None:
-                payload_dict = step.to_dict()
-                loop.call_soon_threadsafe(thinking_queue.put_nowait, payload_dict)
+                def thinking_callback(step: ChatAgentThinkingStep) -> None:
+                    payload_dict = step.to_dict()
+                    loop.call_soon_threadsafe(thinking_queue.put_nowait, payload_dict)
 
-            async def run_agent() -> StudioAgentReply:
-                try:
-                    harness_result = await asyncio.to_thread(
-                        run_chat_agent_harness_isolated,
-                        recent_messages=recent,
-                        new_content=content,
-                        user_name=auth_user.name,
-                        user_id=auth_user.user_id,
-                        conversation_id=conversation_id,
-                        provider_id=provider_profile_id,
-                        policy_version=policy_version,
-                        attachment_names=[item["file_name"] for item in attachments if item.get("file_name")],
-                        thinking_callback=thinking_callback,
-                    )
-                    harness_audit_holder.clear()
-                    harness_audit_holder.update(harness_result.audit_details)
-                    return harness_result.reply
-                finally:
-                    loop.call_soon_threadsafe(thinking_queue.put_nowait, None)
+                async def run_agent() -> StudioAgentReply:
+                    try:
+                        harness_result = await asyncio.to_thread(
+                            run_chat_agent_harness_isolated,
+                            recent_messages=recent,
+                            new_content=content,
+                            user_name=auth_user.name,
+                            user_id=auth_user.user_id,
+                            conversation_id=conversation_id,
+                            provider_id=provider_profile_id,
+                            policy_version=policy_version,
+                            attachment_names=[item["file_name"] for item in attachments if item.get("file_name")],
+                            thinking_callback=thinking_callback,
+                        )
+                        harness_audit_holder.clear()
+                        harness_audit_holder.update(harness_result.audit_details)
+                        return harness_result.reply
+                    finally:
+                        loop.call_soon_threadsafe(thinking_queue.put_nowait, None)
 
-            yield format_agent_thinking_sse()
-            agent_task = asyncio.create_task(run_agent())
-            agent_reply: StudioAgentReply | None = None
-            agent_error: BaseException | None = None
+                yield format_agent_thinking_sse()
+                agent_task = asyncio.create_task(run_agent())
+                agent_reply: StudioAgentReply | None = None
+                agent_error: BaseException | None = None
 
-            while True:
-                try:
-                    step = await asyncio.wait_for(thinking_queue.get(), timeout=0.05)
-                except asyncio.TimeoutError:
-                    if agent_task.done():
+                while True:
+                    try:
+                        step = await asyncio.wait_for(thinking_queue.get(), timeout=0.05)
+                    except asyncio.TimeoutError:
+                        if agent_task.done():
+                            break
+                        continue
+                    if step is None:
                         break
-                    continue
-                if step is None:
-                    break
-                upsert_thinking_step(step)
-                yield format_agent_thinking_step_sse(step)
-
-            while not thinking_queue.empty():
-                step = thinking_queue.get_nowait()
-                if step is not None:
                     upsert_thinking_step(step)
                     yield format_agent_thinking_step_sse(step)
 
-            try:
-                agent_reply = await agent_task
-            except StudioAgentUnavailableError as exc:
-                agent_error = exc
-            except Exception as exc:
-                agent_error = exc
+                while not thinking_queue.empty():
+                    step = thinking_queue.get_nowait()
+                    if step is not None:
+                        upsert_thinking_step(step)
+                        yield format_agent_thinking_step_sse(step)
 
-            if isinstance(agent_error, StudioAgentUnavailableError):
-                exc = agent_error
-                summary, detail = _format_agent_run_error(exc)
-                error_text = format_chat_error_message(
-                    chat_error_payload(
+                try:
+                    agent_reply = await agent_task
+                except StudioAgentUnavailableError as exc:
+                    agent_error = exc
+                except Exception as exc:
+                    agent_error = exc
+
+                if isinstance(agent_error, StudioAgentUnavailableError):
+                    exc = agent_error
+                    summary, telemetry_detail = _format_agent_run_error(exc)
+                    error_payload = chat_error_payload(
                         code="chat_agent_unavailable",
                         summary=summary,
-                        detail=detail,
+                        detail="",
                     )
-                )
-                yield f"data: {json.dumps({'error': {'summary': error_text, 'detail': detail, 'code': 'chat_agent_unavailable'}}, ensure_ascii=False)}\n\n"
-                agent_msg = _persist_agent_assistant_message(db, conversation, conversation_id, error_text)
-                _finish_chat_turn_telemetry(
-                    db,
-                    turn_tracker,
-                    outcome="agent_error",
-                    error_code="chat_agent_unavailable",
-                    error_summary=summary,
-                    assistant_message_id=agent_msg.id,
-                    finalized_holder=telemetry_finalized,
-                )
-                yield "data: [DONE]\n\n"
-                return
-            if agent_error is not None:
-                exc = agent_error
-                logger.exception("Chat agent failed for conversation %s", conversation_id)
-                summary, detail = _format_agent_run_error(exc)
-                error_text = format_chat_error_message(
-                    chat_error_payload(
+                    error_text = format_chat_error_message(error_payload)
+                    yield _chat_error_sse(error_payload)
+                    agent_msg = _persist_agent_assistant_message(db, conversation, conversation_id, error_text)
+                    assistant_message_id = agent_msg.id
+                    _finish_chat_turn_telemetry(
+                        db,
+                        turn_tracker,
+                        outcome="agent_error",
+                        error_code="chat_agent_unavailable",
+                        error_summary=telemetry_detail,
+                        assistant_message_id=assistant_message_id,
+                        finalized_holder=telemetry_finalized,
+                    )
+                    yield "data: [DONE]\n\n"
+                    return
+                if agent_error is not None:
+                    exc = agent_error
+                    logger.exception("Chat agent failed for conversation %s", conversation_id)
+                    summary, telemetry_detail = _format_agent_run_error(exc)
+                    error_payload = chat_error_payload(
                         code="chat_agent_error",
                         summary=summary,
-                        detail=detail,
+                        detail="",
                     )
+                    error_text = format_chat_error_message(error_payload)
+                    yield _chat_error_sse(error_payload)
+                    agent_msg = _persist_agent_assistant_message(db, conversation, conversation_id, error_text)
+                    assistant_message_id = agent_msg.id
+                    _finish_chat_turn_telemetry(
+                        db,
+                        turn_tracker,
+                        outcome="agent_error",
+                        error_code="chat_agent_error",
+                        error_summary=telemetry_detail,
+                        assistant_message_id=assistant_message_id,
+                        finalized_holder=telemetry_finalized,
+                    )
+                    yield "data: [DONE]\n\n"
+                    return
+
+                assert agent_reply is not None
+                compose_done = ChatAgentThinkingStep(
+                    key="agent_compose",
+                    label="整理回复",
+                    detail="回复已生成",
+                    status="done",
+                ).to_dict()
+                upsert_thinking_step(compose_done)
+                yield format_agent_thinking_step_sse(compose_done)
+
+                audit_details: dict[str, object] = {
+                    "model_name": agent_reply.model_name,
+                    "conversation_id": conversation_id,
+                    "message_preview": content[:120],
+                    "reply_preview": agent_reply.text[:240],
+                    "tool_calls": [call.name for call in agent_reply.tool_calls],
+                    "task_proposals": [item.get("proposal_id") for item in agent_reply.task_proposals],
+                    "thinking_steps": [step.get("key") for step in collected_thinking_steps],
+                    "policy_version": agent_reply.policy_version,
+                }
+                harness_audit = harness_audit_holder
+                if isinstance(harness_audit, dict):
+                    audit_details.update(harness_audit)
+
+                write_audit_log(
+                    db,
+                    event_type=AuditEventType.STUDIO_AGENT_ASSIST,
+                    actor_name=auth_user.name,
+                    actor_id=auth_user.user_id,
+                    target_type="chat_agent",
+                    provider_name=agent_reply.provider_name,
+                    details=audit_details,
                 )
-                yield f"data: {json.dumps({'error': {'summary': error_text, 'detail': detail, 'code': 'chat_agent_error'}}, ensure_ascii=False)}\n\n"
-                agent_msg = _persist_agent_assistant_message(db, conversation, conversation_id, error_text)
+
+                full_content = agent_reply.text.strip() or "助手未返回内容，请重试。"
+                assistant_message = _persist_agent_assistant_message(
+                    db,
+                    conversation,
+                    conversation_id,
+                    full_content,
+                    tool_calls=agent_reply.tool_calls,
+                    task_proposals=agent_reply.task_proposals,
+                    thinking_steps=collected_thinking_steps,
+                    policy_version=agent_reply.policy_version,
+                    token_count=agent_reply.total_tokens,
+                )
+                provider_for_ledger = db.get(ProviderProfile, provider_profile_id)
+                if provider_for_ledger is not None:
+                    usage_payload = dict(agent_reply.usage_payload or {"source": "chat_agent"})
+                    usage_payload.setdefault("prompt_tokens", agent_reply.prompt_tokens)
+                    usage_payload.setdefault("completion_tokens", agent_reply.completion_tokens)
+                    usage_payload.setdefault("total_tokens", agent_reply.total_tokens)
+                    usage_payload.setdefault("input_tokens", agent_reply.prompt_tokens)
+                    usage_payload.setdefault("output_tokens", agent_reply.completion_tokens)
+                    usage_payload.setdefault("cached_input_tokens", agent_reply.cached_input_tokens)
+                    record_chat_usage_ledger(
+                        db,
+                        message=assistant_message,
+                        conversation=conversation,
+                        provider=provider_for_ledger,
+                        provider_profile_id=provider_profile_id,
+                        user_id=auth_user.user_id,
+                        user_name=auth_user.name,
+                        provider_name=agent_reply.provider_name or provider_for_ledger.provider_name,
+                        model_name=agent_reply.model_name or provider_for_ledger.model_name,
+                        prompt_tokens=agent_reply.prompt_tokens,
+                        completion_tokens=agent_reply.completion_tokens,
+                        total_tokens=agent_reply.total_tokens,
+                        usage_payload=usage_payload,
+                    )
+                    db.commit()
+
                 _finish_chat_turn_telemetry(
                     db,
                     turn_tracker,
-                    outcome="agent_error",
-                    error_code="chat_agent_error",
-                    error_summary=summary,
-                    assistant_message_id=agent_msg.id,
+                    outcome="agent_success",
+                    assistant_message_id=assistant_message.id,
                     finalized_holder=telemetry_finalized,
                 )
-                yield "data: [DONE]\n\n"
-                return
+                assistant_message_id = assistant_message.id
 
-            assert agent_reply is not None
-            compose_done = ChatAgentThinkingStep(
-                key="agent_compose",
-                label="整理回复",
-                detail="回复已生成",
-                status="done",
-            ).to_dict()
-            upsert_thinking_step(compose_done)
-            yield format_agent_thinking_step_sse(compose_done)
-
-            audit_details: dict[str, object] = {
-                "model_name": agent_reply.model_name,
-                "conversation_id": conversation_id,
-                "message_preview": content[:120],
-                "reply_preview": agent_reply.text[:240],
-                "tool_calls": [call.name for call in agent_reply.tool_calls],
-                "task_proposals": [item.get("proposal_id") for item in agent_reply.task_proposals],
-                "thinking_steps": [step.get("key") for step in collected_thinking_steps],
-                "policy_version": agent_reply.policy_version,
-            }
-            harness_audit = harness_audit_holder
-            if isinstance(harness_audit, dict):
-                audit_details.update(harness_audit)
-
-            write_audit_log(
-                db,
-                event_type=AuditEventType.STUDIO_AGENT_ASSIST,
-                actor_name=auth_user.name,
-                actor_id=auth_user.user_id,
-                target_type="chat_agent",
-                provider_name=agent_reply.provider_name,
-                details=audit_details,
-            )
-
-            full_content = agent_reply.text.strip() or "助手未返回内容，请重试。"
-            assistant_message = _persist_agent_assistant_message(
-                db,
-                conversation,
-                conversation_id,
-                full_content,
-                tool_calls=agent_reply.tool_calls,
-                task_proposals=agent_reply.task_proposals,
-                thinking_steps=collected_thinking_steps,
-                policy_version=agent_reply.policy_version,
-                token_count=agent_reply.total_tokens,
-            )
-            provider_for_ledger = db.get(ProviderProfile, provider_profile_id)
-            if provider_for_ledger is not None:
-                usage_payload = dict(agent_reply.usage_payload or {"source": "chat_agent"})
-                usage_payload.setdefault("prompt_tokens", agent_reply.prompt_tokens)
-                usage_payload.setdefault("completion_tokens", agent_reply.completion_tokens)
-                usage_payload.setdefault("total_tokens", agent_reply.total_tokens)
-                usage_payload.setdefault("input_tokens", agent_reply.prompt_tokens)
-                usage_payload.setdefault("output_tokens", agent_reply.completion_tokens)
-                usage_payload.setdefault("cached_input_tokens", agent_reply.cached_input_tokens)
-                record_chat_usage_ledger(
-                    db,
-                    message=assistant_message,
-                    conversation=conversation,
-                    provider=provider_for_ledger,
-                    provider_profile_id=provider_profile_id,
-                    user_id=auth_user.user_id,
-                    user_name=auth_user.name,
-                    provider_name=agent_reply.provider_name or provider_for_ledger.provider_name,
-                    model_name=agent_reply.model_name or provider_for_ledger.model_name,
-                    prompt_tokens=agent_reply.prompt_tokens,
-                    completion_tokens=agent_reply.completion_tokens,
-                    total_tokens=agent_reply.total_tokens,
-                    usage_payload=usage_payload,
-                )
-                db.commit()
-
-            _finish_chat_turn_telemetry(
-                db,
-                turn_tracker,
-                outcome="agent_success",
-                assistant_message_id=assistant_message.id,
-                finalized_holder=telemetry_finalized,
-            )
-
-            async for chunk in stream_chat_agent_sse(agent_reply):
-                yield chunk
+                async for chunk in stream_chat_agent_sse(agent_reply):
+                    yield chunk
+            except asyncio.CancelledError:
+                if not telemetry_finalized.get("done"):
+                    _finish_chat_turn_telemetry(
+                        db,
+                        turn_tracker,
+                        outcome="interrupted",
+                        error_code="chat_stream_interrupted",
+                        error_summary="Agent 流式响应提前结束",
+                        assistant_message_id=assistant_message_id,
+                        finalized_holder=telemetry_finalized,
+                    )
+                raise
+            except Exception as exc:
+                logger.exception("Chat agent stream failed for conversation %s", conversation_id)
+                if not telemetry_finalized.get("done"):
+                    summary, telemetry_detail = _format_agent_run_error(exc)
+                    error_payload = chat_error_payload(
+                        code="chat_agent_error",
+                        summary=summary,
+                        detail="",
+                    )
+                    try:
+                        error_text = format_chat_error_message(error_payload)
+                        agent_msg = _persist_agent_assistant_message(
+                            db, conversation, conversation_id, error_text
+                        )
+                        assistant_message_id = agent_msg.id
+                        yield _chat_error_sse(error_payload)
+                    except Exception:
+                        logger.exception(
+                            "failed to persist agent error message",
+                            extra={"conversation_id": conversation_id},
+                        )
+                    _finish_chat_turn_telemetry(
+                        db,
+                        turn_tracker,
+                        outcome="agent_error",
+                        error_code="chat_agent_error",
+                        error_summary=telemetry_detail,
+                        assistant_message_id=assistant_message_id,
+                        finalized_holder=telemetry_finalized,
+                    )
+            finally:
+                if not telemetry_finalized.get("done"):
+                    _finish_chat_turn_telemetry(
+                        db,
+                        turn_tracker,
+                        outcome="interrupted",
+                        error_code="chat_stream_interrupted",
+                        error_summary="Agent 流式响应提前结束",
+                        assistant_message_id=assistant_message_id,
+                        finalized_holder=telemetry_finalized,
+                    )
 
         return StreamingResponse(
             generate_agent(),
@@ -1291,7 +1349,7 @@ async def send_message(
                 last_error_payload = chat_error_payload(
                     code="chat_stream_error",
                     summary="对话失败：请求过程中出现异常。",
-                    detail=str(exc)[:380],
+                    detail="",
                 )
                 yield _chat_error_sse(last_error_payload)
                 try:
@@ -1310,7 +1368,7 @@ async def send_message(
                 turn_tracker,
                 outcome="stream_error",
                 error_code="chat_stream_error",
-                error_summary=str(exc)[:255],
+                error_summary=_sanitize_error_text(str(exc), limit=255),
                 assistant_message_id=assistant_message_id,
                 context_tokens=packed_context_tokens,
                 context_usage_percent=packed_context_usage_percent,

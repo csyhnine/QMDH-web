@@ -55,12 +55,10 @@ def chat_error_payload(*, code: str, summary: str, detail: str, status_code: int
 
 
 def format_chat_error_message(payload: dict[str, object]) -> str:
+    """User-facing persisted/stream error text (summary + code only; no raw exception detail)."""
     summary = str(payload.get("summary") or "对话失败，请稍后重试。").strip()
-    detail = str(payload.get("detail") or "").strip()
     code = str(payload.get("code") or "").strip()
     sections = [summary]
-    if detail and detail != summary:
-        sections.append(f"排查线索：{detail}")
     if code:
         sections.append(f"错误码：{code}")
     return "\n".join(sections)

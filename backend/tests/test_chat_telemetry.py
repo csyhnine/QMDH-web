@@ -180,6 +180,51 @@ class ChatTelemetryTests(unittest.TestCase):
             )
             self.assertEqual(merged, 0)
 
+    def test_delete_conversation_removes_turn_telemetry(self) -> None:
+        token = self.login()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        create_response = self.client.post(
+            "/chat/conversations",
+            headers=headers,
+            json={"model_provider_id": 1, "title": "delete-me"},
+        )
+        conversation_id = create_response.json()["id"]
+
+        async def fake_stream(provider, messages):
+            del provider, messages
+            yield 'data: {"delta": "ok"}\n\n'
+            yield "data: [DONE]\n\n"
+
+        with patch("app.routers.chat.stream_chat_completion", fake_stream):
+            send_response = self.client.post(
+                f"/chat/conversations/{conversation_id}/messages",
+                headers={**headers, "Content-Type": "application/json"},
+                json={"content": "hello"},
+            )
+        self.assertEqual(send_response.status_code, 200, send_response.text)
+
+        with self.SessionLocal() as db:
+            self.assertIsNotNone(
+                db.scalar(
+                    select(ChatTurnTelemetry).where(ChatTurnTelemetry.conversation_id == conversation_id)
+                )
+            )
+
+        delete_response = self.client.delete(
+            f"/chat/conversations/{conversation_id}",
+            headers=headers,
+        )
+        self.assertEqual(delete_response.status_code, 204, delete_response.text)
+
+        with self.SessionLocal() as db:
+            self.assertIsNone(db.get(Conversation, conversation_id))
+            self.assertIsNone(
+                db.scalar(
+                    select(ChatTurnTelemetry).where(ChatTurnTelemetry.conversation_id == conversation_id)
+                )
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from fastapi.responses import Response, StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditEventType, write_audit_log
@@ -20,7 +20,7 @@ from app.integrations.studio_agent.agent import (
     StudioAgentReply,
     StudioAgentUnavailableError,
 )
-from app.models import AgentSkillRelease, ChatMessage, Conversation, ProviderProfile, User
+from app.models import AgentSkillRelease, ChatMessage, ChatTurnTelemetry, Conversation, ProviderProfile, User
 from app.schemas import (
     AgentChatToolOut,
     AgentMemoryEntryOut,
@@ -660,6 +660,8 @@ def delete_conversation(
     # Memory rows keep a FK to conversations; detach/delete them first.
     if auth_user.user_id is not None:
         detach_conversation_memories(db, user_id=auth_user.user_id, conversation_id=conversation_id)
+    # Telemetry rows reference conversation/messages; remove before cascade delete.
+    db.execute(delete(ChatTurnTelemetry).where(ChatTurnTelemetry.conversation_id == conversation_id))
     db.delete(conversation)
     db.commit()
     return Response(status_code=204)

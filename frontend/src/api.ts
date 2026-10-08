@@ -1277,6 +1277,185 @@ export function getAuthHeaders(): Record<string, string> {
   return authHeaders();
 }
 
+export type CadExtractLayer = {
+  name: string;
+  entity_count: number;
+  role: string;
+  confidence?: number;
+  entity_types?: Record<string, number>;
+};
+
+export type CadExtractData = {
+  meta?: {
+    units?: string;
+    entity_total?: number;
+    layout_names?: string[];
+    dxf_version?: string;
+    model_extents?: {
+      min_x?: number;
+      min_y?: number;
+      max_x?: number;
+      max_y?: number;
+    } | null;
+  };
+  layers?: CadExtractLayer[];
+  blocks?: Array<{ name: string; insert_count: number }>;
+  texts?: {
+    room_labels?: string[];
+    dimensions?: string[];
+    misc?: string[];
+  };
+  semantics?: {
+    space_summary_zh?: string;
+    suggested_prompt_en?: string;
+  };
+  spaces?: {
+    note?: string;
+    unit_note?: string;
+    relations_zh?: string;
+    principles?: string[];
+    program_review?: {
+      notes?: Record<string, string>;
+    };
+    fitout?: {
+      floors?: Array<{
+        floor_index: number;
+        width?: number;
+        height?: number;
+        note?: string;
+        scheme?: string;
+        score?: {
+          loss: number;
+          passed?: boolean;
+          worst?: string;
+          worst_label?: string;
+          terms?: Record<string, number>;
+          labels?: Record<string, string>;
+        };
+        variants?: Array<{
+          id: string;
+          label: string;
+          note?: string;
+          score?: {
+            loss: number;
+            passed?: boolean;
+            worst?: string;
+            worst_label?: string;
+            terms?: Record<string, number>;
+            labels?: Record<string, string>;
+          };
+          furniture?: Array<{ id: string; room_id?: string; kind: string; label: string; x: number; y: number; w: number; h: number; angle?: number; group?: string }>;
+        }>;
+        partitions?: Array<{ id: string; room_id?: string; label: string; x1: number; y1: number; x2: number; y2: number }>;
+        furniture?: Array<{ id: string; room_id?: string; kind: string; label: string; x: number; y: number; w: number; h: number; angle?: number; group?: string }>;
+      }>;
+    };
+    floors?: Array<{
+      floor_index: number;
+      label: string;
+      preview_path?: string;
+      line_path?: string;
+      undo_count?: number;
+      scheme_zh?: string;
+      geometry?: {
+        min_x: number;
+        max_y: number;
+        scale: number;
+        meters_per_unit: number;
+      };
+      anchors?: Array<{ label: string }>;
+      rooms?: Array<{
+        room_id: string;
+        area_ratio: number;
+        area_m2?: number;
+        polygon?: number[][];
+        usable?: {
+          area_m2: number;
+          polygons: number[][][];
+        };
+        marker?: string;
+        swatch?: string;
+        marker_x?: number;
+        marker_y?: number;
+        entrance?: boolean;
+        function: string;
+        function_source?: string;
+        proposal?: string;
+        layout_hint: string;
+        adjacent_room_ids?: string[];
+        zoning?: {
+          role?: string;
+          activity?: string;
+          hygiene?: string;
+        };
+      }>;
+    }>;
+  };
+  geometry_index?: {
+    bbox?: number[] | null;
+  };
+  usage_notes?: string[];
+  conversion?: {
+    status?: string;
+  };
+};
+
+export type CadUsageSummary = {
+  total: number;
+  by_status: Record<string, number>;
+  recent: Array<{
+    extract_id: string;
+    file_name: string;
+    status: string;
+    created_at: string | null;
+    floor_count: number;
+    room_count: number;
+    owner_name: string;
+    owner_role: string;
+  }>;
+};
+
+export type LibraryItem = {
+  id: string;
+  kind: "image" | "video" | "cad" | string;
+  title: string;
+  subtitle: string;
+  preview_path: string;
+  history_href: string;
+  created_at: string | null;
+};
+
+export type CadProgramRearrangeItem = {
+  floor_index: number;
+  floor_label: string;
+  room_id: string;
+  marker: string;
+  current_name: string;
+  current_activity: string;
+  proposal: string;
+  activity: string;
+  reason: string;
+  split_hint: string;
+};
+
+export type CadProgramRearrangeResult = {
+  model_name: string;
+  items: CadProgramRearrangeItem[];
+};
+
+export type CadExtractRecord = {
+  extract_id: string;
+  status: string;
+  file_name: string;
+  source_format: string;
+  source_storage_path: string;
+  converted_dxf_path: string | null;
+  warnings: string[];
+  error_message: string | null;
+  data: CadExtractData;
+  created_at: string | null;
+};
+
 async function buildError(response: Response): Promise<Error> {
   let detail = "";
   const contentType = response.headers.get("content-type") ?? "";
@@ -1696,6 +1875,38 @@ export const api = {
   updateInspiration: (postId: number, data: { title?: string; description?: string; source_image_path?: string; image_path?: string; category?: string; tags?: string[]; source_url?: string; source_name?: string }) =>
     request<InspirationPost>(`/inspiration/${postId}`, { method: "PATCH", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify(data) }),
   extractImages: (url: string) => postJson<{ images: string[]; title: string }>("/inspiration/extract-images", { url }),
+  createCadExtract: (payload: { file_name: string; data_url: string }) =>
+    postJson<CadExtractRecord>("/cad/extract", payload),
+  listCadExtracts: (limit = 20) => request<CadExtractRecord[]>(`/cad/extracts?limit=${limit}`),
+  getCadExtract: (extractId: string) =>
+    request<CadExtractRecord>(`/cad/extracts/${encodeURIComponent(extractId)}`),
+  editCadRoom: (
+    extractId: string,
+    payload: { floor_index: number; room_id: string; action: "rename" | "remove" | "paint" | "create" | "undo"; proposal?: string; strokes?: Array<{ x: number; y: number; erase: boolean }> },
+  ) => postJson<CadExtractRecord>(`/cad/extracts/${encodeURIComponent(extractId)}/rooms`, payload),
+  saveCadProgramReview: (extractId: string, payload: { notes: Record<string, string> }) =>
+    postJson<CadExtractRecord>(`/cad/extracts/${encodeURIComponent(extractId)}/program-review`, payload),
+  rearrangeCadProgram: (extractId: string) =>
+    postJson<CadProgramRearrangeResult>(`/cad/extracts/${encodeURIComponent(extractId)}/program-rearrange`, {}),
+  applyCadProgram: (
+    extractId: string,
+    payload: { items: Array<{ floor_index: number; room_id: string; proposal: string; activity: string; reason: string }> },
+  ) => postJson<CadExtractRecord>(`/cad/extracts/${encodeURIComponent(extractId)}/program-apply`, payload),
+  layoutCadFitout: (extractId: string, floorIndex: number, clear = false) =>
+    postJson<CadExtractRecord>(
+      `/cad/extracts/${encodeURIComponent(extractId)}/fitout?floor_index=${floorIndex}${clear ? "&clear=true" : ""}`,
+      {},
+    ),
+  cadUsageSummary: () => request<CadUsageSummary>("/cad/usage-summary"),
+  assetLibrary: (kind = "all", page = 1, filters?: { q?: string; since?: string; until?: string }) => {
+    const params = new URLSearchParams({ kind, page: String(page) });
+    if (filters?.q) params.set("q", filters.q);
+    if (filters?.since) params.set("since", filters.since);
+    if (filters?.until) params.set("until", filters.until);
+    return request<{ kind: string; page: number; page_size: number; total: number; items: LibraryItem[] }>(
+      `/assets/library?${params.toString()}`,
+    );
+  },
   // Chat
   getChatModels: () =>
     request<{ provider_id: number; provider_name: string; display_name: string; model_name: string; base_url: string }[]>(

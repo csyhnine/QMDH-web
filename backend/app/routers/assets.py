@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import can_access_project, get_current_auth_user, get_optional_auth_user
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import Asset, AssetBookmark, AssetType, InspirationPost, Project, ProviderCall, Task
+from app.models import Asset, AssetBookmark, AssetType, CadExtract, InspirationPost, Project, ProviderCall, Task
 from app.schemas import AssetOut, AssetShareIn, AssetShareOut, ReferenceUploadIn, ReferenceUploadOut
 from app.services.media_storage import resolve_storage_path, write_binary_asset
 
@@ -342,3 +342,99 @@ def toggle_bookmark(
     out = _to_asset_out(db, asset, auth_user)
     out.is_bookmarked = is_bookmarked
     return out
+
+
+@router.get("/library")
+def list_asset_library(
+    kind: str = Query(default="all"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=30, ge=30, le=30),
+    q: str = Query(default=""),
+    since: str = Query(default=""),
+    until: str = Query(default=""),
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> dict:
+    if auth_user.user_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    selected = kind if kind in {"all", "image", "video", "cad"} else "all"
+    items: list[dict] = []
+    if selected in {"all", "image", "video"}:
+        type_filter = [AssetType.image, AssetType.video]
+        if selected == "image":
+            type_filter = [AssetType.image]
+        elif selected == "video":
+            type_filter = [AssetType.video]
+        assets = db.scalars(
+            select(Asset)
+            .join(Task, Asset.source_task_id == Task.id)
+            .where(
+                Task.user_id == auth_user.user_id,
+                Task.deleted_at.is_(None),
+                Asset.asset_type.in_(type_filter),
+            )
+            .order_by(Asset.created_at.desc(), Asset.id.desc())
+            .limit(400)
+        ).all()
+        for asset in assets:
+            kind_name = asset.asset_type.value if isinstance(asset.asset_type, AssetType) else str(asset.asset_type)
+            items.append(
+                {
+                    "id": f"asset-{asset.id}",
+                    "kind": kind_name,
+                    "title": asset.name,
+                    "subtitle": (asset.prompt_text or "").strip()[:80],
+                    "preview_path": resolve_storage_path(asset.storage_path),
+                    "history_href": f"/studio/generate?task={asset.source_task_id}" if asset.source_task_id else "/studio/generate",
+                    "created_at": asset.created_at.isoformat() if asset.created_at else None,
+                }
+            )
+    if selected in {"all", "cad"}:
+        extracts = db.scalars(
+            select(CadExtract)
+            .where(CadExtract.user_id == auth_user.user_id)
+            .order_by(CadExtract.created_at.desc(), CadExtract.id.desc())
+            .limit(400)
+        ).all()
+        for record in extracts:
+            floors = ((record.payload_json or {}).get("spaces") or {}).get("floors") or []
+            preview = ""
+            for floor in floors:
+                if floor.get("preview_path"):
+                    preview = str(floor["preview_path"])
+                    break
+            items.append(
+                {
+                    "id": record.public_id,
+                    "kind": "cad",
+                    "title": record.file_name,
+                    "subtitle": record.status,
+                    "preview_path": preview,
+                    "history_href": f"/studio/cad?extract={record.public_id}",
+                    "created_at": record.created_at.isoformat() if record.created_at else None,
+                }
+            )
+    keyword = q.strip().lower()
+    since_day = since.strip()[:10]
+    until_day = until.strip()[:10]
+    if keyword or since_day or until_day:
+        filtered = []
+        for item in items:
+            created_day = (item["created_at"] or "")[:10]
+            if keyword and keyword not in f"{item['title']} {item['subtitle']}".lower():
+                continue
+            if since_day and created_day < since_day:
+                continue
+            if until_day and created_day > until_day:
+                continue
+            filtered.append(item)
+        items = filtered
+    items.sort(key=lambda item: item["created_at"] or "", reverse=True)
+    start = (page - 1) * page_size
+    return {
+        "kind": selected,
+        "page": page,
+        "page_size": page_size,
+        "total": len(items),
+        "items": items[start : start + page_size],
+    }

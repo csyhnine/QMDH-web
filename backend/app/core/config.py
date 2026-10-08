@@ -158,6 +158,10 @@ class Settings(BaseSettings):
     meilisearch_inspiration_index: str = "qmdh_inspiration"
     meilisearch_templates_index: str = "qmdh_templates"
     studio_agent_enabled: bool = False
+    cad_max_upload_bytes: int = 50 * 1024 * 1024
+    cad_max_entities: int = 200_000
+    cad_dwg_converter_cmd: str = ""
+    cad_dwg_converter_timeout_seconds: int = 120
     chat_default_context_window_tokens: int = 128000
     chat_completion_reserve_tokens: int = 4096
     chat_summary_budget_tokens: int = 2048

@@ -17,7 +17,7 @@ from app.core.middleware import (
 )
 from app.core.rate_limit import RateLimitMiddleware
 from app.database import Base, SessionLocal, engine
-from app.routers import agent, ai_tools, announcements, assets, auth, canvas_projects, canvas_templates, chat, chat_experience, dashboard, feedback, generation_analytics, health, inspiration, platform_settings, projects, prompt_polish, prompt_templates, providers, search, seedance_avatar, studio_agent, tasks, users, workflows
+from app.routers import agent, ai_tools, announcements, assets, auth, cad, canvas_projects, canvas_templates, chat, chat_experience, dashboard, feedback, generation_analytics, health, inspiration, platform_settings, projects, prompt_polish, prompt_templates, providers, search, seedance_avatar, studio_agent, tasks, users, workflows
 from app.services.bootstrap import ensure_schema, seed_initial_data
 from app.services.media_storage import media_root_path, validate_storage_backend_configuration
 from app.services.chat_telemetry_alert_service import run_chat_telemetry_alerts_once
@@ -197,6 +197,7 @@ app.include_router(workflows.router, prefix=settings.api_prefix)
 app.include_router(tasks.router, prefix=settings.api_prefix)
 app.include_router(agent.router, prefix=settings.api_prefix)
 app.include_router(assets.router, prefix=settings.api_prefix)
+app.include_router(cad.router, prefix=settings.api_prefix)
 app.include_router(seedance_avatar.router, prefix=settings.api_prefix)
 app.include_router(feedback.router, prefix=settings.api_prefix)
 app.include_router(dashboard.router, prefix=settings.api_prefix)

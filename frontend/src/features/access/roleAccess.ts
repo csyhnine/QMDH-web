@@ -5,6 +5,7 @@ export type AdminModuleKey =
   | "generation-analytics"
   | "chat-experience"
   | "usage-logs"
+  | "cad-usage"
   | "inspiration"
   | "feedback"
   | "models"

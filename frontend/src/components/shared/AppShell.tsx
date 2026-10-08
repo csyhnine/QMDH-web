@@ -7,7 +7,7 @@ import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from 
 import { useAdminFeedbackPendingCount } from "../../lib/useAdminFeedbackPendingCount";
 import { BrandIcon } from "./Brand";
 
-type StudioTab = "generate" | "inspiration" | "feedback" | "chat" | "canvas" | "nav";
+type StudioTab = "generate" | "inspiration" | "feedback" | "chat" | "canvas" | "nav" | "cad" | "library";
 type AdminTab = AdminModuleKey;
 
 type AppShellProps =
@@ -25,16 +25,23 @@ type AppShellProps =
 
 import { isStudioCanvasEnabled } from "../../lib/featureFlags";
 
-const adminNavItems: Array<{ key: AdminTab; label: string; path: string }> = [
+const adminNavItems: Array<{ key: AdminTab; label: string; path: string; activeKeys?: AdminTab[] }> = [
   { key: "dashboard", label: "看板", path: "/admin/dashboard" },
-  { key: "generation-analytics", label: "生成分析", path: "/admin/generation-analytics" },
-  { key: "chat-experience", label: "Chat 体验", path: "/admin/chat-experience" },
-  { key: "usage-logs", label: "日志", path: "/admin/usage-logs" },
+  {
+    key: "generation-analytics",
+    label: "数据",
+    path: "/admin/generation-analytics",
+    activeKeys: ["generation-analytics", "chat-experience", "usage-logs", "cad-usage"],
+  },
   { key: "inspiration", label: "灵感", path: "/admin/inspiration" },
   { key: "feedback", label: "反馈", path: "/admin/feedback" },
   { key: "models", label: "模型", path: "/admin/models" },
-  { key: "templates", label: "模板", path: "/admin/templates" },
-  { key: "canvas-templates", label: "画布模板", path: "/admin/canvas-templates" },
+  {
+    key: "templates",
+    label: "模板",
+    path: "/admin/templates",
+    activeKeys: ["templates", "canvas-templates"],
+  },
   { key: "announcements", label: "公告", path: "/admin/announcements" },
   { key: "ai-tools", label: "工具导航", path: "/admin/ai-tools" },
   { key: "agents", label: "助手能力", path: "/admin/agents" },
@@ -46,6 +53,8 @@ const studioNavItems: Array<{ key: Exclude<StudioTab, "generate"> | "generate"; 
   { key: "inspiration", label: "灵感", path: "/studio/inspiration" },
   { key: "feedback", label: "反馈", path: "/studio/feedback" },
   { key: "generate", label: "生成", path: "/studio/generate" },
+  { key: "cad", label: "图纸", path: "/studio/cad" },
+  { key: "library", label: "资产库", path: "/studio/library" },
   ...(isStudioCanvasEnabled
     ? ([{ key: "canvas" as const, label: "无限画布", path: "/studio/canvas" }] as const)
     : []),
@@ -111,7 +120,7 @@ export default function AppShell(props: AppShellProps) {
                     key={item.key}
                     type="button"
                     className={[
-                      props.active === item.key ? "rail-item active" : "rail-item",
+                      item.activeKeys?.includes(props.active) || props.active === item.key ? "rail-item active" : "rail-item",
                       allowed ? "" : "rail-item-locked",
                     ]
                       .filter(Boolean)

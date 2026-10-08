@@ -26,9 +26,11 @@ import {
 import { AppShell, AuthGuard, LoadingFallback } from "./components/shared";
 import { useAuth } from "./context/AuthContext";
 import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from "./features/access/roleAccess";
+import AdminSectionTabs, { INSIGHT_TABS, TEMPLATE_TABS } from "./features/admin/AdminSectionTabs";
 import { isStudioCanvasEnabled } from "./lib/featureFlags";
 
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
+const CadUsagePage = lazy(() => import("./pages/admin/CadUsagePage"));
 const DashboardPage = lazy(() => import("./pages/admin/DashboardPage"));
 const GenerationAnalyticsPage = lazy(() => import("./pages/admin/GenerationAnalyticsPage"));
 const ChatExperiencePage = lazy(() => import("./pages/admin/ChatExperiencePage"));
@@ -48,6 +50,8 @@ const InspirationPage = lazy(() => import("./pages/inspiration/InspirationPage")
 const ChatPage = lazy(() => import("./pages/chat/ChatPage"));
 const FeedbackPage = lazy(() => import("./pages/studio/FeedbackPage"));
 const GeneratePage = lazy(() => import("./pages/studio/GeneratePage"));
+const CadExtractPage = lazy(() => import("./pages/studio/CadExtractPage"));
+const AssetLibraryPage = lazy(() => import("./pages/studio/AssetLibraryPage"));
 const CanvasPage = lazy(() => import("./pages/studio/CanvasPage"));
 function ProtectedRoute({ children }: { children: JSX.Element }) {
   return <AuthGuard>{children}</AuthGuard>;
@@ -298,6 +302,7 @@ function PromptTemplatesRoute() {
 
   return (
     <AppShell kind="admin" active="templates">
+      <AdminSectionTabs tabs={TEMPLATE_TABS} active="templates" />
       <PromptTemplatesPage templates={templates} error={error} onRefresh={() => void refresh()} onSetError={setError} />
     </AppShell>
   );
@@ -322,6 +327,7 @@ function CanvasTemplatesRoute() {
 
   return (
     <AppShell kind="admin" active="canvas-templates">
+      <AdminSectionTabs tabs={TEMPLATE_TABS} active="canvas-templates" />
       <CanvasTemplatesPage templates={templates} error={error} onRefresh={() => void refresh()} onSetError={setError} />
     </AppShell>
   );
@@ -548,6 +554,26 @@ export default function AppRouter() {
           <Route path="/" element={<Navigate to="/studio/generate" replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/studio/generate" element={<ProtectedRoute><GeneratePage /></ProtectedRoute>} />
+          <Route
+            path="/studio/cad"
+            element={
+              <ProtectedRoute>
+                <AppShell kind="studio" active="cad">
+                  <CadExtractPage />
+                </AppShell>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/studio/library"
+            element={
+              <ProtectedRoute>
+                <AppShell kind="studio" active="library">
+                  <AssetLibraryPage />
+                </AppShell>
+              </ProtectedRoute>
+            }
+          />
           <Route path="/studio/inspiration" element={<ProtectedRoute><InspirationRoute /></ProtectedRoute>} />
           <Route path="/studio/feedback" element={<ProtectedRoute><StudioFeedbackRoute /></ProtectedRoute>} />
           <Route path="/studio/nav" element={<ProtectedRoute><AiToolsNavRoute /></ProtectedRoute>} />
@@ -580,6 +606,7 @@ export default function AppRouter() {
               <ProtectedRoute>
                 <AdminOnlyRoute>
                   <AppShell kind="admin" active="generation-analytics">
+                    <AdminSectionTabs tabs={INSIGHT_TABS} active="generation-analytics" />
                     <GenerationAnalyticsPage />
                   </AppShell>
                 </AdminOnlyRoute>
@@ -592,6 +619,7 @@ export default function AppRouter() {
               <ProtectedRoute>
                 <AdminOnlyRoute>
                   <AppShell kind="admin" active="chat-experience">
+                    <AdminSectionTabs tabs={INSIGHT_TABS} active="chat-experience" />
                     <ChatExperiencePage />
                   </AppShell>
                 </AdminOnlyRoute>
@@ -604,7 +632,21 @@ export default function AppRouter() {
               <ProtectedRoute>
                 <AdminOnlyRoute>
                   <AppShell kind="admin" active="usage-logs">
+                    <AdminSectionTabs tabs={INSIGHT_TABS} active="usage-logs" />
                     <UsageLogsPage />
+                  </AppShell>
+                </AdminOnlyRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/cad-usage"
+            element={
+              <ProtectedRoute>
+                <AdminOnlyRoute>
+                  <AppShell kind="admin" active="cad-usage">
+                    <AdminSectionTabs tabs={INSIGHT_TABS} active="cad-usage" />
+                    <CadUsagePage />
                   </AppShell>
                 </AdminOnlyRoute>
               </ProtectedRoute>

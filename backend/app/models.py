@@ -868,6 +868,29 @@ class AiTool(Base):
     created_by: Mapped[User | None] = relationship()
 
 
+class CadExtract(Base):
+    """Structured extract payload from uploaded DWG/DXF drawings."""
+
+    __tablename__ = "cad_extracts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    public_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    file_name: Mapped[str] = mapped_column(String(255))
+    source_format: Mapped[str] = mapped_column(String(8))
+    source_storage_path: Mapped[str] = mapped_column(String(255))
+    converted_dxf_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    extract_json_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    warnings_json: Mapped[list] = mapped_column(JSON, default=list)
+    error_message: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    user: Mapped[User] = relationship()
+
+
 class PlatformSettings(Base):
     """Singleton platform feature toggles (row id=1)."""
 

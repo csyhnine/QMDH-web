@@ -1257,3 +1257,63 @@ class ChatAgentPolicyOut(BaseModel):
     personalization_summary: str | None = None
     user_group_name: str | None = None
     assigned_agents: list[AssignedAgentOut] = Field(default_factory=list)
+
+
+class CadExtractUploadIn(BaseModel):
+    file_name: str = Field(min_length=1, max_length=255)
+    data_url: str = Field(min_length=20)
+
+
+class CadRoomEditIn(BaseModel):
+    floor_index: int = Field(ge=1)
+    room_id: str = Field(default="", max_length=40)
+    action: str = Field(pattern="^(rename|remove|paint|create|undo)$")
+    proposal: str | None = None
+    strokes: list[dict] = Field(default_factory=list)
+
+
+class CadProgramReviewIn(BaseModel):
+    notes: dict[str, str] = Field(default_factory=dict)
+
+
+class CadProgramRearrangeItem(BaseModel):
+    floor_index: int
+    floor_label: str
+    room_id: str
+    marker: str = ""
+    current_name: str
+    current_activity: str
+    proposal: str
+    activity: str
+    reason: str
+    split_hint: str = ""
+
+
+class CadProgramRearrangeOut(BaseModel):
+    model_name: str
+    items: list[CadProgramRearrangeItem] = Field(default_factory=list)
+
+
+class CadProgramApplyItem(BaseModel):
+    floor_index: int = Field(ge=1)
+    room_id: str = Field(min_length=1, max_length=40)
+    proposal: str = Field(min_length=1, max_length=40)
+    activity: str = Field(pattern="^(静|动|中性)$")
+    reason: str = Field(default="", max_length=80)
+
+
+class CadProgramApplyIn(BaseModel):
+    items: list[CadProgramApplyItem] = Field(min_length=1, max_length=40)
+
+
+class CadExtractOut(BaseModel):
+    extract_id: str
+    status: str
+    file_name: str
+    source_format: str
+    source_storage_path: str
+    converted_dxf_path: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    error_message: str | None = None
+    data: dict = Field(default_factory=dict)
+    created_at: datetime | None = None

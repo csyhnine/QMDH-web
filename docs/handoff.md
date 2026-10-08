@@ -11,6 +11,17 @@
 
 ## Latest Handoffs
 
+### [2026-10-08] CAD 几何布置收口 — **WIP（未 commit，下一任务是部署准备）**
+
+- **目标：** 五段已在本地做完（多边形、可摆区域、组团、评分、咖啡厅吧台/操作台）。下一轮只准备部署，用户明确说提交并部署之前不要 push、不要上生产。
+- **当前图：** `ce_94778ce26c6e`（09/28 15:02）。刷新会选中 `ce_d2955df6f9b9`（17:56），不要生成那条。一层网格 **4.74**，组团分 0，家具 121 件，分隔墙 20 段。二层没有在这三段之后重布。
+- **测试：** `tests/test_cad_extract.py -k fitout` **16 passed**（评分和家具库之后未跑整文件）
+- **本地：** 2026-10-08 留档时 18010 / 18011 / 18080 都没在听。要看页面再拉 18080，接口用 18011。不要占掉或杀掉已有的 18010。
+- **Git：** main @ `1c68f52`，CAD **未 commit**。Migration `z1a2b3c4d5e6`（父版本 `y0z1a2b3c4d5`）未跑生产。依赖新增 `shapely`，上线必须 rebuild，不能热补。
+- **Next：** 做部署准备清单（提交范围、排除 `_tmp` / `app.db` / `storage`、迁移、Linux 上的 DWG 转换器、备份后 rebuild）。不要改布置算法。
+- **详档：** `docs/archive/handoff-2026-10-08-cad-geometry-fitout-wip.md`
+- Safe to hand off: **Yes（WIP）**
+
 ### [2026-09-22] Chat UX 修复 + 埋点 P0–P3 — **DONE（已部署）**
 
 - **动机：** 生产用户许潇上传大 PDF 后 Chat 无回复（pack 耗时 + SSE 中断 + 无错误提示）；需可量化漏斗与告警
@@ -36,15 +47,4 @@
 - **详档：** `docs/archive/handoff-2026-09-18-prompt-polish-optimization-deploy.md`
 - Safe to hand off: **Yes**
 
-### [2026-09-16] Studio 滚动/创作区 + 生产运维清理 — **DONE（已部署 + 运维完成）**
-
-- **Studio（已上生产）：** 创作区收纳抽动修复；进入项目自动滚历史**最下方**；右侧灰色圆形悬浮 ↑↓ 钮（`StudioHistoryScrollFab`）
-- **GitHub main：** `be7daa1`（`9d862bc` + `be7daa1`）
-- **生产 HEAD：** `4c1ca8ae`（merge origin + Banana 热补丁）
-- **运维已做：** 僵尸 task #8/#9 关闭；worker 重建；31 条 Chat 对话迁 claude；Docker 安全清理（~0.9GB，**未动 media**）
-- **磁盘：** 82% 使用，~8.5GB 可用；媒体卷 **~23GB**（8141 assets）；约 **+7~8GB/月** 增长 → 需规划升盘或 OSS
-- **详档：** `docs/archive/handoff-2026-09-16-studio-ops-storage.md`
-- **deploy 前端：** merge → `docker compose build frontend` → `up -d --no-deps frontend`
-- Safe to hand off: **Yes**
-
-（2026-09-04 符号主题 / Grok hotfix 等更早条目见 `docs/archive/`；灵感库搁置见 `docs/tasks.md`）
+（2026-09-16 Studio 滚动/运维、2026-09-04 等更早条目见 `docs/archive/`；灵感库搁置见 `docs/tasks.md`）

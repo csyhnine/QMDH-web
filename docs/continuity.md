@@ -20,8 +20,8 @@ This file is the fast handoff baseline for the next agent. Read these first:
 - GitHub **`main`** @ **`be7daa1`**（Studio 收纳/历史滚底/悬浮滚动钮 + 前序 Chat 上下文阶段 1）
 - Production: **`https://cityusbdisk.cn`** — git HEAD **`4c1ca8ae`**（merge origin + Banana 热补丁）；health **200**
 - Alembic head（生产已应用）：**`a8b9c0d1e2f3`**
-- 最新交接：`docs/handoff.md` → **`[2026-09-16] Studio 滚动/创作区 + 生产运维清理`**
-- 详档：`docs/archive/handoff-2026-09-16-studio-ops-storage.md`（Studio+运维）；Chat 见 `docs/archive/handoff-2026-09-16-chat-model-switch-context-stats.md`
+- 最新交接：`docs/handoff.md` → **`[2026-10-08] CAD 几何布置收口`**（WIP，未 commit；下一任务是部署准备，先不要上生产）
+- 详档：`docs/archive/handoff-2026-10-08-cad-geometry-fitout-wip.md`。加门时的布置见 `docs/archive/handoff-2026-09-29-cad-fitout-wip.md`
 - **Studio 生产态（2026-09-16）：** 默认排序 **最早优先**（最新在底部）；进入项目自动滚底；历史区右侧灰色圆形 ↑↓ 悬浮钮
 - **Chat 生产态：** 助手 UI **关**；Chat 模型 **claude-opus-4-6** / **gemini-3.7-flash-high**；禁用模型对话已迁 claude
 - **磁盘（2026-09-16）：** 根分区 **82%**，可用 **~8.5GB**；媒体卷 **~23GB**（8141 assets）；已做 Docker 安全清理（**未删 media**）；约 **+7~8GB/月** → 需升盘或 OSS（`prod-008`）

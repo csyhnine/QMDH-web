@@ -16,7 +16,7 @@ export default function StudioFeedCard(props: StudioFeedCardProps) {
   } = buildStudioFeedCardLayoutProps(props, cardState);
 
   return (
-    <article className={cardState.articleClassName} ref={props.anchorRef}>
+    <article id={`studio-task-${props.task.id}`} className={cardState.articleClassName} ref={props.anchorRef}>
       <StudioFeedReferenceBadge {...referenceBadgeProps} />
       <StudioFeedCardHeader {...headerProps} />
       <StudioFeedCardResult {...resultProps} />

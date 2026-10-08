@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import StudioHistoryFeedItem from "./StudioHistoryFeedItem";
 import type { StudioHistoryFeedProps } from "./studioHistoryFeedTypes";
 
@@ -23,6 +25,12 @@ export default function StudioHistoryFeed({
   onPreviewAsset,
   onCopyTaskToComposer,
 }: StudioHistoryFeedProps) {
+  useEffect(() => {
+    const taskId = new URLSearchParams(window.location.search).get("task");
+    if (!taskId) return;
+    document.getElementById(`studio-task-${taskId}`)?.scrollIntoView({ block: "center" });
+  }, [tasks]);
+
   return (
     <>
       {tasks.map((task) => (

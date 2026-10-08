@@ -11,16 +11,16 @@
 
 ## Latest Handoffs
 
-### [2026-10-08] CAD 几何布置收口 — **WIP（未 commit，下一任务是部署准备）**
+### [2026-10-08] CAD 图纸提取上生产 — **DONE（已部署）**
 
-- **目标：** 五段已在本地做完（多边形、可摆区域、组团、评分、咖啡厅吧台/操作台）。下一轮只准备部署，用户明确说提交并部署之前不要 push、不要上生产。
-- **当前图：** `ce_94778ce26c6e`（09/28 15:02）。刷新会选中 `ce_d2955df6f9b9`（17:56），不要生成那条。一层网格 **4.74**，组团分 0，家具 121 件，分隔墙 20 段。二层没有在这三段之后重布。
-- **测试：** `tests/test_cad_extract.py -k fitout` **16 passed**（评分和家具库之后未跑整文件）
-- **本地：** 2026-10-08 留档时 18010 / 18011 / 18080 都没在听。要看页面再拉 18080，接口用 18011。不要占掉或杀掉已有的 18010。
-- **Git：** main @ `1c68f52`，CAD **未 commit**。Migration `z1a2b3c4d5e6`（父版本 `y0z1a2b3c4d5`）未跑生产。依赖新增 `shapely`，上线必须 rebuild，不能热补。
-- **Next：** 做部署准备清单（提交范围、排除 `_tmp` / `app.db` / `storage`、迁移、Linux 上的 DWG 转换器、备份后 rebuild）。不要改布置算法。
+- **代码：** GitHub `main` 功能提交 `872dc3f`。生产 git 合并为 `1783bec`（服务器上原有的 merge 历史不能快进）。运行中的 backend / worker / frontend 由这次合并重建。
+- **迁移：** 上线前 `y0z1a2b3c4d5`，升级后 **`z1a2b3c4d5e6`（head）**。shapely **2.2.0** 在新镜像里。
+- **健康：** `https://cityusbdisk.cn/api/v1/health` 为 healthy（database、redis）。`/studio/cad` 返回 **200**，前端包内有 `CadExtractPage`。
+- **DWG：** 生产未配置 `QMDH_CAD_DWG_CONVERTER_CMD`，也没有 Linux 版 ODA。上传 DWG 会 `needs_conversion`，需改传 DXF。不要把本机 Windows 的 `ODAFileConverter.exe` 写入仓库或 `.env`。
+- **数据：** 生产 CAD 表是空的。本地 `ce_94778ce26c6e` 不会上去，不要在生产重跑这条，也不要解析 `ce_d2955df6f9b9` 或改旧图 `ce_b121e1b892de`。不要改布置算法。
+- **磁盘：** 同日按 9 月 21 日约定，删除 30 天前的 `generated/` 图片和视频 **6974** 个（约 12.7GB）。灵感库仍引用的 1 条留下。媒体卷约 **13.7GB**，根分区约 **60%**、可用约 **19GB**。
 - **详档：** `docs/archive/handoff-2026-10-08-cad-geometry-fitout-wip.md`
-- Safe to hand off: **Yes（WIP）**
+- Safe to hand off: **Yes**
 
 ### [2026-09-22] Chat UX 修复 + 埋点 P0–P3 — **DONE（已部署）**
 

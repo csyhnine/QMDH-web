@@ -209,12 +209,12 @@
 - 归档：`docs/archive/deploy-2026-07-26-agent-memory.md`
 
 ### Task: [cad-extract-001] 居委会图纸分区、审查与家具
-- 状态：**WIP**（五段本地收口；**未 commit**；fitout pytest **16 passed**；未部署）
+- 状态：**DONE（2026-10-08 已部署生产）**
 - 详档：`docs/archive/handoff-2026-10-08-cad-geometry-fitout-wip.md`（09-29「还是不对」已过时）
 - 已做：几何分区、多边形与可摆区域、组团、评分改写、咖啡厅吧台/操作台；男女卫生间与厕位门保留
-- 当前图：`ce_94778ce26c6e`（09/28 15:02），一层网格 4.74。不要生成 `ce_d2955df6f9b9`。不要改旧图 `ce_b121e1b892de` 的咖啡厅
-- 非目标：线稿、ControlNet、Canvas 生图；部署准备时不要再改布置算法
-- Next：准备部署清单。commit、push、生产 migration `z1a2b3c4d5e6` 和 rebuild 都要用户另说。排除 `scripts/_tmp_*`、`backend/app.db`、`backend/storage/**`
+- 部署：GitHub `872dc3f`，生产合并 `1783bec`，迁移 **`z1a2b3c4d5e6`**，`/studio/cad` 200。生产未配置 DWG 转换器，DWG 需改传 DXF。生产 CAD 数据为空，不要重跑 `ce_94778ce26c6e`
+- 非目标：线稿、ControlNet、Canvas 生图；不要再改布置算法，不要拆卫生间
+- 本地图：`ce_94778ce26c6e`（09/28 15:02），一层网格 4.74。不要生成 `ce_d2955df6f9b9`。不要改旧图 `ce_b121e1b892de` 的咖啡厅
 
 ### Task: [chat-b2-001] Chat → 生图/视频 HITL
 - 状态：**IN PROGRESS**（本迭代 Slice 3）

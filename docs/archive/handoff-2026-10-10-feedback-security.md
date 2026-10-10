@@ -1,5 +1,7 @@
 # Handoff — 反馈防滥用（2026-10-10）
 
+发布覆盖：55216ab 已推送并部署；迁移 c4d5e6f7g8h9，运行镜像来自生产合并 30dfe26。下文为发布前开发记录，最新状态见 handoff-2026-10-10-feedback-security-release.md。
+
 状态：本地完成，未 commit/push/部署。分支 feature/skill-feedback-002-security，基线 4bae2f2。GitHub main 未改，生产仍上一轮镜像/迁移，详见 production-release 归档。
 
 ## 用户范围

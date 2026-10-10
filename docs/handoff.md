@@ -11,16 +11,16 @@
 
 ## Latest Handoffs
 
-### [2026-10-10] 反馈防滥用 — **DONE（本地，未提交/部署）**
+### [2026-10-10] 反馈防滥用 — **已提交、推送、部署**
 
-- **范围：** 独立采集凭证（admin 创建/撤销、用户/设备、skill 版本范围、过期/停用）、持久原子配额、解析前 64 KiB 限制、nginx IP 限制；外部问题待核实，admin/ops 确认后才聚合/重开。双状态与人工线程保留，已核实独立用户数展示。
-- **分支/基线：** feature/skill-feedback-002-security / 4bae2f2；开始时 fetch 后与 origin/main 一致。新迁移 c4d5e6f7g8h9，生产仍 b3c4d5e6f7g8，没有生产操作。
-- **验证：** 后端关键集 102 passed、16 subtests、1 skipped；安全/反馈专项 24 passed。20 并发争抢 5 次配额，5 成功/15 个 429。前端 15 项回归、0 新增类型错误、构建通过；原 TypeScript 23 项基线保留。
-- **待验收：** PostgreSQL 并发、nginx 实际运行、浏览器、平台联调；本机 Docker 引擎未运行。没有创建真实凭证或采集 skill。上线前不要发放外部采集凭证，当前生产仍是原版 Agent 认证。
-- **保护：** 原 styles.css 13 行、比较文档、_tmp_* 原状；不动 CAD/18010/业务库/生产 key/数据卷，不发外部消息。用户随后授权提交、推送、部署；正在备份和发布验收，部署完成后追加实际记录。
-- **详档：** docs/archive/handoff-2026-10-10-feedback-security.md；契约 docs/skill-feedback.md。创建新凭证后降级会拒绝，避免丢历史，应用回退应保留新增结构。
+- **版本：** GitHub 功能 55216ab；生产发布合并 30dfe26，backend/worker/frontend 镜像由其构建；迁移 c4d5e6f7g8h9。后续文档合并不重建镜像。
+- **范围：** 独立可撤销/过期、限定用户/设备/skill 版本的采集凭证；数据库原子额度、解析前体积和 nginx IP 限制；外部问题先核实，再聚合/重开。人工线程与双状态保留。
+- **验证：** GitHub Linux 103 passed + 16 subtests，前端 15 项/0 新增 TS 错误；隔离 PostgreSQL 副本迁移、权限、核实与 20 并发争抢 5 次额度通过。nginx -t 和实际 413/429 通过；公网健康/CAD/反馈页面 200，未认证接口 401，生产管理只读查询通过，近期日志无异常签名。
+- **备份：** /www/backup/qmdh-release-20261010-151347，配对本机 E:/backups/QMDH-web/release-20261010-151347；媒体整包 14.6GB + 15.8MB 增量，CRC/逐项读检与当前 5740 文件元数据核对。恢复先整包再覆盖增量。备份期间有 3 个新上传，非零归档退出经完整读检和补增量解决，未删除文件。
+- **保护：** .env 校验一致，key/卷/18010/CAD 未改；保留生产 Nano Banana 4 文件。原 styles.css 13 行、比较文档及 _tmp_* 未提交。旧镜像标签 :20261010-security 保留。
+- **后续：** 生产专用凭证数量 0，没有安装平台 skill/采集真实数据。管理员按用户发凭证后再做平台联调；真实浏览器操作尚未验收。根分区约 64%/17GB 可用。
+- **详档：** docs/archive/handoff-2026-10-10-feedback-security-release.md；契约 docs/skill-feedback.md。隔离测试 DB 已移除；应用回退保留新增表/列，不自动降级。
 - Safe to hand off: **Yes**
-
 
 ### [2026-10-10] 累计稳定化与 Skill 反馈 — **已提交、推送、部署**
 

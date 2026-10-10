@@ -15,12 +15,12 @@ Last aligned: `2026-10-10`。旧任务原文与开发顺序完整保存在 `arch
 
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
-| skill-feedback-002 | 反馈防滥用 | DONE（功能完成，发布中） | 专用凭证、持久配额、待核实隔离；先发布安全版再接平台 |
+| skill-feedback-002 | 反馈防滥用 | DONE（已部署） | 55216ab / 生产 30dfe26，迁移 c4d5e6f7g8h9；专用凭证尚未发放，平台联调待做 |
 | skill-feedback-001 | Skill 自动采集与改进后台 | DONE（已部署） | 08a2884 已发布，迁移 b3c4d5e6f7g8；平台采集 skill 与浏览器联调待做 |
 | studio-perf-003 | 历史分页与运行任务跟踪 | DONE（已部署） | 08a2884 已发布，运行镜像来自生产合并 861a49a |
 | studio-perf-005 | 后台暂停与配置刷新 | DONE（已部署） | 随 08a2884 发布，加载器 10 项回归 |
 | docs-align-001 | 正式文档对齐 | DONE（已提交） | 已归档并发布，最新部署记录补实际验证 |
-| quality-gate-001 | 最小自动检查 | DONE（已提交/CI 通过） | GitHub Linux 后端 95 passed + 16 subtests，前端检查通过 |
+| quality-gate-001 | 最小自动检查 | DONE（已提交/CI 通过） | 最新 GitHub Linux 后端 103 passed + 16 subtests，前端 15 项检查通过 |
 | ops-storage-001 | 媒体治理 | IN_PROGRESS | 只读工具已发布，生产容量复测 63%/18GB；未执行引用审计或清理 |
 | studio-perf-001 | ECS 容量评估 | TODO | 旧 9 月负载记录只作线索，升配/swap 前重新测量 |
 | studio-perf-002 | nginx 媒体直出 | DONE（代码已存在） | nginx alias + frontend 只读卷；本轮未复核生产运行配置 |
@@ -36,16 +36,14 @@ Last aligned: `2026-10-10`。旧任务原文与开发顺序完整保存在 `arch
 
 ### Task: [skill-feedback-002] 反馈防滥用
 
-- 状态：DONE（本地，未提交/push/部署）。用户 2026-10-10 已授权提交、推送和部署；发布验收进行中。
-- 分支：feature/skill-feedback-002-security，基线 4bae2f2；fetch 后与 origin/main 一致。原访客 styles.css、比较文档和临时脚本保持原状。
-- 目标：反馈凭证不能调用其他业务接口；刷量有硬限额；未经核实的外部数据不能干扰改进状态。
-- 边界：独立凭证及管理员创建/撤销、名称/版本范围、过期/停用；数据库原子配额、解析前体积限制、nginx 入口限制；事件待核实/驳回与确认聚合；保留原人工线程及双状态。
-- 验收：反馈与 Agent 凭证互不接受，越权/撤销/过期/停用拒绝；并发配额不超支；待核实不进收件箱、不重开问题；只有 admin/ops 核实；恶意文本无执行/抓取；迁移保留历史链接。
-- 验证：后端关键集 102 passed、16 subtests、1 skipped，安全/反馈专项 24 passed；前端恶意内容/核实入口 2 项组件渲染回归通过。统一前端检查 15 项通过、23 既有/0 新增类型错误、Vite 构建通过。
-- 依赖/风险：新迁移 c4d5e6f7g8h9，生产仍 b3c4d5e6f7g8；创建凭证后拒绝破坏性降级。部署前做 PostgreSQL/nginx 与浏览器验收；安全版未上线前不分发采集密钥，平台联调仍待做。
-- 禁止项：不创建真实凭证、不采集真实用户数据、不修改生产配置或业务数据（迁移与发布按授权执行）、不安装平台 skill、不动 CAD/18010/原无关文件。
-- 文档：skill-feedback、architecture、decisions、checks、handoff 与 archive/handoff-2026-10-10-feedback-security.md。
-- 2.0：凭证、原始事件、核实、改进分别追踪和审计，不扩成编排引擎。
+- 状态：DONE（已提交/push/部署）。用户 2026-10-10 授权；GitHub 功能 55216ab，运行镜像来自生产合并 30dfe26，迁移 c4d5e6f7g8h9。
+- 分支：feature/skill-feedback-002-security；原访客 styles.css、比较文档和临时脚本保持原状。
+- 目标/实现：反馈独立凭证不能调业务接口；用户/设备/skill 版本、过期/停用/撤销、原子额度、解析前大小和 nginx IP 限制；未经核实问题不进收件箱/不重开，admin/ops 确认后聚合，恶意文本只存为数据。
+- 验证：本地 102 passed + 16 subtests/1 skipped，GitHub Linux 103 passed + 16 subtests；前端 15 项、23 既有/0 新增 TS 错误及构建通过。隔离 PostgreSQL 迁移/认证/核实/并发硬限额、nginx 实际 413/429，公网和生产只读查询通过；没有合成业务数据写入生产。
+- 风险/后续：生产凭证数量 0；平台 skill 与真实浏览器操作待验收。旧来源声明仍非真实性证明；创建新凭证后不做破坏性 downgrade。旧镜像、配置/DB/整包+增量媒体备份保留。
+- 边界：不分发真实凭证、不安装平台 skill、不改 CAD/18010/key/媒体数据；生产保留 Nano Banana 四文件。
+- 文档：skill-feedback、architecture、decisions、checks、handoff 与 archive/handoff-2026-10-10-feedback-security-release.md。
+- 2.0：凭证、原始事件、核实、改进分别追踪/审计，不扩成编排引擎。
 
 ### Task: [skill-feedback-001] Skill 自动采集与改进后台
 

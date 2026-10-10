@@ -2,7 +2,7 @@
 
 Last updated: `2026-10-10`
 
-最新发布/备份/服务器历史差异见 `archive/handoff-2026-10-10-production-release.md`。服务器存在合并历史，不能用 --ff-only；admin 须有提交身份，本轮用一次性 git -c 配置。现有 deploy-production-rebuild.sh 仍包含旧快进/旧镜像迁移流程，不适用于本服务器，按下方 Daily Update 手工顺序操作。
+最新反馈安全发布/备份见 `archive/handoff-2026-10-10-feedback-security-release.md`（功能 55216ab、运行镜像来自 30dfe26、迁移 c4d5e6f7g8h9）；上一轮及服务器历史差异见 `archive/handoff-2026-10-10-production-release.md`。服务器存在合并历史，不能用 --ff-only；admin 须有提交身份，本轮用一次性 git -c 配置。现有 deploy-production-rebuild.sh 仍包含旧快进/旧镜像迁移流程，不适用于本服务器，按下方 Daily Update 手工顺序操作。
 
 ## Current Production-Like Server Snapshot
 

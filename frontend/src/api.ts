@@ -1202,6 +1202,9 @@ export type FeedbackMessage = {
 };
 
 export type FeedbackRecord = {
+  communication_status?: "pending_reply" | "replied";
+  improvement_status?: ImprovementStatus;
+  source?: "human";
   id: number;
   user_id: number;
   user_name: string;
@@ -1237,6 +1240,22 @@ export type FeedbackAdminUpdatePayload = {
 export type FeedbackAdminPendingCount = {
   count: number;
 };
+
+export type ImprovementStatus = "pending_analysis" | "pending_modification" | "pending_verification" | "resolved";
+export type SkillIssue = {
+  id: number; skill_name: string; skill_version: string; problem_code: string; title: string;
+  communication_status: "pending_reply" | "replied"; improvement_status: ImprovementStatus;
+  root_cause: string; modification_suggestion: string; retest_result: string; admin_reply: string;
+  evidence_count: number; updated_at: string;
+  sources?: ("human" | "system" | "ai_inference")[];
+};
+export type SkillEvent = {
+  id: number; event_id: string; run_id: number; issue_id: number | null;
+  correlation_id: string; platform: string; skill_name: string; skill_version: string;
+  source: "human" | "system" | "ai_inference"; event_type: string; summary: string;
+  evidence: Record<string, unknown>[]; evaluation: Record<string, unknown>; occurred_at: string;
+};
+export type SkillFeedbackSummary = { runs: number; completed_runs: number; events: number; issues: number; by_skill: { platform: string; skill_name: string; skill_version: string; events: number }[] };
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api/v1").replace(/\/$/, "");
 const AUTH_STORAGE_KEY = "qmdh.session.token";
@@ -1609,6 +1628,15 @@ export const api = {
     postJson<FeedbackRecord>(`/feedback/${feedbackId}/messages`, payload),
   adminFeedback: () => request<FeedbackRecord[]>("/feedback/admin"),
   adminFeedbackPendingCount: () => request<FeedbackAdminPendingCount>("/feedback/admin/pending-count"),
+  skillFeedbackSummary: () => request<SkillFeedbackSummary>("/feedback/skills/admin/summary"),
+  skillFeedbackIssues: (beforeId?: number) => request<SkillIssue[]>(`/feedback/skills/admin/issues?limit=50${beforeId ? `&before_id=${beforeId}` : ""}`),
+  skillFeedbackEvents: (options: { issue_id?: number; run_id?: number; before_id?: number } = {}) => {
+    const params = new URLSearchParams({ limit: "50" });
+    Object.entries(options).forEach(([key, value]) => { if (value !== undefined) params.set(key, String(value)); });
+    return request<SkillEvent[]>(`/feedback/skills/admin/events?${params}`);
+  },
+  updateSkillIssue: (id: number, changes: Partial<Pick<SkillIssue, "communication_status" | "improvement_status" | "root_cause" | "modification_suggestion" | "retest_result" | "admin_reply">>) => patchJson<SkillIssue>(`/feedback/skills/admin/issues/${id}`, changes),
+  updateFeedbackImprovement: (id: number, improvement_status: ImprovementStatus) => patchJson<FeedbackRecord>(`/feedback/admin/${id}/improvement`, { improvement_status }),
   replyFeedback: (feedbackId: number, payload: FeedbackAdminUpdatePayload) =>
     patchJson<FeedbackRecord>(`/feedback/admin/${feedbackId}`, payload),
   agentClients: () => request<AgentClientRecord[]>("/agent/admin/clients"),
@@ -1804,9 +1832,21 @@ export const api = {
   deleteProviderPricingRule: (ruleId: number) =>
     deleteRequest(`/providers/pricing-rules/${ruleId}`),
   workflows: () => request<Workflow[]>("/workflows"),
-  tasks: () => request<Task[]>("/tasks"),
+  tasks: (options: { limit?: number; before_id?: number; status?: string[]; task_ids?: number[] } = {}) => {
+    const params = new URLSearchParams();
+    if (options.limit !== undefined) params.set("limit", String(options.limit));
+    if (options.before_id !== undefined) params.set("before_id", String(options.before_id));
+    options.status?.forEach((value) => params.append("status", value));
+    options.task_ids?.forEach((id) => params.append("task_ids", String(id)));
+    return request<Task[]>(`/tasks?${params}`);
+  },
   getTask: (taskId: number) => request<Task>(`/tasks/${taskId}`),
-  assets: () => request<Asset[]>("/assets"),
+  assets: (options: { limit?: number; task_ids?: number[] } = {}) => {
+    const params = new URLSearchParams();
+    if (options.limit !== undefined) params.set("limit", String(options.limit));
+    options.task_ids?.forEach((id) => params.append("task_ids", String(id)));
+    return request<Asset[]>(`/assets?${params}`);
+  },
   promptTemplates: () =>
     request<PromptTemplateRecord[]>("/prompt-templates"),
   adminPromptTemplates: () =>

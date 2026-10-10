@@ -1,12 +1,16 @@
 # Architecture
 
-## 2026-05-25 Alignment Update
+2026-10-10 Skill 反馈后台（本地未部署）：`routers/skill_feedback.py` 嵌入 `/feedback/skills`，独立 runs/events/issues 持久化采集事件和聚合问题；正常事件只统计，原人工线程保留并新增改进状态。沟通与改进状态独立，API 契约见 `docs/skill-feedback.md`。新增代码迁移 head `b3c4d5e6f7g8`，生产仍按历史快照为 `z1a2b3c4d5e6`。
+
+媒体运维只读工具（2026-10-10 本地，未部署）：`backend/app/services/media_audit.py` 与 `backend/app/scripts/audit_generated_media.py` 独立于应用启动，扫描默认 schema 文本/JSON 引用并盘点 `generated/`；没有删除入口。使用说明与覆盖限制见 `docs/media-audit.md`。
+
+## 2026-10-08 Alignment Update
 
 - This update overrides older historical references below when they conflict with current runtime behavior.
-- The active permission model is now `admin` and `designer`.
+- 有效角色为 `admin`、`ops`、`designer`；只有 owner 归一为 admin。具体权限见 `backend/app/core/auth.py` 与 `frontend/src/features/access/roleAccess.ts`，ops 仅有部分后台模块权限。
 - Admins can access backend management views such as `/admin/dashboard`, `/admin/models`, `/admin/users`, and `/admin/settings`.
 - Admins can now manage shared studio prompt templates at `/admin/templates`.
-- Designers use the studio and only see their own task and asset history.
+- Studio 生成历史所有角色均按账号归属；有来源任务资产继承任务归属检查，无来源任务资产仍按项目权限处理。
 - Prompt templates now have two scopes: `shared` templates are visible to all studio users, while `private` templates remain visible only to their owner.
 - `/admin/projects` has been removed from the active frontend surface, and project-member management APIs/UI are no longer active product capabilities.
 - Projects still exist in the data model, but they now act as personal or admin-managed task containers rather than shared-history collaboration spaces.
@@ -25,17 +29,17 @@
 
 ## 2. System Overview
 
-QMDH-web 当前是一个前后端分离的原型项目：
+QMDH-web 当前是一个前后端分离的 1.0 生产内测平台：
 
-- `frontend/`：React + Vite + TypeScript 前端，当前正在收束为图像生成工作台
+- `frontend/`：React + Vite + TypeScript，含图像/视频生成、画布、Chat、CAD 与后台页面
 - `backend/`：FastAPI + SQLAlchemy 后端，提供账号、项目、工作流、任务、资产、dashboard 等接口
 - `docs/projects/`：项目阶段状态和里程碑记录
 
-系统当前核心能力是“工作流驱动的任务系统”，图像生成、图像编辑、视频生成、文档生成等能力都被统一抽象为 workflow + task，而不是真正独立的业务服务。
+生成主链路采用 Workflow + Task；普通 Chat 有会话/消息服务，CAD 有独立提取记录与几何处理。不能把所有能力都写成同一个任务执行服务。
 
 MVP 1.0 当前还补充了一套单机服务器部署基线：
 
-- `frontend` 容器：Nginx 托管前端静态文件并反代 `/api`、`/media`
+- `frontend` 容器：Nginx 托管静态文件、反代 `/api`、通过 alias 直出只读共享媒体卷 `/media`
 - `backend` 容器：FastAPI API
 - `worker` 容器：Redis 队列消费者
 - `postgres` 容器：业务数据库
@@ -112,6 +116,8 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
   - 前端状态与任务反馈优化
 
 ### Module: API Surface
+- Studio 刷新策略（`studio-perf-005`，本地未部署）：登录态运行/空闲查询为 4/12 秒；隐藏页面停止轮询、返回立即同步。health/项目/模型/工作流/模板按 5 分钟刷新，配置失败保留原值并低频重试；不暂停服务端任务。请求收尾与账号/组件生命周期隔离，配置刷新保留已加载历史。
+- Studio 历史：`GET /tasks` 支持 `limit`、`before_id`（ID 降序游标）、`task_ids`、`status`；`GET /assets` 支持 `task_ids`，权限/收藏过滤先于 limit。Studio 每页 120 条，按任务取资产，轮询最近 40 条与全部运行任务并按 ID 补查终态，保留已加载历史。项目和状态筛选作用于已加载记录。2026-10-08 本地完成，尚未部署。
 - 路径：
   - `backend/app/routers/`
   - `backend/app/core/auth.py`
@@ -225,7 +231,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
   - 长期迁移治理
   - 生产级 schema 变更策略
 - 当前相关任务：
-  - 从启动补列迁移到正式 migration 体系
+  - 已有 Alembic；启动仍调用 Base.metadata.create_all 与兼容补列 ensure_schema。生产变更必须核对迁移，不可据启动成功认定 schema 已升级。
 
 ### Module: Project Status Docs
 - 路径：
@@ -260,12 +266,12 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 ### Module: Project Management / 项目管理
 - 路径：
   - `backend/app/routers/projects.py`
-  - `frontend/src/pages/admin/ProjectsPage.tsx`
-  - `frontend/src/features/studio/GenerateStudioShell.tsx` 中的项目面板和成员编辑
+  - `frontend/src/features/studio/StudioWorkspacePane.tsx`
+  - `frontend/src/features/studio/useStudioProjects.ts`
 - 职责：
   - 项目 CRUD（创建/重命名/删除）
-  - 项目成员管理（添加/移除）
-  - 项目级访问控制
+  - 个人项目容器的选择和组织；不提供共享历史或项目成员编辑入口
+  - 服务端按当前账号及兼容项目授权检查
 - 依赖：
   - `backend/app/core/auth.py`（ops/admin 权限校验）
   - `backend/app/models.py` 中的 `Project`, `User`
@@ -387,7 +393,7 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
   - 风险：如果不明确维护边界，容易出现模板、事实、历史三者混杂
 
 - 热点模块：`docker-compose.yml` 与部署文件
-  - 原因：MVP 1.0 已开始考虑单机服务器部署
+  - 原因：1.0 已采用单机 Compose 生产部署，数据库/媒体/配置需持续保全
   - 风险：若不持续同步代码与部署配置，极易出现“本地能跑、容器起不来”的漂移
 
 ---
@@ -408,6 +414,8 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 ---
 
 ## 7. Architecture Change Rule
+
+开发验证（2026-10-10 本地未提交）：`.github/workflows/check.yml` 两个只读检查 job；前端 `npm run check` 运行回归、已有类型错误基线对比、构建，后端 `backend/scripts/check.py` 运行明确的离线关键回归。不含部署；不是全类型/全后端/外部集成验收。范围与基线维护见 `docs/checks.md`。
 
 若任务改变了以下任一内容，必须同步更新本文档：
 

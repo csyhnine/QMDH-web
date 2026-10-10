@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 
-import { api, type FeedbackMessage, type FeedbackRecord } from "../../api";
+import { api, type FeedbackMessage, type FeedbackRecord, type ImprovementStatus } from "../../api";
+import SkillFeedbackPanel, { improvementLabels } from "./SkillFeedbackPanel";
 import { formatChinaMonthDayTime } from "../../lib/datetime";
 
 type ReplyDraft = {
@@ -59,6 +60,7 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
   const [selectedId, setSelectedId] = useState<number | null>(feedbackItems[0]?.id ?? null);
   const [replyDraft, setReplyDraft] = useState<ReplyDraft>(defaultReply);
   const [saving, setSaving] = useState(false);
+  const [improvement, setImprovement] = useState<ImprovementStatus>("pending_analysis");
 
   const selectedFeedback = feedbackItems.find((item) => item.id === selectedId) ?? feedbackItems[0] ?? null;
   const openCount = feedbackItems.filter((item) => item.status === "open").length;
@@ -72,11 +74,12 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
       return;
     }
     setSelectedId(selectedFeedback.id);
+    setImprovement(selectedFeedback.improvement_status ?? "pending_analysis");
     setReplyDraft({
       status: (selectedFeedback.status as ReplyDraft["status"]) || "replied",
       admin_reply: "",
     });
-  }, [selectedFeedback?.id]);
+  }, [selectedFeedback?.id, selectedFeedback?.improvement_status]);
 
   async function handleReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -110,12 +113,14 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
       <header className="admin-page-head">
         <div>
           <h1>反馈收件箱</h1>
-          <p>每条反馈都是一条对话线程。你可以多次回复，用户也会在同一线程里继续补充说明。</p>
+          <p>自动采集按问题聚合，人工表单保留对话记录。沟通进度和改进进度分别管理。</p>
         </div>
         <button type="button" className="admin-primary-button" onClick={onRefresh}>
           刷新收件箱
         </button>
       </header>
+
+      <SkillFeedbackPanel onUpdated={onRefresh} />
 
       <div className="admin-kpi-grid">
         <article className="admin-kpi-card admin-blue">
@@ -138,7 +143,7 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
           <div>
             <span>已回复</span>
             <strong>{repliedCount}</strong>
-            <small>已经处理完成</small>
+            <small>沟通已回复，改进可能仍在进行</small>
           </div>
           <i>RP</i>
         </article>
@@ -156,7 +161,7 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
         <section className="admin-table-panel">
           <div className="agent-ops-section-head">
             <div>
-              <h2>用户反馈列表</h2>
+              <h2>人工表单反馈</h2>
               <p>最新反馈会排在最前面，方便后台优先处理。</p>
             </div>
           </div>
@@ -187,6 +192,7 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
                   <em className={`status-pill ${item.status === "replied" ? "status-completed" : item.status === "closed" ? "status-failed" : "status-running"}`}>
                     {item.status === "replied" ? "已回复" : item.status === "closed" ? "已关闭" : "待处理"}
                   </em>
+                  <small>人工反馈 · {improvementLabels[item.improvement_status ?? "pending_analysis"]}</small>
                 </span>
                 <span>
                   <strong>{formatChinaMonthDayTime(item.updated_at)}</strong>
@@ -215,7 +221,20 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
               </div>
 
               <label className="composer-menu-field">
-                <span>状态</span>
+                <span>改进状态</span>
+                <select value={improvement} onChange={(event) => setImprovement(event.target.value as ImprovementStatus)}>
+                  {Object.entries(improvementLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+                <button type="button" disabled={saving} onClick={async () => {
+                  setSaving(true);
+                  try { await api.updateFeedbackImprovement(selectedFeedback.id, improvement); onSetError(""); onRefresh(); }
+                  catch (err) { onSetError(err instanceof Error ? err.message : "保存改进状态失败"); }
+                  finally { setSaving(false); }
+                }}>保存改进状态</button>
+              </label>
+
+              <label className="composer-menu-field">
+                <span>沟通状态（旧记录保留关闭状态）</span>
                 <select
                   value={replyDraft.status}
                   onChange={(event) =>
@@ -225,7 +244,7 @@ export default function FeedbackOpsPage({ feedbackItems, error, onRefresh, onSet
                     }))
                   }
                 >
-                  <option value="open">待处理</option>
+                  <option value="open">待回复</option>
                   <option value="replied">已回复</option>
                   <option value="closed">已关闭</option>
                 </select>

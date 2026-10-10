@@ -1,10 +1,10 @@
 # Decisions
 
-## 2026-05-25 Active Alignment Note
+## 2026-10-08 Active Alignment Note
 
-- When older decision text mentions `owner`, `ops`, `/admin/projects`, or project-member shared history, treat that wording as historical unless the code still matches it.
-- The current active product surface is centered on `admin` and `designer`.
-- The current active visibility model is user-owned history for designers, with admins retaining global management visibility.
+- 对齐前完整版本见 `archive/document-baseline-before-2026-10-08-alignment/decisions.md`。以下是代码核对，不是新增产品范围。
+- Active roles are `admin`, `ops`, `designer`; legacy `owner` normalizes to admin. ops has selected backoffice access, not full admin access; see `core/auth.py` and `features/access/roleAccess.ts`.
+- Studio generation history is account-owned for every role. Admin management endpoints have their own access scopes; admin does not see global history through Studio. Source-task assets inherit owned-task checks; assets without a source task retain project-access checks.
 - Projects remain containers for task organization and assignment, not collaboration spaces with automatic shared history.
 
 ## Purpose
@@ -25,13 +25,13 @@
   - Designers only see their own tasks and assets by default.
   - Shared project membership must not imply shared history visibility.
   - `/admin/projects` and project-member management are not active product capabilities.
-  - The active role model is `admin` and `designer`; legacy `owner` and `ops` values are only compatibility aliases.
+  - The active role model is `admin`, `ops`, and `designer`; only legacy `owner` normalizes to `admin`. ops has selected backoffice modules as defined in code.
 - 影响：
   - Permission checks, admin routes, and history queries should default to user ownership semantics.
   - Historical docs that describe project-member sharing or multi-tier admin surfaces need to be treated as outdated unless separately refreshed.
 - 禁止事项：
   - Do not reintroduce project-member shared history as an implicit default.
-  - Do not treat `ops` as an independently active product role without a new explicit product decision.
+  - Do not broaden ops access beyond its code-defined module permissions or equate it with admin.
 
 ### Decision: 仓库文档而非聊天记录作为长期上下文
 - 状态：Accepted
@@ -47,6 +47,7 @@
 
 ### Decision: 当前阶段以图像生成 MVP 为前台主焦点
 - 状态：Accepted
+- 当前实现说明（2026-10-08）：图像仍是核心场景，视频、普通 Chat、画布与 CAD 已有实际入口；原文描述早期聚焦，不应据此关闭已交付能力或宣称仍仅有模拟生图。助手 UI 保持现有交接边界。
 - 日期：2026-04-17
 - 背景：
   - 项目虽然已有图像、视频、文档等 workflow，但当前最成熟、最适合验证价值的是图像生成
@@ -135,6 +136,7 @@
 
 ### Decision: 开发环境允许 SQLite，生产目标仍指向更稳定的数据库方案
 - 状态：Accepted
+- 当前实现说明（2026-10-08）：本地仍允许 SQLite；生产 Compose 已用 PostgreSQL，已有 Alembic。启动 create_all/ensure_schema 仍存在，不能代替生产迁移和版本核对。
 - 日期：2026-04-17
 - 背景：
   - 当前仓库默认使用 SQLite，适合单机原型和快速启动
@@ -194,6 +196,7 @@
 
 ### Decision: 参考图 MVP 先采用语义参考模式，不伪装成直接图生图
 - 状态：Accepted
+- 适用范围更新（2026-10-08）：仅指仍配置 caption_prompt 的适配器；当前已有原生 image.edit/multipart 和其它参考图路径，必须按具体 provider 表述，不能将所有参考图称为语义参考。
 - 日期：2026-04-23
 - 背景：
   - 当前 ModelScope 免费文生图链路主要围绕文本 prompt 调用
@@ -209,7 +212,8 @@
   - 不把 `caption_prompt` 模式宣传为直接 `img2img / image.edit`
 
 ### Decision: MVP 1.0 先用配置型 token 建立最小用户边界
-- 状态：Accepted
+- 状态：Historical / superseded for primary login（数据库账号与会话为主，旧 token fallback 仍保留）
+- 当前事实（2026-10-08）：routers/auth.py 与 core/auth.py 使用用户名密码及 Bearer AuthSession；QMDH_AUTH_USERS_JSON 是兼容路径。下面原始背景不作为当前账号建设排期。
 - 日期：2026-04-29
 - 背景：
   - 任务和模板原先依赖前端传入 `user_name`，执行人与模板归属都可被客户端随意伪造

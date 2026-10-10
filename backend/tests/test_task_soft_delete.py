@@ -60,7 +60,15 @@ class TaskSoftDeleteTests(unittest.TestCase):
                 is_active=True,
                 project_codes=["*"],
             )
-            db.add_all([project, workflow, owner, teammate, ops])
+            admin = User(
+                name="test.admin",
+                display_name="Test Admin",
+                role="admin",
+                password_hash="unused",
+                is_active=True,
+                project_codes=["*"],
+            )
+            db.add_all([project, workflow, owner, teammate, ops, admin])
             db.flush()
 
             now = datetime.now(timezone.utc)
@@ -79,6 +87,11 @@ class TaskSoftDeleteTests(unittest.TestCase):
                     AuthSession(
                         user_id=ops.id,
                         token_hash=hash_session_token("ops-token"),
+                        expires_at=now + timedelta(days=1),
+                    ),
+                    AuthSession(
+                        user_id=admin.id,
+                        token_hash=hash_session_token("admin-token"),
                         expires_at=now + timedelta(days=1),
                     ),
                 ]
@@ -256,7 +269,9 @@ class TaskSoftDeleteTests(unittest.TestCase):
         delete_response = self._delete(self.task_delete_id, "owner-token", json={"reason": "quota still counts"})
         self.assertEqual(delete_response.status_code, 204)
 
-        response = self.client.get("/dashboard/stats", headers=self._auth_header("ops-token"))
+        forbidden = self.client.get("/dashboard/stats", headers=self._auth_header("ops-token"))
+        self.assertEqual(forbidden.status_code, 403, forbidden.text)
+        response = self.client.get("/dashboard/stats", headers=self._auth_header("admin-token"))
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
 

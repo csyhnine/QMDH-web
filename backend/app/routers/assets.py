@@ -4,7 +4,7 @@ from random import randint
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import can_access_project, get_current_auth_user, get_optional_auth_user
@@ -187,14 +187,28 @@ def list_assets(
     auth_user: AuthUserProfile | None = Depends(get_optional_auth_user),
     bookmarked: bool | None = None,
     limit: int | None = Query(default=None, ge=1, le=500),
+    task_ids: list[int] | None = Query(default=None, max_length=120),
 ) -> list[AssetOut]:
     if auth_user is None:
         return []
-    query = select(Asset).order_by(Asset.created_at.desc())
+    owned_task_ids = _owned_task_ids(db, auth_user)
+    project_access = Asset.project.has(Project.code.in_(auth_user.project_codes))
+    if "*" in auth_user.project_codes:
+        project_access = Asset.project_id.is_not(None)
+    query = select(Asset).where(or_(
+        and_(Asset.source_task_id.is_(None), project_access),
+        and_(Asset.source_task_id.in_(owned_task_ids), or_(Asset.project_id.is_(None), project_access)),
+    )).order_by(Asset.id.desc())
+    if task_ids is not None:
+        query = query.where(Asset.source_task_id.in_(task_ids))
+    if bookmarked is not None:
+        bookmark_access = Asset.id.in_(select(AssetBookmark.asset_id).where(
+            AssetBookmark.user_id == auth_user.user_id
+        ))
+        query = query.where(bookmark_access if bookmarked else ~bookmark_access)
     if limit is not None:
         query = query.limit(limit)
     assets = db.scalars(query).all()
-    owned_task_ids = _owned_task_ids(db, auth_user)
     accessible = [
         asset
         for asset in assets

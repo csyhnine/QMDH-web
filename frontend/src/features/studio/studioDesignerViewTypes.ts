@@ -10,6 +10,7 @@ import type { StudioReferenceUploadState } from "./useStudioReferenceUploads";
 import type { StudioTaskActionsState } from "./useStudioTaskActions";
 import type { StudioTemplatesState } from "./useStudioTemplates";
 import type { StudioViewEffectsState } from "./useStudioViewEffects";
+import type { StudioDataLoader } from "./useStudioDataLoader";
 
 export type StudioDesignerViewProps = {
   activeComposerMenu: ComposerMenuKey;
@@ -33,6 +34,7 @@ export type StudioDesignerViewProps = {
   studioProjects: StudioProjectsState;
   studioTemplates: StudioTemplatesState;
   studioView: StudioViewEffectsState;
+  studioData: StudioDataLoader;
   submitting: boolean;
   submissionProgress: SubmissionTracker | null;
   taskActions: StudioTaskActionsState;

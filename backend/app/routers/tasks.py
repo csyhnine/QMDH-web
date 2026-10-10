@@ -123,6 +123,8 @@ def _to_task_out(task: Task) -> TaskOut:
 @router.get("", response_model=list[TaskOut])
 def list_tasks(
     limit: int | None = Query(default=None, ge=1, le=500),
+    before_id: int | None = Query(default=None, ge=1),
+    task_ids: list[int] | None = Query(default=None, max_length=120),
     status: list[TaskStatus] | None = Query(default=None),
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile | None = Depends(get_optional_auth_user),
@@ -135,7 +137,7 @@ def list_tasks(
         .join(Task.project)
         .join(Task.user)
         .where(Task.deleted_at.is_(None))
-        .order_by(Task.created_at.desc())
+        .order_by(Task.id.desc())
     )
     if "*" not in auth_user.project_codes:
         query = query.where(Project.code.in_(auth_user.project_codes))
@@ -145,6 +147,10 @@ def list_tasks(
         query = query.where(User.name == auth_user.name)
     if status:
         query = query.where(Task.status.in_(status))
+    if before_id is not None:
+        query = query.where(Task.id < before_id)
+    if task_ids is not None:
+        query = query.where(Task.id.in_(task_ids))
     if limit is not None:
         query = query.limit(limit)
     tasks = db.scalars(query).all()

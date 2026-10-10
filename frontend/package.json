@@ -6,6 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "typecheck:baseline": "node scripts/typecheck-baseline.mjs",
+    "test:studio": "node --test scripts/test-studio-data-loader.mjs",
+    "test:checks": "node --test scripts/test-studio-data-loader.mjs scripts/test-typecheck-baseline.mjs",
+    "check": "npm run test:checks && npm run typecheck:baseline && npm run build",
     "preview": "vite preview",
     "lint": "biome check src/lib",
     "lint:integrations": "biome check src/lib src/features/studio/StudioAssistantPanel.tsx src/features/studio/useSharedTemplateBrowser.ts src/features/studio/studioTemplateBrowserUtils.ts src/features/studio/StudioSharedTemplateSearch.tsx",

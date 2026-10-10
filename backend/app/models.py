@@ -331,6 +331,7 @@ class UserFeedback(Base):
     message: Mapped[str] = mapped_column(Text, default="")
     attachment_paths: Mapped[list[str]] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(30), default="open", index=True)
+    improvement_status: Mapped[str] = mapped_column(String(30), default="pending_analysis", server_default="pending_analysis")
     admin_reply: Mapped[str] = mapped_column(Text, default="")
     replied_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     replied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
@@ -358,6 +359,55 @@ class UserFeedbackMessage(Base):
 
     feedback: Mapped[UserFeedback] = relationship(back_populates="messages")
     author: Mapped[User] = relationship()
+
+
+class SkillFeedbackRun(Base):
+    __tablename__ = "skill_feedback_runs"
+    __table_args__ = (UniqueConstraint("client_id", "correlation_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("agent_clients.id"), index=True)
+    correlation_id: Mapped[str] = mapped_column(String(150))
+    platform: Mapped[str] = mapped_column(String(50))
+    skill_name: Mapped[str] = mapped_column(String(150))
+    skill_version: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SkillFeedbackIssue(Base):
+    __tablename__ = "skill_feedback_issues"
+    __table_args__ = (UniqueConstraint("skill_name", "skill_version", "problem_code"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    skill_name: Mapped[str] = mapped_column(String(150), index=True)
+    skill_version: Mapped[str] = mapped_column(String(100))
+    problem_code: Mapped[str] = mapped_column(String(100))
+    title: Mapped[str] = mapped_column(String(200))
+    communication_status: Mapped[str] = mapped_column(String(30), default="pending_reply")
+    improvement_status: Mapped[str] = mapped_column(String(30), default="pending_analysis")
+    root_cause: Mapped[str] = mapped_column(Text, default="")
+    modification_suggestion: Mapped[str] = mapped_column(Text, default="")
+    retest_result: Mapped[str] = mapped_column(Text, default="")
+    admin_reply: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class SkillFeedbackEvent(Base):
+    __tablename__ = "skill_feedback_events"
+    __table_args__ = (UniqueConstraint("client_id", "event_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("agent_clients.id"), index=True)
+    event_id: Mapped[str] = mapped_column(String(150))
+    run_id: Mapped[int] = mapped_column(ForeignKey("skill_feedback_runs.id"), index=True)
+    issue_id: Mapped[int | None] = mapped_column(ForeignKey("skill_feedback_issues.id"), nullable=True, index=True)
+    source: Mapped[str] = mapped_column(String(30))
+    event_type: Mapped[str] = mapped_column(String(50))
+    problem_code: Mapped[str] = mapped_column(String(100), default="")
+    summary: Mapped[str] = mapped_column(Text, default="")
+    evidence: Mapped[list] = mapped_column(JSON, default=list)
+    evaluation: Mapped[dict] = mapped_column(JSON, default=dict)
+    payload_hash: Mapped[str] = mapped_column(String(64))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class AgentClient(Base):

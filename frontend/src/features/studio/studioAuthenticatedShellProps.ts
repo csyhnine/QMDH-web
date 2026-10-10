@@ -60,6 +60,7 @@ export function buildStudioAuthenticatedShellProps({
       studioProjects: studio.studioProjects,
       studioTemplates: studio.studioTemplates,
       studioView: studio.studioView,
+      studioData: studio.studioData,
       submitting: studio.submitting,
       submissionProgress: studio.submissionProgress,
       taskActions: studio.taskActions,

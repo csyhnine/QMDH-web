@@ -15,6 +15,7 @@ export function buildStudioHistoryCanvasProps({
   setGalleryPreview,
   state,
   studioView,
+  studioData,
   submitting,
   taskActions,
 }: StudioDesignerViewProps): StudioHistoryCanvasProps {
@@ -30,6 +31,10 @@ export function buildStudioHistoryCanvasProps({
   } = derivedState;
 
   return {
+    hasMoreHistory: studioData.hasMoreHistory,
+    loadingHistory: studioData.loadingHistory,
+    historyError: studioData.historyError,
+    onLoadMoreHistory: () => void studioData.loadMoreHistory(),
     availableProviders,
     error: state.error,
     filters,

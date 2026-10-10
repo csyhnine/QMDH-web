@@ -1,0 +1,57 @@
+# Development Checks
+
+2026-10-10 Skill 反馈改造追加：自动采集/状态/来源/权限/去重/聚合/关联与旧表单回归、SQLite 迁移升降级，纳入隔离检查集。完整关键集 93 passed、16 subtests passed、1 skipped；最终反馈专项 23 passed；前端统一检查通过（23 既有/0 新增类型错误）。真实 PostgreSQL、平台/浏览器联调未验收。
+
+2026-10-10 追加媒体审计回归（`tests/test_media_audit.py`）：临时数据库与文件、只读/引用保护/报告边界。媒体专项 5 passed、1 skipped（Windows 链接权限不足）；前序 66 项关键回归通过。详见 `docs/media-audit.md`，Linux/真实 PostgreSQL 验证尚未执行。
+
+Updated: `2026-10-10`。本地质量检查已经实现；`.github/workflows/check.yml` 尚未提交，GitHub 未实际运行。
+
+## Frontend
+
+在 `frontend` 目录运行：
+
+```text
+npm ci
+npm run check
+```
+
+统一命令依次执行：
+
+1. `npm run test:checks`：Studio 加载器 10 项、类型基线检查器 3 项回归。
+2. `npm run typecheck:baseline`：编译整个前端并逐项对比已有错误。
+3. `npm run build`：Vite 生产构建。
+
+`npm run typecheck` 是完整、严格的 `tsc --noEmit`，目前仍因 23 项已有错误失败。基线检查通过仅表示没有新增错误，不能宣称类型检查全绿。
+
+`frontend/typecheck-baseline.json` 记录 TypeScript 5.9.3 下的文件、错误码、完整消息和重复次数；不依赖行号。新文件/错误码/消息、同类错误数量增加，或 TypeScript 版本变化都会失败。已有错误减少可通过，同时提示移除失效条目。
+
+基线不由 CI 自动更新。只有明确审阅原因后，才运行 `node scripts/typecheck-baseline.mjs --write-baseline`，逐项审阅 JSON diff。不能为了 CI 变绿扩大基线。长期目标仍是修复已有错误并使用完整 typecheck。
+
+## Backend
+
+Python 3.12，开发依赖在 `backend/requirements-dev.txt`。在 `backend` 目录运行：
+
+```text
+python -m pip install -r requirements-dev.txt
+python scripts/check.py
+```
+
+本机已有解释器可直接运行：
+
+```text
+.venv\Scripts\python.exe scripts/check.py
+```
+
+检查集覆盖列表分页与账号归属、认证边界、角色、健康、CORS/限流、任务恢复和完整软删除测试。名单在脚本中明确列出，**不是整个后端测试集**。
+
+脚本仅在自身进程内清除 QMDH 环境变量、忽略绝对路径的项目 `.env`，使用 SQLite/临时媒体路径，关闭外部 Meilisearch，关闭第三方 pytest 插件自动加载。测试自身使用独立数据库或 mock，无需启动 Redis/PostgreSQL/Meilisearch，不读取/写入真实业务库与存储。外部服务集成、迁移升级、真实上游模型及浏览器交互仍须另外验收。
+
+历史 dashboard 测试已修正：ops 应返回 403，统计核对使用真实 admin 测试账号。没有放宽权限代码或将失败测试 xfail。原 Meilisearch 连接失败由明确的离线配置解决，真实搜索集成不在这组检查覆盖范围。
+
+## CI
+
+工作流分别运行前端与后端检查，触发于 pull_request、main push 和手动 dispatch；只读仓库权限，不使用部署密钥或生产配置、不含部署步骤。使用 Node 22、Python 3.12 与 Ubuntu 24.04；CI 内 npm ci 按 lockfile 安装，Python 按项目运行依赖及开发依赖安装。
+
+Actions v7 的使用方式已参考官方 [checkout](https://github.com/actions/checkout)、[setup-node](https://github.com/actions/setup-node)、[setup-python](https://github.com/actions/setup-python) 文档。GitHub 实际执行和仓库分支保护尚未配置/验证，不能把本地检查通过等同于云端检查已通过。
+
+当前 Python 依赖解析 dry-run 通过，但有历史依赖警告（cryptography 45.0.0 被撤回、huggingface-hub inference extra 不存在）。本轮不修改生产依赖版本；依赖升级应另行验证。

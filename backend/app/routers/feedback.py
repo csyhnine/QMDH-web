@@ -10,7 +10,8 @@ from app.core.audit import write_audit_log
 from app.core.auth import get_current_auth_user, get_optional_auth_user, require_content_ops_access
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import User, UserFeedback, UserFeedbackMessage
+from app.models import User, UserFeedback, UserFeedbackMessage, SkillFeedbackIssue
+from app.skill_feedback_schemas import SkillIssueUpdate
 from app.schemas import (
     FeedbackAdminPendingCountOut,
     FeedbackMessageOut,
@@ -22,6 +23,8 @@ from app.schemas import (
 from app.services.media_storage import resolve_storage_path
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
+from app.routers.skill_feedback import router as skill_feedback_router
+router.include_router(skill_feedback_router)
 
 
 def _resolve_db_user(db: Session, auth_user: AuthUserProfile) -> User:
@@ -113,6 +116,8 @@ def _to_feedback_out(feedback: UserFeedback) -> UserFeedbackOut:
         message=feedback.message,
         attachment_paths=_resolved_attachment_paths(feedback.attachment_paths or []),
         status=feedback.status,
+        communication_status="replied" if feedback.status != "open" and (feedback.admin_reply or any(message.author_role == "admin" for message in feedback.messages)) else "pending_reply",
+        improvement_status=feedback.improvement_status,
         admin_reply=feedback.admin_reply or "",
         replied_by_user_name=replied_by.name if replied_by else None,
         replied_at=feedback.replied_at,
@@ -254,6 +259,9 @@ def admin_feedback_pending_count(
 ) -> FeedbackAdminPendingCountOut:
     require_content_ops_access(auth_user)
     count = db.scalar(select(func.count()).select_from(UserFeedback).where(UserFeedback.status == "open")) or 0
+    count += db.scalar(select(func.count()).select_from(SkillFeedbackIssue).where(
+        (SkillFeedbackIssue.improvement_status != "resolved") | (SkillFeedbackIssue.communication_status == "pending_reply")
+    )) or 0
     return FeedbackAdminPendingCountOut(count=count)
 
 
@@ -291,6 +299,8 @@ def reply_feedback(
         body=reply_body,
     )
     feedback.status = payload.status
+    if payload.improvement_status is not None:
+        feedback.improvement_status = payload.improvement_status
     feedback.admin_reply = reply_body
     feedback.replied_by_user_id = admin_user.id
     feedback.replied_at = datetime.now(timezone.utc)
@@ -309,4 +319,19 @@ def reply_feedback(
     db.commit()
     feedback = db.scalar(_feedback_query().where(UserFeedback.id == feedback.id))
     assert feedback is not None
+    return _to_feedback_out(feedback)
+
+
+@router.patch("/admin/{feedback_id}/improvement", response_model=UserFeedbackOut)
+def update_manual_improvement(feedback_id: int, payload: SkillIssueUpdate, db: Session = Depends(get_db), auth_user: AuthUserProfile = Depends(get_current_auth_user)):
+    require_content_ops_access(auth_user)
+    if payload.model_fields_set != {"improvement_status"} or payload.improvement_status is None:
+        raise HTTPException(422, "Only improvement_status is accepted")
+    feedback = db.scalar(_feedback_query().where(UserFeedback.id == feedback_id))
+    if not feedback:
+        raise HTTPException(404, "Feedback not found")
+    feedback.improvement_status = payload.improvement_status
+    feedback.updated_at = datetime.now(timezone.utc)
+    write_audit_log(db=db, event_type="feedback.improvement_updated", actor_name=auth_user.name, actor_id=auth_user.user_id, target_type="user_feedback", target_id=feedback.id, target_name=feedback.title, details={"improvement_status": feedback.improvement_status})
+    db.commit()
     return _to_feedback_out(feedback)

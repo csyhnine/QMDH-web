@@ -6,6 +6,10 @@ import type { HistoryActionFeedback, HistoryActionKey } from "./studioTypes";
 import type { UpscaleOptions } from "./studioUpscaleOptions";
 
 export type StudioHistoryCanvasProps = {
+  hasMoreHistory: boolean;
+  loadingHistory: boolean;
+  historyError: string;
+  onLoadMoreHistory: () => void;
   availableProviders: Provider[];
   error: string;
   filters: FeedFilterState;

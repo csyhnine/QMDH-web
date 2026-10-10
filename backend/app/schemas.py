@@ -377,6 +377,7 @@ class UserFeedbackCreate(BaseModel):
 class UserFeedbackAdminUpdate(BaseModel):
     status: str = Field(default="replied", pattern=r"^(open|replied|closed)$")
     admin_reply: str = Field(min_length=1, max_length=4000)
+    improvement_status: str | None = Field(default=None, pattern=r"^(pending_analysis|pending_modification|pending_verification|resolved)$")
 
 
 class UserFeedbackMessageCreate(BaseModel):
@@ -405,6 +406,9 @@ class UserFeedbackOut(BaseModel):
     message: str
     attachment_paths: list[str] = Field(default_factory=list)
     status: str
+    communication_status: str = "pending_reply"
+    improvement_status: str = "pending_analysis"
+    source: str = "human"
     admin_reply: str = ""
     replied_by_user_name: str | None = None
     replied_at: datetime | None = None

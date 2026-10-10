@@ -1,321 +1,53 @@
 # Development Continuity
 
-## Purpose
+Last aligned: `2026-10-10`。旧版本完整保存在 `archive/document-baseline-before-2026-10-08-alignment/continuity.md`，其中版本号、stash 序号和排期均为历史。
 
-This file is the fast handoff baseline for the next agent. Read these first:
+## Cold Start
 
-1. `docs/protocol.md`
-2. `docs/tasks.md`
-3. `docs/handoff.md`
-4. `docs/product-boundary.md`
-5. `docs/server-operations.md`
-6. `docs/data-governance.md`
-7. `docs/architecture.md`
-8. `docs/decisions.md`
-9. this file
+依次读 `protocol.md`、`tasks.md`、`handoff.md`、`roadmap-2.0-prep.md` 与当前任务相关的架构/决策。涉及生产再读 `server-operations.md` 的 Daily Update 与 `data-governance.md`。先核对 Git 和代码，后开发。
 
 ## Current Baseline
 
-- **Active development sequence**：以 `docs/tasks.md` + 最新 `docs/handoff.md` 为准
-- GitHub **`main`** @ **`872dc3f`**（CAD 图纸提取与布置；交接记录在其后的 docs 提交）
-- Production: **`https://cityusbdisk.cn`** — 运行镜像来自合并 **`1783bec`**；health **200**；`/studio/cad` **200**
-- Alembic head（生产已应用）：**`z1a2b3c4d5e6`**
-- 最新交接：`docs/handoff.md` → **`[2026-10-08] CAD 图纸提取上生产`**
-- 详档：`docs/archive/handoff-2026-10-08-cad-geometry-fitout-wip.md`。加门时的布置见 `docs/archive/handoff-2026-09-29-cad-fitout-wip.md`
-- **Studio 生产态（2026-09-16）：** 默认排序 **最早优先**（最新在底部）；进入项目自动滚底；历史区右侧灰色圆形 ↑↓ 悬浮钮
-- **Chat 生产态：** 助手 UI **关**；Chat 模型 **claude-opus-4-6** / **gemini-3.7-flash-high**；禁用模型对话已迁 claude
-- **磁盘（2026-10-08）：** 根分区约 **60%**，可用约 **19GB**；媒体卷约 **13.7GB**。已删 30 天前 `generated/` 图片和视频 6974 个（约 12.7GB），灵感库仍引用的 1 条留下。更早的 9 月 16 日记录见归档
-- **本地 WIP（未上生产）：** 符号链/画布等 — git stash（如 `wip-before-chat-deploy`）；勿误 deploy
-- **本地未提交 WIP（2026-08-25，仍有效）**：Chat 助手 UI 默认隐藏 — `featureFlags.ts` + docker 构建 env；详档 `docs/archive/handoff-2026-08-25-billing-chat-agent-ui.md`
-- **2026-08-14 本地待部署（摘要）**：
-  - 运营看板：视频任务 / Chat 轮次纳入 KPI 与每日趋势；capability 推断修复
-  - harness Slice B（`2f85bfb`）：memory 工具 opt-in；Skill 目录-only
-- **2026-08-14 已上生产（摘要）**：
-  - Seedance：手动「入库」（虚拟人 / 真人）；参考图最多 4 张；加图「+」入口
-  - Grok/HappyHorse：提交时剥离 Seedance `asset://`，优先 `mediaPath`（修任务 3851 `OSS media not found`）
-  - 归档：`docs/archive/deploy-2026-08-14-seedance-grok-asset.md`
-- **2026-08-12 已上生产（摘要）**：
-  - 生图：`vip` 异步短 body（比例 size）；`count` 同步短 body（像素 size）；`seedream` → `2K/4K` 或比例像素（16:9=`2560x1440`）
-  - Admin：支持档位、请求体预览、Strategies 预设、看板出图张数/按模型
-  - 归档：`docs/archive/deploy-2026-08-12-haodeya-image-ops.md`
-- **对话收束（2026-08-14）**：无代码 WIP；可换新对话继续开发
-- **已取消专项**：算力费用 / 对外简历运营数据收集（一次性核对已结束，勿当后续任务）
-- 部署归档：`docs/archive/deploy-2026-08-14-seedance-grok-asset.md`；前序 `deploy-2026-08-12-haodeya-image-ops.md`、`deploy-2026-08-06-agent-max-tokens.md`
-- **2026-07-29～30 已上生产（摘要）**：
-  - 对比：多原图可选、灯箱滑杆铺满修复（`MediaComparePanel`）
-  - 画布：进场 fitView、中键双击适应视图、缩略图拖拽/点击跳转
-  - 图生图：换上游后生成与对比优先当前上游，不再沿用旧 `referenceImages`
-- **2026-07-28～29 已上生产（摘要）**：
-  - 画布：`Ctrl+Z` 撤销、悬停连线断开、模板发布新建/覆盖
-  - 站点公告：Admin + 生成页弹窗
-  - Studio「导航」`/studio/nav` + Admin「工具导航」；`ai_tools` 在 DB（非 Git），条目数以生产为准
-  - 导航页 `nav-shell` 全高背景，避免分类筛选后上下割裂
-- **Haodeya 新模型（2026-07-25 / 通线 2026-07-26）**：
-  - 网关 `https://newapi.haodeya.xyz/v1`
-  - Chat：生产启用 `qwen3.8-max-preview`（其它 qwen 档位停用）
-  - 生图：`wan2.7-image` / `wan2.7-image-pro` → 无参考图 `/images/generations`；有参考图 `/images/edits` multipart；size 字面 `1K/2K/4K`（4K 仅 pro 文生图）
-  - 生图：`gpt-image-2-count` → 无参考图 `/images/generations` 短 body（像素 size）；**有参考图** `/images/edits` **multipart** + model **`gpt-image-2-count`（仅 1K SKU）**；VIP 异步仍 `generations + image_urls`（2026-08-16 验收，详档 `docs/archive/handoff-2026-08-16-count-i2i-multipart.md`）
-  - 视频：HappyHorse 单模型 + 档位菜单；合同：`/v1/videos` + `metadata.input.media`（i2v=`first_frame`，r2v=`reference_image`）；顶层 `size`=`1280*720`，档位在 `parameters.resolution`
-  - **i2v 已通并已部署**；复测 task `task_2ngmWnoNnI5ASioE3folcgheW7yse92i`
-  - **Studio 默认**：图像分辨率 **1K**；视频模型优先 **HappyHorse**（`9fff78f`）
-  - 归档：`docs/archive/handoff-2026-07-26-happyhorse-admin-defaults.md`
-- **Chat Agent（重要）**：
-  - **B1 / gov / harness / memory** 已合 main 并已上生产
-  - **「设计助手」UI 生产已关**（`platform_settings.chat_agent_ui_enabled=false`）；**勿 reopen** 直至 pydantic-ai / opentelemetry 依赖修复（见 2026-09-16 详档）
-  - **普通 Chat** 已支持会话内切换模型 + 上下文统计快照（2026-09-16 已 deploy）
-  - **GPT 计费（2026-08-25）：** 用户 Admin 已将 `gpt-image-2` 改为 `per_image`；历史 ledger 不重算
-  - **产品定调**：QMDH UI 壳 + Codex **风格 harness**（非换 GPT）+ Admin Skill 发版 + 跨对话记忆 + HITL 生图/视频
-  - **记忆写入策略**：停写每轮 turn summary；长期记忆含 preference/feedback/thought/fact/**experience**；会话 compact；存量 scrub 已在生产执行
-  - **整包 WIP 仍保留**：`wip/agent-multi-chat-2026-07` @ **`4b0a5b3`**（勿整包 merge）
-- **Admin 用量日志**：默认「按任务汇总」单行（`task.finalized`）；展示能力、输入参数摘要、输出张数/段数；取消勾选可看 provider_call 明细
-- **Admin Models UX**：预设 + 模型/Chat 计费 Tab + 探测优化（含视频分类）已上生产（`4c32d90`）
-- Local dev URLs:
-  - frontend: `http://127.0.0.1:18080`
-  - backend: `http://127.0.0.1:18010`
-- Local helper commands:
-  - startup: `cmd /c start-dev.cmd`
-  - build: `npm run build`
-  - smoke: `npm run smoke:studio`, `npm run smoke:chat`
-- Do not commit: `storage/`、`tmp/`、`.env`、`backend/app.db`、`frontend/dist/`、`node_modules/`、`assets/` 本地截图
-- Hard rule: **未经用户明确同意，禁止 git push / 生产部署**
+- GitHub main / 本地任务分支基线：`65c47a0`，CAD 功能提交 `872dc3f`。
+- 当前任务分支：`feature/studio-perf-003-history-pagination`；`studio-perf-003` / `studio-perf-005` 本地完成、未提交/部署；另有文档对齐与 quality-gate-001（10-10 本地完成，未提交/未在 GitHub 运行）。
+- 原有工作区改动：`frontend/src/styles.css`、`docs/compare-qmdh-openclaw-codex.md` 和 `scripts/_tmp_*`，不属于本轮任务，不要混入提交。
+- 当前 stash 必须现场执行 `git stash list` 再识别。本轮只读看到 `stash@{0}` 为 `wip-before-chat-deploy`，符号主题另有记录；禁止按旧文档直接 pop。
 
-## Current Product Reality
+## Production Snapshot
 
-- **Studio ↔ Canvas linkage**：文生图 / 图像编辑 / 视频生成与画布 `text2img` / `img2img` / `video` 的比例选项、默认值、workflow 映射统一由 `frontend/src/features/studio/studioCanvasLinkage.ts` 驱动；改比例/默认/workflow 只改该文件。画布「图生图」对应生成页「图像编辑」（默认「遵循原图」）。`upscale` / `upload` / `annotate` 为画布侧专用表面。
-- Active runtime roles: `admin`, `ops`, `designer` (`ops` = designer studio access + inspiration/feedback/templates backoffice; other admin modules show 🔒)
-- Studio history, assets, chat conversations, and personal projects are account-owned, not project-member shared.
-- Backend/admin surfaces remain admin-only.
-- `project_code` / `project_id` still exist as compatibility identifiers, but active product semantics are personal containers.
-- `/admin/projects` is not an active frontend surface.
-- Shared prompt templates and private prompt templates coexist:
-  - shared templates are admin-managed and visible to all designers
-  - private templates remain user-owned
-- Shared templates support:
-  - two-level category taxonomy
-  - original image + final image preview assets
-  - recent apply / submit-success analytics
-  - a manual featured flag that currently still powers the studio `热度` bucket
-- Studio template picker supports:
-  - category sidebar
-  - hover compare preview
-  - aligned three-column browsing layout
-  - adaptive right preview for wide / tall / balanced images
-- Admin template management supports:
-  - create / update / delete shared templates
-  - drag-and-drop upload for original/final preview images
-- Current metering model:
-  - image tasks bill from provider profile `pricing_currency / pricing_unit / unit_price`
-  - chat bills from `provider_pricing_rules`
-  - chat supports `input_tokens`, `output_tokens`, `cached_input_tokens`
-  - if a chat model has no pricing rule, usage continues to work but cost is recorded as `0`
-  - provider pricing rule defaults are now `unit_size = 1,000,000` and `currency = USD`
-- Current quota model:
-  - `soft_warn` does not block
-  - `hard_block` blocks new image/chat usage based on current-month `usage_ledgers`
-  - `billing_status = suspended` blocks immediately
-- Current branding reality:
-  - left rail uses the QMDH icon asset
-  - login uses full `清美道合` wordmark only (duplicate icon logo removed 2026-06-12)
-  - login supports remember username/password in browser localStorage
-  - browser title is `清美道合`
-- Current video generation reality (2026-06-12):
-  - Haodeya Grok Imagine Video is live on production
-  - Studio four-tier SKU switcher + single admin `haodeya_grok` provider profile
-  - Text-only and i2v-with-reference-image flows verified end-to-end
-  - Reference images upload in Studio; public URL via `https://cityusbdisk.cn/media/...`
-- Current studio composer reality（**本地 WIP，2026-06-29 已验收**）:
-  - the composer can auto-collapse into a compact bar while browsing history
-  - focusing, opening menus, hovering the collapsed bar, uploading references, or submitting expands it again
-  - resolution UI: **标准 1K** / **高清 2K** 均可选；2K 通过 `image_config.image_size: "2K"` 驱动上游
-  - image batch size is capped at **3** (no 4-image option)
-  - bottom toolbar uses a fixed grid so template/model/ratio/count triggers do not reflow; long labels ellipsis
-  - **Enter** inserts newline; **Ctrl+Enter** (Mac: ⌘+Enter) submits; shortcut hint is inside the submit button
-  - reference images remove via top-right × on preview; bottom filename list removed (`StudioReferenceUploadList.tsx` deleted)
-  - removed stale composer chrome (workflow name, style tag, service online/offline labels)
-- Current history card reality（**本地 WIP**）:
-  - cards are denser than earlier versions
-  - 1–4 generated images share one layout: summary on top, horizontal gallery, footer actions below
-  - gallery scrollbar aligns to the main history column right edge
-  - generated image previews preserve full image content through proportional shrink (`contain`) instead of banner-like crop
-  - footer meta（gallery 布局）: 模型简称 + **分辨率（1K/2K）** + **像素尺寸（宽×高）** + 耗时；时间戳按 **东八区**
-  - 2K 验收：16:9 → **2752×1536**；若仍 **1376×768** 说明 `image_size` 未传到上游
-- Current image 2K routing reality（**2026-07-01，已热补丁生产；详 `docs/archive/haodeya-image-model-routing-2026-07.md`**）:
-  - **Nano Banana PRO**（`gemini-3.1-flash-image`）→ Haodeya **渠道 9**；1K/2K **同一上游 model**；2K 靠 `modalities` + `image_config.image_size:"2K"`
-  - **Nano Banana 2**（`google/gemini-3.1-flash-image-preview`）→ **渠道 3**
-  - **禁止**把 PRO 映射成 preview；**禁止** `-2k` 后缀（GPT/Gemini）
-  - 验收：PRO 2K · 16:9 → **2752×1536**
-- Current admin model reality:
-  - provider profiles can be enabled or disabled from the model list without changing existing pricing rules
-  - toggling a provider profile updates only the `enabled` state
+以下来自用户 2026-10-08 冷启动补充与部署交接，**本轮未连接服务器复核**。
 
-## Key Recent Changes
+- URL：`https://cityusbdisk.cn`；服务器 `120.79.227.11`；目录 `/www/wwwroot/qmdh-web`。
+- 生产 git 最新文档合并 `fe3adb5`；运行 backend/worker/frontend 镜像仍来自含 CAD 功能的 `1783bec`。不同哈希不代表缺少功能。
+- Alembic `z1a2b3c4d5e6`；镜像 shapely 2.2.0；health 正常、`/studio/cad` 200。
+- 无 `QMDH_CAD_DWG_CONVERTER_CMD` 与 Linux ODA。`ce_0abae8a9402f` 上传 DWG 后为需转 DXF，不自动重转。
+- 清理 generated 媒体 6974 个、约 12.7GB；灵感库仍引用的 1 条留下。当时媒体卷约 13.7GB，根分区约 60%、可用约 19GB；这些不是实时容量。
+- 数据在 PostgreSQL/Redis/媒体卷与生产配置中，不随 Git 重置。模型、价格、工具目录条目以数据库为准。
 
-- **`8809239` / `abf2e19` (2026-07-25, deployed):** admin usage logs default to one row per task; capability + input/output summaries on `task.finalized`; see `docs/archive/deploy-2026-07-25-usage-logs-summary.md`.
-- **`f057dff` / `aff7bda` (2026-07-24, deployed):** Studio↔Canvas linkage module; image-edit「遵循原图」omits upstream `aspect_ratio`.
-- **`377bd7e` / `3e83811` / `eff67a3` (2026-07-23/24, deployed):** compare preview, annotate regions, canvas copy/batch run, compare slider edge-to-edge; Chat agent UI default on.
-- WIP: continued splitting the Studio generate surface into focused modules:
-  - `GenerateStudioShell` is now only the auth/login/authenticated-shell entrypoint
-  - `StudioCanvasView` is now a thin composition layer over `StudioHistoryCanvas` and `StudioComposerCanvas`
-  - `StudioAuthenticatedShell` is now a thin layout shell over global rail, designer view, and media lightboxes; authenticated-shell prop partitioning lives in `studioAuthenticatedShellProps`
-  - `StudioHistoryCanvas` for history pane/feed wiring
-  - `studioHistoryCanvasTypes` and `studioHistoryCanvasProps` for the history canvas prop contract and pane/feed prop partitioning
-  - `StudioComposerCanvas` for composer dock wiring
-  - `StudioDesignerView` for the designer workspace pane, studio canvas layout, and studio-only prop wiring
-  - `StudioHistoryFeed` for mapping filtered tasks to feed cards
-  - `StudioHistoryFilters`, `StudioHistoryFilterSelect`, and `studioHistoryFilterOptions` for history filter controls, reusable select rendering, and filter option derivation
-  - `StudioFeedCard` for compact task card composition
-  - `StudioFeedCardAvatar`, `StudioFeedCardTopline`, `StudioFeedCardSummary`, `StudioFeedCardFailureDetails`, and `StudioFeedCardMeta` for feed-card header internals
-  - `StudioFeedCardResult` for gallery vs empty/running result rendering
-  - `StudioFeedCardFooter` for compact task card footer actions/feedback
-  - `StudioGlobalRailNav` and `StudioGlobalRailFooter` for global rail navigation and account/health footer rendering
-  - `StudioAssetTile` for generated asset tile rendering
-  - `StudioFeedCardActions`, `StudioFeedActionButton`, and `studioFeedActionUtils` for feed card footer action composition, action item derivation, button state classes, and labels
-  - `studioDerivedState` for read-only Studio view derivation
-  - `studioSubmissionProgress` for deriving current task submission progress from tracker state and refreshed tasks
-  - `useGenerateStudioController` for the top-level Studio state, data, action, and view-effect hook orchestration
-  - `useStudioAuth` for session restore, login form state, login, and logout
-  - `useStudioDataLoader` for health/projects/providers/workflows/tasks/assets/templates/users/dashboard loading, polling, request de-dupe, and last-sync state
-  - `useStudioHistoryFeedback` for history pending/feedback/notice timer state
-  - `useStudioProjects` for project workspace create/select/rename/archive UI actions
-  - `useStudioGalleryActions` for bookmark/share/delete history asset actions and share confirmation state
-  - `useStudioReferenceUploads` for current base64 reference-image upload state, input reset, and reference replacement
-  - `useStudioTaskActions` for history-task reuse/regenerate orchestration
-  - `useStudioTaskSubmission` for provider validation, task payload creation, create-task calls, submission progress, and shared-template submit-success tracking
-  - `studioTaskActionUtils` for history-task to composer-form derivation, runtime provider resolution, and composer scroll-back behavior
-  - `studioTaskSubmissionValidation` for reference upload/provider/capability/image-count submit validation
-  - `useVirtualTaskProgress` for feed-card pending/running virtual progress timers
-  - `useStudioTemplates` for prompt template loading, active-template detection, and template application coordination
-  - `useCustomStudioTemplates` for private-template draft/edit/save/delete feedback and persistence
-  - `customStudioTemplateUtils` for private-template save validation, create/update payload building, and custom-template list helpers
-  - `useStudioViewEffects` for high-level view refs and history auto-positioning
-  - `useStudioComposerCollapse` for composer menu outside-click handling and auto-collapse scroll behavior
-  - `useStudioGalleryPreviewEffects` for lightbox Escape/body-lock effects
-  - `useStudioDefaults` for default shared-template application and fallback provider/project selection
-  - `useStudioControllerState` for Studio controller base UI state, refs, and load-error helpers
-  - `StudioComposerDock` now stays focused on composer form shell, focus/blur handling, and expand-to-prompt behavior
-  - `studioComposerDockProps` for collapsed/expanded composer dock prop partitioning
-  - `StudioComposerExpandedContent` for the expanded composer body/input/toolbar composition; it is now a thin layout shell over extracted prop contracts and prop partitioning helpers
-  - `studioComposerDockTypes` and `studioComposerDockUtils` for composer dock props and derived labels/hints
-  - `StudioComposerLeading` for current workspace/provider/resolution/image-count status
-  - `StudioComposerToolbar` for the toolbar shell and submit action placement
-  - `StudioComposerToolbarMenus` is now a thin template/provider/display/count menu composition shell; `StudioComposerTemplateMenuSlot`, `StudioComposerProviderMenuSlot`, `StudioComposerDisplayMenuSlot`, and `StudioComposerCountMenuSlot` own menu-specific prop partitioning
-  - `StudioComposerProviderMenu` is now a thin provider-menu shell; trigger, panel, grouped rows, and prop contracts live in `StudioComposerProviderMenuTrigger`, `StudioComposerProviderMenuPanel`, `StudioComposerProviderGroup`, and `studioComposerProviderMenuTypes`
-  - `StudioComposerDisplayMenu` is now a thin display-menu shell; trigger, panel, reusable option group, and prop contracts live in `StudioComposerDisplayMenuTrigger`, `StudioComposerDisplayMenuPanel`, `StudioComposerOptionGroup`, and `studioComposerDisplayMenuTypes`
-  - `StudioComposerBody` for composer body composition; mode switching, reference-image dropzone, and prompt textarea live in `StudioComposerModeSwitch`, `StudioReferenceDropzone`, and `StudioPromptTextarea`
-  - `StudioComposerCollapsedBar` for collapsed composer summary and expand affordance
-  - `StudioGalleryPreviewLightbox` and `StudioShareConfirmLightbox` for generated-image preview and share-confirm modals
-  - `StudioWorkspaceHeader`, `StudioNewProjectForm`, and `StudioWorkspaceProjectList` for the workspace pane header, project creation form, and project list/rename UI
-  - `StudioWorkspaceCreateProjectPanel` for workspace project creation controls
-  - `StudioWorkspaceProjectItem`, `StudioWorkspaceProjectRenameForm`, and `StudioWorkspaceProjectActions` for project row rendering, rename input, and row actions
-  - `studioWorkspaceProjectTypes` and `studioWorkspaceProjectUtils` for workspace project list/item prop contracts and rename keyboard handling
-  - `studioWorkspacePaneTypes` for the workspace pane prop contract
-  - `StudioTemplateMenu` for template menu shell
-  - `StudioTemplateMenuPanel` and `studioTemplateMenuProps` for template menu panel rendering and trigger/panel prop partitioning
-  - `StudioTemplateMenuTrigger`, `StudioSharedTemplateSection`, `StudioCustomTemplateSection`, `StudioTemplateEditor`, and `studioTemplateMenuTypes` for template trigger, shared template browser section, custom template list, custom template editor, and menu prop contract
-  - `StudioCustomTemplateListItem` and `studioCustomTemplateSectionTypes` for custom template list item rendering and custom-template section prop contracts
-  - `StudioTemplateEditorHeader`, `StudioTemplateEditorFeedback`, `StudioTemplateEditorFields`, `StudioTemplateEditorActions`, and `studioTemplateEditorTypes` for custom template editor internals
-  - `StudioSharedTemplateBrowser` for shared template browser composition
-  - `StudioSharedTemplateSidebar`, `StudioSharedTemplateGrid`, and `StudioSharedTemplatePreview` for the sidebar/category navigation, center template grid, and right hover preview
-  - `StudioSharedTemplateGridCard` and `studioSharedTemplateGridTypes` for shared template grid card rendering and grid/card prop contracts
-  - `StudioSharedTemplatePreviewContent`, `StudioSharedTemplatePreviewImages`, `StudioSharedTemplatePreviewFallback`, `StudioSharedTemplatePreviewPlaceholder`, and `studioSharedTemplatePreviewTypes` for hover-preview internals
-  - `StudioSharedTemplateSearch`, `StudioSharedTemplateQuickFilters`, `StudioSharedTemplateCategoryGroup`, `StudioSharedTemplateCategoryButton`, `StudioSharedTemplateSubcategoryList`, and `StudioSharedTemplateNav` for the shared-template sidebar internals
-  - `studioComposerCanvasTypes` for the large composer canvas prop contract; `StudioComposerCanvas` is now only a thin visibility guard and pass-through
-  - `useSharedTemplateBrowser` for shared template search/category/filter UI state
-  - `useSharedTemplatePreview` for shared-template hover preview state and preview image measurement
-  - `useSharedTemplateTracking` for impression/apply/hover-preview event tracking
-  - `studioReferenceUtils` for reference upload restoration, file filtering, and preview URL release helpers
-  - `studioTemplateBrowserUtils` for shared-template category/search/sort helpers
-  - `studioTemplateUtils` for shared template category and preview sizing helpers
-  - `studioUtils` is now a re-export shim over focused utility modules:
-    `studioFormatUtils`, `studioAssetUtils`, `studioTaskUtils`, `studioPayloadUtils`,
-    `studioTemplateFormUtils`, `studioCapabilityUtils`, and `studioReferenceUtils`
-- Added model activation toggles and deployed them.
-- Changed provider pricing rule defaults to `1,000,000` unit size and `USD`.
-- Added provider `display_name` support and deployed it.
-- Added user group assignment plus group spend reporting on dashboard/users surfaces.
-- Unified dashboard `账号监管` and `执行人排行` activity logic while keeping account-level spend/quota details in monitoring view.
-- Excluded legacy local `gpt-image-2` CNY history from current operational spend views to avoid mixed-currency operational summaries.
-- Fixed group-spend CSV export for Excel by emitting UTF-8 BOM.
-- Added frontend branding assets (`清美道合` wordmark + icon), favicon, and browser title update.
-- Refined studio template browser layout, preview presentation, and hover stability.
-- Added auto-collapse / expand behavior for the studio composer while browsing history.
-- Compressed history-card chrome while preserving full generated image content through proportional preview scaling.
-- **`cecab36` (2026-06-26, on GitHub; not deployed):** unified history gallery layout; composer max-3 images, fixed toolbar, Ctrl+Enter submit, reference × remove; dashboard group-spend custom date range; usage-log KPI + double-billing fix with `test_usage_logs.py`.
-- **v1.1.0 (deployed 2026-06-29):** 2K 生图、历史 meta、反馈多轮、上传 20MB/10MB；当时 Git `0090a2a`。
-- **2026-07-16 production deploy:** 访客模式 P0+P1、密码 4 位、worker×3、VIP 代码进镜像但未建 Provider；Gemini 异步误路由热修 → Git **`186b127`**。详见 `docs/archive/deploy-2026-07-16-guest-workers-hotfix.md`。
+## Product And Code Reality
 
-## Current Server Snapshot
+- 有效角色 `admin`、`ops`、`designer`；`owner` 输入归一为 admin。ops 有部分内容后台权限，不等于全局管理员。以 `core/auth.py` 和 `features/access/roleAccess.ts` 的具体检查为准。
+- Studio 历史、任务及有来源任务的资产按账号授权；共享项目不自动共享历史。无来源任务资产仍走项目权限，不能笼统宣称所有资产都是用户私有。
+- 项目是任务容器，`/admin/projects` 不在当前前端入口。共享和私有模板并存。
+- 图像/视频/普通 Chat/画布/CAD 已有实现。助手生产 UI 按交接保持关闭，不擅自打开。
+- nginx `/media` 直出共享只读卷、部分图片 lazy-load 已在代码中；不要按旧 TODO 重做。缩略图派生仍可另行规划。
+- 后端已有测试、Alembic、日志、CORS、限流和会话清理；功能存在不代表生产配置已启用。启动兼容建表/补列仍存在，不能替代迁移核对。
+- 本地 Studio：每页 120 条，最近 40 条 + 全部运行任务轮询与终态补查；隐藏暂停、返回同步，配置 5 分钟刷新。尚未部署，详见本轮交接。
 
-- Server IP: `120.79.227.11`
-- Domain: `cityusbdisk.cn`（京ICP备14011242号-4，已备案）
-- Deploy path: `/www/wwwroot/qmdh-web`
-- Deployment model: Docker Compose（**worker ×3**）
-- **Production Git: `79f4814`** — 与 GitHub `main` 对齐（2026-07-29 对比/画布/上游修复）
-- Alembic: **`r9s0t1u2v3w4` (head)**
-- Latest session archive: `docs/handoff.md` → `[2026-07-30] 对比多原图 / 画布导航 / 上游参考`
-- **Deploy archive:** `docs/archive/deploy-2026-07-29-compare-canvas-upstream.md`；详档 `docs/archive/handoff-2026-07-30-compare-canvas-upstream.md`
-- Gemini CPA doc: `docs/cpa-gemini-image-integration.md`（含 2K 验收表）
-- Verified runtime after latest deploy:
-  - `docker compose ps`：backend healthy + worker-1/2/3 + frontend
-  - `https://cityusbdisk.cn/api/v1/health` returns healthy
-- Production `.env` highlights:
-  - `QMDH_FRONTEND_ORIGIN=https://cityusbdisk.cn`
-  - `QMDH_PUBLIC_MEDIA_BASE_URL=https://cityusbdisk.cn`
-  - `QMDH_STORAGE_BACKEND` 仍为 **local**（OSS 试用已开，业务未切）
-- Current deployment note:
-  - GitHub deploy key is healthy on server `admin` user
-  - `git pull` fails only when run as `root`; use `sudo -u admin git -C /www/wwwroot/qmdh-web pull --ff-only origin main`
-  - 开发请从 **GitHub** 拉代码，勿把服务器当源仓；服务器上可能有若干未跟踪 `.env.bak*`
-  - AI 工具目录内容在 DB `ai_tools`，不随 Git 种子文件版本化
-  - 若曾用控制台重置 root 密码：建议尽快改密钥登录并轮换密码
+## Local Verification
 
-## Known Risks And Follow-Up
+- 前端：在 frontend 执行 `npm run check`（13 项回归、类型基线、build）；完整严格检查仍用 `npm run typecheck`。
+- 后端：在 backend 用 `.venv/Scripts/python.exe scripts/check.py` 执行离线关键回归；其他专项仍用 pytest。运行边界见 `checks.md`。
+- 当前证据：前端统一检查 13 passed + build，后端离线关键回归 66 passed + 16 subtests；完整 tsc 23 项已有错误，无本轮新增。旧 Meilisearch 连接失败由离线检查显式关闭搜索解决；旧 dashboard 夹具已改为 admin 核对并断言 ops 403。全后端和真实外部集成未承诺通过。
+- `package.json` 没有 `smoke:studio` / `smoke:chat` 脚本，不再推荐不存在的 npm 命令。独立脚本先阅读所需运行条件。
+- CAD 本地后端使用 18011；前端 18080 需显式代理到 18011。不得占用或停止别人的 18010。本轮没有启动本地服务。
 
-- Local push to GitHub may need proxy on dev machine (`127.0.0.1:7897`).
-- Server git operations must use `admin`; do not run `git pull` as `root`.
-- `prod-001` first-pass Studio split is merged; further hook splits are optional follow-up only.
-- Release/version records are tracked through root `VERSION`, `CHANGELOG.md`, package versions, and Git tags such as `v1.0.0` / `v1.1.0`.
-- `storage/` and `tmp/` remain expected local-only directories and must not be committed.
-- Server deploy fallback still depends on `git bundle` or **hotpatch** when Docker Hub pull fails.
-- Full backend rebuild on ECS may take **~45–50 min** when Docker pip layer cache is cold; see `docs/archive/deploy-2026-06-29-v1.1.0-production.md`.
-- **Deploy order:** build backend **before** `alembic upgrade head` when release adds new migration files; never run parallel `docker compose build backend`.
-- Image upload still uses base64 data URLs and keeps a 20MB per-image / 10MB per-document limit; nginx `client_max_body_size` is 35m. Image edit sends base64 to upstream (~4/3 size); keep references ≤20MB to stay under typical 30MB gateway limits.
-- Auto-collapsing composer behavior is improved but still a likely UX hotspot; if touched again, re-check bottom-edge expand behavior and scroll jitter.
-- Older docs may still contain stale wording about historical `owner / ops` roles or project-member sharing; when docs disagree, trust `docs/product-boundary.md`, `docs/handoff.md`, and this file.
+## Next Actions And Red Lines
 
-## If A New Agent Takes Over
-
-1. Run `git status --short` first.
-2. Expect current local residuals to be:
-   - `storage/` / `tmp/`
-   - `assets/`（本地截图，勿提交）
-   - **未提交 WIP（2026-08-25）**：`featureFlags.ts`、`docker-compose.yml`、`frontend/Dockerfile`（Chat 助手 UI 隐藏）
-   - 可选未跟踪：`docs/archive/handoff-2026-07-21-canvas-copy-run-wip.md`、`docs/archive/handoff-2026-08-25-billing-chat-agent-ui.md`
-3. Read the latest entry in `docs/handoff.md`.
-4. Reconfirm:
-   - local head
-   - GitHub head
-   - server head
-   - server health / alembic current
-5. If the task involves deploy, remember:
-   - server git pull must run as `admin`
-   - push 完成后再 pull，勿并行
-   - fallback via local `git bundle` remains known-good
-6. If touching studio UX again, re-check:
-   - template picker cards and hover preview
-   - regenerate behavior
-   - history image lightbox behavior
-   - composer auto-collapse / expand behavior near the bottom of the history pane
-   - history card image readability after compact layout
-   - branded rail / login / favicon rendering
-   - Studio↔Canvas linkage via `studioCanvasLinkage.ts`
-7. Do not commit or deploy `tmp/`, `.env`, `backend/app.db`, `storage/`, `frontend/dist/`, or `node_modules/`.
-
-## Near-Term Suggested Next Steps
-
-1. Cold-start: 读 `docs/handoff.md` → **`[2026-08-25]`** 与详档 `docs/archive/handoff-2026-08-25-billing-chat-agent-ui.md`。
-2. **用户批准后**：commit Chat 助手 UI 隐藏 + push `9817ab5` + frontend rebuild（生产隐藏助手开关）。
-3. **Chat 助手产品**：继续 `chat-b2-001` / harness；修完再开 `VITE_CHAT_AGENT_UI_ENABLED=true`。
-4. **不要**继续算力/对外简历运营数据专项（已取消）；**图链路 / 灵感库 / 画布 poll·复制** 仍搁置。
-5. Optional：画布 `stash@{0}`（复制+批量运行）；OSS `prod-008`；root SSH 改密钥。
-6. 自测：`gpt-image-2` 2K × 3 张 ledger ≈ ¥8.01（`per_image` 验收）。
+- 排期以 `tasks.md` 为准，不恢复旧 June 合并顺序或旧待部署事项。
+- 提交/push/部署须有用户明确要求；本轮继续开发不表示授权部署。
+- 部署按 Daily Update 做 .env、数据库和媒体备份；git 必须 `sudo -u admin`。服务器 main 有历史合并，不能用 `--ff-only` 假定可快进；合并冲突按协议处理。
+- 新迁移必须确保执行容器包含新迁移文件，再核对 Alembic current/head；不要机械照抄旧镜像命令。
+- 禁止更换加密 key 或删除数据卷，禁止提交 `.env`、`backend/app.db`、`backend/storage/**`、`scripts/_tmp_*`。
+- CAD：用户提供官方 Linux 安装包前不下载/安装；之后放进容器，用 `{input}` / `{output_dir}` 命令或脚本接入并重建 backend/worker，再用新 DWG 验证。Windows exe 不能搬到服务器或写入仓库。
+- 不在生产重跑 `ce_94778ce26c6e`，不解析 `ce_d2955df6f9b9`，不改 `ce_b121e1b892de`；不改布置算法、不拆卫生间、不做线稿或生图。

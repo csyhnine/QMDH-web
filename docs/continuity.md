@@ -1,5 +1,7 @@
 # Development Continuity
 
+最新生产事实（2026-10-10 已连接复核）：功能 `08a2884` 已在 main，发布合并 `861a49a` 的镜像已运行，迁移 `b3c4d5e6f7g8`；后续文档合并不改变镜像。生产仍保留 4 个 main 未包含的 Nano Banana 文件，不可覆盖；备份与验证见 `archive/handoff-2026-10-10-production-release.md`。下面“本地未提交/旧生产快照”为发布前记录；CAD、加密 key/数据卷保护保持。
+
 Last aligned: `2026-10-10`。旧版本完整保存在 `archive/document-baseline-before-2026-10-08-alignment/continuity.md`，其中版本号、stash 序号和排期均为历史。
 
 ## Cold Start

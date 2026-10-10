@@ -1,6 +1,8 @@
 # Server Operations Runbook
 
-Last updated: `2026-08-16`
+Last updated: `2026-10-10`
+
+最新发布/备份/服务器历史差异见 `archive/handoff-2026-10-10-production-release.md`。服务器存在合并历史，不能用 --ff-only；admin 须有提交身份，本轮用一次性 git -c 配置。现有 deploy-production-rebuild.sh 仍包含旧快进/旧镜像迁移流程，不适用于本服务器，按下方 Daily Update 手工顺序操作。
 
 ## Current Production-Like Server Snapshot
 
@@ -93,14 +95,15 @@ Always update in this order:
 4. Back up PostgreSQL with a logical dump.
 5. Back up media files from `backend_media`.
 6. Pull latest code as `admin`:
-   - `sudo -u admin git -C /www/wwwroot/qmdh-web pull origin main`
-7. If this update includes Alembic migrations, run:
-   - `docker compose run --rm backend alembic upgrade head`
+   - `sudo -u admin git -C /www/wwwroot/qmdh-web pull --no-rebase origin main`
+7. Build new images before running any new migration (existing containers stay running):
+   - `docker compose build backend worker frontend`
+   - then, if migrations are included: `docker compose run --rm --no-deps backend alembic upgrade head`
 8. Confirm Alembic state:
    - `docker compose run --rm backend alembic current`
    - expected result: current revision matches repo `head`
 9. Rebuild and restart:
-   - `docker compose up -d --build`
+   - `docker compose up -d --no-build --scale worker=3 backend worker frontend`
 10. Validate:
    - `docker compose ps`
    - `docker compose logs --tail=100 backend`

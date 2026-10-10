@@ -11,7 +11,17 @@
 
 ## Latest Handoffs
 
-2026-10-10 发布恢复：用户已明确授权提交、推送与部署。当前正在备份并发布累计 Studio/自动检查/媒体只读审计/Skill 反馈改造；下面各条“未提交/暂停”是此前阶段记录，完成后补实际版本与验证。
+### [2026-10-10] 累计稳定化与 Skill 反馈 — **已提交、推送、部署**
+
+- **版本：** GitHub 功能 08a2884；生产发布合并 861a49a，运行 backend/worker/frontend 镜像由其构建，后续文档合并不重建。生产迁移 b3c4d5e6f7g8。
+- **验证：** 本地后端 94 passed + 16 subtests、1 skipped；GitHub Linux 95 passed + 16 subtests/前端通过。公网健康、CAD、反馈页面 200；新管理接口未登录 401；生产 DB 的管理查询只读检查通过。
+- **备份：** 配置/数据库 /www/backup/qmdh-release-20261010-140657；配对本机 E:/backups/QMDH-web/release-20261010-140657，媒体 14.6GB 完整读检。老镜像回退标签保留；.env 校验一致，未改变加密 key/数据卷，未清理媒体。
+- **生产差异：** 保留原服务器 4 个 Nano Banana 文件，与 fe3adb5 一致，相关 5 项回归通过；不能将服务器强制快进或覆盖为 GitHub 树。
+- **后续：** 平台采集 skill、浏览器交互验收仍待做；媒体审计未运行。CAD 先收 DXF，等待用户官方 Linux ODA。
+- **详档：** docs/archive/handoff-2026-10-10-production-release.md。原无关样式、比较文档与临时脚本未提交。
+- Safe to hand off: **Yes**
+
+以下两条保留发布前开发过程；当前状态以上述生产记录为准。
 
 ### [2026-10-10] Skill 自动采集与改进后台 — **DONE（本地，发布暂停）**
 
@@ -36,16 +46,4 @@
 - **说明：** docs/media-audit.md；详档 docs/archive/handoff-2026-10-10-media-audit.md。
 - Safe to hand off: **Yes**
 
-### [2026-10-10] 最小自动检查 — **DONE（本地，未提交）**
-
-- **任务：** quality-gate-001，仍在 `feature/studio-perf-003-history-pagination`，基于 `65c47a0`；前序 Studio 和文档改动同样未提交/部署。
-- **完成：** frontend `npm run check` = 13 项回归 + 全源码 TypeScript 基线检查 + build；backend `python scripts/check.py` = 隔离 .env、临时数据、关闭外部搜索的明确关键回归。`.github/workflows/check.yml` 两个只读 job，无部署步骤。
-- **验证：** 前端统一检查通过；后端 **66 passed + 16 subtests passed**；Python 安装依赖 dry-run 解析通过（历史依赖警告见 checks.md）；workflow YAML 校验通过。
-- **类型：** 完整 typecheck 仍有 23 项已有错误；基线逐项/逐数量对比，新增错误失败。没有 continue-on-error 或自动更新基线。
-- **修正测试：** 旧 dashboard 核对使用 admin 夹具，并断言 ops 403；业务权限代码未改。Meilisearch 真实集成不在离线检查覆盖范围。
-- **边界：** GitHub 实际运行/分支保护未验证，本轮无生产操作、无启动本地服务。CAD、访客样式、比较文档、临时脚本不改。
-- **下一步：** 审阅检查集与基线，用户明确要求后才提交/push；后续媒体治理从只读预览与引用审计开始。
-- **说明：** `docs/checks.md`；详档 `docs/archive/handoff-2026-10-10-quality-gate.md`。
-- Safe to hand off: **Yes**
-
-（Studio 交接见 `docs/archive/handoff-2026-10-08-studio-history-pagination.md`；CAD 生产交接见 `docs/archive/handoff-2026-10-08-cad-production.md`；Chat 与更早交接见对应归档。CAD 安装包、旧图保护、数据卷与加密 key 边界仍有效。）
+（更早质量检查、文档、Studio、CAD/Chat 记录见 docs/archive；数据卷、加密 key、旧图和 18010 保护边界保持。）

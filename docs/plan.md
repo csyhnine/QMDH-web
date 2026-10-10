@@ -1,5 +1,7 @@
 # Plan
 
+2026-10-10 已发布：累计 Studio/检查/媒体工具/Skill 反馈提交 `08a2884`，生产合并 `861a49a` 已部署，迁移 `b3c4d5e6f7g8` 已应用。CI、健康与生产数据库只读管理查询通过；平台采集 skill/浏览器验收仍待做。详见最新生产归档，下面暂停/本地记录属于此前阶段。
+
 2026-10-10：优先调整 Skill 反馈后台，自动接收、关联 ID、版本、来源、聚合证据与双状态本地完成，见 docs/skill-feedback.md。新增迁移 b3c4d5e6f7g8 尚未应用生产；提交推送部署已由用户暂停，先完成改造审阅与联调。
 
 Last aligned: `2026-10-10`。历史版本保存在 `archive/document-baseline-before-2026-10-08-alignment/plan.md`。

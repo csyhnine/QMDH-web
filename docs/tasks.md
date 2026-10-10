@@ -15,12 +15,12 @@ Last aligned: `2026-10-10`。旧任务原文与开发顺序完整保存在 `arch
 
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
-| skill-feedback-001 | Skill 自动采集与改进后台 | DONE（本地） | 接口/任务关联/来源/版本/聚合/详情/双状态已实现；平台、浏览器、PostgreSQL 联调待验收，部署暂停 |
-| studio-perf-003 | 历史分页与运行任务跟踪 | DONE（本地） | 未提交/部署，细节见下方 |
-| studio-perf-005 | 后台暂停与配置刷新 | DONE（本地） | 未提交/部署，加载器累计 10 项回归 |
-| docs-align-001 | 正式文档对齐 | DONE（本地） | 归档旧版本，更新计划、任务、连续性与决策说明 |
-| quality-gate-001 | 最小自动检查 | DONE（本地） | 统一命令 + CI 配置；类型基线禁止新增错误；未提交，GitHub 未实际运行 |
-| ops-storage-001 | 媒体治理 | IN_PROGRESS | 只读预览/引用审计本地完成；生产容量复核与后续治理未执行 |
+| skill-feedback-001 | Skill 自动采集与改进后台 | DONE（已部署） | 08a2884 已发布，迁移 b3c4d5e6f7g8；平台采集 skill 与浏览器联调待做 |
+| studio-perf-003 | 历史分页与运行任务跟踪 | DONE（已部署） | 08a2884 已发布，运行镜像来自生产合并 861a49a |
+| studio-perf-005 | 后台暂停与配置刷新 | DONE（已部署） | 随 08a2884 发布，加载器 10 项回归 |
+| docs-align-001 | 正式文档对齐 | DONE（已提交） | 已归档并发布，最新部署记录补实际验证 |
+| quality-gate-001 | 最小自动检查 | DONE（已提交/CI 通过） | GitHub Linux 后端 95 passed + 16 subtests，前端检查通过 |
+| ops-storage-001 | 媒体治理 | IN_PROGRESS | 只读工具已发布，生产容量复测 63%/18GB；未执行引用审计或清理 |
 | studio-perf-001 | ECS 容量评估 | TODO | 旧 9 月负载记录只作线索，升配/swap 前重新测量 |
 | studio-perf-002 | nginx 媒体直出 | DONE（代码已存在） | nginx alias + frontend 只读卷；本轮未复核生产运行配置 |
 | studio-perf-004 | 缩略图派生与懒加载覆盖 | TODO | 已有部分 lazy-load，不再描述全部 eager；缩略图仍待规划 |
@@ -30,6 +30,8 @@ Last aligned: `2026-10-10`。旧任务原文与开发顺序完整保存在 `arch
 | video-seedance-502-001 | Seedance 参考图代理/DNS | TODO | 历史上游问题；先确认当前是否仍发生 |
 
 ## Current Task Details
+
+最新阶段覆盖：本节本地/暂停/未部署描述为开发验收记录，当前已提交部署与 CI 状态以上方队列和生产归档为准。
 
 ### Task: [skill-feedback-001] Skill 自动采集与改进后台
 
@@ -127,8 +129,4 @@ Last aligned: `2026-10-10`。旧任务原文与开发顺序完整保存在 `arch
 
 ## Next Step
 
-最新优先：用户已恢复提交推送部署授权；执行备份、新迁移与发布后验证，平台反馈 skill 联调仍待完成。协议见 docs/skill-feedback.md。
-
-2026-10-10 累计变更已做本地代码审阅与统一自动回归，见 `docs/release-review-2026-10-10.md`；尚需浏览器、Linux/PostgreSQL 验收及提交后的 GitHub CI。
-
-先审阅本地累计变更和只读媒体报告规则；媒体治理下一步是授权范围内的生产容量/报告复核，不自动删除。提交或部署按用户明确指令另行执行，排除无关工作区文件。CAD 持续等待官方 Linux 安装包。
+发布已完成，记录见 docs/archive/handoff-2026-10-10-production-release.md。下一步：反馈采集 skill 与平台联调、浏览器交互验收；随后修复 TypeScript 基线、容量/缩略图与历史视频问题复核。媒体生产引用审计与清理尚未执行，CAD 等待官方 Linux ODA 包。无关工作区文件仍保留。

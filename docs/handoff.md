@@ -11,6 +11,17 @@
 
 ## Latest Handoffs
 
+### [2026-10-10] 反馈防滥用 — **DONE（本地，未提交/部署）**
+
+- **范围：** 独立采集凭证（admin 创建/撤销、用户/设备、skill 版本范围、过期/停用）、持久原子配额、解析前 64 KiB 限制、nginx IP 限制；外部问题待核实，admin/ops 确认后才聚合/重开。双状态与人工线程保留，已核实独立用户数展示。
+- **分支/基线：** feature/skill-feedback-002-security / 4bae2f2；开始时 fetch 后与 origin/main 一致。新迁移 c4d5e6f7g8h9，生产仍 b3c4d5e6f7g8，没有生产操作。
+- **验证：** 后端关键集 102 passed、16 subtests、1 skipped；安全/反馈专项 24 passed。20 并发争抢 5 次配额，5 成功/15 个 429。前端 15 项回归、0 新增类型错误、构建通过；原 TypeScript 23 项基线保留。
+- **待验收：** PostgreSQL 并发、nginx 实际运行、浏览器、平台联调；本机 Docker 引擎未运行。没有创建真实凭证或采集 skill。上线前不要发放外部采集凭证，当前生产仍是原版 Agent 认证。
+- **保护：** 原 styles.css 13 行、比较文档、_tmp_* 原状；不动 CAD/18010/业务库/生产 key/数据卷，不发外部消息。用户随后授权提交、推送、部署；正在备份和发布验收，部署完成后追加实际记录。
+- **详档：** docs/archive/handoff-2026-10-10-feedback-security.md；契约 docs/skill-feedback.md。创建新凭证后降级会拒绝，避免丢历史，应用回退应保留新增结构。
+- Safe to hand off: **Yes**
+
+
 ### [2026-10-10] 累计稳定化与 Skill 反馈 — **已提交、推送、部署**
 
 - **版本：** GitHub 功能 08a2884；生产发布合并 861a49a，运行 backend/worker/frontend 镜像由其构建，后续文档合并不重建。生产迁移 b3c4d5e6f7g8。
@@ -35,15 +46,3 @@
 
 
 2026-10-10 收尾审阅：`docs/release-review-2026-10-10.md` 记录累计范围与未完成验收。前端统一检查通过；后端 71 passed、16 subtests passed、1 skipped。补 `backend/tests/__init__.py` 避免同名包覆盖测试导入。仍未提交/push/部署；浏览器、Linux/PostgreSQL 与 GitHub CI 未验收。
-
-### [2026-10-10] 媒体只读预览与引用审计 — **DONE（子步骤，本地未提交）**
-
-- **任务：** ops-storage-001 整体仍 IN_PROGRESS；当前分支/65c47a0 基线不变，前序改动也未提交/部署。
-- **完成：** generated 图片/视频/.bin 盘点，实际数据库文本/JSON 引用扫描，归档/软删除与同名别名保护。CLI 无删除入口，不加载 .env/初始化应用；数据库只读，报告拒绝覆盖或写入媒体目录。
-- **验证：** 前序 66 项关键回归通过；媒体专项 5 passed、1 skipped（Windows 链接权限不足）。真实 PostgreSQL 与 Linux 链接隔离未验证。
-- **边界：** 未访问真实本地业务库或生产，未删除媒体、未更新容量快照，未改 CAD/无关文件/18010。
-- **下一步：** 审阅累计变更及报告规则；提交/部署按明确指令执行，生产复核与清理未完成。
-- **说明：** docs/media-audit.md；详档 docs/archive/handoff-2026-10-10-media-audit.md。
-- Safe to hand off: **Yes**
-
-（更早质量检查、文档、Studio、CAD/Chat 记录见 docs/archive；数据卷、加密 key、旧图和 18010 保护边界保持。）

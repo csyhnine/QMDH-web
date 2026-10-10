@@ -1,5 +1,7 @@
 # Development Checks
 
+2026-10-10 最新安全改造（本地未部署）：后端关键集 102 passed、16 subtests、1 skipped；专项 24 passed，含并发配额、专用凭证、待核实隔离、迁移保留及降级拒绝。前端新增反馈真实组件渲染回归 2 项，统一检查 15 项通过、23 既有/0 新增类型错误、Vite 构建通过。下方旧数字是历史记录，上一版 CI 已通过，新版 CI 尚未运行。
+
 2026-10-10 Skill 反馈改造追加：自动采集/状态/来源/权限/去重/聚合/关联与旧表单回归、SQLite 迁移升降级，纳入隔离检查集。完整关键集 93 passed、16 subtests passed、1 skipped；最终反馈专项 23 passed；前端统一检查通过（23 既有/0 新增类型错误）。真实 PostgreSQL、平台/浏览器联调未验收。
 
 2026-10-10 追加媒体审计回归（`tests/test_media_audit.py`）：临时数据库与文件、只读/引用保护/报告边界。媒体专项 5 passed、1 skipped（Windows 链接权限不足）；前序 66 项关键回归通过。详见 `docs/media-audit.md`，Linux/真实 PostgreSQL 验证尚未执行。
@@ -17,7 +19,7 @@ npm run check
 
 统一命令依次执行：
 
-1. `npm run test:checks`：Studio 加载器 10 项、类型基线检查器 3 项回归。
+1. `npm run test:checks`：Studio 加载器 10 项、类型基线检查器 3 项、反馈恶意文本与核实入口 2 项回归。
 2. `npm run typecheck:baseline`：编译整个前端并逐项对比已有错误。
 3. `npm run build`：Vite 生产构建。
 

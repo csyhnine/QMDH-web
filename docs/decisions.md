@@ -15,6 +15,14 @@
 
 ## Active Decisions
 
+### Decision: external feedback is untrusted intake, not execution authority
+- 状态：Accepted（2026-10-10），安全实现本地未部署。
+- 外部采集使用独立、按用户/设备/skill 版本限定且可过期撤销的凭证，不复用业务 Agent 权限，不在 skill 内分发共享密钥。
+- 原始事件与核实、改进问题分层；管理员确认前不能改变改进状态。来源声明、评分和事件次数不等于核实事实或多人共识。
+- 对采集实行持久硬配额和请求体限制；反馈内容不触发工具执行、skill 改写或发布。未来自动分析也必须保持这条边界。
+- 不要求立即拆独立服务/数据库，不引入完整工作流引擎；契约见 skill-feedback.md。
+
+
 ### Decision: active product surface is user-centered, not project-member shared history
 - 状态：Accepted
 - 日期：2026-05-25

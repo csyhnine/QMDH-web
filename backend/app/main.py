@@ -16,6 +16,7 @@ from app.core.middleware import (
     UnhandledExceptionMiddleware,
 )
 from app.core.rate_limit import RateLimitMiddleware
+from app.core.feedback_security import FeedbackBodyLimitMiddleware
 from app.database import Base, SessionLocal, engine
 from app.routers import agent, ai_tools, announcements, assets, auth, cad, canvas_projects, canvas_templates, chat, chat_experience, dashboard, feedback, generation_analytics, health, inspiration, platform_settings, projects, prompt_polish, prompt_templates, providers, search, seedance_avatar, studio_agent, tasks, users, workflows
 from app.services.bootstrap import ensure_schema, seed_initial_data
@@ -170,6 +171,7 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 # Note: FastAPI applies middleware in reverse add order, so add innermost first.
 app.add_middleware(UnhandledExceptionMiddleware)
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(FeedbackBodyLimitMiddleware)
 app.add_middleware(AccessLogMiddleware)
 app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(

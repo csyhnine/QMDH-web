@@ -361,11 +361,30 @@ class UserFeedbackMessage(Base):
     author: Mapped[User] = relationship()
 
 
+class SkillFeedbackCredential(Base):
+    __tablename__ = "skill_feedback_credentials"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    device_name: Mapped[str] = mapped_column(String(150))
+    allowed_skills: Mapped[list] = mapped_column(JSON)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    per_minute: Mapped[int] = mapped_column(Integer, default=30)
+    per_day: Mapped[int] = mapped_column(Integer, default=500)
+    minute_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    day_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    minute_count: Mapped[int] = mapped_column(Integer, default=0)
+    day_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class SkillFeedbackRun(Base):
     __tablename__ = "skill_feedback_runs"
-    __table_args__ = (UniqueConstraint("client_id", "correlation_id"),)
+    __table_args__ = (UniqueConstraint("client_id", "correlation_id"), UniqueConstraint("credential_id", "correlation_id", name="uq_feedback_run_credential"))
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    client_id: Mapped[int] = mapped_column(ForeignKey("agent_clients.id"), index=True)
+    client_id: Mapped[int | None] = mapped_column(ForeignKey("agent_clients.id"), nullable=True, index=True)
+    credential_id: Mapped[int | None] = mapped_column(ForeignKey("skill_feedback_credentials.id"), nullable=True, index=True)
     correlation_id: Mapped[str] = mapped_column(String(150))
     platform: Mapped[str] = mapped_column(String(50))
     skill_name: Mapped[str] = mapped_column(String(150))
@@ -393,9 +412,10 @@ class SkillFeedbackIssue(Base):
 
 class SkillFeedbackEvent(Base):
     __tablename__ = "skill_feedback_events"
-    __table_args__ = (UniqueConstraint("client_id", "event_id"),)
+    __table_args__ = (UniqueConstraint("client_id", "event_id"), UniqueConstraint("credential_id", "event_id", name="uq_feedback_event_credential"))
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    client_id: Mapped[int] = mapped_column(ForeignKey("agent_clients.id"), index=True)
+    client_id: Mapped[int | None] = mapped_column(ForeignKey("agent_clients.id"), nullable=True, index=True)
+    credential_id: Mapped[int | None] = mapped_column(ForeignKey("skill_feedback_credentials.id"), nullable=True, index=True)
     event_id: Mapped[str] = mapped_column(String(150))
     run_id: Mapped[int] = mapped_column(ForeignKey("skill_feedback_runs.id"), index=True)
     issue_id: Mapped[int | None] = mapped_column(ForeignKey("skill_feedback_issues.id"), nullable=True, index=True)
@@ -408,6 +428,10 @@ class SkillFeedbackEvent(Base):
     payload_hash: Mapped[str] = mapped_column(String(64))
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    review_status: Mapped[str] = mapped_column(String(30), default="not_required", index=True)
+    review_note: Mapped[str] = mapped_column(Text, default="")
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AgentClient(Base):

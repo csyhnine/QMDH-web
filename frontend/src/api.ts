@@ -1246,7 +1246,7 @@ export type SkillIssue = {
   id: number; skill_name: string; skill_version: string; problem_code: string; title: string;
   communication_status: "pending_reply" | "replied"; improvement_status: ImprovementStatus;
   root_cause: string; modification_suggestion: string; retest_result: string; admin_reply: string;
-  evidence_count: number; updated_at: string;
+  evidence_count: number; submitter_count: number; updated_at: string;
   sources?: ("human" | "system" | "ai_inference")[];
 };
 export type SkillEvent = {
@@ -1254,8 +1254,11 @@ export type SkillEvent = {
   correlation_id: string; platform: string; skill_name: string; skill_version: string;
   source: "human" | "system" | "ai_inference"; event_type: string; summary: string;
   evidence: Record<string, unknown>[]; evaluation: Record<string, unknown>; occurred_at: string;
+  review_status: "pending" | "accepted" | "rejected" | "not_required" | "legacy";
+  review_note: string; reviewed_by: number | null; reviewed_at: string | null; credential_id: number | null;
 };
-export type SkillFeedbackSummary = { runs: number; completed_runs: number; events: number; issues: number; by_skill: { platform: string; skill_name: string; skill_version: string; events: number }[] };
+export type SkillFeedbackSummary = { runs: number; completed_runs: number; events: number; issues: number; pending_review: number; by_skill: { platform: string; skill_name: string; skill_version: string; events: number }[] };
+export type FeedbackCredential = { id: number; owner_id: number; device_name: string; allowed_skills: { skill_name: string; skill_version: string }[]; is_active: boolean; expires_at: string; per_minute: number; per_day: number; day_count: number };
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api/v1").replace(/\/$/, "");
 const AUTH_STORAGE_KEY = "qmdh.session.token";
@@ -1630,12 +1633,16 @@ export const api = {
   adminFeedbackPendingCount: () => request<FeedbackAdminPendingCount>("/feedback/admin/pending-count"),
   skillFeedbackSummary: () => request<SkillFeedbackSummary>("/feedback/skills/admin/summary"),
   skillFeedbackIssues: (beforeId?: number) => request<SkillIssue[]>(`/feedback/skills/admin/issues?limit=50${beforeId ? `&before_id=${beforeId}` : ""}`),
-  skillFeedbackEvents: (options: { issue_id?: number; run_id?: number; before_id?: number } = {}) => {
+  skillFeedbackEvents: (options: { issue_id?: number; run_id?: number; before_id?: number; review_status?: SkillEvent["review_status"] } = {}) => {
     const params = new URLSearchParams({ limit: "50" });
     Object.entries(options).forEach(([key, value]) => { if (value !== undefined) params.set(key, String(value)); });
     return request<SkillEvent[]>(`/feedback/skills/admin/events?${params}`);
   },
   updateSkillIssue: (id: number, changes: Partial<Pick<SkillIssue, "communication_status" | "improvement_status" | "root_cause" | "modification_suggestion" | "retest_result" | "admin_reply">>) => patchJson<SkillIssue>(`/feedback/skills/admin/issues/${id}`, changes),
+  reviewSkillEvent: (id: number, review_status: "accepted" | "rejected", review_note: string) => patchJson<SkillEvent>(`/feedback/skills/admin/events/${id}/review`, { review_status, review_note }),
+  feedbackCredentials: (beforeId?: number) => request<FeedbackCredential[]>(`/feedback/skills/admin/credentials?limit=50${beforeId ? `&before_id=${beforeId}` : ""}`),
+  createFeedbackCredential: (payload: { owner_id: number; device_name: string; allowed_skills: FeedbackCredential["allowed_skills"]; expires_in_days: number }) => postJson<FeedbackCredential & { token: string }>("/feedback/skills/admin/credentials", payload),
+  revokeFeedbackCredential: (id: number) => postJson<FeedbackCredential>(`/feedback/skills/admin/credentials/${id}/revoke`, {}),
   updateFeedbackImprovement: (id: number, improvement_status: ImprovementStatus) => patchJson<FeedbackRecord>(`/feedback/admin/${id}/improvement`, { improvement_status }),
   replyFeedback: (feedbackId: number, payload: FeedbackAdminUpdatePayload) =>
     patchJson<FeedbackRecord>(`/feedback/admin/${feedbackId}`, payload),

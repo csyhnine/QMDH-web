@@ -1,8 +1,8 @@
 # Architecture
 
-2026-10-10 Skill 反馈后台（本地未部署）：`routers/skill_feedback.py` 嵌入 `/feedback/skills`，独立 runs/events/issues 持久化采集事件和聚合问题；正常事件只统计，原人工线程保留并新增改进状态。沟通与改进状态独立，API 契约见 `docs/skill-feedback.md`。新增代码迁移 head `b3c4d5e6f7g8`，生产仍按历史快照为 `z1a2b3c4d5e6`。
+2026-10-10 Skill 反馈：原版 08a2884 已部署，生产迁移 b3c4d5e6f7g8。安全改造在本地未提交/部署，新 head c4d5e6f7g8h9：独立 skill_feedback_credentials 只接受采集，按用户/设备绑定名称与版本、有效期和数据库原子配额；ASGI 解析前限制请求体。外部问题事件先 pending，管理员/ops 核实后才聚合或重开 issues；正常事件只统计，原人工线程和沟通/改进双状态保留。原始内容以不可信文本处理，不自动调用工具或发布 skill。契约与限制见 docs/skill-feedback.md。
 
-媒体运维只读工具（2026-10-10 本地，未部署）：`backend/app/services/media_audit.py` 与 `backend/app/scripts/audit_generated_media.py` 独立于应用启动，扫描默认 schema 文本/JSON 引用并盘点 `generated/`；没有删除入口。使用说明与覆盖限制见 `docs/media-audit.md`。
+媒体运维只读工具（2026-10-10 已随 08a2884 部署，生产审计未执行）：`backend/app/services/media_audit.py` 与 `backend/app/scripts/audit_generated_media.py` 独立于应用启动，扫描默认 schema 文本/JSON 引用并盘点 `generated/`；没有删除入口。使用说明与覆盖限制见 `docs/media-audit.md`。
 
 ## 2026-10-08 Alignment Update
 

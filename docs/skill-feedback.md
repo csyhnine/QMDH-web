@@ -1,8 +1,8 @@
 # Skill 采集与改进后台
 
-2026-10-10 新增自助临时会话（**本地实现，未提交/未部署**）：任务 skill-feedback-003，迁移 d5e6f7g8h9i0。线上仍为下段 55216ab；不能现在就向线上 /sessions 发请求。管理员登记并开放固定 skill_id 后，外部 skill 无需公司账号即可申请单次任务凭证。最新开发者契约见 skill-feedback-integration.md。
+2026-10-10 自助临时会话**已提交、推送、部署**：功能 514de69，生产运行镜像来自合并 7b310f9，迁移 d5e6f7g8h9i0。管理员登记固定 skill_id 后，外部 skill 无需公司账号即可申请单次任务凭证；当前生产登记/凭证均为 0。开发者契约见 skill-feedback-integration.md，发布/备份与实际验证见 archive/handoff-2026-10-10-feedback-public-release.md；下方旧 release 描述仅作历史。
 
-## 外部 skill 自助申请（待发布）
+## 外部 skill 自助申请
 
 1. 管理员在反馈页「反馈接入与凭证」填写 skill 名称，点击「登记 Skill 并生成固定 ID」，复制公开 ID 交给开发者。默认没有登记的 skill；同名允许、ID 唯一，改名/升级保持不变，无需按版本开放。开放是采集许可，不代表认可客户端的身份或内容。只有 admin 能设置，ops 保留核实权限。
 2. Skill 为一次任务生成固定 correlation_id，在获得用户同意提交最小反馈后申请。无需登录，也不需要安装包中包含共享密钥：
@@ -38,7 +38,7 @@ Content-Type: application/json
 - 可配置 QMDH_FEEDBACK_TRUSTED_PROXY_CIDRS 为明确的可信 frontend 代理 IP/CIDR；仅该 peer 提供的单个合法 X-Real-IP 生效，其他来源/非法头忽略。必须先确认代理链、Uvicorn 没有用全网信任的代理头重写 peer，并确保可信代理覆盖而非透传 X-Real-IP，再启用；禁止配置 0.0.0.0/0 或 ::/0。当前 nginx 已覆盖 X-Real-IP 为它的 remote_addr，宝塔后真实来源仍需按实际拓扑验证。未配置时安全共享额度，不能声称已经按终端用户限流。
 - nginx 对 /sessions（含尾斜杠）增加 4 KiB、每连接 IP 1 请求/秒 + 突发 5、超额 429；应用解析前再检查体积。events 仍为 64 KiB。匿名接口可以被恶意使用者耗尽有限公共额度；这不是身份认证或抗大规模攻击系统，严重滥用时停用对应 ID。
 
-新迁移 d5e6f7g8h9i0 父 c4d5e6f7g8h9，保留所有旧归属和证据。此迁移尚未提交/部署，本轮在同一迁移内改为固定 ID 注册；只从生产 c4 升级，旧版 d5 只曾在一次性测试数据库运行。新增 run/issue 的 skill_id，历史 aggregation_key 以 legacy:名称保留，新问题按 skill_id/版本/问题代码聚合。登记 ID 或产生匿名会话后禁止 downgrade；应用回退保留新增结构。发布需按 Daily Update 备份、构建新 backend/worker/frontend、迁移，再启动；不能只刷新前端。新版 PostgreSQL、nginx 运行验证、真实浏览器和平台联调尚未进行。
+生产已由 c4 升级到 d5e6f7g8h9i0，保留所有旧归属和证据。新增 run/issue 的 skill_id，历史 aggregation_key 以 legacy:名称保留，新问题按 skill_id/版本/问题代码聚合。登记 ID 或产生匿名会话后禁止 downgrade；应用回退保留新增结构。服务器隔离 PostgreSQL 恢复/迁移/身份/并发限额、nginx 实测、公网与管理只读检查已通过；GitHub Linux 123 passed + 16 subtests，前端 16 项。真实浏览器登录后的操作和平台联调仍未进行。发布采用 Daily Update 备份、新镜像迁移与重建三个服务，未改 .env/key/卷。
 
 2026-10-10：安全改造 `55216ab` 已提交、推送并部署，生产发布合并 `30dfe26`，迁移 `c4d5e6f7g8h9`。已启用专用反馈凭证、硬限额与待核实机制，通用 Agent Token 不再用于反馈采集。生产凭证数量为 0；平台反馈 skill 尚未制作或安装，下一步按用户/设备发放独立凭证并联调。发布详档见 archive/handoff-2026-10-10-feedback-security-release.md。
 

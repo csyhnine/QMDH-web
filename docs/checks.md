@@ -1,6 +1,6 @@
 # Development Checks
 
-2026-10-10 自助临时凭证（skill-feedback-003，本地未发布）：最新后端 **122 passed + 16 subtests、1 skipped**；新增固定 ID 登记/停用、同名分离/改名聚合/升级沿用 ID、公开会话、共享申请/提交配额、20 并发争抢 5 次、代理伪造/信任、匿名统计、绑定/撤销/到期和新迁移保留/降级拒绝回归。前端 **16 项**、23 既有/0 新增 TS 错误、Vite 构建通过；新增组件渲染证明无需先加载才能看到创建入口。新 PostgreSQL/nginx/浏览器/平台验收与新 CI 尚未运行，不能沿用旧 release 的生产验证结论。
+2026-10-10 自助临时凭证（skill-feedback-003，514de69 已部署）：最新后端 **122 passed + 16 subtests、1 skipped**；新增固定 ID 登记/停用、同名分离/改名聚合/升级沿用 ID、公开会话、共享申请/提交配额、20 并发争抢 5 次、代理伪造/信任、匿名统计、绑定/撤销/到期和新迁移保留/降级拒绝回归。前端 **16 项**、23 既有/0 新增 TS 错误、Vite 构建通过；新增组件渲染证明无需先加载才能看到创建入口。GitHub 功能 CI 38040818927 success，Linux 123 passed + 16 subtests/前端 16 项。新 PostgreSQL 隔离恢复/迁移/身份/并发配额、nginx 413/429、生产公网与管理只读查询已验证；真实浏览器/平台联调仍待做。详见 archive/handoff-2026-10-10-feedback-public-release.md。
 
 2026-10-10 最新安全改造（55216ab 已部署）：后端关键集 102 passed、16 subtests、1 skipped；专项 24 passed，含并发配额、专用凭证、待核实隔离、迁移保留及降级拒绝。前端新增反馈真实组件渲染回归 2 项，统一检查 15 项通过、23 既有/0 新增类型错误、Vite 构建通过。最新版 GitHub Linux CI 103 passed + 16 subtests；隔离 PostgreSQL 与 nginx 运行验证通过。下方旧数字及未运行 CI 描述是历史记录。
 

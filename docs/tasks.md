@@ -15,13 +15,13 @@ Last aligned: `2026-10-10`。旧任务原文与开发顺序完整保存在 `arch
 
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
-| skill-feedback-003 | 外部 skill 自助临时凭证与入口修正 | DONE（本地） | 单任务一小时/十次、固定 ID 登记与停用、共享配额、匿名标记；122 后端/16 前端通过，未提交/未部署 |
+| skill-feedback-003 | 外部 skill 自助临时凭证与入口修正 | DONE（已部署） | 514de69 / 生产镜像 7b310f9 / 迁移 d5e6f7g8h9i0；Linux 123 后端/16 前端、PG/nginx/公网通过，真实 ID/平台联调待做 |
 | skill-feedback-002 | 反馈防滥用 | DONE（已部署） | 55216ab / 生产 30dfe26，迁移 c4d5e6f7g8h9；专用凭证尚未发放，平台联调待做 |
 | skill-feedback-001 | Skill 自动采集与改进后台 | DONE（已部署） | 08a2884 已发布，迁移 b3c4d5e6f7g8；平台采集 skill 与浏览器联调待做 |
 | studio-perf-003 | 历史分页与运行任务跟踪 | DONE（已部署） | 08a2884 已发布，运行镜像来自生产合并 861a49a |
 | studio-perf-005 | 后台暂停与配置刷新 | DONE（已部署） | 随 08a2884 发布，加载器 10 项回归 |
 | docs-align-001 | 正式文档对齐 | DONE（已提交） | 已归档并发布，最新部署记录补实际验证 |
-| quality-gate-001 | 最小自动检查 | DONE（已提交/CI 通过） | 最新 GitHub Linux 后端 103 passed + 16 subtests，前端 15 项检查通过 |
+| quality-gate-001 | 最小自动检查 | DONE（已提交/CI 通过） | 最新 GitHub Linux 后端 123 passed + 16 subtests，前端 16 项检查通过 |
 | ops-storage-001 | 媒体治理 | IN_PROGRESS | 只读工具已发布，生产容量复测 63%/18GB；未执行引用审计或清理 |
 | studio-perf-001 | ECS 容量评估 | TODO | 旧 9 月负载记录只作线索，升配/swap 前重新测量 |
 | studio-perf-002 | nginx 媒体直出 | DONE（代码已存在） | nginx alias + frontend 只读卷；本轮未复核生产运行配置 |
@@ -35,11 +35,11 @@ Last aligned: `2026-10-10`。旧任务原文与开发顺序完整保存在 `arch
 
 ### Task: [skill-feedback-003] 外部 skill 自助临时凭证
 
-- 状态：DONE（本地未提交/未部署）；分支 feature/skill-feedback-003-public-sessions，基线 7dd45d3；生产保持 55216ab / 30dfe26 / c4d5e6f7g8h9。后端 122 passed + 16 subtests/1 skipped，前端 16 项/0 新增 TS 错误与构建通过。
+- 状态：DONE（已提交/push/部署，用户授权）；功能 514de69，运行镜像来自生产合并 7b310f9，生产迁移 d5e6f7g8h9i0。分支 feature/skill-feedback-003-public-sessions。本地后端 122 passed + 16 subtests/1 skipped，GitHub Linux 123 passed + 16 subtests，前端 16 项/0 新增 TS 错误；隔离 PG、nginx 实际限流、生产公网/只读查询通过。
 - 目标：无需公司账号的 skill 按单次任务申请反馈专用凭证；修正隐藏在加载按钮后的创建入口，公司用户下拉选择；管理员登记固定 ID、改名/升级沿用 ID、停用/开放、匿名身份和统计、全局/来源持久配额。
-- 边界/禁止项：不安装平台 skill、不采集真实用户数据、不分发真实密钥、不动 CAD/ODA/生成算法/18010/key/数据卷；原无关 styles.css/比较文档/临时脚本保留。不自动部署此后续功能。
+- 边界/禁止项：不安装平台 skill、不采集真实用户数据、不分发真实密钥、不动 CAD/ODA/生成算法/18010/key/数据卷；原 styles.css/比较文档/临时脚本未提交，生产 .env 校验一致。新配对备份和 :20261010-public 老镜像保留。
 - 验收：未开放拒绝；版本/任务/平台/来源/有效期/十次总量限制；轮换会话与伪造 IP 不能绕过配额；关闭并重开不恢复旧 token；问题 pending、匿名不算人；旧公司凭证与历史保留；前后端检查、迁移拒绝破坏降级。
-- 依赖：先发布新迁移 d5e6f7g8h9i0、重建三个镜像，再登记实际 skill 并交付 ID。生产真实代理 IP、PostgreSQL/nginx/浏览器/平台联调待验收。
+- 后续：生产尚无登记 ID/凭证；先在反馈后台登记实际 skill 并交付 ID，再联调。生产代理信任保持空，用户共享来源预算；扩大使用前核验真实 IP 链路。真实浏览器/平台操作待验收，详见 archive/handoff-2026-10-10-feedback-public-release.md。
 - 文档：skill-feedback、architecture、decisions、checks、handoff、skill-feedback-integration 与 public-sessions 归档；2.0 不引入编排引擎，任务和证据关联保留，运行配额与业务历史分层。
 
 最新阶段覆盖：本节本地/暂停/未部署描述为开发验收记录，当前已提交部署与 CI 状态以上方队列和生产归档为准。

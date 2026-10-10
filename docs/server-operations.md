@@ -2,6 +2,8 @@
 
 Last updated: `2026-10-10`
 
+最新固定 ID/自助临时凭证发布：功能 514de69、运行镜像来自生产合并 7b310f9、迁移 d5e6f7g8h9i0；备份 /www/backup/qmdh-release-20261010-171226 与 E:/backups/QMDH-web/release-20261010-171226，媒体两包均须恢复。详见 archive/handoff-2026-10-10-feedback-public-release.md。公开接入代理信任保持空，终端用户共享预算，放开前核验真实 IP 链路。
+
 最新反馈安全发布/备份见 `archive/handoff-2026-10-10-feedback-security-release.md`（功能 55216ab、运行镜像来自 30dfe26、迁移 c4d5e6f7g8h9）；上一轮及服务器历史差异见 `archive/handoff-2026-10-10-production-release.md`。服务器存在合并历史，不能用 --ff-only；admin 须有提交身份，本轮用一次性 git -c 配置。现有 deploy-production-rebuild.sh 仍包含旧快进/旧镜像迁移流程，不适用于本服务器，按下方 Daily Update 手工顺序操作。
 
 ## Current Production-Like Server Snapshot

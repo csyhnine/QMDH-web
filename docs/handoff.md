@@ -11,14 +11,15 @@
 
 ## Latest Handoffs
 
-### [2026-10-10] 外部 Skill 自助临时凭证 — **DONE（本地未提交/未部署）**
+### [2026-10-10] 固定 Skill ID 与自助临时凭证 — **已提交、推送、部署**
 
 - **范围：** admin 登记固定 skill_id 后，外部 skill 无需公司账号即可申请一小时/十次的单任务凭证；绑定平台、任务、来源和版本，申请/提交各有原子全局+来源配额。停用 ID 撤销旧匿名凭证，重新开放不恢复。问题仍先核实，匿名会话不计作人。
 - **入口：** 后台直接显示登记/复制固定 ID、改名/停用与自助接口说明；公司用户表单直接展开，以用户下拉替代数字 ID，admin 专属，ops 继续核实。
-- **版本：** 分支 feature/skill-feedback-003-public-sessions，基线 7dd45d3；本地 head 迁移 d5e6f7g8h9i0，生产仍是下条 release 的 c4d5e6f7g8h9。
-- **验证：** 后端 122 passed + 16 subtests/1 skipped，前端 16 项/23 既有、0 新增 TS 错误与构建通过；含并发争抢、轮换不绕过、代理头信任/伪造、匿名统计、新迁移保留/拒绝降级，入口未加载即渲染可见。
-- **后续：** 未发布、未做新 PostgreSQL/nginx/浏览器/平台联调、未登记真实 skill。默认按实际连接 peer 聚合，生产代理后共享限额；配置可信代理前先核实真实 IP 链路。公开接口可能被耗尽额度，停用 ID 可止损。
-- **保护/详档：** 原无关 styles.css 13 行、比较文档/_tmp_* 不动；CAD/ODA/key/18010/数据库/媒体不动。archive/handoff-2026-10-10-feedback-public-sessions.md 与 skill-feedback.md。
+- **版本：** 功能 514de69 已在 GitHub main；运行镜像来自生产合并 7b310f9，生产迁移 d5e6f7g8h9i0。后续部署记录文档合并不重建镜像。
+- **验证：** 本地后端 122 passed + 16 subtests/1 skipped，GitHub Linux 123 passed + 16 subtests，前端 16 项/23 既有、0 新增 TS 错误。新 PostgreSQL 隔离恢复/迁移/身份/20 并发争抢 5 次、nginx 实际 413/429、生产管理只读查询与公网检查通过；日志异常签名 0。
+- **备份：** /www/backup/qmdh-release-20261010-171226，配对 E:/backups/QMDH-web/release-20261010-171226，配置/DB 哈希一致，5740 媒体文件匹配整包+增量，今日已读检两包 SHA256 未变，在新本机备份硬链接复用。恢复须先整包再增量；旧镜像 :20261010-public 保留。
+- **后续：** 生产登记/凭证为 0，先登记实际 ID 再做浏览器/平台联调；不宣称已验收真实点击。代理信任保持空，公开用户共用每小时 5 次申请预算；扩大使用前核验真实 IP 链路。公开预算可被耗尽，停用 ID 可止损。根分区约 64%/17GB。
+- **保护/详档：** 原 styles.css 13 行、比较文档/_tmp_* 未提交；.env 校验不变，CAD/ODA/key/18010/卷/媒体不动，Nano Banana 四文件保留。archive/handoff-2026-10-10-feedback-public-release.md 与 skill-feedback-integration.md。
 - Safe to hand off: **Yes**
 
 ### [2026-10-10] 反馈防滥用 — **已提交、推送、部署**

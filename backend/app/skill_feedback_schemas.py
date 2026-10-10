@@ -12,6 +12,7 @@ class SkillEventIn(BaseModel):
     event_id: str = Field(min_length=1, max_length=150)
     correlation_id: str = Field(min_length=1, max_length=150)
     platform: Literal["workbuddy", "codex", "other"]
+    skill_id: str | None = Field(default=None, pattern=r"^qsk_[a-f0-9]{32}$")
     skill_name: str = Field(min_length=1, max_length=150)
     skill_version: str = Field(min_length=1, max_length=100)
     source: Literal["human", "system", "ai_inference"]
@@ -65,6 +66,23 @@ class FeedbackCredentialCreate(BaseModel):
     expires_in_days: int = Field(default=30, ge=1, le=90)
     per_minute: int = Field(default=30, ge=1, le=60)
     per_day: int = Field(default=500, ge=1, le=2000)
+
+
+class FeedbackPublicGrantCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    skill_name: str = Field(min_length=1, max_length=150)
+    is_active: bool = True
+
+
+class FeedbackPublicGrantUpdate(FeedbackPublicGrantCreate):
+    pass
+
+
+class FeedbackSessionCreate(FeedbackSkillScope):
+    skill_id: str = Field(pattern=r"^qsk_[a-f0-9]{32}$")
+    correlation_id: str = Field(min_length=1, max_length=150)
+    platform: Literal["workbuddy", "codex", "other"]
+    device_name: str = Field(min_length=1, max_length=150)
 
 
 class FeedbackEventReview(BaseModel):

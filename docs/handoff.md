@@ -11,6 +11,16 @@
 
 ## Latest Handoffs
 
+### [2026-10-10] 外部 Skill 自助临时凭证 — **DONE（本地未提交/未部署）**
+
+- **范围：** admin 登记固定 skill_id 后，外部 skill 无需公司账号即可申请一小时/十次的单任务凭证；绑定平台、任务、来源和版本，申请/提交各有原子全局+来源配额。停用 ID 撤销旧匿名凭证，重新开放不恢复。问题仍先核实，匿名会话不计作人。
+- **入口：** 后台直接显示登记/复制固定 ID、改名/停用与自助接口说明；公司用户表单直接展开，以用户下拉替代数字 ID，admin 专属，ops 继续核实。
+- **版本：** 分支 feature/skill-feedback-003-public-sessions，基线 7dd45d3；本地 head 迁移 d5e6f7g8h9i0，生产仍是下条 release 的 c4d5e6f7g8h9。
+- **验证：** 后端 122 passed + 16 subtests/1 skipped，前端 16 项/23 既有、0 新增 TS 错误与构建通过；含并发争抢、轮换不绕过、代理头信任/伪造、匿名统计、新迁移保留/拒绝降级，入口未加载即渲染可见。
+- **后续：** 未发布、未做新 PostgreSQL/nginx/浏览器/平台联调、未登记真实 skill。默认按实际连接 peer 聚合，生产代理后共享限额；配置可信代理前先核实真实 IP 链路。公开接口可能被耗尽额度，停用 ID 可止损。
+- **保护/详档：** 原无关 styles.css 13 行、比较文档/_tmp_* 不动；CAD/ODA/key/18010/数据库/媒体不动。archive/handoff-2026-10-10-feedback-public-sessions.md 与 skill-feedback.md。
+- Safe to hand off: **Yes**
+
 ### [2026-10-10] 反馈防滥用 — **已提交、推送、部署**
 
 - **版本：** GitHub 功能 55216ab；生产发布合并 30dfe26，backend/worker/frontend 镜像由其构建；迁移 c4d5e6f7g8h9。后续文档合并不重建镜像。
@@ -31,18 +41,3 @@
 - **后续：** 平台采集 skill、浏览器交互验收仍待做；媒体审计未运行。CAD 先收 DXF，等待用户官方 Linux ODA。
 - **详档：** docs/archive/handoff-2026-10-10-production-release.md。原无关样式、比较文档与临时脚本未提交。
 - Safe to hand off: **Yes**
-
-以下两条保留发布前开发过程；当前状态以上述生产记录为准。
-
-### [2026-10-10] Skill 自动采集与改进后台 — **DONE（本地，发布暂停）**
-
-- **范围：** 自动接收接口、任务关联 ID、来源、skill 名/版本、同类问题聚合、评测与改进详情、沟通/改进双状态；保留人工线程。普通事件只存后台和统计，不逐条进入收件箱。
-- **迁移：** 新 head b3c4d5e6f7g8，父 z1a2b3c4d5e6，生产未应用。前序累计改动仍未提交，分支/基线不变。
-- **验证：** 后端完整 93 passed、16 subtests、1 skipped；最后反馈专项 23 passed；前端统一检查通过，0 新增类型错误。SQLite 迁移保留原反馈。
-- **待验收：** 平台/浏览器/真实 PostgreSQL 与并发压力；没有创建/安装反馈 skill 或采集真实数据。后台回复仅保存记录，不发送外部消息。
-- **发布：** 用户原要求提交推送部署，但随后要求先调整反馈；当前明确暂停，没有提交/push/SSH/部署。恢复发布前审阅新增迁移与契约。
-- **文档：** docs/skill-feedback.md；详档 docs/archive/handoff-2026-10-10-skill-feedback.md。
-- Safe to hand off: **Yes**
-
-
-2026-10-10 收尾审阅：`docs/release-review-2026-10-10.md` 记录累计范围与未完成验收。前端统一检查通过；后端 71 passed、16 subtests passed、1 skipped。补 `backend/tests/__init__.py` 避免同名包覆盖测试导入。仍未提交/push/部署；浏览器、Linux/PostgreSQL 与 GitHub CI 未验收。

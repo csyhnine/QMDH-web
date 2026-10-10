@@ -1,5 +1,45 @@
 # Skill 采集与改进后台
 
+2026-10-10 新增自助临时会话（**本地实现，未提交/未部署**）：任务 skill-feedback-003，迁移 d5e6f7g8h9i0。线上仍为下段 55216ab；不能现在就向线上 /sessions 发请求。管理员登记并开放固定 skill_id 后，外部 skill 无需公司账号即可申请单次任务凭证。最新开发者契约见 skill-feedback-integration.md。
+
+## 外部 skill 自助申请（待发布）
+
+1. 管理员在反馈页「反馈接入与凭证」填写 skill 名称，点击「登记 Skill 并生成固定 ID」，复制公开 ID 交给开发者。默认没有登记的 skill；同名允许、ID 唯一，改名/升级保持不变，无需按版本开放。开放是采集许可，不代表认可客户端的身份或内容。只有 admin 能设置，ops 保留核实权限。
+2. Skill 为一次任务生成固定 correlation_id，在获得用户同意提交最小反馈后申请。无需登录，也不需要安装包中包含共享密钥：
+
+```http
+POST https://cityusbdisk.cn/api/v1/feedback/skills/sessions
+Content-Type: application/json
+```
+
+```json
+{
+  "skill_id": "qsk_00000000000000000000000000000000",
+  "skill_name": "local-project-research",
+  "skill_version": "1.2.0",
+  "correlation_id": "task-uuid-1",
+  "platform": "codex",
+  "device_name": "Codex feedback session"
+}
+```
+
+201 返回 token、expires_at、skill_id、correlation_id、platform、skill_name、skill_version、max_events=10、per_minute=5、identity=anonymous_session，并设置 no-store。服务端决定额度与有效期，不接受 owner_id、权限或额度等额外字段。未知/停用 ID 403；超限 429 + Retry-After；结构错误 422；原始申请体超过 4 KiB 为 413。
+
+3. 用响应 token 作为下文 events 的 X-QMDH-Feedback-Token，所有事件沿用同一 skill_id、关联 ID、平台、名称和版本。凭证有效一小时，最多十次通过认证的提交尝试（包括重试/后续校验失败），每分钟最多五次。即使跨 UTC 日期也不能超过十次。token 仅暂存本次任务的私有上下文，不写 skill/仓库/日志；到期或网络来源变化需重新申请，并仍受共享限额约束。
+4. 正常事件只统计；问题和纠正仍先 pending，人工核实后才影响改进问题。匿名会话不计入独立公司账号数量；后台分别显示公司账号数和匿名会话数，后者不等于人数。来源声明仍不是真实性认证。
+
+管理员停用 ID 会同时撤销该 ID 已有临时凭证，重新开放只允许新申请；也可单独撤销某个临时凭证。公司用户长期凭证仍按原机制发放，表单可直接展开，用户通过下拉选择。
+
+### 自助接口的配额与网络边界
+
+- 数据库全局 + 来源的原子持久配额，跨进程共享。申请：全局每 UTC 小时 50/每日 200，单来源每小时 5/每日 20；提交：全局每小时 500/每日 2000，单来源每小时 50/每日 100。各名称/版本/凭证/任务 ID 共用，不通过轮换凭证重置。额度同事务扣减，任一层超限不产生会话/事件，也不消耗另一层额度。
+- 配额桶仅保留最近三个 UTC 日期的限流元数据；不删除凭证、任务或原始证据。已接受来源数量受全局配额约束，数据库不支持或不可用时不放行。
+- 来源默认使用后端实际连接 peer；IPv6 按 /64 聚合。**生产经过 frontend 与宝塔反向代理，默认会把代理后的用户合并为一组额度**，并不是每人五次。为了安全，不自动信任客户端的 X-Forwarded-For。
+- 可配置 QMDH_FEEDBACK_TRUSTED_PROXY_CIDRS 为明确的可信 frontend 代理 IP/CIDR；仅该 peer 提供的单个合法 X-Real-IP 生效，其他来源/非法头忽略。必须先确认代理链、Uvicorn 没有用全网信任的代理头重写 peer，并确保可信代理覆盖而非透传 X-Real-IP，再启用；禁止配置 0.0.0.0/0 或 ::/0。当前 nginx 已覆盖 X-Real-IP 为它的 remote_addr，宝塔后真实来源仍需按实际拓扑验证。未配置时安全共享额度，不能声称已经按终端用户限流。
+- nginx 对 /sessions（含尾斜杠）增加 4 KiB、每连接 IP 1 请求/秒 + 突发 5、超额 429；应用解析前再检查体积。events 仍为 64 KiB。匿名接口可以被恶意使用者耗尽有限公共额度；这不是身份认证或抗大规模攻击系统，严重滥用时停用对应 ID。
+
+新迁移 d5e6f7g8h9i0 父 c4d5e6f7g8h9，保留所有旧归属和证据。此迁移尚未提交/部署，本轮在同一迁移内改为固定 ID 注册；只从生产 c4 升级，旧版 d5 只曾在一次性测试数据库运行。新增 run/issue 的 skill_id，历史 aggregation_key 以 legacy:名称保留，新问题按 skill_id/版本/问题代码聚合。登记 ID 或产生匿名会话后禁止 downgrade；应用回退保留新增结构。发布需按 Daily Update 备份、构建新 backend/worker/frontend、迁移，再启动；不能只刷新前端。新版 PostgreSQL、nginx 运行验证、真实浏览器和平台联调尚未进行。
+
 2026-10-10：安全改造 `55216ab` 已提交、推送并部署，生产发布合并 `30dfe26`，迁移 `c4d5e6f7g8h9`。已启用专用反馈凭证、硬限额与待核实机制，通用 Agent Token 不再用于反馈采集。生产凭证数量为 0；平台反馈 skill 尚未制作或安装，下一步按用户/设备发放独立凭证并联调。发布详档见 archive/handoff-2026-10-10-feedback-security-release.md。
 
 ## 安全边界
@@ -28,11 +68,14 @@
 
 `POST /api/v1/feedback/skills/events`，请求头 `X-QMDH-Feedback-Token: <独立凭证>`。
 
+新匿名临时会话必须带返回的 skill_id；下例的零值仅示意，须替换成正式登记 ID。旧公司名称/版本凭证兼容原契约，提交时不带 skill_id，归属标为历史名称，不自动映射到某个同名 ID。
+
 ```json
 {
   "event_id": "event-uuid-2",
   "correlation_id": "task-uuid-1",
   "platform": "codex",
+  "skill_id": "qsk_00000000000000000000000000000000",
   "skill_name": "local-project-research",
   "skill_version": "1.2.0",
   "source": "human",
@@ -53,6 +96,10 @@
 ## 管理接口
 
 凭证管理仅 admin（兼容 owner），不向 ops 开放：
+
+- GET /feedback/skills/admin/public-grants：登记表，默认 50/最多 100，before_id 分页，返回公开 skill_id 与显示名/启用状态。
+- POST /feedback/skills/admin/public-grants：仅 skill_name、is_active（默认 true）；服务端生成固定公开 ID，不允许客户端指定 ID，允许同名登记。
+- PATCH /feedback/skills/admin/public-grants/{skill_id}：skill_name、is_active；改名保留 ID，停用撤销该 ID 临时凭证，重新启用不恢复旧 token。
 
 - GET /feedback/skills/admin/credentials：默认 50/最多 100，before_id 分页，无原密钥及哈希。
 - POST /feedback/skills/admin/credentials：owner_id、device_name、allowed_skills（最多 20 个明确名称/版本组合）、expires_in_days、可选 per_minute/per_day。创建返回 token 一次。

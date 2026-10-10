@@ -361,11 +361,33 @@ class UserFeedbackMessage(Base):
     author: Mapped[User] = relationship()
 
 
+class SkillFeedbackPublicGrant(Base):
+    __tablename__ = "skill_feedback_public_grants"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    skill_id: Mapped[str] = mapped_column(String(36), unique=True)
+    skill_name: Mapped[str] = mapped_column(String(150))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class SkillFeedbackPublicQuota(Base):
+    __tablename__ = "skill_feedback_public_quotas"
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    hour_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    day_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    hour_count: Mapped[int] = mapped_column(Integer, default=0)
+    day_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class SkillFeedbackCredential(Base):
     __tablename__ = "skill_feedback_credentials"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     token_hash: Mapped[str] = mapped_column(String(128), unique=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    public_grant_id: Mapped[int | None] = mapped_column(ForeignKey("skill_feedback_public_grants.id"), nullable=True, index=True)
+    origin_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    bound_correlation_id: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    bound_platform: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    submission_count: Mapped[int] = mapped_column(Integer, default=0)
     device_name: Mapped[str] = mapped_column(String(150))
     allowed_skills: Mapped[list] = mapped_column(JSON)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -387,6 +409,7 @@ class SkillFeedbackRun(Base):
     credential_id: Mapped[int | None] = mapped_column(ForeignKey("skill_feedback_credentials.id"), nullable=True, index=True)
     correlation_id: Mapped[str] = mapped_column(String(150))
     platform: Mapped[str] = mapped_column(String(50))
+    skill_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     skill_name: Mapped[str] = mapped_column(String(150))
     skill_version: Mapped[str] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -394,8 +417,10 @@ class SkillFeedbackRun(Base):
 
 class SkillFeedbackIssue(Base):
     __tablename__ = "skill_feedback_issues"
-    __table_args__ = (UniqueConstraint("skill_name", "skill_version", "problem_code"),)
+    __table_args__ = (UniqueConstraint("aggregation_key", "skill_version", "problem_code", name="uq_feedback_issue_identity"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    skill_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    aggregation_key: Mapped[str] = mapped_column(String(160), default="")
     skill_name: Mapped[str] = mapped_column(String(150), index=True)
     skill_version: Mapped[str] = mapped_column(String(100))
     problem_code: Mapped[str] = mapped_column(String(100))

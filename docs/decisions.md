@@ -15,6 +15,12 @@
 
 ## Active Decisions
 
+### Decision: public skill feedback is an opt-in anonymous task capability
+- 状态：Accepted（2026-10-10），本地实现，尚未发布。
+- 外部用户无需公司账号；admin 一次登记固定 skill_id，名称允许重复、改名与升级保持 ID，匿名客户端申请一小时/十次、绑定任务与平台的凭证，只能提交反馈。停用 ID 撤销旧匿名凭证，重新开放不恢复。
+- 申请和提交分别受来源与全局持久硬配额约束；来源标识不是人。代理信任默认关闭，匿名会话不能伪造“多位公司用户”统计。问题仍先核实，不赋予执行或自动修改权限。
+- 2.0 沿用任务/证据/核实关联；新增配额是运行态，授权开关是配置，事件与改进是业务历史；不引入编排或修改既有公司账号权限。
+
 ### Decision: external feedback is untrusted intake, not execution authority
 - 状态：Accepted（2026-10-10），安全实现已随 55216ab 部署。
 - 外部采集使用独立、按用户/设备/skill 版本限定且可过期撤销的凭证，不复用业务 Agent 权限，不在 skill 内分发共享密钥。

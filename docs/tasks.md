@@ -15,6 +15,7 @@ Last aligned: `2026-10-10`。旧任务原文与开发顺序完整保存在 `arch
 
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
+| skill-feedback-003 | 外部 skill 自助临时凭证与入口修正 | DONE（本地） | 单任务一小时/十次、固定 ID 登记与停用、共享配额、匿名标记；122 后端/16 前端通过，未提交/未部署 |
 | skill-feedback-002 | 反馈防滥用 | DONE（已部署） | 55216ab / 生产 30dfe26，迁移 c4d5e6f7g8h9；专用凭证尚未发放，平台联调待做 |
 | skill-feedback-001 | Skill 自动采集与改进后台 | DONE（已部署） | 08a2884 已发布，迁移 b3c4d5e6f7g8；平台采集 skill 与浏览器联调待做 |
 | studio-perf-003 | 历史分页与运行任务跟踪 | DONE（已部署） | 08a2884 已发布，运行镜像来自生产合并 861a49a |
@@ -31,6 +32,15 @@ Last aligned: `2026-10-10`。旧任务原文与开发顺序完整保存在 `arch
 | video-seedance-502-001 | Seedance 参考图代理/DNS | TODO | 历史上游问题；先确认当前是否仍发生 |
 
 ## Current Task Details
+
+### Task: [skill-feedback-003] 外部 skill 自助临时凭证
+
+- 状态：DONE（本地未提交/未部署）；分支 feature/skill-feedback-003-public-sessions，基线 7dd45d3；生产保持 55216ab / 30dfe26 / c4d5e6f7g8h9。后端 122 passed + 16 subtests/1 skipped，前端 16 项/0 新增 TS 错误与构建通过。
+- 目标：无需公司账号的 skill 按单次任务申请反馈专用凭证；修正隐藏在加载按钮后的创建入口，公司用户下拉选择；管理员登记固定 ID、改名/升级沿用 ID、停用/开放、匿名身份和统计、全局/来源持久配额。
+- 边界/禁止项：不安装平台 skill、不采集真实用户数据、不分发真实密钥、不动 CAD/ODA/生成算法/18010/key/数据卷；原无关 styles.css/比较文档/临时脚本保留。不自动部署此后续功能。
+- 验收：未开放拒绝；版本/任务/平台/来源/有效期/十次总量限制；轮换会话与伪造 IP 不能绕过配额；关闭并重开不恢复旧 token；问题 pending、匿名不算人；旧公司凭证与历史保留；前后端检查、迁移拒绝破坏降级。
+- 依赖：先发布新迁移 d5e6f7g8h9i0、重建三个镜像，再登记实际 skill 并交付 ID。生产真实代理 IP、PostgreSQL/nginx/浏览器/平台联调待验收。
+- 文档：skill-feedback、architecture、decisions、checks、handoff、skill-feedback-integration 与 public-sessions 归档；2.0 不引入编排引擎，任务和证据关联保留，运行配额与业务历史分层。
 
 最新阶段覆盖：本节本地/暂停/未部署描述为开发验收记录，当前已提交部署与 CI 状态以上方队列和生产归档为准。
 

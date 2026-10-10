@@ -130,6 +130,7 @@ class Settings(BaseSettings):
     bootstrap_admin_name: str = "admin"
     bootstrap_admin_password: str = "dev-admin-password"
     auth_session_days: int = 7
+    feedback_trusted_proxy_cidrs: str = ""  # Explicit proxies allowed to supply overwritten X-Real-IP
     encryption_key: str = ""  # Fernet key for encrypting sensitive data like API keys
     agent_clients_json: str = (
         '[{"key":"openclaw-dev","token":"dev-openclaw-agent-token","user_name":"designer.arch",'

@@ -19,6 +19,7 @@ function renderEvent(status, text) {
     require(name) {
       if (name === "react") return { useEffect() {}, useRef: () => ({ current: 0 }), useState(initial) { const value = states[index++]; return [value === undefined ? initial : value, () => {}]; } };
       if (name === "../../api") return { api: {} };
+      if (name === "../../context/AuthContext") return { useAuth: () => ({ canManageUsers: true }) };
       if (name === "./FeedbackCredentials") return { default: () => null };
       return require(name);
     },
@@ -41,4 +42,25 @@ test("only pending evidence exposes review actions and empty notes disable them"
   assert.match(pending, /<button disabled="">驳回并保留记录<\/button>/);
   assert.ok(!renderEvent("rejected", "驳回").includes("确认并纳入改进"));
   assert.ok(!renderEvent("not_required", "正常事件").includes("确认并纳入改进"));
+});
+
+test("credential creation and public publication are visible before any loading", () => {
+  const source = readFileSync(new URL("../src/pages/admin/FeedbackCredentials.tsx", import.meta.url), "utf8");
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 } }).outputText;
+  const exports = {};
+  vm.runInNewContext(code, { exports, require(name) {
+    if (name === "react") return { useEffect() {}, useState(initial) { return [initial, () => {}]; } };
+    if (name === "../../api") return { api: {} };
+    return require(name);
+  } });
+  const html = renderToStaticMarkup(exports.default());
+  assert.ok(html.includes("外部 skill 自助申请临时凭证"));
+  assert.ok(html.includes("登记 Skill 并生成固定 ID"));
+  assert.ok(html.includes("无需重新登记"));
+  assert.ok(!html.includes("开放的版本"));
+  assert.ok(html.includes("/api/v1/feedback/skills/sessions"));
+  assert.ok(html.includes("创建公司用户凭证"));
+  assert.ok(html.includes("选择用户"));
+  assert.ok(!html.includes("用户 ID"));
+  assert.ok(!html.includes("加载或刷新凭证"));
 });

@@ -1243,22 +1243,24 @@ export type FeedbackAdminPendingCount = {
 
 export type ImprovementStatus = "pending_analysis" | "pending_modification" | "pending_verification" | "resolved";
 export type SkillIssue = {
-  id: number; skill_name: string; skill_version: string; problem_code: string; title: string;
+  id: number; skill_id: string | null; skill_name: string; skill_version: string; problem_code: string; title: string;
   communication_status: "pending_reply" | "replied"; improvement_status: ImprovementStatus;
   root_cause: string; modification_suggestion: string; retest_result: string; admin_reply: string;
-  evidence_count: number; submitter_count: number; updated_at: string;
+  evidence_count: number; submitter_count: number; anonymous_session_count: number; updated_at: string;
   sources?: ("human" | "system" | "ai_inference")[];
 };
 export type SkillEvent = {
   id: number; event_id: string; run_id: number; issue_id: number | null;
-  correlation_id: string; platform: string; skill_name: string; skill_version: string;
+  correlation_id: string; platform: string; skill_id: string | null; skill_name: string; skill_version: string;
   source: "human" | "system" | "ai_inference"; event_type: string; summary: string;
   evidence: Record<string, unknown>[]; evaluation: Record<string, unknown>; occurred_at: string;
   review_status: "pending" | "accepted" | "rejected" | "not_required" | "legacy";
+  identity: "anonymous_session" | "account" | "legacy";
   review_note: string; reviewed_by: number | null; reviewed_at: string | null; credential_id: number | null;
 };
-export type SkillFeedbackSummary = { runs: number; completed_runs: number; events: number; issues: number; pending_review: number; by_skill: { platform: string; skill_name: string; skill_version: string; events: number }[] };
-export type FeedbackCredential = { id: number; owner_id: number; device_name: string; allowed_skills: { skill_name: string; skill_version: string }[]; is_active: boolean; expires_at: string; per_minute: number; per_day: number; day_count: number };
+export type SkillFeedbackSummary = { runs: number; completed_runs: number; events: number; issues: number; pending_review: number; by_skill: { platform: string; skill_id: string | null; skill_name: string; skill_version: string; events: number }[] };
+export type FeedbackCredential = { id: number; owner_id: number | null; device_name: string; allowed_skills: { skill_id?: string; skill_name: string; skill_version: string }[]; is_active: boolean; expires_at: string; per_minute: number; per_day: number; day_count: number };
+export type FeedbackPublicGrant = { id: number; skill_id: string; skill_name: string; is_active: boolean };
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "/api/v1").replace(/\/$/, "");
 const AUTH_STORAGE_KEY = "qmdh.session.token";
@@ -1641,6 +1643,9 @@ export const api = {
   updateSkillIssue: (id: number, changes: Partial<Pick<SkillIssue, "communication_status" | "improvement_status" | "root_cause" | "modification_suggestion" | "retest_result" | "admin_reply">>) => patchJson<SkillIssue>(`/feedback/skills/admin/issues/${id}`, changes),
   reviewSkillEvent: (id: number, review_status: "accepted" | "rejected", review_note: string) => patchJson<SkillEvent>(`/feedback/skills/admin/events/${id}/review`, { review_status, review_note }),
   feedbackCredentials: (beforeId?: number) => request<FeedbackCredential[]>(`/feedback/skills/admin/credentials?limit=50${beforeId ? `&before_id=${beforeId}` : ""}`),
+  feedbackPublicGrants: (beforeId?: number) => request<FeedbackPublicGrant[]>(`/feedback/skills/admin/public-grants?limit=50${beforeId ? `&before_id=${beforeId}` : ""}`),
+  registerFeedbackSkill: (payload: { skill_name: string; is_active: boolean }) => postJson<FeedbackPublicGrant>("/feedback/skills/admin/public-grants", payload),
+  setFeedbackPublicGrant: (skillId: string, payload: { skill_name: string; is_active: boolean }) => patchJson<FeedbackPublicGrant>(`/feedback/skills/admin/public-grants/${encodeURIComponent(skillId)}`, payload),
   createFeedbackCredential: (payload: { owner_id: number; device_name: string; allowed_skills: FeedbackCredential["allowed_skills"]; expires_in_days: number }) => postJson<FeedbackCredential & { token: string }>("/feedback/skills/admin/credentials", payload),
   revokeFeedbackCredential: (id: number) => postJson<FeedbackCredential>(`/feedback/skills/admin/credentials/${id}/revoke`, {}),
   updateFeedbackImprovement: (id: number, improvement_status: ImprovementStatus) => patchJson<FeedbackRecord>(`/feedback/admin/${id}/improvement`, { improvement_status }),

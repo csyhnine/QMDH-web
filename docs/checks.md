@@ -1,5 +1,7 @@
 # Development Checks
 
+2026-10-10 自助临时凭证（skill-feedback-003，本地未发布）：最新后端 **122 passed + 16 subtests、1 skipped**；新增固定 ID 登记/停用、同名分离/改名聚合/升级沿用 ID、公开会话、共享申请/提交配额、20 并发争抢 5 次、代理伪造/信任、匿名统计、绑定/撤销/到期和新迁移保留/降级拒绝回归。前端 **16 项**、23 既有/0 新增 TS 错误、Vite 构建通过；新增组件渲染证明无需先加载才能看到创建入口。新 PostgreSQL/nginx/浏览器/平台验收与新 CI 尚未运行，不能沿用旧 release 的生产验证结论。
+
 2026-10-10 最新安全改造（55216ab 已部署）：后端关键集 102 passed、16 subtests、1 skipped；专项 24 passed，含并发配额、专用凭证、待核实隔离、迁移保留及降级拒绝。前端新增反馈真实组件渲染回归 2 项，统一检查 15 项通过、23 既有/0 新增类型错误、Vite 构建通过。最新版 GitHub Linux CI 103 passed + 16 subtests；隔离 PostgreSQL 与 nginx 运行验证通过。下方旧数字及未运行 CI 描述是历史记录。
 
 2026-10-10 Skill 反馈改造追加：自动采集/状态/来源/权限/去重/聚合/关联与旧表单回归、SQLite 迁移升降级，纳入隔离检查集。完整关键集 93 passed、16 subtests passed、1 skipped；最终反馈专项 23 passed；前端统一检查通过（23 既有/0 新增类型错误）。真实 PostgreSQL、平台/浏览器联调未验收。
@@ -19,7 +21,7 @@ npm run check
 
 统一命令依次执行：
 
-1. `npm run test:checks`：Studio 加载器 10 项、类型基线检查器 3 项、反馈恶意文本与核实入口 2 项回归。
+1. `npm run test:checks`：Studio 加载器 10 项、类型基线检查器 3 项、反馈恶意文本、核实入口与凭证创建入口 3 项回归。
 2. `npm run typecheck:baseline`：编译整个前端并逐项对比已有错误。
 3. `npm run build`：Vite 生产构建。
 

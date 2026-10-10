@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 BACKEND = Path(__file__).resolve().parents[1]
 TESTS = (
+    "tests/test_feedback_public.py",
     "tests/test_feedback_security.py",
     "tests/test_skill_feedback_migration.py",
     "tests/test_skill_feedback_api.py",

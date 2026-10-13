@@ -1246,14 +1246,14 @@ export type SkillIssue = {
   id: number; skill_id: string | null; skill_name: string; skill_version: string; problem_code: string; title: string;
   communication_status: "pending_reply" | "replied"; improvement_status: ImprovementStatus;
   root_cause: string; modification_suggestion: string; retest_result: string; admin_reply: string;
-  evidence_count: number; submitter_count: number; anonymous_session_count: number; updated_at: string;
+  evidence_count: number; submitter_count: number; anonymous_session_count: number; created_at: string; updated_at: string;
   sources?: ("human" | "system" | "ai_inference")[];
 };
 export type SkillEvent = {
   id: number; event_id: string; run_id: number; issue_id: number | null;
   correlation_id: string; platform: string; skill_id: string | null; skill_name: string; skill_version: string;
   source: "human" | "system" | "ai_inference"; event_type: string; summary: string;
-  evidence: Record<string, unknown>[]; evaluation: Record<string, unknown>; occurred_at: string;
+  evidence: Record<string, unknown>[]; evaluation: Record<string, unknown>; occurred_at: string; received_at: string;
   review_status: "pending" | "accepted" | "rejected" | "not_required" | "legacy";
   identity: "anonymous_session" | "account" | "legacy";
   review_note: string; reviewed_by: number | null; reviewed_at: string | null; credential_id: number | null;

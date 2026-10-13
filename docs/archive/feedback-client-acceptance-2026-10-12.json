@@ -1,0 +1,53 @@
+{
+  "skill": {
+    "skill_id": "qsk_be064a8f1a53428c9d2b664dc86291a3",
+    "skill_name": "skill-feedback-loop",
+    "skill_version": "0.1.4"
+  },
+  "correlation_id": "integration-test-46201193-08e9-4a02-93c7-05ae6ca66322",
+  "result": {
+    "status": "sent",
+    "receipts": [
+      {
+        "client_event_id": "2ec4ef36-d7f0-4abd-ad80-607eac37b07b",
+        "server_event_id": 2,
+        "run_id": 2,
+        "duplicate": false
+      },
+      {
+        "client_event_id": "aedd1de2-c16b-42d3-b1bc-be62e9334dd4",
+        "server_event_id": 3,
+        "run_id": 2,
+        "duplicate": false
+      },
+      {
+        "client_event_id": "a6fdb9be-21f4-451a-998a-71f896bb4aa1",
+        "server_event_id": 4,
+        "run_id": 2,
+        "duplicate": false
+      }
+    ]
+  },
+  "duplicate_checks": [
+    {
+      "http_status": 200,
+      "event_id": 2,
+      "run_id": 2,
+      "duplicate": true
+    }
+  ],
+  "events": [
+    {
+      "event_id": "2ec4ef36-d7f0-4abd-ad80-607eac37b07b",
+      "event_type": "delivery"
+    },
+    {
+      "event_id": "aedd1de2-c16b-42d3-b1bc-be62e9334dd4",
+      "event_type": "problem"
+    },
+    {
+      "event_id": "a6fdb9be-21f4-451a-998a-71f896bb4aa1",
+      "event_type": "user_correction"
+    }
+  ]
+}

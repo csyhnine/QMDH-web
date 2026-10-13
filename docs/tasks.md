@@ -1,6 +1,6 @@
 # Tasks
 
-Last aligned: `2026-10-10`。旧任务原文与开发顺序完整保存在 `archive/document-baseline-before-2026-10-08-alignment/tasks.md`，不作为当前排期。
+Last aligned: `2026-10-12`。旧任务原文与开发顺序完整保存在 `archive/document-baseline-before-2026-10-08-alignment/tasks.md`，不作为当前排期。
 
 ## Rules And Current Goal
 
@@ -15,6 +15,9 @@ Last aligned: `2026-10-10`。旧任务原文与开发顺序完整保存在 `arch
 
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
+| skill-feedback-004 | 外部客户端接入与真实平台验收 | IN_PROGRESS | 已发现三个配置 ID 与真实 HTTP 客户端；0.1.4 生产三事件提交/去重通过。后台核实/聚合与 WorkBuddy 实测待做，见 archive/handoff-2026-10-12-feedback-client-verification.md |
+| skill-feedback-006 | 反馈时间展示 | DONE（本地，未部署） | 聚合问题显示创建/更新时间；原始事件显示发生/接收时间，统一北京时间；前端统一检查通过 |
+| skill-feedback-005 | 真实 IP 与代理信任核验 | TODO | 当前代理信任为空、公开用户共享来源预算；扩大使用前先核验链路，不直接开放全网信任 |
 | skill-feedback-003 | 外部 skill 自助临时凭证与入口修正 | DONE（已部署） | 514de69 / 生产镜像 7b310f9 / 迁移 d5e6f7g8h9i0；Linux 123 后端/16 前端、PG/nginx/公网通过，真实 ID/平台联调待做 |
 | skill-feedback-002 | 反馈防滥用 | DONE（已部署） | 55216ab / 生产 30dfe26，迁移 c4d5e6f7g8h9；专用凭证尚未发放，平台联调待做 |
 | skill-feedback-001 | Skill 自动采集与改进后台 | DONE（已部署） | 08a2884 已发布，迁移 b3c4d5e6f7g8；平台采集 skill 与浏览器联调待做 |
@@ -32,6 +35,25 @@ Last aligned: `2026-10-10`。旧任务原文与开发顺序完整保存在 `arch
 | video-seedance-502-001 | Seedance 参考图代理/DNS | TODO | 历史上游问题；先确认当前是否仍发生 |
 
 ## Current Task Details
+
+### Task: [skill-feedback-004] 外部客户端接入与真实平台验收
+
+- 状态：IN_PROGRESS（2026-10-12 冷启动复核：外部客户端已存在，0.1.4 生产提交与去重通过；后台浏览器/WorkBuddy 验收未完成）。
+- 目标：正式 skill_id 交付开发者，真实平台完成申请/回传，管理员可核实和聚合。
+- 边界：按 skill-feedback-integration.md 配合外部实现并验收；不重复开发已上线接口，不擅自安装外部 skill 或采集用户数据。
+- 禁止项：不编造 ID、不用零值示例、不写 token/敏感信息到仓库或日志；不改 CAD、key、卷、18010 或无关文件。
+- 验收：正常交付只统计；问题/人工纠正先核实；任务关联与幂等有效；额度/退避/错误不阻断主任务。真实生产测试先明确授权范围。
+- 依赖：三个 ID 配置及外部客户端已找到；skill-feedback-loop 正式 ID 已由本轮生产申请/提交成功验证。另两个 ID 当前启用状态未独立查后台。用户已授权明确标注 integration_test 的交付/问题/人工纠正测试及后台核实聚合；已登录管理页面仍待可访问。
+- 文档：handoff 与 archive/handoff-2026-10-12-feedback-client-next.md；仅登记部署事实不代表客户端已完成。
+
+### Task: [skill-feedback-005] 真实 IP 与代理信任核验
+
+- 状态：TODO；扩大公开使用前处理。
+- 目标：确认宝塔/frontend/backend 的真实来源传递，评估合理的来源限额。
+- 边界：先只读核验配置/链路，再决定最小可信代理范围；没有证据不改环境。
+- 禁止项：禁止全网可信 CIDR、信任调用者 X-Forwarded-For、换 token 绕过额度；保留 key/卷。
+- 验收：可信入口覆盖来源头，伪造头不能绕过配额，合法来源划分有可复核证据。
+- 依赖/文档：server-operations Daily Update、skill-feedback.md、最新发布交接；配置变更另记录验证和部署。
 
 ### Task: [skill-feedback-003] 外部 skill 自助临时凭证
 
@@ -151,4 +173,4 @@ Last aligned: `2026-10-10`。旧任务原文与开发顺序完整保存在 `arch
 
 ## Next Step
 
-发布已完成，记录见 docs/archive/handoff-2026-10-10-production-release.md。下一步：反馈采集 skill 与平台联调、浏览器交互验收；随后修复 TypeScript 基线、容量/缩略图与历史视频问题复核。媒体生产引用审计与清理尚未执行，CAD 等待官方 Linux ODA 包。无关工作区文件仍保留。
+发布已完成，最新部署记录见 docs/archive/handoff-2026-10-10-feedback-public-release.md。2026-10-12 外部 agent 仍未实现网络客户端：优先确认/登记正式 skill_id、按接入文档完成客户端、真实平台及后台浏览器联调；扩大使用前核验真实 IP 链路。随后可处理 TypeScript 基线、媒体只读引用审计、容量/缩略图与历史视频问题复核。CAD 等用户提供官方 Linux ODA 包。最新交接见 docs/archive/handoff-2026-10-12-feedback-client-next.md。本轮只留档，未提交/推送/部署，无关工作区文件仍保留。

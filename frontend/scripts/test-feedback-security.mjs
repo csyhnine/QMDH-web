@@ -8,7 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 const require = createRequire(import.meta.url);
 function renderEvent(status, text) {
-  const event = { id: 1, run_id: 1, summary: text, source: "human", platform: "codex", event_type: "user_correction", skill_name: "research", skill_version: "1.0", correlation_id: "task", occurred_at: "2026-10-10", evidence: [{ quote: text }], evaluation: { reason: text }, review_status: status, review_note: text, credential_id: 1 };
+  const event = { id: 1, run_id: 1, summary: text, source: "human", platform: "codex", event_type: "user_correction", skill_name: "research", skill_version: "1.0", correlation_id: "task", occurred_at: "2026-10-13T02:54:56+00:00", received_at: "2026-10-13T02:55:10.491137+00:00", evidence: [{ quote: text }], evaluation: { reason: text }, review_status: status, review_note: text, credential_id: 1 };
   const states = [[], null, null, [event], undefined, "", false, false, false, undefined, "pending", {}, 0];
   let index = 0;
   const source = readFileSync(new URL("../src/pages/admin/SkillFeedbackPanel.tsx", import.meta.url), "utf8");
@@ -18,6 +18,12 @@ function renderEvent(status, text) {
     exports,
     require(name) {
       if (name === "react") return { useEffect() {}, useRef: () => ({ current: 0 }), useState(initial) { const value = states[index++]; return [value === undefined ? initial : value, () => {}]; } };
+      if (name === "../../lib/datetime") {
+        const dateExports = {};
+        const dateCode = ts.transpileModule(readFileSync(new URL("../src/lib/datetime.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+        vm.runInNewContext(dateCode, { exports: dateExports });
+        return dateExports;
+      }
       if (name === "../../api") return { api: {} };
       if (name === "../../context/AuthContext") return { useAuth: () => ({ canManageUsers: true }) };
       if (name === "./FeedbackCredentials") return { default: () => null };

@@ -1,6 +1,6 @@
 # Tasks
 
-Last aligned: `2026-10-12`。旧任务原文与开发顺序完整保存在 `archive/document-baseline-before-2026-10-08-alignment/tasks.md`，不作为当前排期。
+Last aligned: `2026-10-13`。旧任务原文与开发顺序完整保存在 `archive/document-baseline-before-2026-10-08-alignment/tasks.md`，不作为当前排期。
 
 ## Rules And Current Goal
 
@@ -15,7 +15,7 @@ Last aligned: `2026-10-12`。旧任务原文与开发顺序完整保存在 `arch
 
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
-| skill-feedback-004 | 外部客户端接入与真实平台验收 | IN_PROGRESS | 已发现三个配置 ID 与真实 HTTP 客户端；0.1.4 生产三事件提交/去重通过。后台核实/聚合与 WorkBuddy 实测待做，见 archive/handoff-2026-10-12-feedback-client-verification.md |
+| skill-feedback-004 | 外部客户端接入与真实平台验收 | IN_PROGRESS | 已发现三个配置 ID 与真实 HTTP 客户端；0.1.4 生产三事件提交/去重通过。生产已见真实检索事件 10/11/12；核实/聚合与平台产物验收待做，最新见 archive/handoff-2026-10-13-next-conversation.md |
 | skill-feedback-006 | 反馈时间展示 | DONE（已部署） | b619413 / 生产合并 b04ffb53；聚合问题与原始事件统一北京时间，公网新包与健康检查通过 |
 | skill-feedback-005 | 真实 IP 与代理信任核验 | TODO | 当前代理信任为空、公开用户共享来源预算；扩大使用前先核验链路，不直接开放全网信任 |
 | skill-feedback-003 | 外部 skill 自助临时凭证与入口修正 | DONE（已部署） | 514de69 / 生产镜像 7b310f9 / 迁移 d5e6f7g8h9i0；Linux 123 后端/16 前端、PG/nginx/公网通过，真实 ID/平台联调待做 |
@@ -173,4 +173,4 @@ Last aligned: `2026-10-12`。旧任务原文与开发顺序完整保存在 `arch
 
 ## Next Step
 
-发布已完成，最新部署记录见 docs/archive/handoff-2026-10-10-feedback-public-release.md。2026-10-12 外部 agent 仍未实现网络客户端：优先确认/登记正式 skill_id、按接入文档完成客户端、真实平台及后台浏览器联调；扩大使用前核验真实 IP 链路。随后可处理 TypeScript 基线、媒体只读引用审计、容量/缩略图与历史视频问题复核。CAD 等用户提供官方 Linux ODA 包。最新交接见 docs/archive/handoff-2026-10-12-feedback-client-next.md。本轮只留档，未提交/推送/部署，无关工作区文件仍保留。
+最新冷启动交接见 archive/handoff-2026-10-13-next-conversation.md。反馈时间展示 b619413 已部署，生产 git 0a41ad8c，运行前端来自 b04ffb53；不要重做已上线接口。先直接只读查服务器反馈与正式 ID，并核对外部 E:/projects/test/agent-skills 当前版本；已有真实检索回传不等于素材核实通过。继续已有授权 run_id=2 的后台核实/聚合、时间 UI 视觉与真实平台验收；扩大使用前核验真实 IP 信任链。媒体/类型基线/容量/缩略图/历史视频随后处理，CAD 等官方 Linux ODA 包。原访客样式、比较文档、_tmp_* 保留。

@@ -16,7 +16,7 @@ Last aligned: `2026-10-12`。旧任务原文与开发顺序完整保存在 `arch
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
 | skill-feedback-004 | 外部客户端接入与真实平台验收 | IN_PROGRESS | 已发现三个配置 ID 与真实 HTTP 客户端；0.1.4 生产三事件提交/去重通过。后台核实/聚合与 WorkBuddy 实测待做，见 archive/handoff-2026-10-12-feedback-client-verification.md |
-| skill-feedback-006 | 反馈时间展示 | DONE（本地，未部署） | 聚合问题显示创建/更新时间；原始事件显示发生/接收时间，统一北京时间；前端统一检查通过 |
+| skill-feedback-006 | 反馈时间展示 | DONE（已部署） | b619413 / 生产合并 b04ffb53；聚合问题与原始事件统一北京时间，公网新包与健康检查通过 |
 | skill-feedback-005 | 真实 IP 与代理信任核验 | TODO | 当前代理信任为空、公开用户共享来源预算；扩大使用前先核验链路，不直接开放全网信任 |
 | skill-feedback-003 | 外部 skill 自助临时凭证与入口修正 | DONE（已部署） | 514de69 / 生产镜像 7b310f9 / 迁移 d5e6f7g8h9i0；Linux 123 后端/16 前端、PG/nginx/公网通过，真实 ID/平台联调待做 |
 | skill-feedback-002 | 反馈防滥用 | DONE（已部署） | 55216ab / 生产 30dfe26，迁移 c4d5e6f7g8h9；专用凭证尚未发放，平台联调待做 |

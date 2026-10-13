@@ -11,14 +11,14 @@
 
 ## Latest Handoffs
 
-### [2026-10-13] 反馈时间展示 — 本地完成，未部署
+### [2026-10-13] 反馈时间展示 — 已提交、推送、部署
 
 - 聚合问题列表和详情补创建/更新时间；事件补发生/接收时间，复用 datetime 工具转换为北京时间并显示年月日时分秒。缺值显示未记录。
 - API 已返回 created_at/updated_at/occurred_at/received_at，本轮仅补前端类型和展示，无后端或迁移。
 - 文件：frontend/src/pages/admin/SkillFeedbackPanel.tsx、frontend/src/api.ts、frontend/scripts/test-feedback-security.mjs；测试夹具改为真实 UTC 格式，适配日期工具导入。
 - 验证：npm run check，16 项通过，23 项既有类型错误、0 新增，Vite 构建通过。
 - 只读生产查询发现最新事件 10/11/12 是大岗镇检索交付/文字评测/图片评测；发生北京时间 10-13 10:54:56，接收约 10:55:10；图片自评 pass=false、仅元数据核验。测试问题 3/4 仍 pending，未进行核实。
-- 未提交/push/部署；原未提交文档/访客样式/比较文档/_tmp_* 保留，CAD/key/卷/18010 不动。下一步发布前端后验收页面时间；不重复后端开发。
+- 功能 b619413 已推送 main，生产合并 b04ffb53，仅更新前端。nginx、公网新包时间标签和健康检查通过；后端/迁移/key 未变。备份与详情见 archive/handoff-2026-10-13-feedback-time-release.md。原访客样式/比较文档/_tmp_* 保留；后台浏览器验收待续。
 - Safe to hand off: Yes。
 
 ### [2026-10-12] 反馈客户端核验 — 生产提交/去重通过，后台验收待续

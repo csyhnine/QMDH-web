@@ -17,4 +17,15 @@
 - 实现阶段在 feature/other-gif-001-ui，基于 b09e892；原样式、比较文档及 _tmp_* 保护继续有效。未触碰 CAD/key/卷/18010。
 - 2.0 兼容：工具页仅组织导航和参数，复用已有服务/存储，以请求配置隔离执行；没有新增编排引擎或覆盖历史内容。
 
-发布与运行验证将在完成后补充；此前视频/GIF 服务发布记录见 handoff-2026-10-15-video-gif-release.md。
+## 发布与运行验证
+
+- 功能提交 52276de49edd0fd590f6d9da7c45b0b2722bd612 已推送 main；生产运行代码合并 6c09498ec055b90bada79c1b808425d5b2eff6fd。后续纯文档合并不重建镜像。
+- GitHub CI https://github.com/csyhnine/QMDH-web/actions/runs/38672209449 成功：Linux 后端 149 passed、16 subtests；前端 22 项、23 既有类型错误/0 新增、构建通过。
+- 生产 backend 镜像 sha256:f231fb404f6a7b9a297a9caa01ee4e8431ef327d34fceebd2e7f1f7466a174f9；worker sha256:827d81580edf1ac6b3963f37ce54682cee3489579536b7fb376912ef48c79eeb；frontend sha256:c7b80438eacc7b88ea49e07e05dd09b30cfac7c159f07a89997437e0a82e9970。后端 healthy、三 worker 运行；nginx -t 通过，四进程启动日志 Traceback/UndefinedColumn/UndefinedTable/ImportError 均 0。
+- 新镜像内真实手动 HTTP 接口（TestClient、仅该隔离进程覆盖鉴权/临时媒体目录）验证：1597553 字节 GIF，以 300000 字节为目标，输出 258959 字节、target_met=true；原件保留、两个文件均动画多帧可读，全局默认仍为 500000 字节。无正式用户/测试数据/媒体写入；这不等于浏览器登录后公网上传验收。
+- 公网 /api/v1/health、/studio/other、/studio/cad、/studio/gif 均 200；匿名手动接口 401；公开模板 API 200。实际 index-DugxzFow.js / OtherToolsPage-DkIMv4t5.js / GifCompressPage-DE_145Si.js 含新入口与压缩页面文案。未执行登录浏览器视觉验收。
+- 备份：服务器 /www/backup/qmdh-release-20261015-other-gif；本机 E:/backups/QMDH-web/release-20261015-other-gif。production.env/database.dump/清单/零增量媒体已下载；旧四个媒体包本机硬链接复用此前已完整读取验证的链，5743 文件无变化；恢复顺序沿用 video-gif-release 记录，再覆盖本次零增量包。
+- 本次数据库 dump SHA256 7705f67935885bb1c90929eea531adc05bb6e65d4f25b416f00820db60daa736，经 pg_restore --list 检查（未重复完整恢复）；env 前后 SHA256 均 9ee1cc783bbc975ab76106a43fe194af37e915cd832cf36cee277b5e6bd2a22e；媒体零增量包 a7017484d7c81cbde85c20051c4986dd898258dcbf1cab80dfd432cb53ef9b66。
+- 旧镜像 qmdh-release-backup-{backend,worker,frontend}:20261015-other-gif 保留。发布前活跃任务 0；无迁移、不重建数据服务；原生产四文件 Nano Banana 差异及 CadExtractPage 与 f499e6b1 相比无变化，配置/key/卷/18010 未动。本地原 styles.css 13 行和未跟踪文件不混入提交。
+
+Safe to hand off: Yes。此前视频/GIF 服务发布记录见 handoff-2026-10-15-video-gif-release.md。

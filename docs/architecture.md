@@ -1,6 +1,6 @@
 # Architecture
 
-2026-10-15 其他模块与手动 GIF 工具（本地待发布）：侧栏改为其他，/studio/other 默认转原 /studio/cad，/studio/gif 为手动压缩页；CAD 组件与查询参数不变。POST /assets/gif-compress 鉴权，接收单次参数，以不可变 GifOptions 复用压缩/存储，不修改全局自动上传配置，无迁移。
+2026-10-15 其他模块与手动 GIF 工具（已部署，52276de / 生产运行合并 6c09498e）：侧栏改为其他，/studio/other 默认转原 /studio/cad，/studio/gif 为手动压缩页；CAD 组件与查询参数不变。POST /assets/gif-compress 鉴权，接收单次参数，以不可变 GifOptions 复用压缩/存储，不修改全局自动上传配置，无迁移。
 
 最新部署、备份与运行镜像事实：archive/handoff-2026-10-15-video-gif-release.md。
 

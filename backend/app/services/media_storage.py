@@ -7,12 +7,14 @@ from html import escape
 from mimetypes import guess_type
 from pathlib import Path
 from time import sleep
-from typing import Any, Protocol
+from typing import Any, Protocol, TYPE_CHECKING
 from urllib.parse import quote, unquote, urlparse, urlunparse
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from app.services.gif_compression import GifOptions
 
 
 class StorageBackend(Protocol):
@@ -380,7 +382,8 @@ def write_binary_asset(relative_path: str, content: bytes, *, overwrite: bool = 
     return normalized
 
 
-def write_uploaded_asset(relative_path: str, content: bytes, *, compression_info: dict | None = None) -> str:
+def write_uploaded_asset(relative_path: str, content: bytes, *, compression_info: dict | None = None,
+                         gif_options: GifOptions | None = None) -> str:
     """Keep the original upload; use a smaller GIF derivative when available."""
     from app.services.gif_compression import compress_gif, is_gif
 
@@ -392,14 +395,14 @@ def write_uploaded_asset(relative_path: str, content: bytes, *, compression_info
         return original
     def report(path: str, output_bytes: int) -> str:
         if compression_info is not None:
-            target = settings.gif_target_bytes
+            target = gif_options.target_bytes if gif_options else settings.gif_target_bytes
             compression_info.update(original_bytes=len(content), output_bytes=output_bytes,
                                     target_bytes=target or None,
                                     target_met=output_bytes <= target if target else None,
                                     compressed=path != original)
         return path
 
-    optimized = compress_gif(content)
+    optimized = compress_gif(content, options=gif_options) if gif_options else compress_gif(content)
     if optimized is None:
         return report(original, len(content))
     derivative = str(Path(original).with_suffix(".compressed.gif"))

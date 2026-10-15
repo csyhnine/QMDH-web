@@ -668,6 +668,21 @@ class ReferenceUploadOut(BaseModel):
     compression: GifCompressionOut | None = None
 
 
+class GifCompressIn(ReferenceUploadIn):
+    data_url: str = Field(min_length=20, max_length=28_000_000)
+    target_kb: int = Field(default=500, ge=10, le=20_000)
+    max_edge: int = Field(default=0, ge=0, le=8192)
+    max_fps: float = Field(default=0, ge=0, le=50)
+    max_colors: int = Field(default=128, ge=4, le=256)
+    allow_resize: bool = True
+    allow_frame_reduction: bool = True
+
+
+class GifCompressOut(ReferenceUploadOut):
+    original_storage_path: str
+    compression: GifCompressionOut
+
+
 class ProviderDiscoverIn(BaseModel):
     base_url: str = Field(min_length=5, max_length=255)
     api_key: str = Field(min_length=1)

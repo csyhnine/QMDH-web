@@ -7,7 +7,7 @@ import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from 
 import { useAdminFeedbackPendingCount } from "../../lib/useAdminFeedbackPendingCount";
 import { BrandIcon } from "./Brand";
 
-type StudioTab = "generate" | "inspiration" | "feedback" | "chat" | "canvas" | "nav" | "cad" | "library";
+type StudioTab = "generate" | "inspiration" | "feedback" | "chat" | "canvas" | "nav" | "other" | "library";
 type AdminTab = AdminModuleKey;
 
 type AppShellProps =
@@ -53,7 +53,7 @@ const studioNavItems: Array<{ key: Exclude<StudioTab, "generate"> | "generate"; 
   { key: "inspiration", label: "灵感", path: "/studio/inspiration" },
   { key: "feedback", label: "反馈", path: "/studio/feedback" },
   { key: "generate", label: "生成", path: "/studio/generate" },
-  { key: "cad", label: "图纸", path: "/studio/cad" },
+  { key: "other", label: "其他", path: "/studio/other" },
   { key: "library", label: "资产库", path: "/studio/library" },
   ...(isStudioCanvasEnabled
     ? ([{ key: "canvas" as const, label: "无限画布", path: "/studio/canvas" }] as const)

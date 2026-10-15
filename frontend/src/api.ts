@@ -942,6 +942,19 @@ export type ReferenceUploadResponse = {
   compression?: GifCompressionResult | null;
 };
 
+export type GifToolRequest = ReferenceUploadPayload & {
+  target_kb: number;
+  max_edge: number;
+  max_fps: number;
+  max_colors: number;
+  allow_resize: boolean;
+  allow_frame_reduction: boolean;
+};
+export type GifToolResult = ReferenceUploadResponse & {
+  original_storage_path: string;
+  compression: GifCompressionResult;
+};
+
 export type SeedancePrivateAvatarAsset = {
   asset_id: string;
   asset_url: string;
@@ -1890,6 +1903,7 @@ export const api = {
     postJson<void>(`/prompt-templates/${templateId}/events`, payload),
   uploadReferenceImage: (payload: ReferenceUploadPayload) =>
     postJson<ReferenceUploadResponse>("/assets/reference-upload", payload),
+  compressGif: (payload: GifToolRequest) => postJson<GifToolResult>("/assets/gif-compress", payload),
   registerSeedancePrivateAvatar: (payload: SeedancePrivateAvatarRegisterPayload) =>
     postJson<SeedancePrivateAvatarAsset>("/seedance/private-avatar/register", payload),
   getSeedancePrivateAvatarAsset: (assetId: string, providerName?: string) =>

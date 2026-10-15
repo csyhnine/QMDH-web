@@ -15,6 +15,7 @@ Last aligned: `2026-10-15`。旧任务原文与开发顺序完整保存在 `arch
 
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
+| other-gif-001 | 其他模块与手动 GIF 压缩界面 | IN_PROGRESS（本地） | 侧栏图纸改其他；保留图纸解析/原链接，增加 GIF 上传、参数、预览和下载；待发布 |
 | gif-upload-001 | 新上传 GIF 自动压缩 | DONE（已部署） | a655596/55bd284，生产镜像含 FFmpeg；500000 字节目标，运行容器上传验证 1597553→453484 字节 |
 | video-template-001 | 视频生成提示词模板库 | DONE（已部署） | a655596，迁移 e6f7g8h9i0j1；前后端已发布，21 个旧公共图片模板保留，视频公共内容待管理员添加 |
 | skill-feedback-004 | 外部客户端接入与真实平台验收 | IN_PROGRESS | 已发现三个配置 ID 与真实 HTTP 客户端；0.1.4 生产三事件提交/去重通过。生产最新事件 13/14/15（run_id=6）；三个 ID 启用，当前客户端 14 项离线通过。run_id=2 经 SSH 核实并聚合 issue_id=1（2 证据/1 匿名），真实产物未获取，事件 13 完成统计字段不符；详见 archive/handoff-2026-10-13-feedback-live-verification.md |
@@ -37,6 +38,16 @@ Last aligned: `2026-10-15`。旧任务原文与开发顺序完整保存在 `arch
 | video-seedance-502-001 | Seedance 参考图代理/DNS | TODO | 历史上游问题；先确认当前是否仍发生 |
 
 ## Current Task Details
+
+### Task: [other-gif-001] 其他模块与手动 GIF 压缩
+
+- 状态：IN_PROGRESS（本地实现与回归完成后发布），分支 feature/other-gif-001-ui。
+- 目标：侧栏“图纸”改“其他”，保留现有图纸解析，提供可见、可操作的 GIF 压缩工具。
+- 边界：导航与路由包裹、独立 GIF 页/CSS、鉴权手动压缩接口及请求局部参数；不修改 CAD 算法/组件/数据，不改旧自动上传压缩策略。
+- 验收：旧 /studio/cad（含查询参数）继续使用原组件；/studio/gif 显示上传/500KB 默认目标/高级参数/双预览/大小对比/下载；只挂载当前工具；手动请求不修改全局配置；鉴权/输入/服务不可用有明确错误。
+- 禁止：覆盖原 styles.css 13 行、比较文档/_tmp_*，修改 CAD/key/卷/18010；不登记新账号或向正式库写验收模板。
+- 依赖：已发布 FFmpeg 服务；无新迁移。文档同步：handoff、architecture、archive/handoff-2026-10-15-other-gif-tool.md。
+- 2.0 兼容：复用存储和压缩服务，以不可变请求配置隔离参数，无新增任务编排或数据模型。
 
 ### Task: [gif-upload-001] 新上传 GIF 自动压缩
 

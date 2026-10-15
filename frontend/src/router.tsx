@@ -50,7 +50,7 @@ const InspirationPage = lazy(() => import("./pages/inspiration/InspirationPage")
 const ChatPage = lazy(() => import("./pages/chat/ChatPage"));
 const FeedbackPage = lazy(() => import("./pages/studio/FeedbackPage"));
 const GeneratePage = lazy(() => import("./pages/studio/GeneratePage"));
-const CadExtractPage = lazy(() => import("./pages/studio/CadExtractPage"));
+const OtherToolsPage = lazy(() => import("./pages/studio/OtherToolsPage"));
 const AssetLibraryPage = lazy(() => import("./pages/studio/AssetLibraryPage"));
 const CanvasPage = lazy(() => import("./pages/studio/CanvasPage"));
 function ProtectedRoute({ children }: { children: JSX.Element }) {
@@ -558,12 +558,12 @@ export default function AppRouter() {
             path="/studio/cad"
             element={
               <ProtectedRoute>
-                <AppShell kind="studio" active="cad">
-                  <CadExtractPage />
-                </AppShell>
+                <OtherToolsPage tool="cad" />
               </ProtectedRoute>
             }
           />
+          <Route path="/studio/other" element={<ProtectedRoute><Navigate to="/studio/cad" replace /></ProtectedRoute>} />
+          <Route path="/studio/gif" element={<ProtectedRoute><OtherToolsPage tool="gif" /></ProtectedRoute>} />
           <Route
             path="/studio/library"
             element={

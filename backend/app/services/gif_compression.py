@@ -41,6 +41,23 @@ class GifInfo:
     transparent: bool
 
 
+@dataclass(frozen=True)
+class GifOptions:
+    target_bytes: int
+    max_edge: int
+    max_fps: float
+    max_colors: int
+    allow_resize: bool
+    allow_frame_reduction: bool
+    min_edge: int
+    min_fps: float
+    min_colors: int
+
+    @classmethod
+    def from_settings(cls) -> GifOptions:
+        return cls(**{name: getattr(settings, "gif_" + name) for name in cls.__dataclass_fields__})
+
+
 def _inspect(content: bytes, deadline: float) -> GifInfo:
     with warnings.catch_warnings():
         warnings.simplefilter("error", Image.DecompressionBombWarning)
@@ -77,11 +94,12 @@ def _inspect(content: bytes, deadline: float) -> GifInfo:
             return GifInfo(width, height, frames, duration, delay, loop, transparent)
 
 
-def compress_gif(content: bytes) -> bytes | None:
+def compress_gif(content: bytes, *, options: GifOptions | None = None) -> bytes | None:
     """Return a validated smaller GIF, or None to keep the upload unchanged."""
     if not settings.gif_compression_enabled or not is_gif(content) or len(content) > MAX_INPUT_BYTES:
         return None
-    target = settings.gif_target_bytes
+    policy = options or GifOptions.from_settings()
+    target = policy.target_bytes
     if target and len(content) <= target:
         return None
     best: bytes | None = None
@@ -96,9 +114,9 @@ def compress_gif(content: bytes) -> bytes | None:
             return None
         info = _inspect(content, deadline)
         # Never raise the source frame rate; a still GIF needs no frame resampling.
-        max_edge = settings.gif_max_edge
-        max_fps = settings.gif_max_fps
-        colors = settings.gif_max_colors
+        max_edge = policy.max_edge
+        max_fps = policy.max_fps
+        colors = policy.max_colors
         with TemporaryDirectory(prefix="qmdh-gif-") as folder:
             root = Path(folder)
             source, palette, output = root / "input.gif", root / "palette.png", root / "output.gif"
@@ -117,23 +135,23 @@ def compress_gif(content: bytes) -> bytes | None:
                 yield max_edge, max_fps, colors
                 if not target:
                     return
-                low_colors = min(colors, settings.gif_min_colors)
+                low_colors = min(colors, policy.min_colors)
                 for palette_colors in sorted({max(low_colors, min(colors, n)) for n in (96, 64, 32)}, reverse=True):
                     if palette_colors < colors:
                         yield max_edge, max_fps, palette_colors
                 current_fps = max_fps
                 effective_fps = max_fps or 1000 / info.min_delay_ms
-                if settings.gif_allow_frame_reduction and info.frames > 1:
-                    for rate in (12, 8, settings.gif_min_fps):
-                        next_fps = max(settings.gif_min_fps, min(effective_fps, rate))
+                if policy.allow_frame_reduction and info.frames > 1:
+                    for rate in (12, 8, policy.min_fps):
+                        next_fps = max(policy.min_fps, min(effective_fps, rate))
                         if next_fps < effective_fps:
                             current_fps = next_fps
                             effective_fps = next_fps
                             yield max_edge, current_fps, low_colors
-                if not settings.gif_allow_resize:
+                if not policy.allow_resize:
                     return
                 edge = min(max_edge or max(info.width, info.height), max(info.width, info.height))
-                floor = min(edge, settings.gif_min_edge)
+                floor = min(edge, policy.min_edge)
                 for _ in range(3):
                     estimate = len(best) if best else len(content)
                     ratio = min(0.8, (target / estimate) ** 0.5 * 0.9)

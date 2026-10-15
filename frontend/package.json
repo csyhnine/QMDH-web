@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "typecheck:baseline": "node scripts/typecheck-baseline.mjs",
     "test:studio": "node --test scripts/test-studio-data-loader.mjs",
-    "test:checks": "node --test scripts/test-studio-data-loader.mjs scripts/test-typecheck-baseline.mjs scripts/test-feedback-security.mjs scripts/test-video-templates.mjs",
+    "test:checks": "node --test scripts/test-studio-data-loader.mjs scripts/test-typecheck-baseline.mjs scripts/test-feedback-security.mjs scripts/test-video-templates.mjs scripts/test-other-tools.mjs",
     "check": "npm run test:checks && npm run typecheck:baseline && npm run build",
     "preview": "vite preview",
     "lint": "biome check src/lib",

@@ -2,16 +2,22 @@ from base64 import b64decode
 from datetime import datetime
 from random import randint
 import re
+import shutil
+from time import monotonic
+from uuid import uuid4
+from dataclasses import replace
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import can_access_project, get_current_auth_user, get_optional_auth_user
-from app.core.config import AuthUserProfile
+from app.core.config import AuthUserProfile, settings
 from app.database import get_db
 from app.models import Asset, AssetBookmark, AssetType, CadExtract, InspirationPost, Project, ProviderCall, Task
 from app.schemas import AssetOut, AssetShareIn, AssetShareOut, ReferenceUploadIn, ReferenceUploadOut
+from app.schemas import GifCompressIn, GifCompressOut
+from app.services.gif_compression import GifOptions, is_gif, _inspect
 from app.services.media_storage import resolve_storage_path, write_uploaded_asset
 
 router = APIRouter(prefix="/assets", tags=["assets"])
@@ -253,6 +259,30 @@ def upload_reference_image(
     compression_info: dict = {}
     storage_path = write_uploaded_asset(relative_path, content, compression_info=compression_info)
     return ReferenceUploadOut(file_name=payload.file_name, storage_path=resolve_storage_path(storage_path), compression=compression_info or None)
+
+
+@router.post("/gif-compress", response_model=GifCompressOut, status_code=status.HTTP_201_CREATED)
+def compress_uploaded_gif(
+    payload: GifCompressIn,
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> GifCompressOut:
+    if not settings.gif_compression_enabled or not shutil.which(settings.ffmpeg_binary):
+        raise HTTPException(status_code=503, detail="GIF 压缩服务暂不可用，请联系管理员。")
+    content = _decode_reference_upload(payload.data_url)
+    if not is_gif(content):
+        raise HTTPException(status_code=422, detail="请选择有效的 GIF 文件。")
+    try:
+        _inspect(content, monotonic() + 5)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="GIF 无法读取或超出处理预算，请缩短动画或降低尺寸后重试。") from exc
+    options = replace(GifOptions.from_settings(), target_bytes=payload.target_kb * 1000,
+                      max_edge=payload.max_edge, max_fps=payload.max_fps, max_colors=payload.max_colors,
+                      allow_resize=payload.allow_resize, allow_frame_reduction=payload.allow_frame_reduction)
+    original = f"gif-tools/{uuid4().hex}.gif"
+    compression: dict = {}
+    result = write_uploaded_asset(original, content, compression_info=compression, gif_options=options)
+    return GifCompressOut(file_name=payload.file_name, storage_path=resolve_storage_path(result),
+                          original_storage_path=resolve_storage_path(original), compression=compression)
 
 
 @router.post("/{asset_id}/like", response_model=AssetOut, status_code=status.HTTP_200_OK)

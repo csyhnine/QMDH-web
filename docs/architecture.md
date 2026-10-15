@@ -1,5 +1,7 @@
 # Architecture
 
+2026-10-15 其他模块与手动 GIF 工具（本地待发布）：侧栏改为其他，/studio/other 默认转原 /studio/cad，/studio/gif 为手动压缩页；CAD 组件与查询参数不变。POST /assets/gif-compress 鉴权，接收单次参数，以不可变 GifOptions 复用压缩/存储，不修改全局自动上传配置，无迁移。
+
 最新部署、备份与运行镜像事实：archive/handoff-2026-10-15-video-gif-release.md。
 
 2026-10-15 新上传 GIF 自动压缩（a655596/55bd284 已部署）：assets/reference-upload、chat/attachments/upload 和 Agent 内联工件使用 write_uploaded_asset；保留原件，独立 gif_compression 服务按可配置尺寸/帧率/颜色数用 FFmpeg 生成经验证且更小的派生文件（默认以 500000 字节为目标，自适应降低且可锁定原尺寸/帧时序，上传 API 含达标回执），失败回退；同步有界处理，Dockerfile 内安装 FFmpeg。详见 archive/handoff-2026-10-15-gif-upload-compression.md，无本功能数据库迁移。

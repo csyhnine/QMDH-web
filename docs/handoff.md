@@ -11,6 +11,14 @@
 
 ## Latest Handoffs
 
+### [2026-10-15] 其他模块与手动 GIF 工具 — 实现完成，发布中
+
+- 按用户要求将侧栏图纸改其他；保留原 /studio/cad 与完整 CAD 组件，新增 /studio/gif 手动压缩页面和两工具页签。
+- 上传/自定义目标与高级参数/双预览/体积对比/达标说明/下载已实现；新鉴权接口使用请求局部 GifOptions，不改变全局自动压缩，无迁移。
+- 本地后端 148 passed/1 skipped/16 subtests；前端 22 项/23 既有类型错误、0 新增/构建通过。详见 archive/handoff-2026-10-15-other-gif-tool.md。
+- 分支 feature/other-gif-001-ui，原 styles.css/比较文档/_tmp_* 保留；准备按既有发布流程部署。此前完整 handoff 另存 archive/handoff-before-2026-10-15-other-gif.md。
+- Safe to hand off: Yes（发布步骤待续）。
+
 ### [2026-10-15] 视频模板与目标体积 GIF 压缩 — 已提交、推送、部署
 
 - 功能 a655596、构建 55bd284 已推送 main，生产运行代码合并 1dadfc50。后端/三个 worker/前端已更新，迁移 e6f7g8h9i0j1，FFmpeg 7.1.5 可用，21 个旧图片模板保留。
@@ -27,11 +35,3 @@
 - 最终 GIF 专项 16 项（含真实 FFmpeg 的 500KB 目标达标测试）；后端全量 141 passed/1 skipped/16 subtests，前端 19 项/类型基线/构建通过，额外附件/存储 17 passed/6 subtests。详情见 archive/handoff-2026-10-15-gif-upload-compression.md。
 - 保留原视频模板、反馈文档、styles.css、比较文档与 _tmp_*，无提交/push/部署。当前分支 feature/video-prompt-templates，整包发布仍需视频模板迁移。
 - Safe to hand off: Yes。前次完整交接另存 archive/handoff-before-2026-10-15-gif-upload.md。
-
-### [2026-10-14] 视频提示词模板库 — 本地完成，未部署
-
-- 分支 feature/video-prompt-templates，基于 f1e2122；原反馈文档改动、styles.css 13 行、比较文档与 _tmp_* 保留，无提交/push。
-- 视频模式开放模板库，按 media_type 区分图片/视频，公共浏览/搜索/套用和个人保存/编辑/删除复用原实现；后台新增用途选择与筛选。
-- 视频模板只套用文字/风格/说明，保留当前视频模型、SKU/时长、画幅、分辨率及参考图；旧模板默认图片。迁移 e6f7g8h9i0j1，新增列不改旧内容。
-- 验证及发布要求见 archive/handoff-2026-10-14-video-templates.md。未调用视频生成、未操作生产。前后端需同时发布并先迁移。
-- Safe to hand off: Yes。此前三条完整交接另存 archive/handoff-before-2026-10-14-video-templates.md。

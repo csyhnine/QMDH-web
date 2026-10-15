@@ -3,7 +3,7 @@ import { api, type GifToolResult } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import { fileToDataUrl } from "../../features/studio/studioAssetUtils";
 import { downloadMediaUrl } from "../../features/studio/studioMediaDownload";
-import { MAX_REFERENCE_UPLOAD_BYTES } from "../../utils/uploads";
+import { createGifZip, runGifBatch, validateGifBatch, type GifJob } from "./gifToolBatch";
 
 export function formatGifSize(bytes: number) {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(2)} MB`;
@@ -18,15 +18,18 @@ export function gifResultMessage(result: GifToolResult) {
 
 export default function GifCompressPage() {
   const { isGuest } = useAuth();
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [jobs, setJobs] = useState<GifJob[]>([]);
+  const [selected, setSelected] = useState(0);
   const [preview, setPreview] = useState("");
   const [target, setTarget] = useState(500);
-  const [maxEdge, setMaxEdge] = useState(0);
-  const [maxFps, setMaxFps] = useState(0);
-  const [maxColors, setMaxColors] = useState(128);
+  const [maxEdge, setMaxEdge] = useState(344);
+  const [maxFps, setMaxFps] = useState(12.5);
+  const [maxColors, setMaxColors] = useState(96);
   const [allowResize, setAllowResize] = useState(true);
   const [allowFrameReduction, setAllowFrameReduction] = useState(true);
-  const [result, setResult] = useState<GifToolResult | null>(null);
+  const file = files[selected];
+  const result = jobs[selected]?.result;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
@@ -39,34 +42,45 @@ export default function GifCompressPage() {
     setPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [file]);
-  useEffect(() => { setResult(null); }, [target, maxEdge, maxFps, maxColors, allowResize, allowFrameReduction]);
+  useEffect(() => { setJobs(files.map(() => ({ status: "waiting" }))); }, [files, target, maxEdge, maxFps, maxColors, allowResize, allowFrameReduction]);
 
-  function chooseFile(next: File | undefined) {
-    if (!next || busy) return;
-    if (!next.name.toLowerCase().endsWith(".gif") && next.type !== "image/gif") {
-      setError("请选择 GIF 文件。"); return;
-    }
-    if (!next.size || next.size > MAX_REFERENCE_UPLOAD_BYTES) {
-      setError("GIF 文件不能为空，且不能超过 20 MB。"); return;
-    }
-    setFile(next); setResult(null); setError("");
+  function chooseFiles(next: File[]) {
+    if (!next.length || busy || downloading) return;
+    const message = validateGifBatch(next);
+    if (message) { setError(message); return; }
+    setFiles(next); setSelected(0); setJobs(next.map(() => ({ status: "waiting" }))); setError("");
   }
 
   async function compress(event: FormEvent) {
     event.preventDefault();
-    if (!file || busy || isGuest) return;
+    if (!files.length || busy || isGuest || downloading) return;
     const id = ++request.current;
-    setBusy(true); setError(""); setResult(null);
+    setBusy(true); setError(""); setJobs(files.map(() => ({ status: "waiting" })));
     try {
-      const dataUrl = await fileToDataUrl(file);
-      if (id !== request.current) return;
-      const next = await api.compressGif({ file_name: file.name, data_url: dataUrl, target_kb: target,
-        max_edge: maxEdge, max_fps: maxFps, max_colors: maxColors,
-        allow_resize: allowResize, allow_frame_reduction: allowFrameReduction });
-      if (id === request.current) setResult(next);
-    } catch (err) {
-      if (id === request.current) setError(err instanceof Error ? err.message : "压缩失败，请重试。");
+      await runGifBatch(files, async file => {
+        const dataUrl = await fileToDataUrl(file);
+        if (id !== request.current) throw new Error("已离开页面");
+        return api.compressGif({ file_name: file.name, data_url: dataUrl, target_kb: target,
+          max_edge: maxEdge, max_fps: maxFps, max_colors: maxColors,
+          allow_resize: allowResize, allow_frame_reduction: allowFrameReduction });
+      }, (index, job) => setJobs(previous => previous.map((old, i) => i === index ? job : old)), () => id === request.current);
     } finally { if (id === request.current) setBusy(false); }
+  }
+
+  async function downloadBatch() {
+    if (downloading || busy) return;
+    setDownloading(true); setError("");
+    const id = request.current;
+    try {
+      const results = jobs.flatMap(job => job.result ? [job.result] : []);
+      if (!results.length) return;
+      const bytes = await createGifZip(results);
+      if (id !== request.current) return;
+      const url = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: "application/zip" }));
+      const anchor = document.createElement("a"); anchor.href = url; anchor.download = "gif-compressed.zip";
+      anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) { if (id === request.current) setError(err instanceof Error ? err.message : "打包下载失败，请重试。"); }
+    finally { if (id === request.current) setDownloading(false); }
   }
 
   async function download() {
@@ -79,28 +93,28 @@ export default function GifCompressPage() {
   return <section className="gif-tool-page">
     <header className="gif-tool-heading">
       <h1>GIF 压缩</h1>
-      <p>上传动图，设置目标大小，预览并下载压缩结果。保留原文件与完整动画时长。</p>
+      <p>批量上传动图，默认以 500 KB 为目标。按比例缩放，保留动画时长和原循环方式。</p>
     </header>
     <div className="gif-tool-columns">
       <form className="feedback-panel gif-tool-form" onSubmit={compress}>
         <h2>上传 GIF</h2>
-        <input ref={input} type="file" accept=".gif,image/gif" hidden disabled={busy || isGuest}
-          onChange={event => { chooseFile(event.target.files?.[0]); event.target.value = ""; }} />
-        <button type="button" className="gif-dropzone" disabled={busy || isGuest} onClick={() => input.current?.click()}
-          onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); if (!isGuest) chooseFile(event.dataTransfer.files[0]); }}>
-          <strong>{file ? file.name : "点击选择或拖入 GIF"}</strong>
-          <span>{file ? `${formatGifSize(file.size)} · 点击更换` : "单个文件不超过 20 MB"}</span>
+        <input ref={input} type="file" accept=".gif,image/gif" multiple hidden disabled={busy || downloading || isGuest}
+          onChange={event => { chooseFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
+        <button type="button" className="gif-dropzone" disabled={busy || downloading || isGuest} onClick={() => input.current?.click()}
+          onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); if (!isGuest) chooseFiles(Array.from(event.dataTransfer.files)); }}>
+          <strong>{files.length ? `已选择 ${files.length} 个 GIF` : "点击选择或拖入多个 GIF"}</strong>
+          <span>{files.length ? `${formatGifSize(files.reduce((sum, f) => sum + f.size, 0))} · 点击重新选择` : "最多 20 个，每个不超过 20 MB，总计不超过 100 MB"}</span>
         </button>
-        <fieldset disabled={busy || isGuest} className="gif-settings">
+        <fieldset disabled={busy || downloading || isGuest} className="gif-settings">
           <label className="gif-field"><span>目标大小（KB）</span>
             <input type="number" min={10} max={20000} step={1} required value={target} onChange={e => setTarget(Number(e.target.value))} />
             <small>默认 500 KB。1 KB = 1000 字节，尽量在质量下限内达标。</small>
           </label>
           <details className="gif-advanced"><summary>压缩选项</summary>
             <div className="gif-options-grid">
-              <label className="gif-field"><span>初始最长边（像素）</span><input type="number" min={0} max={8192} step={1} required value={maxEdge} onChange={e => setMaxEdge(Number(e.target.value))} /><small>0 表示从原尺寸开始，不放大图片。</small></label>
-              <label className="gif-field"><span>初始帧率上限（fps）</span><input type="number" min={0} max={50} step={0.5} required value={maxFps} onChange={e => setMaxFps(Number(e.target.value))} /><small>0 表示从原帧率开始。</small></label>
-              <label className="gif-field"><span>初始颜色数</span><input type="number" min={4} max={256} step={1} required value={maxColors} onChange={e => setMaxColors(Number(e.target.value))} /><small>颜色越多，画面通常更细腻、体积更大。</small></label>
+              <label className="gif-field"><span>初始最长边（像素）</span><input type="number" min={0} max={8192} step={1} required value={maxEdge} onChange={e => setMaxEdge(Number(e.target.value))} /><small>默认 344：720×720 将缩至 344×344；非方图等比缩放。Lanczos 保留细节，0 为原尺寸，不放大。</small></label>
+              <label className="gif-field"><span>初始帧率上限（fps）</span><input type="number" min={0} max={50} step={0.5} required value={maxFps} onChange={e => setMaxFps(Number(e.target.value))} /><small>默认 12.5：25fps 动画约减半帧数，保持时长。0 为原帧率，不增加源帧率。</small></label>
+              <label className="gif-field"><span>初始颜色数</span><input type="number" min={4} max={256} step={1} required value={maxColors} onChange={e => setMaxColors(Number(e.target.value))} /><small>默认最多 96 色，配合 Bayer 抖动改善颜色过渡。</small></label>
             </div>
             <label className="gif-checkbox"><input type="checkbox" checked={allowResize} onChange={e => setAllowResize(e.target.checked)} />为达到目标，允许逐步缩小尺寸</label>
             <label className="gif-checkbox"><input type="checkbox" checked={allowFrameReduction} onChange={e => setAllowFrameReduction(e.target.checked)} />为达到目标，允许逐步降低帧率</label>
@@ -109,11 +123,23 @@ export default function GifCompressPage() {
         </fieldset>
         {isGuest ? <p className="gif-notice">登录后即可上传并压缩 GIF。</p> : null}
         {error ? <p className="gif-error" role="alert">{error}</p> : null}
-        <button className="admin-primary-button" type="submit" disabled={!file || busy || isGuest}>{busy ? "正在压缩…" : "开始压缩"}</button>
-        <p className="gif-footnote">处理通常需要几秒钟；复杂动图可能在达到质量或处理时间下限时保留未达标结果。</p>
+        <button className="admin-primary-button" type="submit" disabled={!files.length || busy || downloading || isGuest}>{busy ? `正在压缩 ${jobs.filter(job => job.status === "done" || job.status === "error").length}/${files.length}…` : files.length > 1 ? "开始批量压缩" : "开始压缩"}</button>
+        <p className="gif-footnote">逐个压缩，单个失败不会中断整批；超出目标时继续降低颜色、帧率或尺寸，达到质量或处理时间下限后会显示未达标。</p>
       </form>
       <section className="feedback-panel gif-result-panel" aria-label="压缩结果" aria-live="polite" aria-busy={busy}>
         <h2>压缩结果</h2>
+        {files.length > 0 ? <>
+          <div className="gif-batch-summary">
+            <span>{jobs.filter(job => job.status === "done").length} / {files.length} 已完成 · {jobs.filter(job => job.status === "error").length} 失败</span>
+            <button type="button" className="ghost-button" disabled={busy || downloading || !jobs.some(job => job.result)} onClick={() => void downloadBatch()}>{downloading ? "准备下载…" : "打包下载结果"}</button>
+          </div>
+          <ul className="gif-batch-list">{files.map((entry, index) => {
+            const job = jobs[index];
+            const status = job?.status === "processing" ? "正在压缩" : job?.status === "error" ? "失败" : job?.result ? `${formatGifSize(job.result.compression.output_bytes)} · ${job.result.compression.target_met ? "已达标" : "未达标"}` : "等待压缩";
+            return <li key={index}><button type="button" className={selected === index ? "is-selected" : ""} aria-pressed={selected === index} onClick={() => setSelected(index)}><strong>{entry.name}</strong><span>{status}</span></button></li>;
+          })}</ul>
+          {jobs[selected]?.error ? <p role="alert" className="gif-error">{jobs[selected].error}</p> : null}
+        </> : null}
         {result ? <>
           <p className={result.compression.target_met ? "gif-notice is-success" : "gif-notice is-warning"}>{gifResultMessage(result)}</p>
           <div className="gif-stats">
@@ -128,7 +154,7 @@ export default function GifCompressPage() {
           </div>
           <div className="gif-download-actions"><button type="button" className="admin-primary-button" disabled={downloading} onClick={() => void download()}>{downloading ? "准备下载…" : "下载 GIF"}</button>
             <button type="button" className="ghost-button" onClick={() => void downloadMediaUrl(result.original_storage_path, result.file_name)}>下载原文件</button></div>
-        </> : <div className="gif-result-empty">{busy ? "正在尝试压缩方案，请稍候…" : "选择 GIF 并开始压缩后，在这里查看体积对比和动画预览。"}</div>}
+        </> : <div className="gif-result-empty">{jobs[selected]?.status === "processing" ? "正在尝试压缩方案，请稍候…" : "选择文件查看结果；开始压缩后，在这里查看体积对比和动画预览。"}</div>}
       </section>
     </div>
   </section>;

@@ -142,7 +142,7 @@ def compress_gif(content: bytes, *, options: GifOptions | None = None) -> bytes 
                 current_fps = max_fps
                 effective_fps = max_fps or 1000 / info.min_delay_ms
                 if policy.allow_frame_reduction and info.frames > 1:
-                    for rate in (12, 8, policy.min_fps):
+                    for rate in (12.5, 10, 8, policy.min_fps):
                         next_fps = max(policy.min_fps, min(effective_fps, rate))
                         if next_fps < effective_fps:
                             current_fps = next_fps

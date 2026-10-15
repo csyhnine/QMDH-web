@@ -1,5 +1,7 @@
 # Architecture
 
+2026-10-15 GIF 推荐预设与批量（本地待发布）：自动上传/手动工具默认最长边 344、12.5fps、96 色，Lanczos 与 Bayer 抖动，500000 字节目标；批量 20 件/100MiB 总计，浏览器顺序请求原单文件接口，独立状态/结果/ZIP 下载，fflate 按需加载，无新服务/迁移。
+
 2026-10-15 其他模块与手动 GIF 工具（已部署，52276de / 生产运行合并 6c09498e）：侧栏改为其他，/studio/other 默认转原 /studio/cad，/studio/gif 为手动压缩页；CAD 组件与查询参数不变。POST /assets/gif-compress 鉴权，接收单次参数，以不可变 GifOptions 复用压缩/存储，不修改全局自动上传配置，无迁移。
 
 最新部署、备份与运行镜像事实：archive/handoff-2026-10-15-video-gif-release.md。

@@ -107,9 +107,9 @@ class Settings(BaseSettings):
     media_url_prefix: str = "/media"
     gif_compression_enabled: bool = True
     ffmpeg_binary: str = "ffmpeg"
-    gif_max_edge: int = Field(default=0, ge=0, le=8192)
-    gif_max_fps: float = Field(default=0, ge=0, le=50)
-    gif_max_colors: int = Field(default=128, ge=4, le=256)
+    gif_max_edge: int = Field(default=344, ge=0, le=8192)
+    gif_max_fps: float = Field(default=12.5, ge=0, le=50)
+    gif_max_colors: int = Field(default=96, ge=4, le=256)
     gif_target_bytes: int = Field(default=500_000, ge=0, le=20 * 1024 * 1024)
     gif_allow_resize: bool = True
     gif_allow_frame_reduction: bool = True

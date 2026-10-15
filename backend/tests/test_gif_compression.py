@@ -28,7 +28,7 @@ def single_pass_unless_target_is_explicit():
         yield
 
 
-def animation(*, loop=0, width=128, height=72, frames=20, transparent=False):
+def animation(*, loop=0, width=128, height=72, frames=20, transparent=False, duration=80):
     rng = random.Random(17)
     images = []
     for _ in range(frames):
@@ -41,7 +41,7 @@ def animation(*, loop=0, width=128, height=72, frames=20, transparent=False):
     options = {"loop": loop} if loop is not None else {}
     if transparent:
         options["transparency"] = 0
-    images[0].save(output, format="GIF", save_all=True, append_images=images[1:], duration=80,
+    images[0].save(output, format="GIF", save_all=True, append_images=images[1:], duration=duration,
                    disposal=2, optimize=False, **options)
     return output.getvalue()
 
@@ -220,3 +220,32 @@ def test_agent_inline_gif_uses_the_same_upload_processing():
             name="animation", data_url="data:image/gif;base64," + b64encode(content).decode()))
         assert result.endswith(".compressed.gif")
         assert storage.read_binary_asset(result.replace(".compressed.gif", ".gif")) == content
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="Requires FFmpeg")
+@pytest.mark.parametrize("loop", [0, 2, None])
+def test_recommended_25fps_preset_preserves_aspect_timing_loop_and_color_limit(loop):
+    from dataclasses import replace
+    original = animation(loop=loop, width=720, height=360, frames=8, duration=40)
+    options = replace(gif.GifOptions.from_settings(), target_bytes=0,
+                      max_edge=344, max_fps=12.5, max_colors=96)
+    optimized = gif.compress_gif(original, options=options)
+    assert optimized is not None
+    before = gif._inspect(original, float("inf"))
+    after = gif._inspect(optimized, float("inf"))
+    assert (after.width, after.height) == (344, 172)
+    assert after.frames == 4 and after.min_delay_ms == 80
+    assert after.duration_ms == before.duration_ms and after.loop == loop
+    with Image.open(BytesIO(optimized)) as image:
+        for frame in range(image.n_frames):
+            image.seek(frame)
+            assert len(image.convert("RGB").getcolors(maxcolors=256)) <= 96
+
+
+def test_gif_recommended_defaults_and_manual_schema_are_aligned():
+    from app.core.config import Settings
+    from app.schemas import GifCompressIn
+    config = Settings(_env_file=None)
+    payload = GifCompressIn(file_name="test.gif", data_url="data:image/gif;base64,R0lGODlh")
+    assert (config.gif_max_edge, config.gif_max_fps, config.gif_max_colors) == (344, 12.5, 96)
+    assert (payload.max_edge, payload.max_fps, payload.max_colors) == (344, 12.5, 96)

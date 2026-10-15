@@ -671,9 +671,9 @@ class ReferenceUploadOut(BaseModel):
 class GifCompressIn(ReferenceUploadIn):
     data_url: str = Field(min_length=20, max_length=28_000_000)
     target_kb: int = Field(default=500, ge=10, le=20_000)
-    max_edge: int = Field(default=0, ge=0, le=8192)
-    max_fps: float = Field(default=0, ge=0, le=50)
-    max_colors: int = Field(default=128, ge=4, le=256)
+    max_edge: int = Field(default=344, ge=0, le=8192)
+    max_fps: float = Field(default=12.5, ge=0, le=50)
+    max_colors: int = Field(default=96, ge=4, le=256)
     allow_resize: bool = True
     allow_frame_reduction: bool = True
 

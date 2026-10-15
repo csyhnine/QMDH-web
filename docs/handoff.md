@@ -11,6 +11,15 @@
 
 ## Latest Handoffs
 
+
+### [2026-10-15] GIF 推荐预设与批量 — 本地完成，待发布
+
+- 默认 344 像素/12.5fps/96 色，Lanczos 与 Bayer 抖动，目标 500KB、单次参数可改；新上传自动与手动默认对齐，显式环境配置优先。
+- 批量 20 件/100MiB，顺序复用单件接口、失败续跑、逐件预览/状态、ZIP 下载；卸载不再提交后续文件，无迁移或后台任务。
+- 本地后端 152 passed/1 skipped/16 subtests，前端 26 项/23 既有类型错误、0 新增/构建通过。详见 archive/handoff-2026-10-15-gif-batch.md。
+- 分支 codex/gif-batch-presets；原 styles.css/比较文档/_tmp_* 与生产四文件差异保护继续有效。
+- Safe to hand off: Yes（发布步骤待续）。
+
 ### [2026-10-15] 其他模块与手动 GIF 工具 — 已部署
 
 - 按用户要求将侧栏图纸改其他；保留原 /studio/cad 与完整 CAD 组件，新增 /studio/gif 手动压缩页面和两工具页签。
@@ -29,11 +38,3 @@
 - 配对备份/旧镜像保留，5743 媒体文件恢复链完整读取校验；生产 .env 前后相同。原四文件 Nano Banana 差异保留，本地 styles.css 13 行/比较文档/_tmp_* 未提交。
 - 详见 archive/handoff-2026-10-15-video-gif-release.md；后续纯文档同步不重建镜像。此前实现交接中的“未部署”已被本条覆盖。
 - Safe to hand off: Yes。下一步继续反馈客户端真实产物、浏览器视觉与 IP 信任链专项。
-
-### [2026-10-15] 新上传 GIF 自动压缩 — 本地完成，未部署
-
-- 通用图片/聊天/Agent 内联上传复用 GIF 处理：默认以 500000 字节为目标，按颜色/帧率/尺寸逐档尝试，可配置目标和质量下限；上传响应返回实际大小及是否达标，保留原件；压缩更小且动画验证通过才返回派生路径，失败/超时/繁忙回退。
-- 独立服务、20 秒软预算/两名额每 API 进程，Dockerfile/CI 安装 FFmpeg，无本功能迁移；当前生产后端仍需重建发布。
-- 最终 GIF 专项 16 项（含真实 FFmpeg 的 500KB 目标达标测试）；后端全量 141 passed/1 skipped/16 subtests，前端 19 项/类型基线/构建通过，额外附件/存储 17 passed/6 subtests。详情见 archive/handoff-2026-10-15-gif-upload-compression.md。
-- 保留原视频模板、反馈文档、styles.css、比较文档与 _tmp_*，无提交/push/部署。当前分支 feature/video-prompt-templates，整包发布仍需视频模板迁移。
-- Safe to hand off: Yes。前次完整交接另存 archive/handoff-before-2026-10-15-gif-upload.md。

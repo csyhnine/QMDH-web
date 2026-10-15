@@ -17,6 +17,7 @@ function load(file, states = []) {
     if (name === 'react-router-dom') return { NavLink: ({ to, children }) => require('react').createElement('a', { href: to }, children) };
     if (name.endsWith('/components/shared')) return { AppShell: ({ children }) => children };
     if (name.endsWith('AuthContext')) return { useAuth: () => ({ isGuest: false }) };
+    if (name.endsWith('/gifToolBatch')) return {};
     if (name.endsWith('/uploads')) return { formatUploadSize: x => `${x} bytes` };
     if (name === 'react/jsx-runtime') return require(name);
     return {};
@@ -28,12 +29,16 @@ test('GIF page exposes upload, adjustable target/options, and initial empty stat
   const html = renderToStaticMarkup(load('GifCompressPage').default());
   for (const label of ['上传 GIF', '目标大小（KB）', '压缩选项', '初始最长边', '初始帧率上限', '初始颜色数', '开始压缩']) assert.ok(html.includes(label));
   assert.match(html, /value="500"/);
+  for (const value of [344, 12.5, 96]) assert.ok(html.includes(`value="${value}"`));
+  assert.ok(html.includes('multiple=""'));
+  assert.ok(html.includes('Lanczos'));
+  assert.ok(html.includes('Bayer'));
   assert.ok(html.includes('disabled=""'));
 });
 
 test('GIF results distinguish reached and missed targets and expose both downloads', () => {
   const result = { file_name: 'sample.gif', storage_path: '/media/out.gif', original_storage_path: '/media/in.gif', compression: { original_bytes: 900000, output_bytes: 450000, target_bytes: 500000, target_met: true, compressed: true } };
-  const render = r => renderToStaticMarkup(load('GifCompressPage', [{ name: 'sample.gif' }, 'blob:original', 500, 0, 0, 128, true, true, r]).default());
+  const render = r => renderToStaticMarkup(load('GifCompressPage', [[{ name: 'sample.gif' }], [{ status: 'done', result: r }], 0, 'blob:original', 500, 344, 12.5, 96, true, true]).default());
   const html = render(result);
   for (const label of ['已达到目标体积', '50.0%', '下载 GIF', '下载原文件', '原始 GIF 动画', '处理后的 GIF 动画']) assert.ok(html.includes(label));
   const missed = render({ ...result, compression: { ...result.compression, target_met: false } });

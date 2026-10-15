@@ -57,7 +57,7 @@ from app.services.chat_message_content import (
     serialize_chat_attachments,
 )
 from app.services.chat_word_export import build_chat_word_document, default_chat_word_file_name
-from app.services.media_storage import resolve_storage_path, write_binary_asset
+from app.services.media_storage import resolve_storage_path, write_uploaded_asset
 from app.services.chat_context import (
     apply_message_input_tokens,
     compute_context_breakdown,
@@ -377,14 +377,16 @@ def upload_chat_attachment(
         relative_path = build_chat_file_relative_path(file_name, extension)
         kind = "file"
 
-    storage_path = write_binary_asset(relative_path, content)
+    compression_info: dict = {}
+    storage_path = write_uploaded_asset(relative_path, content, compression_info=compression_info)
     from app.services.chat_message_content import mime_type_for_path
 
     return ChatAttachmentUploadOut(
         file_name=file_name,
         storage_path=resolve_storage_path(storage_path),
-        mime_type=mime_type_for_path(relative_path),
+        mime_type=mime_type_for_path(storage_path),
         kind=kind,
+        compression=compression_info or None,
     )
 
 

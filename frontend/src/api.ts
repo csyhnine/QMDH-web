@@ -780,6 +780,7 @@ export type ChatTelemetryAlertEvaluateResult = {
 };
 
 export type PromptTemplateRecord = {
+  media_type?: "image" | "video";
   id: number;
   user_name: string;
   scope: "private" | "shared";
@@ -899,6 +900,7 @@ export type AiToolCreatePayload = {
 export type AiToolUpdatePayload = Partial<AiToolCreatePayload>;
 
 export type PromptTemplateCreatePayload = {
+  media_type?: "image" | "video";
   category: string;
   subcategory: string;
   is_featured: boolean;
@@ -926,9 +928,18 @@ export type ReferenceUploadPayload = {
   data_url: string;
 };
 
+export type GifCompressionResult = {
+  original_bytes: number;
+  output_bytes: number;
+  target_bytes: number | null;
+  target_met: boolean | null;
+  compressed: boolean;
+};
+
 export type ReferenceUploadResponse = {
   file_name: string;
   storage_path: string;
+  compression?: GifCompressionResult | null;
 };
 
 export type SeedancePrivateAvatarAsset = {
@@ -1898,7 +1909,7 @@ export const api = {
       }`
     ),
   uploadChatAttachment: (payload: ReferenceUploadPayload) =>
-    postJson<{ file_name: string; storage_path: string; mime_type: string; kind: "image" | "file" }>(
+    postJson<{ file_name: string; storage_path: string; mime_type: string; kind: "image" | "file"; compression?: GifCompressionResult | null }>(
       "/chat/attachments/upload",
       payload,
     ),

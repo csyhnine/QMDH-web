@@ -4,13 +4,14 @@ import type { StudioFormState } from "./studioTypes";
 import { toTemplateFormValue } from "./studioTemplateFormUtils";
 
 export function formMatchesTemplate(form: StudioFormState, template: PromptTemplateRecord): boolean {
+  if ((template.media_type ?? "image") !== (form.creationMode === "video" ? "video" : "image")) return false;
   const value = toTemplateFormValue(template);
   return (
     form.title.trim() === value.title.trim() &&
     form.prompt.trim() === value.prompt.trim() &&
     form.style.trim() === value.style.trim() &&
-    form.aspectRatio === value.aspectRatio &&
-    normalizeStudioResolution(form.resolution) === normalizeStudioResolution(value.resolution) &&
+    (form.creationMode === "video" || (form.aspectRatio === value.aspectRatio &&
+    normalizeStudioResolution(form.resolution) === normalizeStudioResolution(value.resolution))) &&
     form.deliverable.trim() === value.deliverable.trim() &&
     form.notes.trim() === value.notes.trim()
   );

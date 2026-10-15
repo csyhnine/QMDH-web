@@ -3,6 +3,10 @@ import { normalizeStudioResolution } from "./studioConstants";
 import type { CustomPromptTemplate, PromptTemplateFormValue, StudioFormState } from "./studioTypes";
 
 export function applyTemplateToForm(template: PromptTemplateFormValue, current: StudioFormState): StudioFormState {
+  if ((template.mediaType ?? "image") !== (current.creationMode === "video" ? "video" : "image")) return current;
+  if (current.creationMode === "video") {
+    return { ...current, title: template.title, prompt: template.prompt, style: template.style, deliverable: template.deliverable, notes: template.notes, promptPolished: false };
+  }
   return {
     ...current,
     title: template.title,
@@ -17,6 +21,7 @@ export function applyTemplateToForm(template: PromptTemplateFormValue, current: 
 
 export function toTemplateFormValue(template: PromptTemplateRecord): PromptTemplateFormValue {
   return {
+    mediaType: template.media_type ?? "image",
     label: template.label,
     title: template.title,
     prompt: template.prompt,

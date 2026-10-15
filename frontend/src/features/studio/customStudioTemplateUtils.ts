@@ -75,6 +75,7 @@ export function buildCustomTemplatePayload({
   workspaceName,
 }: BuildCustomTemplatePayloadOptions): PromptTemplateCreatePayload {
   return {
+    media_type: studioForm.creationMode === "video" ? "video" : "image",
     category: "",
     subcategory: "",
     is_featured: false,
@@ -83,7 +84,7 @@ export function buildCustomTemplatePayload({
     prompt: draft.prompt,
     style: studioForm.style,
     aspect_ratio: studioForm.aspectRatio,
-    resolution: normalizeStudioResolution(studioForm.resolution),
+    resolution: studioForm.creationMode === "video" ? studioForm.resolution : normalizeStudioResolution(studioForm.resolution),
     deliverable: studioForm.deliverable,
     notes: studioForm.notes,
     source_image_path: "",

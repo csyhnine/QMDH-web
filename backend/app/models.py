@@ -627,6 +627,8 @@ class AgentSkillCatalogEntry(Base):
 class PromptTemplate(Base):
     __tablename__ = "prompt_templates"
 
+    media_type: Mapped[str] = mapped_column(String(10), default="image", server_default="image")
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     scope: Mapped[str] = mapped_column(String(20), default="private", index=True)

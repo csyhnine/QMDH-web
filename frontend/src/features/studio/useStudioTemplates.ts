@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction, useCallback, useMemo, useState } from "react";
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
 
 import type { PromptTemplateRecord } from "../../api";
 import type {
@@ -67,6 +67,11 @@ export function useStudioTemplates({
     workspaceName,
   });
 
+  const mediaType = studioForm.creationMode === "video" ? "video" : "image";
+  const visibleSharedTemplates = useMemo(() => sharedTemplates.filter(t => (t.media_type ?? "image") === mediaType), [sharedTemplates, mediaType]);
+  const visibleCustomTemplates = useMemo(() => customTemplates.filter(t => (t.media_type ?? "image") === mediaType), [customTemplates, mediaType]);
+  useEffect(() => { clearTemplateEditState(); }, [mediaType, clearTemplateEditState]);
+
   const allTemplates = useMemo(
     () => [...sharedTemplates, ...customTemplates],
     [customTemplates, sharedTemplates]
@@ -88,6 +93,7 @@ export function useStudioTemplates({
 
   const applyTemplate = useCallback((template: PromptTemplateRecord, options: ApplyTemplateOptions = {}) => {
     const { closeMenu = true, preserveResolution = false, bindTemplate = true } = options;
+    if ((template.media_type ?? "image") !== mediaType) return;
     const nextTemplate = toTemplateFormValue(template);
     clearFeedback();
     setStudioForm((current) => {
@@ -98,7 +104,7 @@ export function useStudioTemplates({
     if (closeMenu) {
       setActiveComposerMenu(null);
     }
-  }, [clearFeedback, setActiveComposerMenu, setStudioForm]);
+  }, [clearFeedback, setActiveComposerMenu, setStudioForm, mediaType]);
 
   return {
     activeTemplate,
@@ -106,7 +112,7 @@ export function useStudioTemplates({
     cancelTemplateEdit,
     clearFeedback,
     clearTemplateEditState,
-    customTemplates,
+    customTemplates: visibleCustomTemplates,
     deleteCustomTemplate,
     editingTemplateId,
     editCustomTemplate,
@@ -114,7 +120,7 @@ export function useStudioTemplates({
     setPromptTemplates,
     setTemplateDraftLabel,
     setTemplateDraftTitle,
-    sharedTemplates,
+    sharedTemplates: visibleSharedTemplates,
     syncTemplateDraftWithCurrentForm,
     templateDraftLabel,
     templateDraftTitle,

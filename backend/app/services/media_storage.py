@@ -380,6 +380,36 @@ def write_binary_asset(relative_path: str, content: bytes, *, overwrite: bool = 
     return normalized
 
 
+def write_uploaded_asset(relative_path: str, content: bytes, *, compression_info: dict | None = None) -> str:
+    """Keep the original upload; use a smaller GIF derivative when available."""
+    from app.services.gif_compression import compress_gif, is_gif
+
+    gif = is_gif(content)
+    if gif:
+        relative_path = str(Path(relative_path).with_suffix(".gif"))
+    original = write_binary_asset(relative_path, content)
+    if not gif:
+        return original
+    def report(path: str, output_bytes: int) -> str:
+        if compression_info is not None:
+            target = settings.gif_target_bytes
+            compression_info.update(original_bytes=len(content), output_bytes=output_bytes,
+                                    target_bytes=target or None,
+                                    target_met=output_bytes <= target if target else None,
+                                    compressed=path != original)
+        return path
+
+    optimized = compress_gif(content)
+    if optimized is None:
+        return report(original, len(content))
+    derivative = str(Path(original).with_suffix(".compressed.gif"))
+    try:
+        return report(write_binary_asset(derivative, optimized), len(optimized))
+    except OSError:
+        logger.warning("GIF derivative storage failed; using original upload")
+        return report(original, len(content))
+
+
 def read_binary_asset(relative_path: str) -> bytes:
     """Read media bytes. Prefer local mirror, then active backend (OSS)."""
     normalized = coerce_relative_media_path(relative_path)

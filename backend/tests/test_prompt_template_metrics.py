@@ -58,6 +58,30 @@ class PromptTemplateMetricsTests(unittest.TestCase):
         Base.metadata.drop_all(bind=self.engine)
         self.engine.dispose()
 
+    def test_video_templates_round_trip_and_private_permissions(self) -> None:
+        owner = {"X-QMDH-Auth": "designer-token"}
+        other = {"X-QMDH-Auth": "admin-token"}
+        base = {"label": "Video", "title": "Video prompt", "prompt": "Slow camera pan"}
+        created = self.client.post("/prompt-templates", headers=owner, json={**base, "media_type": "video"})
+        self.assertEqual(created.status_code, 201, created.text)
+        row = created.json()
+        self.assertEqual(row["media_type"], "video")
+        visible = self.client.get("/prompt-templates", headers=owner).json()
+        self.assertEqual(next(t for t in visible if t["id"] == row["id"])["media_type"], "video")
+        self.assertNotIn(row["id"], [t["id"] for t in self.client.get("/prompt-templates", headers=other).json()])
+        self.assertEqual(self.client.patch(f"/prompt-templates/{row['id']}", headers=other, json={"prompt": "No"}).status_code, 404)
+        updated = self.client.patch(f"/prompt-templates/{row['id']}", headers=owner, json={"prompt": "Orbit slowly"})
+        self.assertEqual(updated.json()["media_type"], "video")
+        legacy = self.client.post("/prompt-templates", headers=owner, json=base)
+        self.assertEqual(legacy.json()["media_type"], "image")
+        for bad in ("audio", None):
+            self.assertEqual(self.client.patch(f"/prompt-templates/{row['id']}", headers=owner, json={"media_type": bad}).status_code, 422)
+        shared = self.client.post("/prompt-templates/admin/shared", headers=other, json={**base, "media_type": "video"})
+        self.assertEqual(shared.status_code, 201, shared.text)
+        self.assertEqual(shared.json()["media_type"], "video")
+        self.assertIn(shared.json()["id"], [t["id"] for t in self.client.get("/prompt-templates", headers=owner).json()])
+        self.assertEqual(self.client.delete(f"/prompt-templates/{row['id']}", headers=owner).status_code, 204)
+
     def test_shared_template_popularity_stats_and_deduped_hover(self) -> None:
         created = self.client.post(
             "/prompt-templates/admin/shared",

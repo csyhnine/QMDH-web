@@ -96,6 +96,7 @@ def _to_prompt_template_out(
         id=template.id,
         user_name=template.user.name,
         scope=template.scope,
+        media_type=template.media_type,
         can_manage=False,
         category=template.category or "",
         subcategory=template.subcategory or "",
@@ -225,6 +226,7 @@ def create_prompt_template(
     template = PromptTemplate(
         user_id=user.id,
         scope="private",
+        media_type=payload.media_type,
         category=payload.category,
         subcategory=payload.subcategory,
         is_featured=payload.is_featured,
@@ -360,6 +362,7 @@ def create_shared_prompt_template(
     template = PromptTemplate(
         user_id=user.id,
         scope="shared",
+        media_type=payload.media_type,
         category=payload.category,
         subcategory=payload.subcategory,
         is_featured=payload.is_featured,

@@ -61,7 +61,7 @@ from app.services.agent_policy_service import (
 )
 from app.services.agent_skill_registry import list_official_skills
 from app.services.inspiration_media import prepare_inspiration_image
-from app.services.media_storage import resolve_storage_payload, resolve_storage_path, write_binary_asset
+from app.services.media_storage import resolve_storage_payload, resolve_storage_path, write_uploaded_asset
 from app.services.model_registry import get_provider_definition, get_provider_map
 from app.services.task_executor import enqueue_task, execute_task, mark_task_enqueue_failed
 
@@ -174,7 +174,7 @@ def _write_agent_artifact(project: Project, payload: AgentProjectArtifactCreate)
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         safe_name = "".join(char if char.isalnum() else "-" for char in payload.name.lower()).strip("-") or "artifact"
         relative_path = f"agent-artifacts/{project.code}/{timestamp}-{safe_name[:60]}{extension}"
-        return write_binary_asset(relative_path, content)
+        return write_uploaded_asset(relative_path, content)
     if payload.storage_path:
         return payload.storage_path
     raise HTTPException(status_code=400, detail="Either data_url or storage_path is required")

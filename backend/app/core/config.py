@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 
 from app.services.provider_strategy import normalize_provider_base_url, normalize_strategies
 
@@ -104,6 +105,17 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://127.0.0.1:18080"
     media_root: str = "./storage/assets"
     media_url_prefix: str = "/media"
+    gif_compression_enabled: bool = True
+    ffmpeg_binary: str = "ffmpeg"
+    gif_max_edge: int = Field(default=0, ge=0, le=8192)
+    gif_max_fps: float = Field(default=0, ge=0, le=50)
+    gif_max_colors: int = Field(default=128, ge=4, le=256)
+    gif_target_bytes: int = Field(default=500_000, ge=0, le=20 * 1024 * 1024)
+    gif_allow_resize: bool = True
+    gif_allow_frame_reduction: bool = True
+    gif_min_edge: int = Field(default=240, ge=32, le=8192)
+    gif_min_fps: float = Field(default=6, ge=1, le=50)
+    gif_min_colors: int = Field(default=32, ge=4, le=256)
     public_media_base_url: str = ""
     storage_backend: str = "local"
     cdn_base_url: str = ""

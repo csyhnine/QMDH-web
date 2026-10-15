@@ -15,6 +15,7 @@ type PromptTemplateDraft = PromptTemplateCreatePayload;
 type UploadField = "source_image_path" | "preview_image_path";
 
 const defaultDraft: PromptTemplateDraft = {
+  media_type: "image",
   category: "",
   subcategory: "",
   is_featured: false,
@@ -141,6 +142,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
   const [uploadingField, setUploadingField] = useState<UploadField | null>(null);
   const [draggingField, setDraggingField] = useState<UploadField | null>(null);
   const [listSearch, setListSearch] = useState("");
+  const [mediaFilter, setMediaFilter] = useState("all");
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeSubcategory, setActiveSubcategory] = useState("all");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(() => new Set());
@@ -161,13 +163,13 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
   const categoryGroups = useMemo(() => buildSharedTemplateCategories(templates), [templates]);
   const filteredTemplates = useMemo(
     () =>
-      filterSharedTemplates(templates, {
+      filterSharedTemplates(templates.filter(t => mediaFilter === "all" || (t.media_type ?? "image") === mediaFilter), {
         activeCategory,
         activeSubcategory,
         quickFilter: "all",
         search: listSearch,
       }),
-    [activeCategory, activeSubcategory, listSearch, templates]
+    [activeCategory, activeSubcategory, listSearch, templates, mediaFilter]
   );
 
   const categoryOptions = useMemo(
@@ -206,6 +208,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
       return;
     }
     setDraft({
+      media_type: selectedTemplate.media_type ?? "image",
       category: selectedTemplate.category || "",
       subcategory: selectedTemplate.subcategory || "",
       is_featured: selectedTemplate.is_featured,
@@ -307,6 +310,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
     setSaving(true);
     try {
       const payload: PromptTemplateCreatePayload = {
+        media_type: draft.media_type ?? "image",
         category: draft.category.trim(),
         subcategory: draft.subcategory.trim(),
         is_featured: draft.is_featured,
@@ -419,6 +423,14 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
           </div>
 
           <div className="admin-prompt-taxonomy">
+            <label className="composer-menu-field">
+              <span>模板用途筛选</span>
+              <select value={mediaFilter} onChange={event => { setMediaFilter(event.target.value); selectCategoryFilter("all"); }}>
+                <option value="all">全部用途</option>
+                <option value="image">图片生成</option>
+                <option value="video">视频生成</option>
+              </select>
+            </label>
             <label className="admin-prompt-taxonomy-search">
               <input
                 value={listSearch}
@@ -514,7 +526,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
                     <strong>{template.label}</strong>
                     <span>{template.title}</span>
                     <small className="admin-template-meta">
-                      {categoryPath(template)} · {template.is_featured ? "热门" : "普通"} · {imageCoverageLabel(template)}
+                      {template.media_type === "video" ? "视频" : "图片"} · {categoryPath(template)} · {template.is_featured ? "热门" : "普通"} · {imageCoverageLabel(template)}
                     </small>
                     <small className="admin-template-meta">
                       {`热度 ${template.popularity_score.toFixed(1)} · 应用 ${template.recent_apply_count} · 成功提交 ${template.recent_submit_success_count}`}
@@ -543,6 +555,14 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
             </div>
 
             <div className="template-editor">
+              <label className="composer-menu-field">
+                <span>模板用途</span>
+                <select value={draft.media_type ?? "image"} onChange={(event) => setDraft(current => ({ ...current, media_type: event.target.value as "image" | "video" }))}>
+                  <option value="image">图片生成</option>
+                  <option value="video">视频生成</option>
+                </select>
+              </label>
+              {draft.media_type === "video" ? <p>视频模板套用提示词、风格及说明，模型、时长、比例、分辨率和参考图由创作台当前设置决定。</p> : null}
               <div className="template-editor-row">
                 <label className="composer-menu-field">
                   <span>模板名称</span>
@@ -613,14 +633,14 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
                 </label>
                 <label className="composer-menu-field">
                   <span>比例</span>
-                  <input value={draft.aspect_ratio} onChange={(event) => setDraft((current) => ({ ...current, aspect_ratio: event.target.value }))} placeholder="16:9" />
+                  <input disabled={draft.media_type === "video"} value={draft.aspect_ratio} onChange={(event) => setDraft((current) => ({ ...current, aspect_ratio: event.target.value }))} placeholder="16:9" />
                 </label>
               </div>
 
               <div className="template-editor-row">
                 <label className="composer-menu-field">
                   <span>分辨率</span>
-                  <input value={draft.resolution} onChange={(event) => setDraft((current) => ({ ...current, resolution: event.target.value }))} placeholder="1k" />
+                  <input disabled={draft.media_type === "video"} value={draft.resolution} onChange={(event) => setDraft((current) => ({ ...current, resolution: event.target.value }))} placeholder="1k" />
                 </label>
                 <label className="composer-menu-field">
                   <span>交付说明</span>

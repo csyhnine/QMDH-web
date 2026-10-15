@@ -10,7 +10,7 @@ export default function StudioComposerToolbarMenus(props: StudioComposerToolbarM
 
   return (
     <>
-      {isVideoMode ? null : <StudioComposerTemplateMenuSlot {...props} />}
+      <StudioComposerTemplateMenuSlot {...props} />
       <StudioComposerProviderMenuSlot {...props} />
       {isVideoMode ? <StudioComposerGrokSkuMenuSlot {...props} /> : null}
       <StudioComposerDisplayMenuSlot {...props} />

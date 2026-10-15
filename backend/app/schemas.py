@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -587,6 +587,7 @@ class ProjectStatusOut(BaseModel):
 
 
 class PromptTemplateBase(BaseModel):
+    media_type: Literal["image", "video"] = "image"
     category: str = ""
     subcategory: str = ""
     is_featured: bool = False
@@ -607,6 +608,7 @@ class PromptTemplateCreate(PromptTemplateBase):
 
 
 class PromptTemplateUpdate(BaseModel):
+    media_type: Literal["image", "video"] = "image"
     category: str | None = None
     subcategory: str | None = None
     is_featured: bool | None = None
@@ -652,9 +654,18 @@ class ReferenceUploadIn(BaseModel):
     data_url: str = Field(min_length=20)
 
 
+class GifCompressionOut(BaseModel):
+    original_bytes: int
+    output_bytes: int
+    target_bytes: int | None = None
+    target_met: bool | None = None
+    compressed: bool
+
+
 class ReferenceUploadOut(BaseModel):
     file_name: str
     storage_path: str
+    compression: GifCompressionOut | None = None
 
 
 class ProviderDiscoverIn(BaseModel):
@@ -786,6 +797,7 @@ class ChatAttachmentUploadOut(BaseModel):
     storage_path: str
     mime_type: str
     kind: str
+    compression: GifCompressionOut | None = None
 
 
 class ConversationCreate(BaseModel):

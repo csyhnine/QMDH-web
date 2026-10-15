@@ -1,5 +1,9 @@
 # Architecture
 
+2026-10-15 新上传 GIF 自动压缩（本地，未部署）：assets/reference-upload、chat/attachments/upload 和 Agent 内联工件使用 write_uploaded_asset；保留原件，独立 gif_compression 服务按可配置尺寸/帧率/颜色数用 FFmpeg 生成经验证且更小的派生文件（默认以 500000 字节为目标，自适应降低且可锁定原尺寸/帧时序，上传 API 含达标回执），失败回退；同步有界处理，Dockerfile 内安装 FFmpeg。详见 archive/handoff-2026-10-15-gif-upload-compression.md，无本功能数据库迁移。
+
+2026-10-14 视频提示词模板库（本地，未部署）：prompt_templates 新增 media_type（image/video，旧数据默认 image），迁移 e6f7g8h9i0j1。沿用现有公共/个人 CRUD 与权限；Studio 按创作类型筛选，视频套用保留运行参数和参考图。后台支持用途选择/筛选，无新执行链路。
+
 2026-10-10 自助反馈会话（skill-feedback-003，514de69 已部署，镜像来自生产合并 7b310f9）：新增 public_grants 固定公开 skill_id 注册表（名称可重复、升级不需登记）与 public_quotas 原子全局/来源配额；credentials 支持匿名短期任务范围，不创建 User/AgentClient，不开放业务权限。正常事件、待核实证据和改进问题分层沿用；匿名会话不计作独立人。代理信任默认关闭，真实来源配置与发布限制见 skill-feedback.md。runs/issues 保存 ID，新问题按 ID/版本/问题代码聚合，历史名称归属保留。生产迁移 head d5e6f7g8h9i0；下段旧版 c4 描述为历史。发布/备份见 archive/handoff-2026-10-10-feedback-public-release.md。
 
 2026-10-10 Skill 反馈：原版 08a2884 已部署，生产迁移 b3c4d5e6f7g8。安全改造 55216ab 已部署，运行镜像来自生产合并 30dfe26，生产 head c4d5e6f7g8h9：独立 skill_feedback_credentials 只接受采集，按用户/设备绑定名称与版本、有效期和数据库原子配额；ASGI 解析前限制请求体。外部问题事件先 pending，管理员/ops 核实后才聚合或重开 issues；正常事件只统计，原人工线程和沟通/改进双状态保留。原始内容以不可信文本处理，不自动调用工具或发布 skill。契约与限制见 docs/skill-feedback.md。

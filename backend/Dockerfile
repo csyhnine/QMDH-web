@@ -5,6 +5,10 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 # Aliyun ECS often cannot reach pypi.org reliably during cold builds.
 RUN pip install --no-cache-dir \

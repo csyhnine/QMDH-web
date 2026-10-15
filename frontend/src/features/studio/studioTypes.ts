@@ -55,6 +55,7 @@ export type ReferenceUploadItem = {
 };
 
 export type PromptTemplateFormValue = {
+  mediaType?: "image" | "video";
   label: string;
   title: string;
   prompt: string;

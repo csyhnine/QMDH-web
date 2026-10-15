@@ -12,7 +12,7 @@ from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.models import Asset, AssetBookmark, AssetType, CadExtract, InspirationPost, Project, ProviderCall, Task
 from app.schemas import AssetOut, AssetShareIn, AssetShareOut, ReferenceUploadIn, ReferenceUploadOut
-from app.services.media_storage import resolve_storage_path, write_binary_asset
+from app.services.media_storage import resolve_storage_path, write_uploaded_asset
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -152,9 +152,11 @@ def _extension_for_reference_upload(file_name: str, data_url: str) -> str:
     normalized_name = file_name.lower().strip()
     if "." in normalized_name:
         suffix = normalized_name.rsplit(".", 1)[-1]
-        if suffix in {"png", "jpg", "jpeg", "webp"}:
+        if suffix in {"png", "jpg", "jpeg", "webp", "gif"}:
             return "jpeg" if suffix == "jpg" else suffix
 
+    if data_url.lower().startswith("data:image/gif;"):
+        return "gif"
     if data_url.startswith("data:image/png"):
         return "png"
     if data_url.startswith("data:image/jpeg") or data_url.startswith("data:image/jpg"):
@@ -248,8 +250,9 @@ def upload_reference_image(
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     safe_stub = "".join(char if char.isalnum() else "-" for char in payload.file_name.lower()).strip("-") or "reference"
     relative_path = f"references/{timestamp}-{safe_stub[:40]}-{randint(1000, 9999)}.{extension}"
-    storage_path = write_binary_asset(relative_path, content)
-    return ReferenceUploadOut(file_name=payload.file_name, storage_path=resolve_storage_path(storage_path))
+    compression_info: dict = {}
+    storage_path = write_uploaded_asset(relative_path, content, compression_info=compression_info)
+    return ReferenceUploadOut(file_name=payload.file_name, storage_path=resolve_storage_path(storage_path), compression=compression_info or None)
 
 
 @router.post("/{asset_id}/like", response_model=AssetOut, status_code=status.HTTP_200_OK)

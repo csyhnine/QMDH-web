@@ -39,6 +39,8 @@ class GifInfo:
     min_delay_ms: int
     loop: int | None
     transparent: bool
+    max_delay_ms: int = 0
+    colors: int | None = None
 
 
 @dataclass(frozen=True)
@@ -58,7 +60,7 @@ class GifOptions:
         return cls(**{name: getattr(settings, "gif_" + name) for name in cls.__dataclass_fields__})
 
 
-def _inspect(content: bytes, deadline: float) -> GifInfo:
+def _inspect(content: bytes, deadline: float, *, include_colors: bool = False) -> GifInfo:
     with warnings.catch_warnings():
         warnings.simplefilter("error", Image.DecompressionBombWarning)
         with Image.open(BytesIO(content)) as image:
@@ -68,7 +70,8 @@ def _inspect(content: bytes, deadline: float) -> GifInfo:
             if width * height > MAX_FRAME_PIXELS:
                 raise ValueError("Frame too large")
             loop = image.info.get("loop")
-            frames, duration, delay, transparent = 0, 0, 1000, False
+            frames, duration, delay, transparent = 0, 0, MAX_DURATION_MS, False
+            max_delay, colors = 0, 0
             decoded_pixels = 0
             while True:
                 frame_pixels = image.width * image.height
@@ -77,12 +80,17 @@ def _inspect(content: bytes, deadline: float) -> GifInfo:
                         or frame_pixels > MAX_FRAME_PIXELS or decoded_pixels > MAX_DECODED_PIXELS):
                     raise ValueError("Decode budget exceeded")
                 image.load()  # Validate all frames, including the final frame.
-                alpha = image.convert("RGBA").getextrema()[3]
+                rgba = image.convert("RGBA")
+                alpha = rgba.getextrema()[3]
+                if include_colors and colors is not None:
+                    used = rgba.getcolors(maxcolors=256)
+                    colors = max(colors, len(used)) if used is not None else None
                 transparent = transparent or alpha[0] < 128
                 frame_delay = int(image.info.get("duration", 100))
                 if frame_delay < 20:
                     raise ValueError("Ambiguous browser frame timing")
                 delay = min(delay, frame_delay)
+                max_delay = max(max_delay, frame_delay)
                 duration += frame_delay
                 if duration > MAX_DURATION_MS:
                     raise ValueError("Animation too long")
@@ -91,7 +99,24 @@ def _inspect(content: bytes, deadline: float) -> GifInfo:
                     image.seek(frames)
                 except EOFError:
                     break
-            return GifInfo(width, height, frames, duration, delay, loop, transparent)
+            return GifInfo(width, height, frames, duration, delay, loop, transparent, max_delay, colors if include_colors else None)
+
+
+def gif_media_info(content: bytes) -> dict:
+    """Bounded actual media measurements; never infer output from requested options."""
+    if not is_gif(content) or len(content) > MAX_INPUT_BYTES:
+        raise ValueError("Invalid GIF")
+    if not _slots.acquire(blocking=False):
+        raise BlockingIOError("GIF inspector busy")
+    try:
+        info = _inspect(content, monotonic() + 5, include_colors=True)
+        return {"width": info.width, "height": info.height, "frames": info.frames,
+            "duration_ms": info.duration_ms,
+            "average_fps": round(info.frames * 1000 / info.duration_ms, 2) if info.frames > 1 else 0,
+            "variable_fps": info.min_delay_ms != info.max_delay_ms,
+            "colors": info.colors, "loop": info.loop, "transparent": info.transparent}
+    finally:
+        _slots.release()
 
 
 def compress_gif(content: bytes, *, options: GifOptions | None = None) -> bytes | None:

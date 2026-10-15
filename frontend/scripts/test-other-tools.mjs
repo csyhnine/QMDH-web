@@ -18,6 +18,7 @@ function load(file, states = []) {
     if (name.endsWith('/components/shared')) return { AppShell: ({ children }) => children };
     if (name.endsWith('AuthContext')) return { useAuth: () => ({ isGuest: false }) };
     if (name.endsWith('/datetime')) return { formatChinaMonthDayTime: () => '10/15 12:00' };
+    if (name === './GifMediaDetails') return load('GifMediaDetails');
     if (name.endsWith('/gifToolBatch')) return {};
     if (name.endsWith('/uploads')) return { formatUploadSize: x => `${x} bytes` };
     if (name === 'react/jsx-runtime') return require(name);
@@ -63,4 +64,17 @@ test('saved GIF history opens original and output after files are no longer sele
   const html = renderToStaticMarkup(load('GifCompressPage', [[], [], 0, '', 500, 344, 12.5, 96, true, true, result, false, '', false, [result], '']).default());
   for (const value of ['src="/media/original.gif"', 'src="/media/saved.gif"', 'saved.gif', '已保存到资产库', 'href="/studio/library"']) assert.ok(html.includes(value));
   assert.ok(renderToStaticMarkup(load('AssetLibraryPage').default()).includes('GIF 压缩'));
+});
+
+
+test('actual GIF parameters show measured dimensions, variable FPS, colors and loop', () => {
+  const info = { width: 720, height: 344, frames: 50, duration_ms: 2000, average_fps: 25, variable_fps: true, colors: 256, loop: 0, transparent: true };
+  const render = next => renderToStaticMarkup(load('GifMediaDetails').default({ info: next, title: '原始 GIF 参数' }));
+  const html = render(info);
+  for (const value of ['720 × 344 px', '25 fps（可变）', '256 色', '50 帧', '2.00 秒', '无限循环']) assert.ok(html.includes(value));
+  assert.ok(render({ ...info, loop: null }).includes('不循环'));
+  assert.ok(render({ ...info, loop: 2 }).includes('重复 2 次'));
+  assert.ok(render({ ...info, colors: null }).includes('超过 256 色'));
+  assert.ok(render({ ...info, frames: 1 }).includes('静态'));
+  assert.ok(render(null).includes('暂无参数'));
 });

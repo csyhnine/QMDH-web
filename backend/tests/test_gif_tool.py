@@ -90,6 +90,7 @@ def test_invalid_file_and_disabled_encoder_have_clear_errors(client):
 def test_manual_gif_requires_login():
     app = FastAPI(); app.include_router(assets.router)
     assert TestClient(app).post("/assets/gif-compress", json=payload()).status_code == 401
+    assert TestClient(app).post("/assets/gif-inspect", json=payload()).status_code == 401
 
 
 def test_history_survives_new_session_and_is_in_library_but_private(client):
@@ -125,3 +126,44 @@ def test_unmet_result_is_also_persisted_and_unowned_identity_is_rejected(client)
     http.app.dependency_overrides[get_current_auth_user] = lambda: AuthUserProfile(name="unowned", token="test")
     assert http.post("/assets/gif-compress", json=payload()).status_code == 401
     assert http.get("/assets/gif-history").status_code == 401
+
+
+def test_inspect_shows_actual_original_parameters_without_saving_files(client):
+    http, root = client
+    raw = animation(frames=2, width=128, height=72, duration=[40, 80], loop=2)
+    r = http.post("/assets/gif-inspect", json={"file_name": "variable.gif", "data_url": "data:image/gif;base64," + b64encode(raw).decode()})
+    assert r.status_code == 200, r.text
+    info = r.json()
+    assert (info["width"], info["height"], info["frames"], info["duration_ms"]) == (128, 72, 2, 120)
+    assert info["average_fps"] == 16.67 and info["variable_fps"] is True
+    assert info["colors"] == 256 and info["loop"] == 2
+    assert not list(Path(root).rglob("*"))
+    assert http.get("/assets/gif-history").json() == []
+    assert http.post("/assets/gif-inspect", json={"file_name": "bad.gif", "data_url": "data:image/gif;base64," + b64encode(b"not a gif file").decode()}).status_code == 422
+    with patch.object(gif, "_slots") as slots:
+        slots.acquire.return_value = False
+        assert http.post("/assets/gif-inspect", json=payload()).status_code == 503
+        slots.release.assert_not_called()
+
+
+def test_metadata_saved_and_old_history_can_be_inspected_without_rewriting_record(client):
+    from app.models import GifCompressionRecord
+    http, root = client
+    saved = http.post("/assets/gif-compress", json=payload()).json()
+    assert saved["source_info"]["width"] == 128
+    assert saved["output_info"] is not None
+    assert http.get("/assets/gif-history").json()[0]["source_info"] == saved["source_info"]
+    # Simulate an older record; reading the original is scoped to the record owner.
+    database = http.app.dependency_overrides[get_db]()
+    db = next(database)
+    record = db.get(GifCompressionRecord, saved["record_id"])
+    record.compression = {k: v for k, v in record.compression.items() if k not in {"source_info", "output_info"}}
+    db.commit(); database.close()
+    assert http.get(f"/assets/gif-history/{saved['record_id']}").json()["source_info"] is None
+    measured = http.get(f"/assets/gif-history/{saved['record_id']}?inspect_metadata=true").json()
+    assert measured["source_info"] == saved["source_info"]
+    assert http.get(f"/assets/gif-history/{saved['record_id']}").json()["source_info"] is None
+    http.app.dependency_overrides[get_current_auth_user] = lambda: AuthUserProfile(name="other", token="test", user_id=2)
+    with patch.object(assets, "read_binary_asset") as read:
+        assert http.get(f"/assets/gif-history/{saved['record_id']}?inspect_metadata=true").status_code == 404
+        read.assert_not_called()

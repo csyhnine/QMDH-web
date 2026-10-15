@@ -52,3 +52,11 @@
 .gif-history-panel h2 { margin: 0; font-size: 20px; }
 .gif-history-panel .gif-batch-list { margin-top: 16px; max-height: 350px; }
 .gif-history-panel small { display: block; margin-top: 6px; font-weight: 400; font-size: 12px; color: #657695; }
+
+.gif-media-details { min-width: 0; padding: 14px; margin: 12px 0; border-radius: 12px; background: #f5f8fc; font-size: 12px; color: #17375e; }
+.gif-media-details > strong { font-size: 13px; }
+.gif-media-details dl { margin: 12px 0 0; display: grid; gap: 8px; }
+.gif-media-details dl > div { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 5px 12px; }
+.gif-media-details dt { color: #6f8099; }
+.gif-media-details dd { margin: 0; overflow-wrap: anywhere; }
+.gif-media-details p { color: #6f8099; line-height: 1.6; }

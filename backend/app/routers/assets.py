@@ -3,7 +3,6 @@ from datetime import datetime
 from random import randint
 import re
 import shutil
-from time import monotonic
 from uuid import uuid4
 from dataclasses import replace
 
@@ -16,9 +15,9 @@ from app.core.config import AuthUserProfile, settings
 from app.database import get_db
 from app.models import Asset, AssetBookmark, AssetType, CadExtract, GifCompressionRecord, InspirationPost, Project, ProviderCall, Task
 from app.schemas import AssetOut, AssetShareIn, AssetShareOut, ReferenceUploadIn, ReferenceUploadOut
-from app.schemas import GifCompressIn, GifCompressOut
-from app.services.gif_compression import GifOptions, is_gif, _inspect
-from app.services.media_storage import resolve_storage_path, write_uploaded_asset
+from app.schemas import GifCompressIn, GifCompressOut, GifInspectIn, GifMediaInfo
+from app.services.gif_compression import GifOptions, is_gif, gif_media_info
+from app.services.media_storage import resolve_storage_path, write_uploaded_asset, read_binary_asset
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -261,6 +260,17 @@ def upload_reference_image(
     return ReferenceUploadOut(file_name=payload.file_name, storage_path=resolve_storage_path(storage_path), compression=compression_info or None)
 
 
+@router.post("/gif-inspect", response_model=GifMediaInfo)
+def inspect_uploaded_gif(payload: GifInspectIn, auth_user: AuthUserProfile = Depends(get_current_auth_user)):
+    content = _decode_reference_upload(payload.data_url)
+    try:
+        return gif_media_info(content)
+    except BlockingIOError as exc:
+        raise HTTPException(status_code=503, detail="参数读取繁忙，请稍后重试。") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="GIF 参数无法读取或超出处理预算。") from exc
+
+
 @router.post("/gif-compress", response_model=GifCompressOut, status_code=status.HTTP_201_CREATED)
 def compress_uploaded_gif(
     payload: GifCompressIn,
@@ -275,7 +285,9 @@ def compress_uploaded_gif(
     if not is_gif(content):
         raise HTTPException(status_code=422, detail="请选择有效的 GIF 文件。")
     try:
-        _inspect(content, monotonic() + 5)
+        source_info = gif_media_info(content)
+    except BlockingIOError as exc:
+        raise HTTPException(status_code=503, detail="参数读取繁忙，请稍后重试。") from exc
     except Exception as exc:
         raise HTTPException(status_code=422, detail="GIF 无法读取或超出处理预算，请缩短动画或降低尺寸后重试。") from exc
     options = replace(GifOptions.from_settings(), target_bytes=payload.target_kb * 1000,
@@ -284,6 +296,8 @@ def compress_uploaded_gif(
     original = f"gif-tools/{uuid4().hex}.gif"
     compression: dict = {}
     result = write_uploaded_asset(original, content, compression_info=compression, gif_options=options)
+    compression["source_info"] = source_info
+    compression["output_info"] = source_info if result == original else _stored_gif_info(result)
     record = GifCompressionRecord(user_id=auth_user.user_id, file_name=payload.file_name,
         storage_path=result, original_storage_path=original, compression=compression,
         parameters=payload.model_dump(exclude={"file_name", "data_url"}))
@@ -296,7 +310,15 @@ def compress_uploaded_gif(
 def _gif_record_out(record: GifCompressionRecord) -> GifCompressOut:
     return GifCompressOut(file_name=record.file_name, storage_path=resolve_storage_path(record.storage_path),
         original_storage_path=resolve_storage_path(record.original_storage_path), compression=record.compression,
-        record_id=record.id, created_at=record.created_at, parameters=record.parameters)
+        record_id=record.id, created_at=record.created_at, parameters=record.parameters,
+        source_info=record.compression.get("source_info"), output_info=record.compression.get("output_info"))
+
+
+def _stored_gif_info(path: str) -> dict | None:
+    try:
+        return gif_media_info(read_binary_asset(path))
+    except Exception:
+        return None
 
 
 @router.get("/gif-history", response_model=list[GifCompressOut])
@@ -311,7 +333,7 @@ def list_gif_history(before_id: int | None = Query(default=None, ge=1), limit: i
 
 
 @router.get("/gif-history/{record_id}", response_model=GifCompressOut)
-def get_gif_history(record_id: int, db: Session = Depends(get_db),
+def get_gif_history(record_id: int, inspect_metadata: bool = False, db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user)):
     if auth_user.user_id is None:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -319,7 +341,15 @@ def get_gif_history(record_id: int, db: Session = Depends(get_db),
         GifCompressionRecord.user_id == auth_user.user_id))
     if record is None:
         raise HTTPException(status_code=404, detail="GIF record not found")
-    return _gif_record_out(record)
+    out = _gif_record_out(record)
+    if inspect_metadata:
+        if out.source_info is None:
+            measured = _stored_gif_info(record.original_storage_path)
+            out.source_info = GifMediaInfo(**measured) if measured else None
+        if out.output_info is None:
+            measured = _stored_gif_info(record.storage_path) if record.storage_path != record.original_storage_path else None
+            out.output_info = out.source_info if record.storage_path == record.original_storage_path else (GifMediaInfo(**measured) if measured else None)
+    return out
 
 
 @router.post("/{asset_id}/like", response_model=AssetOut, status_code=status.HTTP_200_OK)

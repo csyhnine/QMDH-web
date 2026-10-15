@@ -950,7 +950,13 @@ export type GifToolRequest = ReferenceUploadPayload & {
   allow_resize: boolean;
   allow_frame_reduction: boolean;
 };
+export type GifMediaInfo = {
+  width: number; height: number; frames: number; duration_ms: number;
+  average_fps: number; variable_fps: boolean; colors: number | null; loop: number | null; transparent: boolean;
+};
 export type GifToolResult = ReferenceUploadResponse & {
+  source_info?: GifMediaInfo | null;
+  output_info?: GifMediaInfo | null;
   record_id: number;
   created_at: string;
   parameters: Record<string, number | boolean>;
@@ -1906,8 +1912,9 @@ export const api = {
     postJson<void>(`/prompt-templates/${templateId}/events`, payload),
   uploadReferenceImage: (payload: ReferenceUploadPayload) =>
     postJson<ReferenceUploadResponse>("/assets/reference-upload", payload),
+  inspectGif: (payload: ReferenceUploadPayload) => postJson<GifMediaInfo>("/assets/gif-inspect", payload),
   gifHistory: (beforeId?: number) => request<GifToolResult[]>(`/assets/gif-history?limit=20${beforeId ? `&before_id=${beforeId}` : ""}`),
-  gifHistoryRecord: (id: number) => request<GifToolResult>(`/assets/gif-history/${id}`),
+  gifHistoryRecord: (id: number) => request<GifToolResult>(`/assets/gif-history/${id}?inspect_metadata=true`),
   compressGif: (payload: GifToolRequest) => postJson<GifToolResult>("/assets/gif-compress", payload),
   registerSeedancePrivateAvatar: (payload: SeedancePrivateAvatarRegisterPayload) =>
     postJson<SeedancePrivateAvatarAsset>("/seedance/private-avatar/register", payload),

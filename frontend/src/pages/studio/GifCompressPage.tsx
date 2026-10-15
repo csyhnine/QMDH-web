@@ -1,7 +1,8 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { formatChinaMonthDayTime } from "../../lib/datetime";
-import { api, type GifToolResult } from "../../api";
+import { api, type GifToolResult, type GifMediaInfo } from "../../api";
+import GifMediaDetails from "./GifMediaDetails";
 import { useAuth } from "../../context/AuthContext";
 import { fileToDataUrl } from "../../features/studio/studioAssetUtils";
 import { downloadMediaUrl } from "../../features/studio/studioMediaDownload";
@@ -43,6 +44,8 @@ export default function GifCompressPage() {
   const [restoring, setRestoring] = useState(false);
   const [copiedFrom, setCopiedFrom] = useState("");
   const form = useRef<HTMLFormElement | null>(null);
+  const [sourceInfo, setSourceInfo] = useState<GifMediaInfo | null>(null);
+  const [infoMessage, setInfoMessage] = useState("");
   const input = useRef<HTMLInputElement | null>(null);
   const request = useRef(0);
   useEffect(() => () => { request.current++; }, []);
@@ -69,6 +72,26 @@ export default function GifCompressPage() {
     }
     return () => { cancelled = true; };
   }, [recordId, isGuest, currentUser?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSourceInfo(null); setInfoMessage(file ? "正在读取原始 GIF 参数…" : "");
+    if (file && !isGuest) fileToDataUrl(file).then(data_url => {
+      if (cancelled) return null;
+      return api.inspectGif({ file_name: file.name, data_url });
+    }).then(info => { if (!cancelled && info) { setSourceInfo(info); setInfoMessage(""); } })
+      .catch(err => { if (!cancelled) setInfoMessage(err instanceof Error ? err.message : "原始参数读取失败，请重新选择文件。"); });
+    return () => { cancelled = true; };
+  }, [file, isGuest]);
+  const detailId = result?.record_id;
+  useEffect(() => {
+    let cancelled = false;
+    if (detailId && result && (!result.source_info || !result.output_info)) {
+      api.gifHistoryRecord(detailId).then(item => { if (!cancelled) setHistoryResult(item); })
+        .catch(err => { if (!cancelled) setHistoryError(err instanceof Error ? err.message : "历史参数读取失败。"); });
+    }
+    return () => { cancelled = true; };
+  }, [detailId]);
 
   function chooseFiles(next: File[]) {
     if (!next.length || busy || downloading || restoring) return;
@@ -157,6 +180,7 @@ export default function GifCompressPage() {
           <strong>{files.length ? `已选择 ${files.length} 个 GIF` : "点击选择或拖入多个 GIF"}</strong>
           <span>{files.length ? `${formatGifSize(files.reduce((sum, f) => sum + f.size, 0))} · 点击重新选择` : "最多 20 个，每个不超过 20 MB，总计不超过 100 MB"}</span>
         </button>
+        {file ? <><p className="gif-footnote">{file.name}</p>{sourceInfo ? <GifMediaDetails info={sourceInfo} title="原始 GIF 参数" /> : <p className="gif-footnote" role="status">{infoMessage}</p>}</> : null}
         <fieldset disabled={busy || downloading || restoring || isGuest} className="gif-settings">
           <label className="gif-field"><span>目标大小（KB）</span>
             <input type="number" min={10} max={20000} step={1} required value={target} onChange={e => setTarget(Number(e.target.value))} />
@@ -201,6 +225,11 @@ export default function GifCompressPage() {
             <div><span>目标大小</span><strong>{(result.compression.target_bytes ?? 0) / 1000} KB</strong></div>
             <div><span>体积减少</span><strong>{Math.max(0, (1 - result.compression.output_bytes / result.compression.original_bytes) * 100).toFixed(1)}%</strong></div>
           </div>
+          <div className="gif-preview-pair">
+            <GifMediaDetails info={result.source_info} title="原始 GIF 参数" />
+            <GifMediaDetails info={result.output_info} title="结果 GIF 参数" />
+          </div>
+          <p className="gif-footnote">这里显示文件实际参数；平均帧率按单轮动画计算，用色可能低于设置的颜色上限。</p>
           <div className="gif-preview-pair">
             <figure><figcaption>原始 GIF</figcaption><div className="gif-preview"><img src={historyResult ? result.original_storage_path : preview} alt="原始 GIF 动画" /></div></figure>
             <figure><figcaption>处理结果</figcaption><div className="gif-preview"><img src={result.storage_path} alt="处理后的 GIF 动画" /></div></figure>

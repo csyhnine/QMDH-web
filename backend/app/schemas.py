@@ -678,12 +678,30 @@ class GifCompressIn(ReferenceUploadIn):
     allow_frame_reduction: bool = True
 
 
+class GifMediaInfo(BaseModel):
+    width: int
+    height: int
+    frames: int
+    duration_ms: int
+    average_fps: float
+    variable_fps: bool
+    colors: int | None
+    loop: int | None
+    transparent: bool
+
+
+class GifInspectIn(ReferenceUploadIn):
+    data_url: str = Field(min_length=20, max_length=28_000_000)
+
+
 class GifCompressOut(ReferenceUploadOut):
     original_storage_path: str
     compression: GifCompressionOut
     record_id: int
     created_at: datetime
     parameters: dict
+    source_info: GifMediaInfo | None = None
+    output_info: GifMediaInfo | None = None
 
 
 class ProviderDiscoverIn(BaseModel):

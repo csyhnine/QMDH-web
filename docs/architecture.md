@@ -1,5 +1,7 @@
 # Architecture
 
+2026-10-15 GIF 实际参数（本地待发布）：鉴权 POST /assets/gif-inspect 仅测量不落盘/不登记；复用 5 秒/帧与像素预算及两名额，测量平均 fps/变帧率/每帧最多实际颜色/尺寸/帧数/时长/循环/透明。手动结果 metadata 写 compression JSON；旧记录详情 inspect_metadata=true 在所有权验证后按需读文件，不写回，无迁移。
+
 2026-10-15 其他导航与 GIF 复用（已部署，f18b5d6 / 生产合并 ce56c34d）：生成页 StudioGlobalRailNav 与 AppShell 共用 OTHER_TOOLS_NAV（其他 /studio/other）；历史/当前结果可复制原始 GIF 和参数到压缩表单，手动提交后新增记录，不覆盖源记录；复用现有媒体读取/上传/历史 API，无后端/迁移。
 
 2026-10-15 GIF 持久历史（已部署，9b89b53 / 生产运行合并 e6d98efa）：新增 gif_compression_records（账号 FK、原件/结果、参数/体积、时间），手动压缩提交记录后返回；GET /assets/gif-history（游标）与 /assets/gif-history/{id} 仅本人可读；/assets/library 聚合新增 gif 分类，回链 /studio/gif?record_id=，不造 Task/不改变原 Asset 权限。迁移 f7g8h9i0j1k2，旧未登记文件不猜测归属。

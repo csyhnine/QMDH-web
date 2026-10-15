@@ -1,8 +1,10 @@
 # Architecture
 
-2026-10-15 新上传 GIF 自动压缩（本地，未部署）：assets/reference-upload、chat/attachments/upload 和 Agent 内联工件使用 write_uploaded_asset；保留原件，独立 gif_compression 服务按可配置尺寸/帧率/颜色数用 FFmpeg 生成经验证且更小的派生文件（默认以 500000 字节为目标，自适应降低且可锁定原尺寸/帧时序，上传 API 含达标回执），失败回退；同步有界处理，Dockerfile 内安装 FFmpeg。详见 archive/handoff-2026-10-15-gif-upload-compression.md，无本功能数据库迁移。
+最新部署、备份与运行镜像事实：archive/handoff-2026-10-15-video-gif-release.md。
 
-2026-10-14 视频提示词模板库（本地，未部署）：prompt_templates 新增 media_type（image/video，旧数据默认 image），迁移 e6f7g8h9i0j1。沿用现有公共/个人 CRUD 与权限；Studio 按创作类型筛选，视频套用保留运行参数和参考图。后台支持用途选择/筛选，无新执行链路。
+2026-10-15 新上传 GIF 自动压缩（a655596/55bd284 已部署）：assets/reference-upload、chat/attachments/upload 和 Agent 内联工件使用 write_uploaded_asset；保留原件，独立 gif_compression 服务按可配置尺寸/帧率/颜色数用 FFmpeg 生成经验证且更小的派生文件（默认以 500000 字节为目标，自适应降低且可锁定原尺寸/帧时序，上传 API 含达标回执），失败回退；同步有界处理，Dockerfile 内安装 FFmpeg。详见 archive/handoff-2026-10-15-gif-upload-compression.md，无本功能数据库迁移。
+
+2026-10-15 视频提示词模板库（a655596 已部署，迁移 e6f7g8h9i0j1）：prompt_templates 新增 media_type（image/video，旧数据默认 image），迁移 e6f7g8h9i0j1。沿用现有公共/个人 CRUD 与权限；Studio 按创作类型筛选，视频套用保留运行参数和参考图。后台支持用途选择/筛选，无新执行链路。
 
 2026-10-10 自助反馈会话（skill-feedback-003，514de69 已部署，镜像来自生产合并 7b310f9）：新增 public_grants 固定公开 skill_id 注册表（名称可重复、升级不需登记）与 public_quotas 原子全局/来源配额；credentials 支持匿名短期任务范围，不创建 User/AgentClient，不开放业务权限。正常事件、待核实证据和改进问题分层沿用；匿名会话不计作独立人。代理信任默认关闭，真实来源配置与发布限制见 skill-feedback.md。runs/issues 保存 ID，新问题按 ID/版本/问题代码聚合，历史名称归属保留。生产迁移 head d5e6f7g8h9i0；下段旧版 c4 描述为历史。发布/备份见 archive/handoff-2026-10-10-feedback-public-release.md。
 

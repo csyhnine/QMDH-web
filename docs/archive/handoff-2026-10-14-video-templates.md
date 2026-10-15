@@ -1,5 +1,7 @@
 # 2026-10-14 视频生成提示词模板库
 
+发布更新：2026-10-15 已提交/推送/部署；以下为实现时记录，最新状态与验收见 handoff-2026-10-15-video-gif-release.md。
+
 ## 状态
 
 本地完成，未提交/push/部署。分支 feature/video-prompt-templates，基于 f1e2122；开工 fetch 后与 origin/main 差异 0/0。用户需求：给视频生成增加提示词模板库。

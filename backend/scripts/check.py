@@ -11,6 +11,7 @@ from unittest.mock import patch
 BACKEND = Path(__file__).resolve().parents[1]
 TESTS = (
     "tests/test_gif_tool.py",
+    "tests/test_gif_history_migration.py",
     "tests/test_gif_compression.py",
     "tests/test_prompt_template_metrics.py",
     "tests/test_prompt_template_media_migration.py",

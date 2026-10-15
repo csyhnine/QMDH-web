@@ -1,5 +1,7 @@
 # Architecture
 
+2026-10-15 GIF 持久历史（本地待发布）：新增 gif_compression_records（账号 FK、原件/结果、参数/体积、时间），手动压缩提交记录后返回；GET /assets/gif-history（游标）与 /assets/gif-history/{id} 仅本人可读；/assets/library 聚合新增 gif 分类，回链 /studio/gif?record_id=，不造 Task/不改变原 Asset 权限。迁移 f7g8h9i0j1k2，旧未登记文件不猜测归属。
+
 2026-10-15 GIF 推荐预设与批量（已部署，1fc9174 / 生产运行合并 0449ec4b）：自动上传/手动工具默认最长边 344、12.5fps、96 色，Lanczos 与 Bayer 抖动，500000 字节目标；批量 20 件/100MiB 总计，浏览器顺序请求原单文件接口，独立状态/结果/ZIP 下载，fflate 按需加载，无新服务/迁移。
 
 2026-10-15 其他模块与手动 GIF 工具（已部署，52276de / 生产运行合并 6c09498e）：侧栏改为其他，/studio/other 默认转原 /studio/cad，/studio/gif 为手动压缩页；CAD 组件与查询参数不变。POST /assets/gif-compress 鉴权，接收单次参数，以不可变 GifOptions 复用压缩/存储，不修改全局自动上传配置，无迁移。

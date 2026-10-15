@@ -47,3 +47,8 @@
 .gif-batch-list button.is-selected { border-color: #7a98ef; background: #edf2ff; }
 .gif-batch-list strong { overflow-wrap: anywhere; min-width: 0; }
 .gif-batch-list span { font-size: 12px; color: #657695; flex-shrink: 0; }
+
+.gif-history-panel { margin-top: 20px; padding: 24px; border-radius: 22px; }
+.gif-history-panel h2 { margin: 0; font-size: 20px; }
+.gif-history-panel .gif-batch-list { margin-top: 16px; max-height: 350px; }
+.gif-history-panel small { display: block; margin-top: 6px; font-weight: 400; font-size: 12px; color: #657695; }

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import can_access_project, get_current_auth_user, get_optional_auth_user
 from app.core.config import AuthUserProfile, settings
 from app.database import get_db
-from app.models import Asset, AssetBookmark, AssetType, CadExtract, InspirationPost, Project, ProviderCall, Task
+from app.models import Asset, AssetBookmark, AssetType, CadExtract, GifCompressionRecord, InspirationPost, Project, ProviderCall, Task
 from app.schemas import AssetOut, AssetShareIn, AssetShareOut, ReferenceUploadIn, ReferenceUploadOut
 from app.schemas import GifCompressIn, GifCompressOut
 from app.services.gif_compression import GifOptions, is_gif, _inspect
@@ -264,8 +264,11 @@ def upload_reference_image(
 @router.post("/gif-compress", response_model=GifCompressOut, status_code=status.HTTP_201_CREATED)
 def compress_uploaded_gif(
     payload: GifCompressIn,
+    db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
 ) -> GifCompressOut:
+    if auth_user.user_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
     if not settings.gif_compression_enabled or not shutil.which(settings.ffmpeg_binary):
         raise HTTPException(status_code=503, detail="GIF 压缩服务暂不可用，请联系管理员。")
     content = _decode_reference_upload(payload.data_url)
@@ -281,8 +284,42 @@ def compress_uploaded_gif(
     original = f"gif-tools/{uuid4().hex}.gif"
     compression: dict = {}
     result = write_uploaded_asset(original, content, compression_info=compression, gif_options=options)
-    return GifCompressOut(file_name=payload.file_name, storage_path=resolve_storage_path(result),
-                          original_storage_path=resolve_storage_path(original), compression=compression)
+    record = GifCompressionRecord(user_id=auth_user.user_id, file_name=payload.file_name,
+        storage_path=result, original_storage_path=original, compression=compression,
+        parameters=payload.model_dump(exclude={"file_name", "data_url"}))
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return _gif_record_out(record)
+
+
+def _gif_record_out(record: GifCompressionRecord) -> GifCompressOut:
+    return GifCompressOut(file_name=record.file_name, storage_path=resolve_storage_path(record.storage_path),
+        original_storage_path=resolve_storage_path(record.original_storage_path), compression=record.compression,
+        record_id=record.id, created_at=record.created_at, parameters=record.parameters)
+
+
+@router.get("/gif-history", response_model=list[GifCompressOut])
+def list_gif_history(before_id: int | None = Query(default=None, ge=1), limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db), auth_user: AuthUserProfile = Depends(get_current_auth_user)):
+    if auth_user.user_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    query = select(GifCompressionRecord).where(GifCompressionRecord.user_id == auth_user.user_id)
+    if before_id is not None:
+        query = query.where(GifCompressionRecord.id < before_id)
+    return [_gif_record_out(record) for record in db.scalars(query.order_by(GifCompressionRecord.id.desc()).limit(limit)).all()]
+
+
+@router.get("/gif-history/{record_id}", response_model=GifCompressOut)
+def get_gif_history(record_id: int, db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user)):
+    if auth_user.user_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    record = db.scalar(select(GifCompressionRecord).where(GifCompressionRecord.id == record_id,
+        GifCompressionRecord.user_id == auth_user.user_id))
+    if record is None:
+        raise HTTPException(status_code=404, detail="GIF record not found")
+    return _gif_record_out(record)
 
 
 @router.post("/{asset_id}/like", response_model=AssetOut, status_code=status.HTTP_200_OK)
@@ -404,7 +441,7 @@ def list_asset_library(
 ) -> dict:
     if auth_user.user_id is None:
         raise HTTPException(status_code=401, detail="Authentication required")
-    selected = kind if kind in {"all", "image", "video", "cad"} else "all"
+    selected = kind if kind in {"all", "image", "video", "cad", "gif"} else "all"
     items: list[dict] = []
     if selected in {"all", "image", "video"}:
         type_filter = [AssetType.image, AssetType.video]
@@ -461,6 +498,15 @@ def list_asset_library(
                     "created_at": record.created_at.isoformat() if record.created_at else None,
                 }
             )
+    if selected in {"all", "gif"}:
+        records = db.scalars(select(GifCompressionRecord).where(GifCompressionRecord.user_id == auth_user.user_id)
+            .order_by(GifCompressionRecord.id.desc()).limit(400)).all()
+        for record in records:
+            items.append({"id": f"gif-{record.id}", "kind": "gif", "title": record.file_name,
+                "subtitle": "GIF 压缩 · " + ("已达标" if record.compression.get("target_met") else "未达标"),
+                "preview_path": resolve_storage_path(record.storage_path),
+                "history_href": f"/studio/gif?record_id={record.id}",
+                "created_at": record.created_at.isoformat() if record.created_at else None})
     keyword = q.strip().lower()
     since_day = since.strip()[:10]
     until_day = until.strip()[:10]

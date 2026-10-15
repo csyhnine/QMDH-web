@@ -681,6 +681,9 @@ class GifCompressIn(ReferenceUploadIn):
 class GifCompressOut(ReferenceUploadOut):
     original_storage_path: str
     compression: GifCompressionOut
+    record_id: int
+    created_at: datetime
+    parameters: dict
 
 
 class ProviderDiscoverIn(BaseModel):

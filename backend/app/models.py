@@ -1012,3 +1012,17 @@ class PlatformSettings(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     updated_by: Mapped[User | None] = relationship()
+
+
+class GifCompressionRecord(Base):
+    """Account-owned tool result; original and derivative remain in media storage."""
+    __tablename__ = "gif_compression_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    file_name: Mapped[str] = mapped_column(String(255))
+    original_storage_path: Mapped[str] = mapped_column(String(255))
+    storage_path: Mapped[str] = mapped_column(String(255))
+    compression: Mapped[dict] = mapped_column(JSON)
+    parameters: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

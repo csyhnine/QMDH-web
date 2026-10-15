@@ -1,4 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useSearchParams, Link } from "react-router-dom";
+import { formatChinaMonthDayTime } from "../../lib/datetime";
 import { api, type GifToolResult } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import { fileToDataUrl } from "../../features/studio/studioAssetUtils";
@@ -17,7 +19,9 @@ export function gifResultMessage(result: GifToolResult) {
 }
 
 export default function GifCompressPage() {
-  const { isGuest } = useAuth();
+  const { isGuest, currentUser } = useAuth();
+  const [searchParams] = useSearchParams();
+  const recordId = Number(searchParams.get("record_id"));
   const [files, setFiles] = useState<File[]>([]);
   const [jobs, setJobs] = useState<GifJob[]>([]);
   const [selected, setSelected] = useState(0);
@@ -29,10 +33,13 @@ export default function GifCompressPage() {
   const [allowResize, setAllowResize] = useState(true);
   const [allowFrameReduction, setAllowFrameReduction] = useState(true);
   const file = files[selected];
-  const result = jobs[selected]?.result;
+  const [historyResult, setHistoryResult] = useState<GifToolResult | null>(null);
+  const result = historyResult ?? jobs[selected]?.result;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
+  const [history, setHistory] = useState<GifToolResult[]>([]);
+  const [historyError, setHistoryError] = useState("");
   const input = useRef<HTMLInputElement | null>(null);
   const request = useRef(0);
   useEffect(() => () => { request.current++; }, []);
@@ -44,18 +51,34 @@ export default function GifCompressPage() {
   }, [file]);
   useEffect(() => { setJobs(files.map(() => ({ status: "waiting" }))); }, [files, target, maxEdge, maxFps, maxColors, allowResize, allowFrameReduction]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setHistory([]); setHistoryResult(null); setHistoryError("");
+    if (!isGuest) api.gifHistory().then(items => { if (!cancelled) setHistory(items); })
+      .catch(err => { if (!cancelled) setHistoryError(err instanceof Error ? err.message : "历史加载失败，请刷新重试。"); });
+    return () => { cancelled = true; };
+  }, [isGuest, currentUser?.id]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!isGuest && Number.isSafeInteger(recordId) && recordId > 0) {
+      api.gifHistoryRecord(recordId).then(item => { if (!cancelled) setHistoryResult(item); })
+        .catch(err => { if (!cancelled) setHistoryError(err instanceof Error ? err.message : "无法读取压缩记录。"); });
+    }
+    return () => { cancelled = true; };
+  }, [recordId, isGuest, currentUser?.id]);
+
   function chooseFiles(next: File[]) {
     if (!next.length || busy || downloading) return;
     const message = validateGifBatch(next);
     if (message) { setError(message); return; }
-    setFiles(next); setSelected(0); setJobs(next.map(() => ({ status: "waiting" }))); setError("");
+    setHistoryResult(null); setFiles(next); setSelected(0); setJobs(next.map(() => ({ status: "waiting" }))); setError("");
   }
 
   async function compress(event: FormEvent) {
     event.preventDefault();
     if (!files.length || busy || isGuest || downloading) return;
     const id = ++request.current;
-    setBusy(true); setError(""); setJobs(files.map(() => ({ status: "waiting" })));
+    setHistoryResult(null); setBusy(true); setError(""); setJobs(files.map(() => ({ status: "waiting" })));
     try {
       await runGifBatch(files, async file => {
         const dataUrl = await fileToDataUrl(file);
@@ -63,7 +86,13 @@ export default function GifCompressPage() {
         return api.compressGif({ file_name: file.name, data_url: dataUrl, target_kb: target,
           max_edge: maxEdge, max_fps: maxFps, max_colors: maxColors,
           allow_resize: allowResize, allow_frame_reduction: allowFrameReduction });
-      }, (index, job) => setJobs(previous => previous.map((old, i) => i === index ? job : old)), () => id === request.current);
+      }, (index, job) => {
+        setJobs(previous => previous.map((old, i) => i === index ? job : old));
+        if (job.result) {
+          const saved = job.result;
+          setHistory(previous => [saved, ...previous.filter(item => item.record_id !== saved.record_id)].slice(0, 20));
+        }
+      }, () => id === request.current);
     } finally { if (id === request.current) setBusy(false); }
   }
 
@@ -136,11 +165,12 @@ export default function GifCompressPage() {
           <ul className="gif-batch-list">{files.map((entry, index) => {
             const job = jobs[index];
             const status = job?.status === "processing" ? "正在压缩" : job?.status === "error" ? "失败" : job?.result ? `${formatGifSize(job.result.compression.output_bytes)} · ${job.result.compression.target_met ? "已达标" : "未达标"}` : "等待压缩";
-            return <li key={index}><button type="button" className={selected === index ? "is-selected" : ""} aria-pressed={selected === index} onClick={() => setSelected(index)}><strong>{entry.name}</strong><span>{status}</span></button></li>;
+            return <li key={index}><button type="button" className={selected === index ? "is-selected" : ""} aria-pressed={selected === index} onClick={() => { setHistoryResult(null); setSelected(index); }}><strong>{entry.name}</strong><span>{status}</span></button></li>;
           })}</ul>
           {jobs[selected]?.error ? <p role="alert" className="gif-error">{jobs[selected].error}</p> : null}
         </> : null}
         {result ? <>
+          <p className="gif-footnote">{result.file_name} · 已保存到资产库{result.created_at ? ` · ${formatChinaMonthDayTime(result.created_at)}` : ""}</p>
           <p className={result.compression.target_met ? "gif-notice is-success" : "gif-notice is-warning"}>{gifResultMessage(result)}</p>
           <div className="gif-stats">
             <div><span>原始大小</span><strong>{formatGifSize(result.compression.original_bytes)}</strong></div>
@@ -149,7 +179,7 @@ export default function GifCompressPage() {
             <div><span>体积减少</span><strong>{Math.max(0, (1 - result.compression.output_bytes / result.compression.original_bytes) * 100).toFixed(1)}%</strong></div>
           </div>
           <div className="gif-preview-pair">
-            <figure><figcaption>原始 GIF</figcaption><div className="gif-preview"><img src={preview} alt="原始 GIF 动画" /></div></figure>
+            <figure><figcaption>原始 GIF</figcaption><div className="gif-preview"><img src={historyResult ? result.original_storage_path : preview} alt="原始 GIF 动画" /></div></figure>
             <figure><figcaption>处理结果</figcaption><div className="gif-preview"><img src={result.storage_path} alt="处理后的 GIF 动画" /></div></figure>
           </div>
           <div className="gif-download-actions"><button type="button" className="admin-primary-button" disabled={downloading} onClick={() => void download()}>{downloading ? "准备下载…" : "下载 GIF"}</button>
@@ -157,5 +187,17 @@ export default function GifCompressPage() {
         </> : <div className="gif-result-empty">{jobs[selected]?.status === "processing" ? "正在尝试压缩方案，请稍候…" : "选择文件查看结果；开始压缩后，在这里查看体积对比和动画预览。"}</div>}
       </section>
     </div>
+    <section className="feedback-panel gif-history-panel" aria-label="压缩历史">
+      <div className="gif-batch-summary"><h2>压缩历史</h2><Link to="/studio/library">前往资产库</Link></div>
+      <p className="gif-footnote">最近 20 条，按当前账号保存；刷新或重新登录后仍可查看。点击记录查看原件与压缩结果。</p>
+      {historyError ? <p className="gif-error" role="alert">{historyError}</p> : null}
+      <ul className="gif-batch-list">{history.map(item => <li key={item.record_id}>
+        <button type="button" className={historyResult?.record_id === item.record_id ? "is-selected" : ""} onClick={() => setHistoryResult(item)}>
+          <strong>{item.file_name}<small>{formatChinaMonthDayTime(item.created_at)}</small></strong>
+          <span>{formatGifSize(item.compression.output_bytes)} · {item.compression.target_met ? "已达标" : "未达标"}</span>
+        </button>
+      </li>)}</ul>
+      {!history.length && !historyError ? <p className="gif-footnote">暂无已保存记录。新压缩结果会自动保存。</p> : null}
+    </section>
   </section>;
 }

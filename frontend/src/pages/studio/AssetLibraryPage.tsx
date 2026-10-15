@@ -10,12 +10,14 @@ const FILTERS = [
   { key: "image", label: "图片" },
   { key: "video", label: "视频" },
   { key: "cad", label: "解析" },
+  { key: "gif", label: "GIF 压缩" },
 ] as const;
 
 const KIND_LABELS: Record<string, string> = {
   image: "图片",
   video: "视频",
   cad: "解析",
+  gif: "GIF 压缩",
 };
 
 export default function AssetLibraryPage() {
@@ -83,7 +85,7 @@ export default function AssetLibraryPage() {
       <header className="feedback-page-copy">
         <h1>资产库</h1>
         <p>
-          {currentUser ? `当前账号 ${currentUser.display_name || currentUser.name} 的图片、视频和图纸解析。` : "登录后查看自己的资产。"}
+          {currentUser ? `当前账号 ${currentUser.display_name || currentUser.name} 的图片、视频、图纸解析和 GIF 压缩结果。` : "登录后查看自己的资产。"}
           不显示其他账号的成果。
         </p>
       </header>

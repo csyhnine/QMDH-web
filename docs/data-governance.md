@@ -48,6 +48,12 @@ This matrix maps the practical storage / source-of-truth rule now used by QMDH-w
 | Runtime cache / queue state | Redis queue, locks, temporary session / coordination state | live Redis | Implemented |
 | Seed / bootstrap content | default workflows, bootstrap admin, dev accounts, roster recovery script, baseline inspiration seed | repo code + scripts | Implemented |
 
+## 2026-10-15 GIF tool history
+
+- `gif_compression_records` is live business history in PostgreSQL, owned by `user_id`; original/result files remain in managed `gif-tools/` media storage. Keep the database, matching environment and media together in backups; rebuilding frontend state is not history recovery.
+- Compression completion (including unmet targets and originals already under target) commits its record before returning success. The personal library reads these records without inventing generation tasks or widening account access.
+- Older UUID-only files have no recorded owner/name/parameters. Do not guess ownership, automatically assign them to an admin, or delete them while fixing history.
+
 ## Current Implementation Notes
 
 - Project deletion has entered archive-style governance:

@@ -11,12 +11,14 @@
 
 ## Latest Handoffs
 
-### [2026-10-15] GIF 持久历史与资产库 — 本地完成，待发布
+### [2026-10-15] GIF 持久历史与资产库 — 已部署
 
 - 旧压缩仅写媒体/React state 未入库，现新增账号归属记录、最近历史/详情、资产库 GIF 分类和回链；未达标/无需处理结果同样登记。
 - 迁移 f7g8h9i0j1k2 新增独立表，旧业务表不变；旧未知归属媒体不自动补录。详见 archive/handoff-2026-10-15-gif-history.md。
-- 分支 codex/gif-persistent-history，原样式/比较文档/_tmp_* 与生产四文件差异保护；准备备份/隔离迁移验证后发布。
-- Safe to hand off: Yes（发布待续）。
+- 功能 9b89b53 已推送，生产运行合并 e6d98efa，迁移 f7g8h9i0j1k2；CI Linux 156 passed/16 subtests、前端 27 项/23 既有、0 新增类型错误/构建通过。
+- 配对备份 release-20261015-gif-history 下载/校验；完整恢复的隔离 PostgreSQL 验证迁移与真实压缩入库/新 session 回读/资产库/跨账号隔离，随后删除隔离库，未向正式库写测试记录。公网新包/历史鉴权/库分类/健康通过，无登录浏览器交互声明。
+- 分支 codex/gif-persistent-history，原样式/比较文档/_tmp_* 与生产四文件差异保护继续。
+- Safe to hand off: Yes。
 
 ### [2026-10-15] GIF 推荐预设与批量 — 已部署
 

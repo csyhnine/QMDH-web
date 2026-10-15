@@ -1,6 +1,6 @@
 # Architecture
 
-2026-10-15 其他导航与 GIF 复用（本地待发布）：生成页 StudioGlobalRailNav 与 AppShell 共用 OTHER_TOOLS_NAV（其他 /studio/other）；历史/当前结果可复制原始 GIF 和参数到压缩表单，手动提交后新增记录，不覆盖源记录；复用现有媒体读取/上传/历史 API，无后端/迁移。
+2026-10-15 其他导航与 GIF 复用（已部署，f18b5d6 / 生产合并 ce56c34d）：生成页 StudioGlobalRailNav 与 AppShell 共用 OTHER_TOOLS_NAV（其他 /studio/other）；历史/当前结果可复制原始 GIF 和参数到压缩表单，手动提交后新增记录，不覆盖源记录；复用现有媒体读取/上传/历史 API，无后端/迁移。
 
 2026-10-15 GIF 持久历史（已部署，9b89b53 / 生产运行合并 e6d98efa）：新增 gif_compression_records（账号 FK、原件/结果、参数/体积、时间），手动压缩提交记录后返回；GET /assets/gif-history（游标）与 /assets/gif-history/{id} 仅本人可读；/assets/library 聚合新增 gif 分类，回链 /studio/gif?record_id=，不造 Task/不改变原 Asset 权限。迁移 f7g8h9i0j1k2，旧未登记文件不猜测归属。
 

@@ -5,8 +5,12 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+ARG DEBIAN_MIRROR=
+RUN if [ -n "$DEBIAN_MIRROR" ]; then \
+      sed -i "s|http://deb.debian.org|$DEBIAN_MIRROR|g" /etc/apt/sources.list.d/debian.sources; \
+    fi \
+    && apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update \
+    && apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

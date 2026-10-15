@@ -5,7 +5,7 @@ import { api, type GifToolResult } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import { fileToDataUrl } from "../../features/studio/studioAssetUtils";
 import { downloadMediaUrl } from "../../features/studio/studioMediaDownload";
-import { createGifZip, runGifBatch, validateGifBatch, type GifJob } from "./gifToolBatch";
+import { createGifZip, gifParametersFromRecord, restoreGifOriginal, runGifBatch, validateGifBatch, type GifJob } from "./gifToolBatch";
 
 export function formatGifSize(bytes: number) {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(2)} MB`;
@@ -20,7 +20,7 @@ export function gifResultMessage(result: GifToolResult) {
 
 export default function GifCompressPage() {
   const { isGuest, currentUser } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const recordId = Number(searchParams.get("record_id"));
   const [files, setFiles] = useState<File[]>([]);
   const [jobs, setJobs] = useState<GifJob[]>([]);
@@ -40,6 +40,9 @@ export default function GifCompressPage() {
   const [downloading, setDownloading] = useState(false);
   const [history, setHistory] = useState<GifToolResult[]>([]);
   const [historyError, setHistoryError] = useState("");
+  const [restoring, setRestoring] = useState(false);
+  const [copiedFrom, setCopiedFrom] = useState("");
+  const form = useRef<HTMLFormElement | null>(null);
   const input = useRef<HTMLInputElement | null>(null);
   const request = useRef(0);
   useEffect(() => () => { request.current++; }, []);
@@ -68,15 +71,34 @@ export default function GifCompressPage() {
   }, [recordId, isGuest, currentUser?.id]);
 
   function chooseFiles(next: File[]) {
-    if (!next.length || busy || downloading) return;
+    if (!next.length || busy || downloading || restoring) return;
     const message = validateGifBatch(next);
     if (message) { setError(message); return; }
-    setHistoryResult(null); setFiles(next); setSelected(0); setJobs(next.map(() => ({ status: "waiting" }))); setError("");
+    setCopiedFrom(""); setHistoryResult(null); setFiles(next); setSelected(0); setJobs(next.map(() => ({ status: "waiting" }))); setError("");
+  }
+
+  async function copyToCompressor(record: GifToolResult) {
+    if (busy || downloading || restoring || isGuest) return;
+    const id = ++request.current;
+    setRestoring(true); setError("");
+    try {
+      const original = await restoreGifOriginal(record);
+      if (id !== request.current) return;
+      const params = gifParametersFromRecord(record);
+      setTarget(params.target_kb); setMaxEdge(params.max_edge); setMaxFps(params.max_fps);
+      setMaxColors(params.max_colors); setAllowResize(params.allow_resize); setAllowFrameReduction(params.allow_frame_reduction);
+      setFiles([original]); setSelected(0); setJobs([{ status: "waiting" }]); setHistoryResult(null);
+      setCopiedFrom(record.file_name);
+      const query = new URLSearchParams(searchParams); query.delete("record_id");
+      setSearchParams(query, { replace: true });
+      form.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (err) { if (id === request.current) setError(err instanceof Error ? err.message : "复制失败，请重试。"); }
+    finally { if (id === request.current) setRestoring(false); }
   }
 
   async function compress(event: FormEvent) {
     event.preventDefault();
-    if (!files.length || busy || isGuest || downloading) return;
+    if (!files.length || busy || isGuest || downloading || restoring) return;
     const id = ++request.current;
     setHistoryResult(null); setBusy(true); setError(""); setJobs(files.map(() => ({ status: "waiting" })));
     try {
@@ -97,7 +119,7 @@ export default function GifCompressPage() {
   }
 
   async function downloadBatch() {
-    if (downloading || busy) return;
+    if (downloading || busy || restoring) return;
     setDownloading(true); setError("");
     const id = request.current;
     try {
@@ -113,7 +135,7 @@ export default function GifCompressPage() {
   }
 
   async function download() {
-    if (!result || downloading) return;
+    if (!result || downloading || restoring) return;
     setDownloading(true);
     try { await downloadMediaUrl(result.storage_path, result.file_name.replace(/\.gif$/i, "") + "-compressed.gif"); }
     finally { setDownloading(false); }
@@ -125,16 +147,17 @@ export default function GifCompressPage() {
       <p>批量上传动图，默认以 500 KB 为目标。按比例缩放，保留动画时长和原循环方式。</p>
     </header>
     <div className="gif-tool-columns">
-      <form className="feedback-panel gif-tool-form" onSubmit={compress}>
+      <form ref={form} className="feedback-panel gif-tool-form" onSubmit={compress}>
         <h2>上传 GIF</h2>
-        <input ref={input} type="file" accept=".gif,image/gif" multiple hidden disabled={busy || downloading || isGuest}
+        {copiedFrom ? <p className="gif-notice">已将「{copiedFrom}」的原始 GIF 和参数复制到压缩区。可调整后开始压缩，原记录保留。</p> : null}
+        <input ref={input} type="file" accept=".gif,image/gif" multiple hidden disabled={busy || downloading || restoring || isGuest}
           onChange={event => { chooseFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
-        <button type="button" className="gif-dropzone" disabled={busy || downloading || isGuest} onClick={() => input.current?.click()}
+        <button type="button" className="gif-dropzone" disabled={busy || downloading || restoring || isGuest} onClick={() => input.current?.click()}
           onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); if (!isGuest) chooseFiles(Array.from(event.dataTransfer.files)); }}>
           <strong>{files.length ? `已选择 ${files.length} 个 GIF` : "点击选择或拖入多个 GIF"}</strong>
           <span>{files.length ? `${formatGifSize(files.reduce((sum, f) => sum + f.size, 0))} · 点击重新选择` : "最多 20 个，每个不超过 20 MB，总计不超过 100 MB"}</span>
         </button>
-        <fieldset disabled={busy || downloading || isGuest} className="gif-settings">
+        <fieldset disabled={busy || downloading || restoring || isGuest} className="gif-settings">
           <label className="gif-field"><span>目标大小（KB）</span>
             <input type="number" min={10} max={20000} step={1} required value={target} onChange={e => setTarget(Number(e.target.value))} />
             <small>默认 500 KB。1 KB = 1000 字节，尽量在质量下限内达标。</small>
@@ -152,7 +175,7 @@ export default function GifCompressPage() {
         </fieldset>
         {isGuest ? <p className="gif-notice">登录后即可上传并压缩 GIF。</p> : null}
         {error ? <p className="gif-error" role="alert">{error}</p> : null}
-        <button className="admin-primary-button" type="submit" disabled={!files.length || busy || downloading || isGuest}>{busy ? `正在压缩 ${jobs.filter(job => job.status === "done" || job.status === "error").length}/${files.length}…` : files.length > 1 ? "开始批量压缩" : "开始压缩"}</button>
+        <button className="admin-primary-button" type="submit" disabled={!files.length || busy || downloading || restoring || isGuest}>{busy ? `正在压缩 ${jobs.filter(job => job.status === "done" || job.status === "error").length}/${files.length}…` : files.length > 1 ? "开始批量压缩" : "开始压缩"}</button>
         <p className="gif-footnote">逐个压缩，单个失败不会中断整批；超出目标时继续降低颜色、帧率或尺寸，达到质量或处理时间下限后会显示未达标。</p>
       </form>
       <section className="feedback-panel gif-result-panel" aria-label="压缩结果" aria-live="polite" aria-busy={busy}>
@@ -160,7 +183,7 @@ export default function GifCompressPage() {
         {files.length > 0 ? <>
           <div className="gif-batch-summary">
             <span>{jobs.filter(job => job.status === "done").length} / {files.length} 已完成 · {jobs.filter(job => job.status === "error").length} 失败</span>
-            <button type="button" className="ghost-button" disabled={busy || downloading || !jobs.some(job => job.result)} onClick={() => void downloadBatch()}>{downloading ? "准备下载…" : "打包下载结果"}</button>
+            <button type="button" className="ghost-button" disabled={busy || downloading || restoring || !jobs.some(job => job.result)} onClick={() => void downloadBatch()}>{downloading ? "准备下载…" : "打包下载结果"}</button>
           </div>
           <ul className="gif-batch-list">{files.map((entry, index) => {
             const job = jobs[index];
@@ -182,7 +205,7 @@ export default function GifCompressPage() {
             <figure><figcaption>原始 GIF</figcaption><div className="gif-preview"><img src={historyResult ? result.original_storage_path : preview} alt="原始 GIF 动画" /></div></figure>
             <figure><figcaption>处理结果</figcaption><div className="gif-preview"><img src={result.storage_path} alt="处理后的 GIF 动画" /></div></figure>
           </div>
-          <div className="gif-download-actions"><button type="button" className="admin-primary-button" disabled={downloading} onClick={() => void download()}>{downloading ? "准备下载…" : "下载 GIF"}</button>
+          <div className="gif-download-actions"><button type="button" className="ghost-button" disabled={busy || downloading || restoring || isGuest} onClick={() => void copyToCompressor(result)}>{restoring ? "正在载入原件…" : "复制到压缩区"}</button><button type="button" className="admin-primary-button" disabled={downloading} onClick={() => void download()}>{downloading ? "准备下载…" : "下载 GIF"}</button>
             <button type="button" className="ghost-button" onClick={() => void downloadMediaUrl(result.original_storage_path, result.file_name)}>下载原文件</button></div>
         </> : <div className="gif-result-empty">{jobs[selected]?.status === "processing" ? "正在尝试压缩方案，请稍候…" : "选择文件查看结果；开始压缩后，在这里查看体积对比和动画预览。"}</div>}
       </section>

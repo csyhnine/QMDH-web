@@ -1,5 +1,6 @@
 import type { RailView, StudioGlobalRailNavProps } from "./studioGlobalRailTypes";
 import { isStudioCanvasEnabled } from "../../lib/featureFlags";
+import { OTHER_TOOLS_NAV } from "./studioNavigation";
 
 type RailNavItem = {
   label: string;
@@ -19,7 +20,7 @@ const STUDIO_NAV_ITEMS: RailNavItem[] = [
   { label: "\u7075\u611f", href: "/studio/inspiration" },
   { label: "\u53cd\u9988", href: "/studio/feedback" },
   { label: "\u751f\u6210", href: "/studio/generate", view: "studio" },
-  { label: "\u56fe\u7eb8", href: "/studio/cad" },
+  { label: OTHER_TOOLS_NAV.label, href: OTHER_TOOLS_NAV.path },
   { label: "\u8d44\u4ea7\u5e93", href: "/studio/library" },
   ...(isStudioCanvasEnabled ? [{ label: "\u65e0\u9650\u753b\u5e03", href: "/studio/canvas" }] : []),
   { label: "\u5bfc\u822a", href: "/studio/nav" },

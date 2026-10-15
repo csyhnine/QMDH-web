@@ -41,7 +41,7 @@ test('GIF results distinguish reached and missed targets and expose both downloa
   const result = { file_name: 'sample.gif', storage_path: '/media/out.gif', original_storage_path: '/media/in.gif', compression: { original_bytes: 900000, output_bytes: 450000, target_bytes: 500000, target_met: true, compressed: true } };
   const render = r => renderToStaticMarkup(load('GifCompressPage', [[{ name: 'sample.gif' }], [{ status: 'done', result: r }], 0, 'blob:original', 500, 344, 12.5, 96, true, true, null]).default());
   const html = render(result);
-  for (const label of ['已达到目标体积', '50.0%', '下载 GIF', '下载原文件', '原始 GIF 动画', '处理后的 GIF 动画']) assert.ok(html.includes(label));
+  for (const label of ['已达到目标体积', '50.0%', '下载 GIF', '下载原文件', '复制到压缩区', '原始 GIF 动画', '处理后的 GIF 动画']) assert.ok(html.includes(label));
   const missed = render({ ...result, compression: { ...result.compression, target_met: false } });
   assert.ok(missed.includes('未达到目标体积'));
 });

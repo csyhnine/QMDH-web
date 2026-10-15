@@ -6,6 +6,7 @@ import GuestLoginBanner from "../../features/studio/GuestLoginBanner";
 import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from "../../features/access/roleAccess";
 import { useAdminFeedbackPendingCount } from "../../lib/useAdminFeedbackPendingCount";
 import { BrandIcon } from "./Brand";
+import { OTHER_TOOLS_NAV } from "../../features/studio/studioNavigation";
 
 type StudioTab = "generate" | "inspiration" | "feedback" | "chat" | "canvas" | "nav" | "other" | "library";
 type AdminTab = AdminModuleKey;
@@ -53,7 +54,7 @@ const studioNavItems: Array<{ key: Exclude<StudioTab, "generate"> | "generate"; 
   { key: "inspiration", label: "灵感", path: "/studio/inspiration" },
   { key: "feedback", label: "反馈", path: "/studio/feedback" },
   { key: "generate", label: "生成", path: "/studio/generate" },
-  { key: "other", label: "其他", path: "/studio/other" },
+  OTHER_TOOLS_NAV,
   { key: "library", label: "资产库", path: "/studio/library" },
   ...(isStudioCanvasEnabled
     ? ([{ key: "canvas" as const, label: "无限画布", path: "/studio/canvas" }] as const)

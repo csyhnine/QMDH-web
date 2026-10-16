@@ -11,6 +11,14 @@
 
 ## Latest Handoffs
 
+### [2026-10-16] CAD 布置按钮超时 — 已修复外层代理
+
+- ce_1e513e72a64e 两次 fitout 在后台耗时 74214/74956ms 并返回 200，但宝塔 60s 返回 504；正式库已存 floor 1 的三套方案/默认 104 家具。没有重跑/修改正式 CAD 数据。
+- 新增 ops/nginx/cad-extracts.conf；安装到宝塔 extension/120.79.227.11/qmdh-cad-extracts.conf，仅 /api/v1/cad/extracts/ 等待 300s，与内层一致。nginx -t/-T、平滑 reload、公开 CAD 未登录 401/健康 200 通过；未再次调用耗时写接口。
+- 方案代码仍为沿墙/主家具/网格，生成成功后出现切换，按通过状态与 loss 选默认；刷新可读取已保存结果。
+- 配置备份 /www/backup/qmdh-cad-timeout-20261016 与 E:/backups/QMDH-web/cad-timeout-20261016；回退移出新增 extension conf 后 nginx -t/reload。不改镜像/env/数据库/媒体/18010，原未提交样式等保护。
+- 分支 codex/cad-proxy-timeout；Safe to hand off: Yes。
+
 ### [2026-10-16] Linux ODA 转换器 — 已部署
 
 - 用户新授权配置转换器，官方 Linux 27.9 已下载并校验；旧的等包限制由本次授权覆盖，其余旧图保护不变。
@@ -28,13 +36,4 @@
 - 功能 1997c3f 已推送、生产运行合并 cd60dab3；无迁移，head 仍 f7g8h9i0j1k2。Linux CI 158 passed/16 subtests，前端 31 项/23 既有、0 新增类型错误/构建通过。
 - 新镜像隔离媒体/SQLite 验证：720×720/25fps/256 色 → 344×344/12.5fps/63 色，320ms/无限循环保留，真实结果 488082 字节，元信息持久与旧历史补读通过。未向正式库/媒体写测试数据，公网新包/鉴权/健康通过。
 - 配对备份 release-20261015-gif-info 两端校验、5762 媒体/零增量、旧镜像保留；生产 env/四文件历史差异和原样式等保护继续。
-- Safe to hand off: Yes。
-
-### [2026-10-15] 其他导航一致性与 GIF 复制 — 已部署
-
-- 生成页独立侧栏漏改旧图纸名称，现与 AppShell 共用其他入口。
-- 当前结果/历史详情可复制原件和参数到压缩区，用户改参后生成新记录，保留原记录；无后端/迁移。
-- 前端 30 项/23 既有类型错误、0 新增/构建通过，详见 archive/handoff-2026-10-15-gif-copy-navigation.md。原样式/临时文件及生产差异保护。
-- 功能 f18b5d6 已推送 main、生产合并 ce56c34d，仅前端镜像重建发布；后端/worker 镜像保持，正式迁移仍 f7g8h9i0j1k2。公网新包/入口/健康、nginx 检查通过，未宣称登录浏览器点击验收。
-- 配对备份 release-20261015-gif-copy 两端校验，5762 媒体/本次增量 8 文件完整读取；旧前端镜像标签保留，生产 env 未改。
 - Safe to hand off: Yes。

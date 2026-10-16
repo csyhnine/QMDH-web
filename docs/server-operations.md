@@ -1,5 +1,7 @@
 # Server Operations Runbook
 
+2026-10-16 CAD 布置超时修复：外层宝塔默认 60s，但真实 fitout 为 74–75s；新增 extension/120.79.227.11/qmdh-cad-extracts.conf，来源 ops/nginx/cad-extracts.conf，仅 CAD extracts 前缀 proxy_read_timeout/proxy_send_timeout 300s。现有 location ^~ / 不会阻止更长的前缀匹配。迁移/重建宝塔站点时保留此 include；nginx -t/-T 后 reload。原代理配置与生效前配置两端备份 cad-timeout-20261016。回退移出新增片段后检查与 reload，不删除业务结果。
+
 2026-10-16 DWG 转换器已发布：功能 0346eee/Qt 依赖修复 b1532b1，生产运行合并 26095b9d。官方 ODA 27.9.0.0 amd64 与 Xvfb/Qt/OpenGL 在 backend/worker 镜像内，非宿主机临时安装；安装包 backend/vendor/oda/ODAFileConverter_QT6_lnxX64_11dll_27.9.deb 不入 Git，SHA256 由生产 QMDH_CAD_ODA_SHA256 固定。QMDH_CAD_ODA_PACKAGE/同 SHA 字段由 Compose 传 build args，QMDH_CAD_DWG_CONVERTER_CMD 调用 python -m app.scripts.convert_dwg_oda --input {input} --output-dir {output_dir}。以后重建保留包与这三个配置字段；新服务器从配对私有备份恢复包，不能仅 clone 后假设已安装。按既有 DEBIAN_MIRROR=https://mirrors.aliyun.com 参数构建 backend/worker。
 
 本次备份 /www/backup/qmdh-release-20261016-linux-oda 与 E:/backups/QMDH-web/release-20261016-linux-oda，含旧 production.env、已配置 production-after.env、数据库/媒体链、官方安装包及验证日志。仅三个转换器键变化，其他配置/加密 key 保持。回退需旧 backend/worker 镜像与旧 production.env 配对，不因回退删除数据库/媒体或降级迁移。新 DWG 可上传，ce_0abae8a9402f 等旧图不重跑。详见 archive/handoff-2026-10-16-linux-oda.md。

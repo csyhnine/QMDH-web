@@ -1,5 +1,7 @@
 # Server Operations Runbook
 
+2026-10-16 CAD 布置前确认 cfdccca 已部署，运行合并 5ac68b6e。三服务镜像重建（保留 ODA 包/三项配置，DEBIAN_MIRROR 参数），backend/3 worker/前端已发布；无迁移，Alembic 仍 f7g8h9i0j1k2、env/key 不变。配对备份 release-20261016-cad-preparation，两端含数据库、5773 文件清单、9 文件媒体增量及旧全链/ODA 包；旧镜像 qmdh-release-backup-{backend,worker,frontend}:20261016-cad-preparation 保留。回退镜像不重置 DB/媒体，新增 CAD JSON 字段可保留。新镜像隔离 HTTP 验证和公网路由/新包/健康通过，正式旧图不自动重算。
+
 2026-10-16 CAD 布置超时修复：外层宝塔默认 60s，但真实 fitout 为 74–75s；新增 extension/120.79.227.11/qmdh-cad-extracts.conf，来源 ops/nginx/cad-extracts.conf，仅 CAD extracts 前缀 proxy_read_timeout/proxy_send_timeout 300s。现有 location ^~ / 不会阻止更长的前缀匹配。迁移/重建宝塔站点时保留此 include；nginx -t/-T 后 reload。location 前缀必须不带末尾斜杠，否则列表接口 /extracts 会被自动 301，引发后端去斜杠重定向循环；旧 301 可能被浏览器永久缓存，必须保留片段中的内部 rewrite 去掉 /extracts/ 尾斜杠（break、不向客户端重定向、保留查询）。运行 scripts/check-cad-proxy.sh 验收带/不带斜杠的列表、含查询列表与详情直接返回 401（不能只测详情/健康）。原代理配置与生效前配置两端备份 cad-timeout-20261016。回退移出新增片段后检查与 reload，不删除业务结果。
 
 2026-10-16 DWG 转换器已发布：功能 0346eee/Qt 依赖修复 b1532b1，生产运行合并 26095b9d。官方 ODA 27.9.0.0 amd64 与 Xvfb/Qt/OpenGL 在 backend/worker 镜像内，非宿主机临时安装；安装包 backend/vendor/oda/ODAFileConverter_QT6_lnxX64_11dll_27.9.deb 不入 Git，SHA256 由生产 QMDH_CAD_ODA_SHA256 固定。QMDH_CAD_ODA_PACKAGE/同 SHA 字段由 Compose 传 build args，QMDH_CAD_DWG_CONVERTER_CMD 调用 python -m app.scripts.convert_dwg_oda --input {input} --output-dir {output_dir}。以后重建保留包与这三个配置字段；新服务器从配对私有备份恢复包，不能仅 clone 后假设已安装。按既有 DEBIAN_MIRROR=https://mirrors.aliyun.com 参数构建 backend/worker。

@@ -31,7 +31,7 @@ RUN if [ -n "$CAD_ODA_PACKAGE" ]; then \
       && apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y --no-install-recommends \
          xvfb xauth libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
          libxcb-render-util0 libxcb-xinerama0 libxcb-util1 libxkbcommon-x11-0 \
-         libgl1 libegl1 libdbus-1-3 /tmp/qmdh-oda/"$CAD_ODA_PACKAGE" \
+         libgl1 libopengl0 libegl1 libdbus-1-3 /tmp/qmdh-oda/"$CAD_ODA_PACKAGE" \
       && if [ ! -e /usr/lib/x86_64-linux-gnu/libxcb-util.so.0 ]; then \
            ln -s libxcb-util.so.1 /usr/lib/x86_64-linux-gnu/libxcb-util.so.0; \
          fi; \

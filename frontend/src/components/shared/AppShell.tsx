@@ -107,7 +107,7 @@ export default function AppShell(props: AppShellProps) {
   return (
     <div className={isGuest && props.kind === "studio" ? "studio-guest-layout" : undefined}>
       {isGuest && props.kind === "studio" ? <GuestLoginBanner /> : null}
-      <div className={className}>
+      <div className={className + (props.kind === "studio" && props.active === "management" ? " management-shell" : "")}>
       <aside className="global-rail">
         <div className="rail-logo">
           <BrandIcon className="rail-logo-image" />

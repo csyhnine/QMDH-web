@@ -15,6 +15,11 @@
 
 ## Active Decisions
 
+### Decision: use a bounded open-source Gantt component inside existing company planning
+- Accepted（2026-10-16）：用户认可参考 Worklenz 界面、OpenProject 项目层级与成熟甘特交互。仅独立引入已核验 MIT 的 dhtmlx-gantt@10.0.3，不复制其他项目 AGPL/GPL/商业版实现；公开保留版权许可，锁文件固定完整性。
+- 保留既有管理层/管理员显式授权、单位隔离、业务数据和后端项目版本边界。拖动先预览再保存，不自动改依赖阶段；多项目按项目保存，部分失败保留未保存调整，不宣称跨项目原子事务。当前不引入排程引擎/工作日历/依赖编辑，不用资源管理 PRO API。
+
+
 ### Decision: company management permissions are independent of website administration
 - Accepted（2026-10-16）：用户以公司架构指定新二分院管理层，原二分院与四分院合并。用独立 company_management/company_unit/company_position 表达身份，网站 admin/ops/designer 保持既有含义；新管理接口查询实时个人授权并按单位隔离。
 - 年度项目台账、合同/回款、人员和排期单独保存，不能复用 Studio 私人生成项目而扩大历史可见性。既有分组、作品及历史不批量改归属；名册记录不赋予网站权限。

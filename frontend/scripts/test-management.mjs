@@ -69,7 +69,7 @@ test('editor interactions create project, assign a stage and save; stale edit ke
     if(body){if(fail)throw Error('项目已被他人修改'); saved=body;return {...body,id:1};}
     return path==='/staff'?[{id:1,name:'设计师',is_active:true}]:path.startsWith('/reports')?report:[];
   };
-  const Page=load('pages/management/ManagementProjectsPage.tsx',{'react':hooks,'../../api':{managementRequest:request},'../../context/AuthContext':{useAuth:()=>({currentUser:user})},'./planning':planning},{structuredClone,crypto:{randomUUID:()=> 'stage-1'},window:{confirm:()=>true},Error}).default;
+  const Page=load('pages/management/ManagementProjectsPage.tsx',{'react':hooks,'../../api':{managementRequest:request},'../../context/AuthContext':{useAuth:()=>({currentUser:user})},'./planning':planning,'./ManagementOverview':{default:()=>null},'./ProjectLedger':{default:()=>null},'./ProjectPlan':{default:()=>null},'./PeopleSchedule':{default:()=>null}},{structuredClone,crypto:{randomUUID:()=> 'stage-1'},window:{confirm:()=>true},Error}).default;
   const render=()=>{do{cursor=0;effects=[];changed=false;tree=Page();effects.forEach(fn=>fn());}while(changed);};
   const nodes=n=>{if(!n||typeof n!=='object')return[];return[n,...[n.props?.children].flat(Infinity).flatMap(nodes)];};
   const text=n=>typeof n==='string'||typeof n==='number'?String(n):n&&typeof n==='object'?[n.props?.children].flat(Infinity).map(text).join(''):'';
@@ -89,4 +89,44 @@ test('editor interactions create project, assign a stage and save; stale edit ke
   fail=false;await editor().props.onSubmit({preventDefault(){}});render();
   assert.equal(saved.name,'真实安排'); assert.equal(saved.stages[0].name,'方案设计');assert.equal(saved.stages[0].id,'stage-1');
   assert.equal(editor(),undefined);
+});
+
+
+test('overview counts unfinished weekly nodes and overdue stages, excludes archived and totals money exactly', () => {
+  const p={...makeProject(1,[{...stage('a','2026-10-12','2026-10-15'),progress:0},{...stage('b','2026-10-15','2026-10-18'),progress:50},{...stage('c','2026-10-13','2026-10-14'),progress:100}]),invoiced_pending:'999999999999.99'};
+  const second={...makeProject(2,[]),invoiced_pending:'0.01'};
+  const hidden={...makeProject(3,[stage('hidden','2026-10-12','2026-10-13')]),archived:true,invoiced_pending:'999.00'};
+  const data=planning.planningOverview([p,second,hidden],[{id:1,name:'A'}],'2026-10-16');
+  assert.equal(data.week.start,'2026-10-12');assert.equal(data.week.end,'2026-10-18');assert.equal(data.active.length,2);
+  assert.equal(data.due.length,2);assert.equal(data.overdue.length,1);assert.equal(data.invoiced,'1000000000000.00');assert.equal(data.unscheduled.length,1);
+  assert.equal(planning.matchesStatus(p,'overdue','2026-10-16'),true);
+  assert.equal(planning.matchesStatus(second,'unscheduled','2026-10-16'),true);
+});
+test('chart adapter preserves inclusive dates, milestones, stable IDs and escapes every external text', () => {
+  const p={...makeProject(8,[{...stage('s_1','2026-12-30','2026-12-31'),name:'<img src=x onerror=alert(1)>',progress:25}]),name:'<script>name</script>'};
+  const data=planning.ganttData([p],[{id:1,name:'<unsafe>'}],'2026-12-01');
+  assert.equal(data[1].end_date,'2027-01-01 00:00');assert.equal(data[1].id,'s:8:s_1');
+  assert.ok(data[0].text.includes('&lt;script&gt;'));assert.ok(data[1].people.includes('&lt;unsafe&gt;'));assert.ok(!data[1].text.includes('<img'));
+  const updated=planning.stageFromGantt(p.stages[0],{start_date:new Date(2027,0,2),end_date:new Date(2027,0,5),progress:0.76});
+  assert.equal(updated.start,'2027-01-02');assert.equal(updated.end,'2027-01-04');assert.equal(updated.progress,76);assert.equal(updated.assignees,p.stages[0].assignees);
+  const milestone=planning.stageFromGantt({...p.stages[0],milestone:true},{start_date:new Date(2027,0,2),end_date:new Date(2027,0,3),progress:0});
+  assert.equal(milestone.start,milestone.end);
+});
+test('community chart blocks parent/archived drags, edits through drawer and disables dependency writes', () => {
+  const listeners={},config={},templates={};let changed,edited;
+  const chart={config,templates,i18n:{setLocale(){}},attachEvent:(name,fn)=>{listeners[name]=fn;},init(){},
+    getTask:id=>id==='parent'?{projectId:1,readonly:true}:{projectId:1,stageId:'stage',readonly:id==='archived',start_date:new Date(2026,9,16),end_date:new Date(2026,9,18),progress:0.3}};
+  const bridge=load('pages/management/ganttBridge.ts',{'./planning':planning});
+  bridge.initializePlanningGantt(chart,{}, {canDrag:()=>true,onChange:(...args)=>changed=args,onEdit:id=>edited=id});
+  assert.equal(listeners.onBeforeTaskDrag('parent'),false);assert.equal(listeners.onBeforeTaskDrag('archived'),false);assert.equal(listeners.onBeforeTaskDrag('normal'),true);
+  listeners.onAfterTaskDrag('normal');assert.equal(changed[0],1);assert.equal(changed[1],'stage');
+  assert.equal(listeners.onTaskDblClick('normal'),false);assert.equal(edited,1);assert.equal(config.drag_links,false);
+});
+
+test('saving several changed projects acknowledges only committed writes and preserves failed/unattempted work', async () => {
+  const queue={1:makeProject(1,[]),2:makeProject(2,[]),3:makeProject(3,[])};const attempted=[];
+  const failure=await planning.savePlanQueue(Object.values(queue),async project=>{attempted.push(project.id);if(project.id===2)throw Error('conflict');return {...project,version:2};},id=>delete queue[id]);
+  assert.deepEqual(attempted,[1,2]);assert.equal(failure.message,'conflict');assert.deepEqual(Object.keys(queue),['2','3']);
+  const result=await planning.savePlanQueue(Object.values(queue),async p=>({...p,version:2}),id=>delete queue[id]);
+  assert.equal(result,null);assert.deepEqual(Object.keys(queue),[]);
 });

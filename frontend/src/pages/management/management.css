@@ -1408,3 +1408,5 @@
   display: block;
   color: #9c8f7b;
 }
+
+.mp-chart-scroll{max-width:100%;overflow:auto}.mp-chart{min-width:850px}

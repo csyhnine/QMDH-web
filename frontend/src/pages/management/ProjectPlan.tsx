@@ -168,7 +168,7 @@ export default function ProjectPlan({
         </p>
       ) : null}
       {!ready && !loadError ? <p>正在加载项目计划…</p> : null}
-      <div ref={host} className="mp-chart" aria-label="项目阶段交互甘特图" />
+      <div className="mp-chart-scroll"><div ref={host} className="mp-chart" aria-label="项目阶段交互甘特图" /></div>
       {!projects.length ? (
         <p className="mp-plan-empty">暂无项目。新建项目并添加设计阶段后，即可拖动安排时间。</p>
       ) : null}

@@ -11,13 +11,15 @@
 
 ## Latest Handoffs
 
-### [2026-10-16] 公司管理层项目台账与甘特图 — WIP，发布待验收
+### [2026-10-16] 公司管理层项目台账与甘特图 — 已部署
 
-- 分支 codex/management-project-planning；独立 company_* 权限/单位隔离，admin/ops 不自动获得财务权限。新二分院按用户确认五个职务与现有账号唯一对应，真实授权待迁移后以私有脚本写入，不修改既有角色/分组。
-- 新 /management/projects 年度台账覆盖全部字段，人员名册独立于网站账号，阶段/里程碑/进度/分配比例、按项目/人员甘特、重叠提示、CSV、归档/恢复、版本冲突保护和修订快照。无真实项目明细，禁止填假项目。金额 Decimal→JSON 字符串，未知 null。
-- 迁移 a16c9e74b821 追加三列四表；本地 196 passed/1 skipped/16 subtests；前端 39 项、23 既有/0 新增类型错误/构建通过。浏览器工具 kernel assets 路径报错，只有事件级前端验收。
-- 配对备份 /www/backup/qmdh-release-20261016-management-projects 与 E:/backups/QMDH-web/release-20261016-management-projects；5773 媒体/零增量，8 文件 SHA256 校验；restore-media-chain.json 引用前一完整包链，原配置 env/key 不变。接下来新镜像恢复副本迁移、HTTP 权限/持久测试、部署及真实名单最小授权。
-- 原 styles.css 13 行、比较文档与临时脚本不提交；历史生成数据/原二四分院分组/CAD/18010/媒体卷保护。当前 Safe to hand off: Yes，属于本地 WIP，勿标已部署。
+- db376ec / 生产运行合并 3ba7989d；/management/projects，年度台账全字段、人员名册、阶段/里程碑/进度/分配比例、按项目/人员甘特及日历日超额提示、CSV、归档恢复、版本冲突保护/修订快照。无真实项目明细，不填假项目。
+- 独立 users.company_management/unit/position，当前个人 Bearer＋实时单位隔离；网站 admin/ops 不自动获得财务权限。用户确认的新二分院五位管理层唯一匹配现有账号后授权，角色/旧二四分院分组不改。名册目前仅五位确认人员，可自行补员工，不赋予名册成员网站权限。授权已记审计，私有脚本不入 Git。
+- 迁移 a16c9e74b821（三列四表）。生产恢复副本保留 45 原业务表计数、70 账号姓名/角色/分组；真实会话、五人访问、普通管理员拒绝、保存/归档/冲突/修订/撤权通过。空库直接旧链缺 chat_messages 已单列 TODO；现有建表流程后新迁移通过，未改旧迁移。
+- 本地后端 196 passed/1 skipped/16 subtests，CI 38865978617 成功：Linux 197 passed/16 subtests、前端 39 项/23 既有/0 新增类型错误/构建。组件事件覆盖新增阶段、保存、冲突保留输入；浏览器 kernel assets 路径故障，未宣称真实登录点击验收。
+- 配对备份 release-20261016-management-projects（/www/backup/qmdh-release-20261016-management-projects 与 E:/backups/QMDH-web/release-20261016-management-projects）发布前后数据库/config/5773 媒体零增量、23 份文件 SHA256 校验；restore-media-chain.json 引用旧完整链，旧镜像标签保留，env/key 不变。隔离验证库已删除，正式业务不删。
+- backend healthy/三 worker/新前端已运行；SQL READ ONLY 正式数据验证五人权限/台账/名册、无假项目、网站管理员/ops 拒绝。公网管理接口未登录 401、前端入口/health 200，ManagementProjectsPage-C61G32Jb.js；六条 CAD 代理检查通过，FFmpeg/Xvfb/ODA 输入、Nano Banana 生产历史差异、媒体卷/18010、原 styles 13 行等均保护。详情 archive/handoff-2026-10-16-management-projects.md。
+- Safe to hand off: Yes。
 
 ### [2026-10-16] 系统通路建议与人工修改 — 已部署
 
@@ -39,4 +41,3 @@
 - backend healthy/3 worker/新前端已发布；公网六条 CAD 路由直接 401、健康 200、新 CadExtractPage-BYY76q7I.js 含新界面；ODA/Xvfb/FFmpeg 仍存在，Alembic 仍 f7g8h9i0j1k2，env SHA256 cca2d6f79f121cd430fbc5b1c81d1cb45fdea49c488fb590d62b2afc1772a59f 不变。原样式 13 行、比较文档、临时文件与生产历史差异保护。详见 archive/handoff-2026-10-16-cad-preparation.md。
 - 边界：仅手动预留家具禁放带，墙体连通、门洞、核心筒识别、容量与目标型方案未实现；界面明确说明。
 - Safe to hand off: Yes。
-

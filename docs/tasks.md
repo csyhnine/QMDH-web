@@ -1,6 +1,6 @@
 # Tasks
 
-Last aligned: `2026-10-15`。旧任务原文与开发顺序完整保存在 `archive/document-baseline-before-2026-10-08-alignment/tasks.md`，不作为当前排期。
+Last aligned: `2026-10-16`。旧任务原文与开发顺序完整保存在 `archive/document-baseline-before-2026-10-08-alignment/tasks.md`，不作为当前排期。
 
 ## Rules And Current Goal
 
@@ -15,7 +15,8 @@ Last aligned: `2026-10-15`。旧任务原文与开发顺序完整保存在 `arch
 
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
-| management-projects-001 | 公司管理层年度台账与人员甘特排期 | IN_PROGRESS（本地 WIP） | 独立公司权限、单位隔离，二/四分院合并新二分院；全部台账字段、人员、阶段/里程碑、并发保护与修订留存；测试/备份/迁移/部署待验收，禁止覆盖原 styles 改动及历史业务 |
+| management-projects-001 | 公司管理层年度台账与人员甘特排期 | DONE（已部署，db376ec） | 独立公司权限/单位隔离，五位已核对账号授权；台账全字段、人员、阶段甘特/里程碑/重叠、CSV、归档/版本保护；迁移 a16c9e74b821，生产副本与线上只读验证通过，无示例项目；真实浏览器点击因工具故障未验收 |
+| migration-bootstrap-001 | 历史空库迁移链完整性 | TODO | 纯空库 alembic upgrade head 在旧 chat_messages attachments 迁移缺表；生产副本升级和 Base.metadata 建表后新迁移均通过。本轮不改旧链，后续用独立任务修复并建立从零回归 |
 | cad-auto-route-001 | 系统通路建议与人工修改 | DONE（已部署，23ccfa8） | 只读建议、完整宽度避障/部分连通提示；预览采用保留手画，支持修改折点/宽度/起点与删除 |
 | cad-preparation-001 | 布置前尺度、功能与主通路确认 | DONE（已部署，cfdccca） | 每平面两点校准、明确用途/保留空白、手动主通路家具禁放；旧方案保留，条件失效须重确认；不自动重跑旧图 |
 | cad-fitout-timeout-001 | 布置结果被外层代理超时截断 | DONE（已部署） | 宝塔 CAD extracts 前缀等待 300s；已纠正前缀尾斜杠导致列表循环跳转，内部 rewrite 兼容浏览器已缓存的 301，补六条只读路由检查；已存三套方案，不重跑原记录；ops/nginx/cad-extracts.conf 可恢复 |

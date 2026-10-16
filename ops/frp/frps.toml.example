@@ -1,0 +1,16 @@
+# frp v0.71.0; all paths are inside the container. No dashboard/vhost/UDP.
+bindAddr = "0.0.0.0"
+bindPort = 7000
+proxyBindAddr = "127.0.0.1"
+detailedErrorsToClient = false
+auth.method = "token"
+auth.additionalScopes = ["HeartBeats", "NewWorkConns"]
+auth.tokenSource.type = "file"
+auth.tokenSource.file.path = "/run/frp/auth-token"
+transport.tls.force = true
+transport.tls.certFile = "/run/frp/server.crt"
+transport.tls.keyFile = "/run/frp/server.key"
+transport.tls.trustedCaFile = "/run/frp/client-ca.crt"
+log.to = "console"
+log.level = "info"
+log.disablePrintColor = true

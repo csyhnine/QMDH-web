@@ -13,6 +13,7 @@ Last aligned: `2026-10-16`。旧任务原文与开发顺序完整保存在 `arch
 
 ## Next Conversation Checkpoint
 
+- 当前新任务已切换为 comfyui-frp-001：按用户要求先准备服务器 FRP 与网站接入方案，先文生图后图生图；以 docs/comfyui-frp.md 的当前状态为准。
 - 用户已要求于 2026-10-16 先留档，后续在新对话继续。冷启动读取 archive/handoff-2026-10-16-next-conversation.md，10-13 的 next-conversation 仅保留历史，不代表当前部署。
 - 管理台账与四视图工作台均已上线，admin 已明确授权；下一步按用户新需求，优先实际管理员页面/真实资料验收，不能用本地样例冒充业务记录。本次留档不新增开发范围。
 
@@ -20,6 +21,7 @@ Last aligned: `2026-10-16`。旧任务原文与开发顺序完整保存在 `arch
 
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
+| comfyui-frp-001 | Windows ComfyUI 私有隧道与接入准备 | IN_PROGRESS（本地方案，未部署） | 已准备 STCP/mTLS/token/Docker 隔离模板及交接契约；先文生图后图生图；待本机 CSR、API 工作流/绑定/真实 history，未生成生产秘密或注册 provider |
 | management-workbench-002 | 管理工作台与交互排期 | DONE（已部署，514a8cb/ce31075） | 四视图、列分组排序/右侧详情/搜索选人；DHTMLX 10.0.3 MIT，拖动预览/版本保存/失败保留；本地 Chrome 操作与窄屏检查、CI 后端 197/前端 43 通过，仅替换 frontend，六人授权/API/业务数据保留，无迁移 |
 | management-projects-001 | 公司管理层年度台账与人员甘特排期 | DONE（已部署，db376ec） | 独立公司权限/单位隔离，五位已核对账号及后续明确授权的 admin 已开通；台账全字段、人员、阶段甘特/里程碑/重叠、CSV、归档/版本保护；迁移 a16c9e74b821，生产副本与线上只读验证通过，无示例项目；真实浏览器点击因工具故障未验收 |
 | migration-bootstrap-001 | 历史空库迁移链完整性 | TODO | 纯空库 alembic upgrade head 在旧 chat_messages attachments 迁移缺表；生产副本升级和 Base.metadata 建表后新迁移均通过。本轮不改旧链，后续用独立任务修复并建立从零回归 |
@@ -53,6 +55,17 @@ Last aligned: `2026-10-16`。旧任务原文与开发顺序完整保存在 `arch
 | video-seedance-502-001 | Seedance 参考图代理/DNS | TODO | 历史上游问题；先确认当前是否仍发生 |
 
 ## Current Task Details
+
+### Task: [comfyui-frp-001] Windows ComfyUI 私有接入准备
+
+- 状态：IN_PROGRESS（2026-10-16 本地，未部署）。用户要求先准备配置与接入方案，另一本机 agent 负责客户端/ComfyUI；首批先文生图、后图生图。
+- 本轮边界：ops/frp 公开模板与 docs/comfyui-frp.md 契约，生产只读端口/路由/网络核验。STCP 无公网 remotePort，7443/TCP 为拟用 FRP 入口；mTLS + token + STCP secret，专用 internal 网络仅 backend/worker 接入。
+- 代码事实：现有 provider 无 ComfyUI adapter，不能把配置准备标为网站接入完成。后续拆分材料签发/网络发布/文生图 adapter/图生图，不自行发布或创建业务 provider。
+- 禁止：公开 ComfyUI、跳过证书校验、聊天/Git 交接秘密、覆盖原 styles/比较文档/_tmp_*、更换 key、影响 CAD/18010/数据卷、未协调即重建运行任务的 worker。
+- 验收：模板通过 TOML/固定版本 frp verify 与合并 Compose 检查；后续需错误凭证拒绝、backend/全部 worker 可达、frontend/公网不可达、真实生成结果入库及断线/恢复验收。当前仅准备，不能声称真实隧道或生成已验收。
+- 依赖：本机 windows.csr、API 格式工作流、白名单绑定、模型/节点版本、成功/失败 history 与图片样例；秘密受限目录/SSH 交接，私钥各自保管。安全组未核验，尚无可领取生产证书/token。
+- 文档同步：本说明、handoff、architecture、docs/comfyui-frp.md；2.0 沿用 Task/ProviderCall/Asset，工作流版本/hash 与 prompt_id 支持追溯，保持账号归属，不引入任意 graph 执行。
+
 
 ### Task: [cad-auto-route-001] 系统通路建议与人工修改
 

@@ -1,0 +1,49 @@
+# Overlay on docker-compose.yml. Preparatory only: do not apply to production yet.
+services:
+  comfy-frps:
+    image: qmdh-frp:0.71.0
+    build:
+      context: ${QMDH_FRP_RUNTIME_DIR:-/opt/qmdh-frp}
+      dockerfile: Dockerfile
+    command: ["/frps", "-c", "/run/frp/frps.toml"]
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:7443:7000/tcp"
+    volumes:
+      - ${QMDH_FRP_RUNTIME_DIR:-/opt/qmdh-frp}/server:/run/frp:ro
+    networks: [frp_control]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: &frp_logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  comfy-visitor:
+    image: qmdh-frp:0.71.0
+    command: ["/frpc", "-c", "/run/frp/visitor.toml"]
+    restart: unless-stopped
+    depends_on: [comfy-frps]
+    volumes:
+      - ${QMDH_FRP_RUNTIME_DIR:-/opt/qmdh-frp}/visitor:/run/frp:ro
+    networks:
+      frp_control: {}
+      comfy_backend:
+        ipv4_address: 172.30.218.2
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: *frp_logging
+  backend:
+    networks: [default, comfy_backend]
+  worker:
+    networks: [default, comfy_backend]
+
+networks:
+  frp_control: {}
+  comfy_backend:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.218.0/28

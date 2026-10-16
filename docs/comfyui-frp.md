@@ -1,0 +1,93 @@
+# Windows ComfyUI / QMDH 私有接入交接
+
+状态：2026-10-16，仅方案与配置模板，未部署、未签发生产材料、未开安全组、未注册网站 provider。用户确认先文生图，后图生图。本机另一 agent 负责 Windows frpc / ComfyUI；本会话负责服务器与网站。无自动跨 chat 发消息。
+
+## 对接值
+
+| 项目 | 约定 |
+|---|---|
+| Windows serverAddr | `120.79.227.11`（现有服务器 SSH 地址；首次联调再核对） |
+| 公网 FRP 端口 | `7443/TCP`，准备值，当前未监听/未开放；不是 HTTPS 网站路径 |
+| FRP 版本 | 双方固定 `0.71.0`，已查官方 tag；不是“自动使用最新版本” |
+| TLS serverName | `frp.qmdh.internal`，server 证书 SAN 必须包含此 DNS 名；连接仍用上方 IP，无需为此名字配置公共 DNS |
+| Windows user / proxy | `qmdh-windows` / `comfyui`，类型 `stcp` |
+| visitor user | `qmdh-backend`；Windows allowUsers 仅此值；用户名不是独立密码 |
+| Windows ComfyUI | `127.0.0.1:8188`，仅本机绑定，不开 Windows 入站端口 |
+| 网站服务端 base URL | `http://comfy-visitor:8188`，无 `/v1`；backend 与所有 worker 使用 |
+| 内部 visitor 监听 | `172.30.218.2:8188`；绑定专用网卡，不绑定控制网络网卡 |
+| 公网 ComfyUI 端口 | 无，STCP 不设置 remotePort；不配置 nginx 转发或前端直连 |
+
+只读核对：生产 Compose v5.1.3；未发现 frps 命令；7443/7000/8188 没有 TCP 监听；宿主路由与现有 Docker 网段未与拟用 `172.30.218.0/28` 重叠。云安全组、上游策略未检查，以上不代表公网已可用。部署当天重新检查全部 Docker IPAM、路由和端口。
+
+## 网络与隔离
+
+Windows frpc → 公网 7443 → 容器 frps:7000；服务器 visitor frpc → 私有 frp_control → frps。visitor 在第二张网卡 comfy_backend 上提供 8188，仅 backend、worker 加入该 internal 网络。frontend、数据库、Redis 和其他服务不加入。backend/worker 同时保留原 default 网络，原有 DB/Redis/外部 API 出站路径保持。
+
+`ops/frp/compose.frp.yml` 是主 compose 的显式 overlay，不能独立替代主文件。内部 DNS 返回 visitor 的接口地址；listener 仅绑定 comfy_backend 静态地址。backend 的 localhost 是自己的容器，不能填 `127.0.0.1:8188`；也不通过 host.docker.internal 或宿主公网端口绕行。
+
+FRP 唯一 host publish 为 7443:7000；proxyBindAddr 强制 frps 容器 loopback，纵使误注册 TCP 代理也不向宿主发布。禁 host network、privileged、Docker socket、dashboard、HTTP/HTTPS vhost、KCP/QUIC/UDP。信任边界包括服务器 root/Docker 管理员；容器网络不能隔离这些管理员。
+
+安全组只放 7443/TCP，优先来源为 Windows 当前公网出口 /32；动态出口变化先更新来源规则，不关闭认证。Docker published port 可能绕过普通 UFW INPUT，需核对云安全组和 Docker 转发防火墙，不能仅凭 UFW 输出宣称隔离成功。8188/7000 不开放公网，不新增网站路径。
+
+## 证书与秘密交接
+
+使用专用 server CA 与 client CA（不复用网站证书私钥），服务端强制 mTLS；双方 frpc 均配置 server CA + serverName 核验服务端，frps 用 client CA 核验客户端。Windows 与 visitor 使用不同 clientAuth 叶证书。另用独立 32 随机字节 token 和另一份 32 随机字节 STCP secret（64 位 hex）；不得复用 SSH、网站管理员密码或 QMDH_ENCRYPTION_KEY。
+
+签发步骤由服务器侧后续执行：
+
+1. 专用 CA 在离线/受保护位置创建，CA 私钥不得挂进运行容器或交给客户端。server 叶证书：SAN DNS:frp.qmdh.internal、EKU serverAuth；visitor/windows 叶证书：不同 CN、EKU clientAuth；叶证书 basicConstraints CA:FALSE、有效期建议 90 天，CA 建议一年。核对系统时间与提前续期。
+2. 本机 agent 在 `C:\ProgramData\QMDH-FRP` 创建 windows.key 与 windows.csr，私钥仅该运行账号/Admin/SYSTEM 可读。只将 CSR 送入受限交接目录；服务器校验 CSR 签名、用途后签发，返回 windows.crt。visitor/server 的私钥留服务器，各自运行目录分开。
+3. 服务器运行目录 `/opt/qmdh-frp/{server,visitor}`，分别仅包含所需配置与叶证书/CA 公钥/token；目录 root:65532 0750、文件 root:65532 0640，使镜像 UID 65532 可读。visitor.toml 内含 STCP secret，同样按秘密管理。不挂载整个备份目录。
+4. 推荐交接目录 `E:\backups\QMDH-web\comfyui-frp-handoff\windows`，ACL 关闭继承，仅 Admin/SYSTEM 和实际 frpc 服务账号。使用现有已核验主机指纹的 SSH/SFTP 下载最小包：server-ca.crt、windows.crt、auth-token、已填 STCP secret 的 windows.toml、材料 manifest。本机 windows.key 不进入下载包。CSR 先置该目录，再经同一 SSH 通道上传签发。若换一台机器，用收件人公钥加密包，解密密钥走另一路。
+5. 聊天/Git 只交接路径、证书 SHA256 指纹、serial、notAfter、CSR 公钥指纹和配置版本，不贴 token、STCP secret、私钥、完整已填配置；秘密本身不写入 manifest。CA 指纹用独立已信任渠道核对，不能只信随包 manifest。目录不位于网站根目录，不经附件/公开 URL 传输。服务端材料保存在受限备份链中。
+6. auth-token 文件使用无换行 ASCII hex，双方 tokenSource 从文件读取；STCP secret 只填受限运行副本。模板中的 REPLACE 字符串不得用于运行。任一秘密泄漏，轮换 token 与 STCP secret；证书泄漏另换叶密钥。FRP 不能被假定支持单张客户端证书吊销，紧急吊销需要更换受信 client CA、重新签发未受影响客户端并重启隧道。
+
+当前没有生产 token、CA 或证书可领取；待本机 CSR 就绪后签发。此文的地址/端口/公开模板可直接给本机 agent。
+
+## 配置与部署准备
+
+模板：`ops/frp/frps.toml.example`、`visitor.toml.example`、`windows.toml.example`、`Dockerfile`、`compose.frp.yml`。运行副本与任何 `.key`、秘密均只放 Git 外目录。
+
+官方 Linux amd64 归档 `frp_0.71.0_linux_amd64.tar.gz` SHA256：`84f27e39f11169f7adcef8e8b70c9329de17747b1f14dad9fb95eef5682ea716`。先对下载包核验，再将 frps/frpc 提取到 `/opt/qmdh-frp/bin/`，复制本目录 Dockerfile 到 `/opt/qmdh-frp/Dockerfile`，用 scratch 构建本地 `qmdh-frp:0.71.0`。Windows agent 从同一官方 release 获取自己的架构包，独立核验该资产的官方 SHA256，不能使用 Linux 哈希。
+
+准备生产目录后，用相同版本二进制分别 `frps verify -c ...` / `frpc verify -c ...`。证书链、SAN/EKU、文件权限另外核验，verify 不等于 TLS 联通。先构建 frps 镜像（visitor 复用），再显式合并主文件与 overlay，用 `docker compose -f docker-compose.yml -f ops/frp/compose.frp.yml config --quiet` 验证，不将完整展开配置打印进日志（其中可能带原 .env）。
+
+实际发布须先保全原数据库/config/媒体恢复链和镜像。先独立启动 frps/visitor 并核验 TLS；backend/worker 加网需要容器重建，排空/协调运行任务，不能直接中断现有生成。网络变更不要求重建 backend 镜像；以后发布适配器时保留 ODA 私有 build args/包及 Nano Banana 生产差异。无数据库迁移，不动旧 key、18010、CAD 或管理台账。回退移除 overlay 对 backend/worker 的网络接入并停用这两个 FRP 服务，保留材料、业务记录和媒体，不 down -v。
+
+## 工作流接口约定 v1（待双方实测签收）
+
+网站现有 `provider_strategy.py`、`task_executor.py` 与 `provider_adapters/base.py` 尚无 ComfyUI 策略。后续新增独立 `comfyui` adapter 与能力 `image.generate`，第二阶段 `image.edit`；不开任意 URL 代理，不伪装 OpenAI compatible。provider 先禁用，工作流确认和联调通过后再给正式模型入口。
+
+本机 agent 提供以下文件到受限交接目录 `workflow/`，不含人名、真实业务图或秘密：
+
+- `txt2img.api.json`：API 格式 node-id → class_type/inputs，不能仅交 UI 的 nodes/links 格式；不预设任何 node ID。
+- `workflow-manifest.json`：workflow_id/version/SHA256；ComfyUI commit、Python/Torch/CUDA、显卡/显存、自定义节点仓库与 commit；checkpoint/VAE/LoRA 名称及哈希；支持尺寸范围/步长、batch 上限、seed 范围、steps/CFG/sampler/scheduler 的允许值、平均/最长耗时。
+- `bindings.json`：业务字段到 node_id/input/type/range 的显式映射。文生图至少 positive_prompt、negative_prompt（可选但明确）、width、height、seed、steps、CFG、sampler、scheduler、batch_size、filename_prefix；明确哪些参数固定。图生图另加 LoadImage 输入与 denoise。只有白名单字段可被网站替换，模型/自定义节点不能由普通用户任意指定。
+- `history-success.json`、`history-error.json`（可用脱敏/合成失败样例并注明）、成功实际图片、输出节点 ID 白名单、输出结构和 MIME。首轮固定 batch=1/单 GPU 并发=1；网站三 worker 共用一个全局 Redis 配额，不是每个 worker 各允许一个。若本地同时手动使用 GPU，需明确共享队列/优先级和等待上限。
+
+请求与取回：
+
+1. QMDH 创建现有账号所有的 Task，保存 workflow 版本/hash、已解析参数及实际 seed；worker 读取服务端批准模板，深拷贝后按绑定改值。客户端不传任意 graph、模型文件路径或 base URL。
+2. 提交 `POST /prompt`，JSON 为 `{"prompt": <API graph>, "client_id": <task-specific UUID>}`。记录返回 prompt_id 并与 QMDH task_id/user_id 对应，检查 HTTP 和 node_errors；成功入队不表示生成成功。先不依赖新版本才有的客户端指定 prompt_id。
+3. 每 2 秒轮询 `GET /history/{prompt_id}`，请求连接超时初拟 5 秒/读取 30 秒、总队列+执行预算初拟 20 分钟，拿到真实性能后调整。history 空对象表示尚无终态，不能算成功或失败；检查 status.completed/status_str、execution_error/interrupted 和白名单输出。WebSocket `/ws?clientId=...` 可补进度，但断线后仍以 history 恢复，不靠 WS 二进制预览当最终产物。
+4. 首轮仅从已确认输出节点的 `outputs[node_id].images[]` 取 filename/subfolder/type；type 必须 output，用固定 base URL 的 `GET /view` 查询参数编码下载，拒绝绝对路径、..、任意外链和跳转。限制图片数/字节数/像素并解码确认。以后视频输出结构另立契约。
+5. 图片由现有 media_storage 写入 QMDH 管理存储，按 Task 归属落 Asset，再沿用 ProviderCall/usage ledger。原始图必须落服务器后才完成任务，网站前端只读现有媒体 URL，不知道隧道地址或 Windows 路径。保留 prompt_id、workflow hash、输出引用与下载状态，避免 worker 重启后重复生成/重复扣账；价格未核定不套用云模型计费。
+6. POST /prompt 响应丢失属于提交状态未知，禁止盲目重试；能通过已记录关联/queue/history 确认才续接，不能确认就明确待核查。Windows 离线、OOM、缺节点、超时、断网分别报告。超时不承诺已停止本机任务；不调用全局 interrupt/clear 误杀本机手动任务。取消按该 prompt_id 协商支持版本，第一期无精确取消时保留限制。
+7. 图生图阶段：worker 从当前账号可访问的参考图读字节，multipart `POST /upload/image`，image 文件名使用 QMDH 唯一 task 前缀、type=input、overwrite=false。使用返回的 name/subfolder 构造 LoadImage 值，再提交；不向 Windows 传服务器本地路径，也不让 Windows 拉取公开参考图 URL。不自动删除本机历史。
+
+## 本轮验证记录
+
+- 本地 Python 3.12 tomllib：三份 TOML 模板全部解析通过。
+- 生产临时目录内合并现有主 Compose 与本 overlay，`docker compose ... config --quiet` 通过，未启动服务。
+- 服务器下载官方 Linux 包超过约 150 秒仍未完成，已仅中止本轮临时下载，临时目录随上下文清理；尚未完成包哈希、frps/frpc verify、镜像构建、TLS 与业务联通验证。不得据此标记可部署。
+- `git diff --check` 通过；没有改运行时代码，本轮不重复执行全站回归。
+
+## 联调验收与后续任务
+
+上线前必须留下证据：错误 token/错误 CA/错误 SAN/无客户端证书均拒绝；Windows→frps mTLS 成功；STCP 错误 secret 拒绝；backend 和三个 worker 内分别 GET /system_stats 成功；frontend 容器无法访问专用 8188；公网探测 8188/7000 不通且无新增 nginx 路径；frpc 断开后网站明确不可用、重连可恢复。只 GET 探活不等于真实生成通过。
+
+之后用双方同意的合成提示词进行 1 次文生图（消耗本机 GPU，正式启用前安排），核对 prompt_id→history→图片 SHA256→QMDH 归属持久化；再验证 worker 重启/提交不确定性/超时/并发锁/部分下载失败，最后接图生图。不能因隧道连通就标网站接入完成。
+
+当前阶段不新增产品执行逻辑；材料准备、网络部署、文生图 adapter、图生图分别验收。2.0 兼容：沿用 Task/ProviderCall/Asset 与账号所有权，工作流版本和 prompt_id 提供追溯/恢复依据；不引入任意工作流执行器或新的管理权限。
+
+官方依据：[FRP v0.71.0 发布](https://github.com/fatedier/frp/releases/tag/v0.71.0)、[FRP TLS](https://gofrp.org/en/docs/features/common/network/network-tls/)、[visitor 配置](https://gofrp.org/en/docs/reference/visitor/)、[版本固定服务端示例](https://github.com/fatedier/frp/blob/v0.71.0/conf/frps_full_example.toml)、[客户端示例](https://github.com/fatedier/frp/blob/v0.71.0/conf/frpc_full_example.toml)、[ComfyUI API 示例](https://github.com/Comfy-Org/ComfyUI/blob/master/script_examples/websockets_api_example.py)、[ComfyUI server 路由](https://github.com/Comfy-Org/ComfyUI/blob/master/server.py)。ComfyUI master 仅作接口依据，最终以本机实际 commit/样例核验。

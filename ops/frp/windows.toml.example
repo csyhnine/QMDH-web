@@ -1,0 +1,26 @@
+# Client agent: replace paths with your protected absolute Windows paths.
+serverAddr = "120.79.227.11"
+serverPort = 7443
+user = "qmdh-windows"
+loginFailExit = false
+auth.method = "token"
+auth.additionalScopes = ["HeartBeats", "NewWorkConns"]
+auth.tokenSource.type = "file"
+auth.tokenSource.file.path = 'C:\ProgramData\QMDH-FRP\auth-token'
+transport.protocol = "tcp"
+transport.tls.enable = true
+transport.tls.serverName = "frp.qmdh.internal"
+transport.tls.trustedCaFile = 'C:\ProgramData\QMDH-FRP\server-ca.crt'
+transport.tls.certFile = 'C:\ProgramData\QMDH-FRP\windows.crt'
+transport.tls.keyFile = 'C:\ProgramData\QMDH-FRP\windows.key'
+log.to = "console"
+log.level = "info"
+log.disablePrintColor = true
+
+[[proxies]]
+name = "comfyui"
+type = "stcp"
+secretKey = "REPLACE_WITH_64_HEX_STCP_SECRET"
+allowUsers = ["qmdh-backend"]
+localIP = "127.0.0.1"
+localPort = 8188

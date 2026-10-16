@@ -1,0 +1,27 @@
+serverAddr = "comfy-frps"
+serverPort = 7000
+user = "qmdh-backend"
+loginFailExit = false
+auth.method = "token"
+auth.additionalScopes = ["HeartBeats", "NewWorkConns"]
+auth.tokenSource.type = "file"
+auth.tokenSource.file.path = "/run/frp/auth-token"
+transport.protocol = "tcp"
+transport.tls.enable = true
+transport.tls.serverName = "frp.qmdh.internal"
+transport.tls.trustedCaFile = "/run/frp/server-ca.crt"
+transport.tls.certFile = "/run/frp/visitor.crt"
+transport.tls.keyFile = "/run/frp/visitor.key"
+log.to = "console"
+log.level = "info"
+log.disablePrintColor = true
+
+[[visitors]]
+name = "qmdh-comfy-visitor"
+type = "stcp"
+serverUser = "qmdh-windows"
+serverName = "comfyui"
+# Replace ONLY in the protected runtime copy, never commit a populated file.
+secretKey = "REPLACE_WITH_64_HEX_STCP_SECRET"
+bindAddr = "172.30.218.2"
+bindPort = 8188

@@ -11,6 +11,15 @@
 
 ## Latest Handoffs
 
+### [2026-10-16] 系统通路建议与人工修改 — WIP 待发布
+
+- 分支 codex/cad-auto-circulation；新只读 route-suggestions 生成入口分区/接待/大分区起点至可达分区的通路树，完整宽度避让墙柱/已知核心筒；未识别入口、不可达、缺墙图明确提示，不自动保存或穿墙补线。
+- 用户可预览采用、指定起点、手画、删除、修改折点/宽度；采用只换 system，manual/旧无来源保留，改后的系统通路转 manual。旧条件签名兼容，无迁移，尺度/用途确认保留。
+- 本地后端 181 passed/1 skipped/16 subtests（新增 9 项），前端 34 项/23 既有、0 新增类型错误/构建通过。事件级组件测试覆盖移点/改宽/保留手画/取消；cua 连接因 kernel assets 路径报错，本轮无真实浏览器点击验收。
+- 配对备份 release-20261016-cad-auto-route 两端校验、5773 媒体/空增量；restore-media-chain.json 引用前次完整包链，ODA 包仍在前次私有备份。env/key 不变，原文件/旧图/18010/数据卷保护。
+- 后续：提交推送、CI、新镜像隔离 HTTP 与真实图只读副本试跑，再发布/补运行证据。旧正式图不自动保存条件、不重算布置。
+- Safe to hand off: Yes（已记录 WIP）。
+
 ### [2026-10-16] CAD 布置前确认第一阶段 — 已部署
 
 - 新分支 codex/cad-layout-preparation，落实两点尺度校准、明确功能/保留空白、手动主通路家具禁放；原件/图像/既有方案/撤销历史保留。payload_json 存条件/签名，无迁移，新布置须确认，旧记录不自动重跑。
@@ -30,12 +39,3 @@
 - 方案代码仍为沿墙/主家具/网格，生成成功后出现切换，按通过状态与 loss 选默认；刷新可读取已保存结果。
 - 配置备份 /www/backup/qmdh-cad-timeout-20261016 与 E:/backups/QMDH-web/cad-timeout-20261016；回退移出新增 extension conf 后 nginx -t/reload。不改镜像/env/数据库/媒体/18010，原未提交样式等保护。
 - 分支 codex/cad-proxy-timeout；Safe to hand off: Yes。
-
-### [2026-10-16] Linux ODA 转换器 — 已部署
-
-- 用户新授权配置转换器，官方 Linux 27.9 已下载并校验；旧的等包限制由本次授权覆盖，其余旧图保护不变。
-- 官方 ODA 27.9/Xvfb/Qt/OpenGL 已在后端与三个 worker 镜像持久接入，0346eee/b1532b1 已推送，生产运行合并 26095b9d；安全传参/超时进程组清理生效，无迁移/算法改动。
-- 本地后端 161 passed/1 skipped/16 subtests + CAD 专项 31 passed；Linux CI 162 passed/16 subtests、前端 31 项/类型基线/构建通过。新公开 DWG 2018 转换保留 LINE/预览、隔离 HTTP 201/status=ok，运行后端转换复验通过；旧 ce_0abae8a9402f 仍 needs_conversion，未重跑/改正式记录。
-- 配对备份 release-20261016-linux-oda 两端校验，5764 媒体/2 文件增量、官方包和日志保留；env 仅三个转换器键变化（key 不变），前端镜像不变，仅 nginx 平滑 reload。
-- 分支 codex/linux-dwg-converter，详见 archive/handoff-2026-10-16-linux-oda.md；原样式/临时文件/生产四文件差异继续保护。
-- Safe to hand off: Yes。

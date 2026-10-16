@@ -25,6 +25,8 @@ def preparation_state(floor: dict[str, Any]) -> bytes:
 def preparation_signature(floor: dict[str, Any], mask_bytes: bytes) -> str:
     inputs = floor.get("preparation") or {}
     constraints = {key: inputs.get(key) for key in ("calibration", "room_kinds", "routes")}
+    if inputs.get("entry") is not None:
+        constraints["entry"] = inputs["entry"]
     return hashlib.sha256(mask_bytes + preparation_state(floor) + json.dumps(constraints, sort_keys=True).encode()).hexdigest()
 
 
@@ -55,7 +57,7 @@ def save_preparation(payload: dict[str, Any], inputs: dict[str, Any]) -> dict[st
         raise ValueError("请为每个分区明确选择一种功能，也可以选择保留空白")
     for route in inputs["routes"]:
         points = route["points"]
-        if any(math.hypot((a["x"]-b["x"])*width, (a["y"]-b["y"])*height) < 2 for a, b in zip(points, points[1:])):
+        if any(math.hypot((a["x"]-b["x"])*width, (a["y"]-b["y"])*height) < .5 for a, b in zip(points, points[1:])):
             raise ValueError("通路相邻点太近，请撤销重复点")
     previous_mpp = math.sqrt(float(floor.get("square_meters_per_pixel") or 0.0025))
     factor = mpp / previous_mpp

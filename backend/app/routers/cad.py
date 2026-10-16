@@ -21,6 +21,8 @@ from app.schemas import (
     CadProgramReviewIn,
     CadRoomEditIn,
     CadPreparationIn,
+    CadRouteSuggestionsIn,
+    CadRouteSuggestionsOut,
 )
 from app.services.cad.extract_service import build_cad_extract
 from app.services.cad.fitout import write_floor_fitout
@@ -276,6 +278,28 @@ def save_cad_program_review(
     db.commit()
     db.refresh(record)
     return _to_cad_extract_out(record)
+
+
+@router.post("/extracts/{extract_id}/route-suggestions", response_model=CadRouteSuggestionsOut)
+def suggest_cad_routes(
+    extract_id: str,
+    inputs: CadRouteSuggestionsIn,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> dict:
+    from app.services.cad.circulation import suggest_routes
+
+    if auth_user.user_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    record = db.scalar(select(CadExtract).where(CadExtract.public_id == extract_id.strip(), CadExtract.user_id == auth_user.user_id))
+    if record is None:
+        raise HTTPException(status_code=404, detail="CAD extract not found")
+    try:
+        return suggest_routes(dict(record.payload_json or {}), inputs.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail="本层图像文件缺失，无法生成通路建议") from exc
 
 
 @router.post("/extracts/{extract_id}/preparation", response_model=CadExtractOut)

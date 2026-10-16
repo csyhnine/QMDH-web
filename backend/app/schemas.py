@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -1341,13 +1341,33 @@ class CadScaleCalibration(BaseModel):
 class CadReservedRoute(BaseModel):
     points: list[CadPlanPoint] = Field(min_length=2, max_length=30)
     width_m: float = Field(ge=0.8, le=4, allow_inf_nan=False)
+    origin: Literal["manual", "system"] = "manual"
 
 
-class CadPreparationIn(BaseModel):
+class CadPreparationBase(BaseModel):
     floor_index: int = Field(ge=1)
     calibration: CadScaleCalibration
     room_kinds: dict[str, str] = Field(max_length=255)
+    entry: CadPlanPoint | None = None
+
+
+class CadPreparationIn(CadPreparationBase):
     routes: list[CadReservedRoute] = Field(min_length=1, max_length=12)
+    route_warnings: list[Annotated[str, Field(max_length=500)]] = Field(default_factory=list, max_length=10)
+
+
+class CadRouteSuggestionsIn(CadPreparationBase):
+    width_m: float = Field(default=1.2, ge=0.8, le=4, allow_inf_nan=False)
+
+
+class CadRouteSuggestionsOut(BaseModel):
+    routes: list[CadReservedRoute] = Field(default_factory=list)
+    entry: CadPlanPoint | None = None
+    entry_source: str
+    connected_room_ids: list[str] = Field(default_factory=list)
+    unreachable_room_ids: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    status: Literal["ok", "partial", "unavailable"]
 
 
 class CadProgramRearrangeItem(BaseModel):

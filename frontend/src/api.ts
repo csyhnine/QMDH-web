@@ -1347,7 +1347,18 @@ export type CadPreparationInputs = {
   floor_index: number;
   calibration: { points: CadPlanPoint[]; meters: number };
   room_kinds: Record<string, string>;
-  routes: Array<{ points: CadPlanPoint[]; width_m: number }>;
+  entry?: CadPlanPoint | null;
+  route_warnings?: string[];
+  routes: Array<{ points: CadPlanPoint[]; width_m: number; origin?: "manual" | "system" }>;
+};
+export type CadRouteSuggestions = {
+  routes: CadPreparationInputs["routes"];
+  entry: CadPlanPoint | null;
+  entry_source: string;
+  connected_room_ids: string[];
+  unreachable_room_ids: string[];
+  warnings: string[];
+  status: "ok" | "partial" | "unavailable";
 };
 
 export type CadExtractData = {
@@ -1999,6 +2010,8 @@ export const api = {
   ) => postJson<CadExtractRecord>(`/cad/extracts/${encodeURIComponent(extractId)}/program-apply`, payload),
   saveCadPreparation: (extractId: string, payload: CadPreparationInputs) =>
     postJson<CadExtractRecord>(`/cad/extracts/${encodeURIComponent(extractId)}/preparation`, payload),
+  suggestCadRoutes: (extractId: string, payload: Omit<CadPreparationInputs, "routes"> & { width_m: number }) =>
+    postJson<CadRouteSuggestions>(`/cad/extracts/${encodeURIComponent(extractId)}/route-suggestions`, payload),
   layoutCadFitout: (extractId: string, floorIndex: number, clear = false) =>
     postJson<CadExtractRecord>(
       `/cad/extracts/${encodeURIComponent(extractId)}/fitout?floor_index=${floorIndex}${clear ? "&clear=true" : ""}`,

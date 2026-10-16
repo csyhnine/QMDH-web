@@ -1,5 +1,7 @@
 # Server Operations Runbook
 
+2026-10-16 自动通路 23ccfa8 已部署，运行合并 f060300c；backend/worker/前端重建，backend healthy＋3 worker，无迁移、env/key 不变。备份 release-20261016-cad-auto-route 两端校验，5773 媒体/空增量；本次 restore-media-chain.json 引用 cad-preparation 目录既有完整包链及 ODA 包（未复制/删除旧包），恢复时按该链追加空增量。最新及前次目录 ACL 仅 Admin/SYSTEM，使用 (OI)(CI) 让受限文件可继承访问。回退镜像 qmdh-release-backup-{backend,worker,frontend}:20261016-cad-auto-route，不回退/删除业务 DB/媒体。只读建议接口不需迁移；隔离 HTTP 与真实图副本试跑/公网新包/路由/健康通过，真实图部分连通结论见 handoff，不自动保存建议。
+
 2026-10-16 CAD 布置前确认 cfdccca 已部署，运行合并 5ac68b6e。三服务镜像重建（保留 ODA 包/三项配置，DEBIAN_MIRROR 参数），backend/3 worker/前端已发布；无迁移，Alembic 仍 f7g8h9i0j1k2、env/key 不变。配对备份 release-20261016-cad-preparation，两端含数据库、5773 文件清单、9 文件媒体增量及旧全链/ODA 包；旧镜像 qmdh-release-backup-{backend,worker,frontend}:20261016-cad-preparation 保留。回退镜像不重置 DB/媒体，新增 CAD JSON 字段可保留。新镜像隔离 HTTP 验证和公网路由/新包/健康通过，正式旧图不自动重算。
 
 2026-10-16 CAD 布置超时修复：外层宝塔默认 60s，但真实 fitout 为 74–75s；新增 extension/120.79.227.11/qmdh-cad-extracts.conf，来源 ops/nginx/cad-extracts.conf，仅 CAD extracts 前缀 proxy_read_timeout/proxy_send_timeout 300s。现有 location ^~ / 不会阻止更长的前缀匹配。迁移/重建宝塔站点时保留此 include；nginx -t/-T 后 reload。location 前缀必须不带末尾斜杠，否则列表接口 /extracts 会被自动 301，引发后端去斜杠重定向循环；旧 301 可能被浏览器永久缓存，必须保留片段中的内部 rewrite 去掉 /extracts/ 尾斜杠（break、不向客户端重定向、保留查询）。运行 scripts/check-cad-proxy.sh 验收带/不带斜杠的列表、含查询列表与详情直接返回 401（不能只测详情/健康）。原代理配置与生效前配置两端备份 cad-timeout-20261016。回退移出新增片段后检查与 reload，不删除业务结果。

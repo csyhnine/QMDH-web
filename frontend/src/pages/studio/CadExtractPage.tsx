@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { api, type CadExtractRecord, type CadProgramRearrangeResult } from "../../api";
 import { buildCadProgram } from "../../features/studio/cadProgram";
+import { CadPreparationPanel, CAD_ROOM_KINDS } from "../../features/studio/CadPreparationPanel";
 import { useAuth } from "../../context/AuthContext";
 import { fileToDataUrl } from "../../features/studio/studioAssetUtils";
 import { formatChinaMonthDayTime } from "../../lib/datetime";
@@ -257,6 +258,7 @@ function CadExtractResult({
   const [paintMode, setPaintMode] = useState<"add" | "erase" | "create" | null>(null);
   const [saving, setSaving] = useState(false);
   const [fitting, setFitting] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [layoutScheme, setLayoutScheme] = useState<string | null>(null);
   const [editError, setEditError] = useState("");
   const planRef = useRef<HTMLImageElement | null>(null);
@@ -525,6 +527,11 @@ function CadExtractResult({
                 <h3 className="cad-floor-title">{floor?.label}</h3>
               )}
 
+              {floor ? <CadPreparationPanel key={`${record.extract_id}:${floor.floor_index}`} record={record} floor={floor}
+                busy={fitting || saving} onUpdated={onUpdated} onPendingChange={setPreparing} /> : null}
+              {floorFitout && (!floor?.preparation?.current || floorFitout.preparation_signature !== floor.preparation.signature) ? (
+                <p role="status">当前显示的是此前保存的方案，尚未应用本层最新布置条件。确认并保存条件后，点击“布置这一层”重新生成。</p>
+              ) : null}
               {layoutVariants.length > 1 ? (
                 <div className="cad-scheme-tabs" role="tablist" aria-label="布置方案">
                   {layoutVariants.map((item) => (
@@ -545,7 +552,7 @@ function CadExtractResult({
               {layoutScore?.terms ? (
                 <div className="cad-score" aria-label="损失函数">
                   <p>
-                    损失函数 {layoutScore.loss}，越低越好。通过之后只加组团、铺开和密度。
+                    排布参考分 {layoutScore.loss}，越低越符合当前规则；不代表流线和使用质量已通过验收。
                     {layoutScore.passed === false ? " 重叠、越界或撞柱超过 2%，这套另加 100，表示没有通过。" : ""}
                   </p>
                   <ul>
@@ -641,6 +648,7 @@ function CadExtractResult({
                             {room.proposal || room.function || room.zoning?.role || "待分区"}
                           </strong>
                           <span>
+                            {room.layout_kind ? `已确认${CAD_ROOM_KINDS.find(([id]) => id === room.layout_kind)?.[1] || room.layout_kind} · ` : ""}
                             {[room.zoning?.activity, room.zoning?.hygiene].filter((item) => item && item !== "中性").join(" ")}{" "}
                             {roomAreaText(room)}
                           </span>
@@ -656,7 +664,7 @@ function CadExtractResult({
                     <div className="cad-program-actions">
                       <button
                         type="button"
-                        disabled={fitting || !floor}
+                        disabled={fitting || saving || preparing || !floor?.preparation?.current}
                         onClick={() => {
                           if (!floor) return;
                           setFitting(true);
@@ -673,7 +681,7 @@ function CadExtractResult({
                       {floorFitout ? (
                         <button
                           type="button"
-                          disabled={fitting || !floor}
+                          disabled={fitting || saving || preparing || !floor}
                           onClick={() => {
                             if (!floor) return;
                             setFitting(true);
@@ -690,6 +698,8 @@ function CadExtractResult({
                       ) : null}
                     </div>
                   </div>
+                  {editError ? <p role="alert">{editError}</p> : null}
+                  {!floor?.preparation ? <p>先完成上方“布置前确认”，再生成本层方案。</p> : null}
                   {floor?.line_path || floorFitout ? (
                     <div className="cad-layout-plan">
                       {floor?.line_path ? <img src={floor.line_path} alt={`${floor.label}布置`} draggable={false} /> : null}
@@ -700,6 +710,10 @@ function CadExtractResult({
                           preserveAspectRatio="none"
                           aria-hidden="true"
                         >
+                          {(floorFitout.reserved_routes ?? []).map((route, i) => <polyline key={`route-${i}`}
+                            points={route.points.map(p => `${p.x * (floorFitout.width || 1)},${p.y * (floorFitout.height || 1)}`).join(" ")}
+                            fill="none" stroke="#168aff" opacity="0.22" strokeLinecap="round" strokeLinejoin="round"
+                            strokeWidth={route.width_m / (floorFitout.meters_per_pixel || 0.05)} />)}
                           {(floorFitout.partitions ?? []).map((item) => (
                             <line
                               key={item.id}
@@ -726,6 +740,7 @@ function CadExtractResult({
                     <p className="cad-empty-inline">这一层还没有墙线图。</p>
                   )}
                   {layoutNote ? <p className="cad-empty-inline">{layoutNote}</p> : null}
+                  {floorFitout?.route_note ? <p className="cad-empty-inline">{floorFitout.route_note}</p> : null}
                   {floorFitout ? (
                     <p className="cad-empty-inline">
                       分隔墙 {(floorFitout.partitions ?? []).length} 段，家具 {layoutFurniture.length} 件。
@@ -744,7 +759,7 @@ function CadExtractResult({
               </div>
               <div className="cad-room-pane">
                   {floor?.scheme_zh ? <p className="cad-summary">{floor.scheme_zh}</p> : null}
-                  {record.data.spaces?.unit_note ? <p className="cad-empty-inline">{record.data.spaces.unit_note}</p> : null}
+                  {floor?.scale_note || record.data.spaces?.unit_note ? <p className="cad-empty-inline">{floor?.scale_note || record.data.spaces?.unit_note}</p> : null}
                   {activeRoom?.layout_hint ? (
                     <p className="cad-room-hint">
                       <small>

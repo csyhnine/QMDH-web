@@ -1328,6 +1328,28 @@ class CadProgramReviewIn(BaseModel):
     notes: dict[str, str] = Field(default_factory=dict)
 
 
+class CadPlanPoint(BaseModel):
+    x: float = Field(ge=0, le=1, allow_inf_nan=False)
+    y: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+
+class CadScaleCalibration(BaseModel):
+    points: list[CadPlanPoint] = Field(min_length=2, max_length=2)
+    meters: float = Field(gt=0, le=1000, allow_inf_nan=False)
+
+
+class CadReservedRoute(BaseModel):
+    points: list[CadPlanPoint] = Field(min_length=2, max_length=30)
+    width_m: float = Field(ge=0.8, le=4, allow_inf_nan=False)
+
+
+class CadPreparationIn(BaseModel):
+    floor_index: int = Field(ge=1)
+    calibration: CadScaleCalibration
+    room_kinds: dict[str, str] = Field(max_length=255)
+    routes: list[CadReservedRoute] = Field(min_length=1, max_length=12)
+
+
 class CadProgramRearrangeItem(BaseModel):
     floor_index: int
     floor_label: str

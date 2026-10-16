@@ -1,3 +1,5 @@
+2026-10-16 CAD 布置前确认（待发布）：CadPreparationPanel + POST /cad/extracts/{id}/preparation 保存每平面 calibration/room_kinds/routes 至既有 payload_json。两点真实长度换算 square_meters_per_pixel 与 geometry.meters_per_unit，同步房间面积、polygon/usable 和撤销快照尺度；不改 DWG/DXF、mask 或线图。新 fitout 必须有与当前房间、几何、mask 匹配的签名，且旧方案可继续回看。确认后不自动拆分房间；layout_kind 显式取代中文模糊推断，empty 不布置/不罚密度。手动通路先从 placeable grid 排除、生成后全轮廓过滤；结果存 reserved_routes/mpp/条件签名用于展示。参考分排除通路的铺开/密度面积，不表示流线或法规验收。无迁移，自动连通验证/容量/目标型方案属于后续阶段。
+
 # Architecture
 
 2026-10-16 Linux DWG 转换（已部署，0346eee/b1532b1 / 生产运行合并 26095b9d）：官方 ODA 27.9 amd64 .deb 为 Git 外私有构建输入，可选包名/SHA256 build args；镜像安装 Xvfb/Qt 依赖，命令 python -m app.scripts.convert_dwg_oda --input {input} --output-dir {output_dir} 在私有虚拟显示转换。原 DWG→DXF→解析模型不变，命令分词后传参/不经 shell，超时终止进程组；不自动重转旧图。

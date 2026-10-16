@@ -212,7 +212,8 @@ def score_floor_layout(
     width, height = mask.size
     mask_l = mask.convert("L")
     line_grid = _line_grid(lines.convert("RGBA") if lines is not None else None, width, height)
-    rooms = [room for room in (floor.get("rooms") or []) if int(room.get("marker") or 0) > 0]
+    rooms = [room for room in (floor.get("rooms") or []) if int(room.get("marker") or 0) > 0
+             and (not floor.get("preparation") or room.get("layout_kind"))]
     grids = {str(room.get("room_id") or ""): _room_grid(mask_l, int(room.get("marker") or 0)) for room in rooms}
     distances = {room_id: _outside_distance(grid) for room_id, grid in grids.items()}
     interior = {
@@ -293,6 +294,8 @@ def score_floor_layout(
     planting_ratios: list[float] = []
     toilet_ratios: list[float] = []
     green_kinds = {"plant", "planter", "tree"}
+    from app.services.cad.preparation import reserved_route_mask
+    route_pixels = reserved_route_mask(floor, mask.size).load()
     for room in rooms:
         area = float(room.get("area_m2") or 0)
         room_id = str(room.get("room_id") or "")
@@ -301,7 +304,7 @@ def score_floor_layout(
         toilet_degree = _toilet_degree(room, items)
         if toilet_degree is not None:
             toilet_ratios.append(toilet_degree)
-        if kind in {"toilet", "storage"}:
+        if kind in {"toilet", "storage", "empty"}:
             continue
         if area >= 16:
             greens = [item for item in items if str(item.get("kind") or "") in green_kinds]
@@ -320,10 +323,13 @@ def score_floor_layout(
                 group_ratios.append(missing / len(expected))
             grid = grids.get(room_id)
             if grid is not None:
-                covered = _coverage_degree(grid, claims)
+                available = [bytearray(value and not route_pixels[x, y] for x, value in enumerate(row)) for y, row in enumerate(grid)]
+                covered = _coverage_degree(available, claims)
                 if covered is not None:
                     coverage_ratios.append(covered)
-            density = _density_degree(kind, occupied_pixels.get(room_id, 0) * cell_m2, area)
+            # Reserved circulation is intentional empty space, not missing furniture.
+            route_area = sum(1 for y, row in enumerate(grid or []) for x, value in enumerate(row) if value and route_pixels[x, y]) * cell_m2
+            density = _density_degree(kind, occupied_pixels.get(room_id, 0) * cell_m2, max(0, area - route_area))
             if density is not None:
                 density_ratios.append(density)
 

@@ -20,6 +20,7 @@ from app.schemas import (
     CadProgramRearrangeOut,
     CadProgramReviewIn,
     CadRoomEditIn,
+    CadPreparationIn,
 )
 from app.services.cad.extract_service import build_cad_extract
 from app.services.cad.fitout import write_floor_fitout
@@ -67,7 +68,11 @@ def _persist_line_layers(record: CadExtract) -> None:
 
 
 def _to_cad_extract_out(record: CadExtract) -> CadExtractOut:
-    payload = dict(record.payload_json or {})
+    from app.services.cad.preparation import preparation_current
+    payload = copy.deepcopy(dict(record.payload_json or {}))
+    for floor in (payload.get("spaces") or {}).get("floors") or []:
+        if floor.get("preparation"):
+            floor["preparation"]["current"] = preparation_current(floor)
     return CadExtractOut(
         extract_id=record.public_id,
         status=record.status,
@@ -273,6 +278,33 @@ def save_cad_program_review(
     return _to_cad_extract_out(record)
 
 
+@router.post("/extracts/{extract_id}/preparation", response_model=CadExtractOut)
+def prepare_cad_fitout(
+    extract_id: str,
+    inputs: CadPreparationIn,
+    db: Session = Depends(get_db),
+    auth_user: AuthUserProfile = Depends(get_current_auth_user),
+) -> CadExtractOut:
+    from app.services.cad.preparation import save_preparation
+
+    if auth_user.user_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    record = db.scalar(select(CadExtract).where(CadExtract.public_id == extract_id.strip(), CadExtract.user_id == auth_user.user_id))
+    if record is None:
+        raise HTTPException(status_code=404, detail="CAD extract not found")
+    try:
+        updated = save_preparation(copy.deepcopy(dict(record.payload_json or {})), inputs.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail="本层图像文件缺失，无法校准") from exc
+    record.payload_json = updated
+    flag_modified(record, "payload_json")
+    db.commit()
+    db.refresh(record)
+    return _to_cad_extract_out(record)
+
+
 @router.post("/extracts/{extract_id}/fitout", response_model=CadExtractOut)
 def generate_cad_fitout(
     extract_id: str,
@@ -294,7 +326,7 @@ def generate_cad_fitout(
     try:
         updated = write_floor_fitout(copy.deepcopy(dict(record.payload_json or {})), floor_index, clear=clear)
     except ValueError as exc:
-        detail = {"floor_not_found": "没有这一层"}.get(str(exc), "这一层还不能布置")
+        detail = {"floor_not_found": "没有这一层"}.get(str(exc), str(exc))
         raise HTTPException(status_code=400, detail=detail) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail="这一层还不能布置") from exc

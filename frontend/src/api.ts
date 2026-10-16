@@ -1342,6 +1342,14 @@ export type CadExtractLayer = {
   entity_types?: Record<string, number>;
 };
 
+export type CadPlanPoint = { x: number; y: number };
+export type CadPreparationInputs = {
+  floor_index: number;
+  calibration: { points: CadPlanPoint[]; meters: number };
+  room_kinds: Record<string, string>;
+  routes: Array<{ points: CadPlanPoint[]; width_m: number }>;
+};
+
 export type CadExtractData = {
   meta?: {
     units?: string;
@@ -1381,6 +1389,10 @@ export type CadExtractData = {
         height?: number;
         note?: string;
         scheme?: string;
+        preparation_signature?: string;
+        reserved_routes?: CadPreparationInputs["routes"];
+        meters_per_pixel?: number;
+        route_note?: string;
         score?: {
           loss: number;
           passed?: boolean;
@@ -1414,6 +1426,9 @@ export type CadExtractData = {
       line_path?: string;
       undo_count?: number;
       scheme_zh?: string;
+      square_meters_per_pixel?: number;
+      scale_note?: string;
+      preparation?: CadPreparationInputs & { signature: string; current?: boolean; confirmed_proposals?: Record<string, string>; image_width: number; image_height: number };
       geometry?: {
         min_x: number;
         max_y: number;
@@ -1437,6 +1452,7 @@ export type CadExtractData = {
         entrance?: boolean;
         function: string;
         function_source?: string;
+        layout_kind?: string;
         proposal?: string;
         layout_hint: string;
         adjacent_room_ids?: string[];
@@ -1981,6 +1997,8 @@ export const api = {
     extractId: string,
     payload: { items: Array<{ floor_index: number; room_id: string; proposal: string; activity: string; reason: string }> },
   ) => postJson<CadExtractRecord>(`/cad/extracts/${encodeURIComponent(extractId)}/program-apply`, payload),
+  saveCadPreparation: (extractId: string, payload: CadPreparationInputs) =>
+    postJson<CadExtractRecord>(`/cad/extracts/${encodeURIComponent(extractId)}/preparation`, payload),
   layoutCadFitout: (extractId: string, floorIndex: number, clear = false) =>
     postJson<CadExtractRecord>(
       `/cad/extracts/${encodeURIComponent(extractId)}/fitout?floor_index=${floorIndex}${clear ? "&clear=true" : ""}`,

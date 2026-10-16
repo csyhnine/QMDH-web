@@ -11,6 +11,15 @@
 
 ## Latest Handoffs
 
+### [2026-10-16] CAD 布置前确认第一阶段 — WIP 待发布
+
+- 新分支 codex/cad-layout-preparation，落实两点尺度校准、明确功能/保留空白、手动主通路家具禁放；原件/图像/既有方案/撤销历史保留。payload_json 存条件/签名，无迁移，新布置须确认，旧记录不自动重跑。
+- 后端新增专项与原 CAD 测试通过，前端 32 项/0 新增类型错误/构建通过；隔离浏览器实际点选、填写、选择、画通路、保存/恢复成功，截图私有备份 preparation-ui-preview.png（模拟保存，真实 HTTP 持久/归属由隔离后端测试覆盖）。不声称正式登录 UI 验收。
+- 备份 /www/backup/qmdh-release-20261016-cad-preparation 与 E:/backups/QMDH-web/release-20261016-cad-preparation 已配对校验；5773 媒体/9 文件增量 3050634 字节完整读取，旧媒体链与 ODA 包硬链接保留。production.env 与前次生产配置逐字节相同，旧三服务镜像标签保留。
+- 后续：提交/推送、Linux CI、镜像构建后隔离验收，再发布与健康/路由/ODA 检查。原样式 13 行、比较文档、临时文件与生产历史差异继续保护。
+- 边界：仅手动预留家具禁放带，墙体连通、门洞、核心筒识别、容量与目标型方案未实现；界面明确说明。
+- Safe to hand off: Yes（已记录 WIP）。
+
 ### [2026-10-16] CAD 布置按钮超时 — 已修复外层代理
 
 - 浏览器缓存补救：用户刷新仍失败；日志证实 Chrome 继续请求 /extracts/?limit=20，返回 307 到 HTTP。前次 301 已被缓存。现在使用 rewrite ... break 内部去尾斜杠，查询参数保持，不向浏览器再跳转；六个列表/详情路由均直接 401、健康 200。只读脚本加入带尾斜杠/limit=20 覆盖。当前可连接浏览器无现有标签/登录态，不能宣称登录 UI 验收。
@@ -28,14 +37,4 @@
 - 本地后端 161 passed/1 skipped/16 subtests + CAD 专项 31 passed；Linux CI 162 passed/16 subtests、前端 31 项/类型基线/构建通过。新公开 DWG 2018 转换保留 LINE/预览、隔离 HTTP 201/status=ok，运行后端转换复验通过；旧 ce_0abae8a9402f 仍 needs_conversion，未重跑/改正式记录。
 - 配对备份 release-20261016-linux-oda 两端校验，5764 媒体/2 文件增量、官方包和日志保留；env 仅三个转换器键变化（key 不变），前端镜像不变，仅 nginx 平滑 reload。
 - 分支 codex/linux-dwg-converter，详见 archive/handoff-2026-10-16-linux-oda.md；原样式/临时文件/生产四文件差异继续保护。
-- Safe to hand off: Yes。
-
-### [2026-10-15] GIF 原始与结果实际参数 — 已部署
-
-- 新增只读测量接口，选文件后显示原始尺寸/平均 fps/实际用色等参数，结果并排对照。
-- 新记录元信息复用 compression JSON；旧记录详情按需读取原件/结果，先验所有权、不改写历史，无迁移。
-- 参数读取预算/并发受限、繁忙/不可读明确提示；详见 archive/handoff-2026-10-15-gif-media-info.md。原样式/临时文件/生产差异保护继续。
-- 功能 1997c3f 已推送、生产运行合并 cd60dab3；无迁移，head 仍 f7g8h9i0j1k2。Linux CI 158 passed/16 subtests，前端 31 项/23 既有、0 新增类型错误/构建通过。
-- 新镜像隔离媒体/SQLite 验证：720×720/25fps/256 色 → 344×344/12.5fps/63 色，320ms/无限循环保留，真实结果 488082 字节，元信息持久与旧历史补读通过。未向正式库/媒体写测试数据，公网新包/鉴权/健康通过。
-- 配对备份 release-20261015-gif-info 两端校验、5762 媒体/零增量、旧镜像保留；生产 env/四文件历史差异和原样式等保护继续。
 - Safe to hand off: Yes。

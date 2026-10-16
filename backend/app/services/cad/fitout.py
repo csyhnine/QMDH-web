@@ -21,6 +21,8 @@ def _room_name(room: dict[str, Any]) -> str:
 
 
 def _layout_kind(room: dict[str, Any]) -> str:
+    if room.get("layout_kind"):
+        return str(room["layout_kind"])
     name = _room_name(room)
     area = float(room.get("area_m2") or 0)
     activity = str((room.get("zoning") or {}).get("activity") or "")
@@ -1367,8 +1369,11 @@ def _furniture_for_room(
     lines: list[bytearray] | None = None,
     scheme: str = "wall",
     frame: dict[str, Any] | None = None,
+    reserved: Image.Image | None = None,
 ) -> list[dict[str, Any]]:
     kind = _layout_kind(room)
+    if kind == "empty":
+        return []
     area = float(room.get("area_m2") or 0)
     room_id = str(room.get("room_id") or "")
     placeable = _clear_swings(
@@ -1377,6 +1382,12 @@ def _furniture_for_room(
         lines,
         meters_per_pixel,
     )
+    if reserved is not None:
+        blocked = reserved.load()
+        for y, row in enumerate(placeable):
+            for x in range(len(row)):
+                if blocked[x, y]:
+                    row[x] = 0
     runs = _wall_runs(grid, meters_per_pixel)
     pieces: list[dict[str, Any]] = []
     if kind == "meeting":
@@ -2060,10 +2071,12 @@ def build_floor_fitout(
     width, height = mask.size
     mask_l = mask.convert("L")
     line_image = lines.convert("RGBA") if lines is not None else None
-    partitions = _adjacency_partitions(mask_l, line_image, list(floor.get("rooms") or []), meters_per_pixel)
+    layout_rooms = [room for room in floor.get("rooms") or [] if
+                    not floor.get("preparation") or room.get("layout_kind")]
+    partitions = _adjacency_partitions(mask_l, line_image, [r for r in layout_rooms if _layout_kind(r) != "empty"], meters_per_pixel)
     line_grid = _line_grid(line_image, width, height)
     room_grids: list[tuple[dict[str, Any], list[bytearray]]] = []
-    for room in floor.get("rooms") or []:
+    for room in layout_rooms:
         marker = int(room.get("marker") or 0)
         if marker <= 0 or float(room.get("area_m2") or 0) < 1.5:
             continue
@@ -2079,11 +2092,14 @@ def build_floor_fitout(
             partitions.extend(_entry_screen(mask_l, line_image, room, width, height, meters_per_pixel))
         room_grids.append((room, grid))
     from app.services.cad.fitout_score import score_floor_layout
+    from app.services.cad.preparation import reserved_route_mask
+
+    reserved = reserved_route_mask(floor, mask.size)
 
     schemes = (
-        ("wall", "沿墙", "接待台、等候、洽谈、绿化按组团靠墙摆，每块可摆区域至少一组洽谈。"),
-        ("anchor", "主家具", "每块可摆区域放一组洽谈，接待台靠长墙，旁边配绿化。"),
-        ("grid", "网格", "洽谈组团铺在各块可摆区域里，等候沿墙散开。"),
+        ("wall", "沿墙", "按分区功能优先沿墙组织家具，并保留已标注通路。"),
+        ("anchor", "主家具", "按分区功能先放主要家具，再补充配套家具，并保留已标注通路。"),
+        ("grid", "网格", "按分区功能以网格展开家具，并保留已标注通路。"),
     )
     variants: list[dict[str, Any]] = []
     for scheme, label, note in schemes:
@@ -2091,9 +2107,16 @@ def build_floor_fitout(
         for room, grid in room_grids:
             furniture.extend(
             _furniture_for_room(
-                room, grid, meters_per_pixel, width, height, line_grid, scheme, floor.get("geometry") if isinstance(floor.get("geometry"), dict) else None,
+                room, grid, meters_per_pixel, width, height, line_grid, scheme, floor.get("geometry") if isinstance(floor.get("geometry"), dict) else None, reserved,
             )
         )
+        # Placement samples are approximate; enforce the entire raster footprint.
+        from app.services.cad.fitout_score import _covered
+        blocked = reserved.load()
+        furniture = [item for item in furniture if not any(
+            blocked[x, y] for x, y in _covered(item["x"] * width, item["y"] * height,
+                item["w"] * width, item["h"] * height, math.radians(item.get("angle") or 0), width, height)
+        )]
         _assign_groups(furniture)
         variants.append(
             {
@@ -2109,12 +2132,16 @@ def build_floor_fitout(
     return {
         "width": width,
         "height": height,
+        "meters_per_pixel": meters_per_pixel,
         "scheme": best["id"],
         "note": best["note"],
         "partitions": partitions,
         "furniture": best["furniture"],
         "score": best["score"],
         "variants": variants,
+        "preparation_signature": (floor.get("preparation") or {}).get("signature"),
+        "reserved_routes": (floor.get("preparation") or {}).get("routes", []),
+        "route_note": "已按标注预留家具禁放带；墙体连通、门洞及疏散要求尚未核验。" if (floor.get("preparation") or {}).get("routes") else "未标注主通路。",
     }
 
 
@@ -2335,10 +2362,13 @@ def write_floor_fitout(payload: dict[str, Any], floor_index: int, *, clear: bool
     fitout = spaces.get("fitout") if isinstance(spaces.get("fitout"), dict) else {"floors": []}
     kept = [item for item in (fitout.get("floors") or []) if int(item.get("floor_index") or 0) != floor_index]
     if not clear:
-        mask_image = Image.open(BytesIO(read_binary_asset(str(floor.get("mask_file") or "")))).convert("L")
+        from app.services.cad.preparation import require_preparation
+        raw_mask = read_binary_asset(str(floor.get("mask_file") or ""))
+        require_preparation(floor, raw_mask)
+        mask_image = Image.open(BytesIO(raw_mask)).convert("L")
         line_file = str(floor.get("line_file") or "")
         line_image = Image.open(BytesIO(read_binary_asset(line_file))) if line_file else None
-        split_interior_walls(floor, mask_image, line_image)
+        # Confirmed room boundaries must not change as a side effect of layout.
         built = build_floor_fitout(floor, mask_image, line_image)
         kept.append({"floor_index": floor_index, **built})
     fitout["floors"] = kept

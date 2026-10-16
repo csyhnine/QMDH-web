@@ -9,7 +9,7 @@ export default function StudioGlobalRail(props: StudioGlobalRailProps) {
       <div className="rail-logo">
         <BrandIcon className="rail-logo-image" />
       </div>
-      <StudioGlobalRailNav activeView={props.activeView} isAdminView={props.isAdminView} />
+      <StudioGlobalRailNav currentUser={props.currentUser} activeView={props.activeView} isAdminView={props.isAdminView} />
       <StudioGlobalRailFooter
         canManageUsers={props.canManageUsers}
         canUseOpsViews={props.canUseOpsViews}

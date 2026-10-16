@@ -66,6 +66,9 @@ export type Provider = {
 };
 
 export type AuthUser = {
+  company_management?: boolean;
+  company_unit?: string;
+  company_position?: string;
   id: number;
   name: string;
   display_name: string;
@@ -87,6 +90,9 @@ export type LoginResponse = {
 };
 
 export type ManagedUser = {
+  company_management?: boolean;
+  company_unit?: string;
+  company_position?: string;
   id: number;
   name: string;
   display_name: string;
@@ -104,6 +110,9 @@ export type ManagedUser = {
 };
 
 export type UserCreatePayload = {
+  company_management?: boolean;
+  company_unit?: string;
+  company_position?: string;
   name: string;
   password: string;
   display_name: string;
@@ -120,6 +129,9 @@ export type UserCreatePayload = {
 export type UserUpdatePayload = Partial<
   Pick<
     UserCreatePayload,
+    | "company_management"
+    | "company_unit"
+    | "company_position"
     | "display_name"
     | "group_name"
     | "role"
@@ -2196,3 +2208,11 @@ export const api = {
     source_surface?: "studio" | "canvas";
   }) => postJson<PromptPolishResponse>("/studio/prompt-polish", payload),
 };
+
+
+// Reuse authenticated transport; management responses must never be cached in browser storage.
+export function managementRequest<T>(path: string, body?: unknown, method = "PUT"): Promise<T> {
+  return request<T>(`/management${path}`, body === undefined ? { cache: "no-store" } : {
+    method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), cache: "no-store",
+  });
+}

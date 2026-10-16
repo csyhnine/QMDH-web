@@ -278,6 +278,9 @@ class AuthLoginIn(BaseModel):
 
 
 class AuthUserOut(BaseModel):
+    company_management: bool = False
+    company_unit: str = Field(default="", max_length=120)
+    company_position: str = Field(default="", max_length=120)
     id: int
     name: str
     display_name: str
@@ -299,6 +302,9 @@ class AuthLoginOut(BaseModel):
 
 
 class UserCreate(BaseModel):
+    company_management: bool = False
+    company_unit: str = Field(default="", max_length=120)
+    company_position: str = Field(default="", max_length=120)
     name: str = Field(min_length=2, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$")
     password: str = Field(min_length=4, max_length=200)
     display_name: str = Field(default="", max_length=150)
@@ -313,6 +319,9 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    company_management: bool | None = None
+    company_unit: str | None = Field(default=None, max_length=120)
+    company_position: str | None = Field(default=None, max_length=120)
     display_name: str | None = Field(default=None, max_length=150)
     group_name: str | None = Field(default=None, max_length=120)
     role: str | None = None
@@ -329,6 +338,9 @@ class UserPasswordReset(BaseModel):
 
 
 class UserOut(BaseModel):
+    company_management: bool = False
+    company_unit: str = Field(default="", max_length=120)
+    company_position: str = Field(default="", max_length=120)
     id: int
     name: str
     display_name: str

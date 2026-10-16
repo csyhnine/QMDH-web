@@ -38,6 +38,7 @@ function railItemClass(activeView: RailView, item: RailNavItem) {
 export default function StudioGlobalRailNav({
   activeView,
   isAdminView,
+  currentUser,
 }: StudioGlobalRailNavProps) {
   const items = isAdminView ? ADMIN_NAV_ITEMS : STUDIO_NAV_ITEMS;
 
@@ -54,6 +55,7 @@ export default function StudioGlobalRailNav({
           <span>{item.label}</span>
         </button>
       ))}
+      {currentUser?.company_management ? <button type="button" className="rail-item" onClick={() => navigateTo("/management/projects")}><span>项目管理</span></button> : null}
     </nav>
   );
 }

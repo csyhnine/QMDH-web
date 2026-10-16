@@ -8,7 +8,7 @@ import { useAdminFeedbackPendingCount } from "../../lib/useAdminFeedbackPendingC
 import { BrandIcon } from "./Brand";
 import { OTHER_TOOLS_NAV } from "../../features/studio/studioNavigation";
 
-type StudioTab = "generate" | "inspiration" | "feedback" | "chat" | "canvas" | "nav" | "other" | "library";
+type StudioTab = "management" | "generate" | "inspiration" | "feedback" | "chat" | "canvas" | "nav" | "other" | "library";
 type AdminTab = AdminModuleKey;
 
 type AppShellProps =
@@ -159,6 +159,7 @@ export default function AppShell(props: AppShellProps) {
                   <span>{item.label}</span>
                 </button>
               ))}
+          {currentUser?.company_management ? <button type="button" className={props.kind === "studio" && props.active === "management" ? "rail-item active" : "rail-item"} onClick={() => navigate("/management/projects")}>项目管理</button> : null}
         </nav>
         <div className="rail-footer">
           {isGuest && props.kind === "studio" ? (

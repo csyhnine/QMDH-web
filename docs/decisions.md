@@ -15,6 +15,13 @@
 
 ## Active Decisions
 
+### Decision: company management permissions are independent of website administration
+- Accepted（2026-10-16）：用户以公司架构指定新二分院管理层，原二分院与四分院合并。用独立 company_management/company_unit/company_position 表达身份，网站 admin/ops/designer 保持既有含义；新管理接口查询实时个人授权并按单位隔离。
+- 年度项目台账、合同/回款、人员和排期单独保存，不能复用 Studio 私人生成项目而扩大历史可见性。既有分组、作品及历史不批量改归属；名册记录不赋予网站权限。
+- 项目、阶段和人员使用稳定 ID，乐观版本拒绝旧页面覆盖，项目版本快照保留被移除的阶段，归档可恢复。金额用受限 Decimal 的 JSON 字符串存储，避免浮点金额与未知值混淆。
+- 2.0 保留账号/单位、阶段 ID、修改人和修订快照作为任务与审计关联地基；当前不引入审批、薪酬、自动绩效或智能体执行。
+
+
 ### Decision: public skill feedback is an opt-in anonymous task capability
 - 状态：Accepted（2026-10-10），已随功能 514de69 部署，生产迁移 d5e6f7g8h9i0。
 - 外部用户无需公司账号；admin 一次登记固定 skill_id，名称允许重复、改名与升级保持 ID，匿名客户端申请一小时/十次、绑定任务与平台的凭证，只能提交反馈。停用 ID 撤销旧匿名凭证，重新开放不恢复。

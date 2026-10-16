@@ -11,6 +11,14 @@
 
 ## Latest Handoffs
 
+### [2026-10-16] 公司管理层项目台账与甘特图 — WIP，发布待验收
+
+- 分支 codex/management-project-planning；独立 company_* 权限/单位隔离，admin/ops 不自动获得财务权限。新二分院按用户确认五个职务与现有账号唯一对应，真实授权待迁移后以私有脚本写入，不修改既有角色/分组。
+- 新 /management/projects 年度台账覆盖全部字段，人员名册独立于网站账号，阶段/里程碑/进度/分配比例、按项目/人员甘特、重叠提示、CSV、归档/恢复、版本冲突保护和修订快照。无真实项目明细，禁止填假项目。金额 Decimal→JSON 字符串，未知 null。
+- 迁移 a16c9e74b821 追加三列四表；本地 196 passed/1 skipped/16 subtests；前端 39 项、23 既有/0 新增类型错误/构建通过。浏览器工具 kernel assets 路径报错，只有事件级前端验收。
+- 配对备份 /www/backup/qmdh-release-20261016-management-projects 与 E:/backups/QMDH-web/release-20261016-management-projects；5773 媒体/零增量，8 文件 SHA256 校验；restore-media-chain.json 引用前一完整包链，原配置 env/key 不变。接下来新镜像恢复副本迁移、HTTP 权限/持久测试、部署及真实名单最小授权。
+- 原 styles.css 13 行、比较文档与临时脚本不提交；历史生成数据/原二四分院分组/CAD/18010/媒体卷保护。当前 Safe to hand off: Yes，属于本地 WIP，勿标已部署。
+
 ### [2026-10-16] 系统通路建议与人工修改 — 已部署
 
 - 分支 codex/cad-auto-circulation；新只读 route-suggestions 生成入口分区/接待/大分区起点至可达分区的通路树，完整宽度避让墙柱/已知核心筒；未识别入口、不可达、缺墙图明确提示，不自动保存或穿墙补线。
@@ -32,12 +40,3 @@
 - 边界：仅手动预留家具禁放带，墙体连通、门洞、核心筒识别、容量与目标型方案未实现；界面明确说明。
 - Safe to hand off: Yes。
 
-### [2026-10-16] CAD 布置按钮超时 — 已修复外层代理
-
-- 浏览器缓存补救：用户刷新仍失败；日志证实 Chrome 继续请求 /extracts/?limit=20，返回 307 到 HTTP。前次 301 已被缓存。现在使用 rewrite ... break 内部去尾斜杠，查询参数保持，不向浏览器再跳转；六个列表/详情路由均直接 401、健康 200。只读脚本加入带尾斜杠/limit=20 覆盖。当前可连接浏览器无现有标签/登录态，不能宣称登录 UI 验收。
-- 后续纠错：初版 location 尾斜杠让列表 /extracts 被 301 加斜杠，后端又 307 跳 HTTP 去斜杠，引发混合内容/循环跳转。已去掉 location 尾斜杠，列表含查询/详情均直接 401，健康 200；scripts/check-cad-proxy.sh 固定覆盖这些只读路径。旧版只查详情与健康，验收覆盖不足。
-- ce_1e513e72a64e 两次 fitout 在后台耗时 74214/74956ms 并返回 200，但宝塔 60s 返回 504；正式库已存 floor 1 的三套方案/默认 104 家具。没有重跑/修改正式 CAD 数据。
-- 新增 ops/nginx/cad-extracts.conf；安装到宝塔 extension/120.79.227.11/qmdh-cad-extracts.conf，仅 /api/v1/cad/extracts 前缀等待 300s，与内层一致。nginx -t/-T、平滑 reload、公开 CAD 未登录 401/健康 200 通过；未再次调用耗时写接口。
-- 方案代码仍为沿墙/主家具/网格，生成成功后出现切换，按通过状态与 loss 选默认；刷新可读取已保存结果。
-- 配置备份 /www/backup/qmdh-cad-timeout-20261016 与 E:/backups/QMDH-web/cad-timeout-20261016；回退移出新增 extension conf 后 nginx -t/reload。不改镜像/env/数据库/媒体/18010，原未提交样式等保护。
-- 分支 codex/cad-proxy-timeout；Safe to hand off: Yes。

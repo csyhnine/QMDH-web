@@ -13,7 +13,7 @@ export type StudioGlobalRailProps = {
   onLogout: () => void;
 };
 
-export type StudioGlobalRailNavProps = Pick<StudioGlobalRailProps, "activeView" | "isAdminView">;
+export type StudioGlobalRailNavProps = Pick<StudioGlobalRailProps, "activeView" | "isAdminView" | "currentUser">;
 
 export type StudioGlobalRailFooterProps = Pick<
   StudioGlobalRailProps,

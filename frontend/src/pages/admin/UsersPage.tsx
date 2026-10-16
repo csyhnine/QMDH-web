@@ -8,6 +8,9 @@ type UserDraft = {
   password: string;
   displayName: string;
   groupName: string;
+  companyManagement: boolean;
+  companyUnit: string;
+  companyPosition: string;
   role: string;
   monthlyQuota: string;
   billingPlan: string;
@@ -22,6 +25,9 @@ const defaultUserDraft: UserDraft = {
   password: "",
   displayName: "",
   groupName: "",
+  companyManagement: false,
+  companyUnit: "",
+  companyPosition: "",
   role: "designer",
   monthlyQuota: "200",
   billingPlan: "standard",
@@ -61,6 +67,9 @@ function toUserPayload(draft: UserDraft): UserCreatePayload {
     display_name: draft.displayName.trim(),
     group_name: draft.groupName.trim(),
     role: draft.role,
+    company_management: draft.companyManagement,
+    company_unit: draft.companyUnit.trim(),
+    company_position: draft.companyPosition.trim(),
     monthly_quota: draft.monthlyQuota.trim() ? Number(draft.monthlyQuota) : null,
     billing_plan: draft.billingPlan,
     billing_status: draft.billingStatus,
@@ -77,6 +86,9 @@ function toUserDraft(user: ManagedUser): UserDraft {
     displayName: user.display_name,
     groupName: user.group_name,
     role: user.role,
+    companyManagement: user.company_management ?? false,
+    companyUnit: user.company_unit ?? "",
+    companyPosition: user.company_position ?? "",
     monthlyQuota: user.monthly_quota === null ? "" : String(user.monthly_quota),
     billingPlan: user.billing_plan,
     billingStatus: user.billing_status,
@@ -177,6 +189,9 @@ export default function UsersPage({
           display_name: payload.display_name,
           group_name: payload.group_name,
           role: payload.role,
+          company_management: payload.company_management,
+          company_unit: payload.company_unit,
+          company_position: payload.company_position,
           monthly_quota: payload.monthly_quota,
           billing_plan: payload.billing_plan,
           billing_status: payload.billing_status,
@@ -474,6 +489,13 @@ export default function UsersPage({
                     />
                   </label>
                 </div>
+                <fieldset>
+                  <legend>公司管理身份</legend>
+                  <p>独立于网站角色。授权后可查看所属单位的项目、合同与回款。</p>
+                  <label><input type="checkbox" checked={userDraft.companyManagement} onChange={e => setUserDraft(v => ({ ...v, companyManagement: e.target.checked }))} /> 公司管理层</label>
+                  <label className="composer-menu-field"><span>公司所属单位</span><input required={userDraft.companyManagement} value={userDraft.companyUnit} onChange={e => setUserDraft(v => ({ ...v, companyUnit: e.target.value }))} placeholder="如：二分院" /></label>
+                  <label className="composer-menu-field"><span>公司职务</span><input required={userDraft.companyManagement} value={userDraft.companyPosition} onChange={e => setUserDraft(v => ({ ...v, companyPosition: e.target.value }))} /></label>
+                </fieldset>
                 <label className="composer-menu-field">
                   <span>角色</span>
                   <select

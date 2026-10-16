@@ -350,3 +350,11 @@ For QMDH-web as of `2026-05-15`:
 - baseline account recovery: `python -m app.cli seed_users`
 - baseline inspiration library: repo seed + managed storage localization
 - production updates must preserve volumes and `.env`, then run Alembic
+
+
+## Company project planning (2026-10-16)
+
+- management_reports/staff/projects/revisions 是业务数据，User 三个 company_* 字段是敏感授权配置；部署迁移默认不授予任何人公司权限。真实职务、名单和台账不能写入公共 seed、前端包或示例项目。
+- 项目归档而不物理删除，版本快照保留阶段修改/移除与操作账号。人员停用保留已有分配，名册与网站账号授权独立；旧单位分组/生成项目不迁移或改归属。
+- 公司数据按当前授权单位隔离；旧共享 API 凭证无权进入新接口。浏览器不将管理数据写入 localStorage，接口成功响应 Cache-Control:no-store；CSV 导出仅已授权人员操作，转义公式与引号。
+- 部署前备份真实 PostgreSQL/config/媒体链，新镜像先对恢复副本演练追加迁移并核对原表计数、账号角色与分组；回退旧镜像须保留新增表/列，禁止通过 downgrade 删除真实台账。

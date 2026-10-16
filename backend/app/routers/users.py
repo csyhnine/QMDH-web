@@ -209,6 +209,9 @@ def _to_user_out(user: User) -> UserOut:
         display_name=user.display_name or user.name,
         group_name=user.group_name or USER_GROUP_UNASSIGNED,
         role=normalize_user_role(user.role),
+        company_management=user.company_management,
+        company_unit=user.company_unit,
+        company_position=user.company_position,
         is_active=user.is_active,
         monthly_quota=user.monthly_quota,
         billing_plan=user.billing_plan or "standard",
@@ -242,7 +245,12 @@ def create_user(
     if existing:
         raise HTTPException(status_code=409, detail="User already exists")
 
+    if payload.company_management and not (payload.company_unit.strip() and payload.company_position.strip()):
+        raise HTTPException(422, "公司管理层须填写所属单位与职务")
     user = User(
+        company_management=payload.company_management,
+        company_unit=payload.company_unit.strip(),
+        company_position=payload.company_position.strip(),
         name=payload.name.strip(),
         display_name=payload.display_name.strip() or payload.name.strip(),
         group_name=_normalize_group_name(payload.group_name),
@@ -288,6 +296,11 @@ def update_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     updates = payload.model_dump(exclude_unset=True)
+    for key in ("company_management", "company_unit", "company_position"):
+        if key in updates and updates[key] is not None:
+            setattr(user, key, updates[key].strip() if isinstance(updates[key], str) else updates[key])
+    if user.company_management and not (user.company_unit.strip() and user.company_position.strip()):
+        raise HTTPException(422, "公司管理层须填写所属单位与职务")
     if "display_name" in updates and updates["display_name"] is not None:
         user.display_name = updates["display_name"].strip() or user.name
     if "group_name" in updates and updates["group_name"] is not None:

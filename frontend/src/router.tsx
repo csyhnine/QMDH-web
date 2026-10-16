@@ -29,6 +29,7 @@ import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from 
 import AdminSectionTabs, { INSIGHT_TABS, TEMPLATE_TABS } from "./features/admin/AdminSectionTabs";
 import { isStudioCanvasEnabled } from "./lib/featureFlags";
 
+const ManagementProjectsPage = lazy(() => import("./pages/management/ManagementProjectsPage"));
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const CadUsagePage = lazy(() => import("./pages/admin/CadUsagePage"));
 const DashboardPage = lazy(() => import("./pages/admin/DashboardPage"));
@@ -77,6 +78,12 @@ function AdminOnlyRoute({ children }: { children: JSX.Element }) {
     return <Navigate to={defaultAdminHomePath(currentUser?.role)} replace />;
   }
   return children;
+}
+
+function CompanyManagementRoute() {
+  const { currentUser } = useAuth();
+  if (!currentUser?.company_management) return <Navigate to="/studio/generate" replace />;
+  return <AppShell kind="studio" active="management"><ManagementProjectsPage /></AppShell>;
 }
 
 function InspirationRoute() {
@@ -551,6 +558,7 @@ export default function AppRouter() {
     <BrowserRouter>
       <Suspense fallback={<LoadingFallback />}>
         <Routes>
+          <Route path="/management/projects" element={<ProtectedRoute><CompanyManagementRoute /></ProtectedRoute>} />
           <Route path="/" element={<Navigate to="/studio/generate" replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/studio/generate" element={<ProtectedRoute><GeneratePage /></ProtectedRoute>} />

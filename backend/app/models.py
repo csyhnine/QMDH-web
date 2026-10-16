@@ -36,6 +36,9 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(150), default="")
     group_name: Mapped[str] = mapped_column(String(120), default="")
+    company_management: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    company_unit: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    company_position: Mapped[str] = mapped_column(String(120), default="", server_default="")
     role: Mapped[str] = mapped_column(String(50), default="designer")
     password_hash: Mapped[str] = mapped_column(Text, default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -1026,3 +1029,46 @@ class GifCompressionRecord(Base):
     compression: Mapped[dict] = mapped_column(JSON)
     parameters: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class ManagementReport(Base):
+    __tablename__ = "management_reports"
+    __table_args__ = (UniqueConstraint("unit", "year"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unit: Mapped[str] = mapped_column(String(120))
+    year: Mapped[int] = mapped_column(Integer)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    document: Mapped[dict] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ManagementStaff(Base):
+    __tablename__ = "management_staff"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unit: Mapped[str] = mapped_column(String(120), index=True)
+    name: Mapped[str] = mapped_column(String(150))
+    position: Mapped[str] = mapped_column(String(120), default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class ManagementProject(Base):
+    __tablename__ = "management_projects"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unit: Mapped[str] = mapped_column(String(120), index=True)
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    document: Mapped[dict] = mapped_column(JSON, default=dict)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ManagementRevision(Base):
+    __tablename__ = "management_revisions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("management_projects.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    snapshot: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

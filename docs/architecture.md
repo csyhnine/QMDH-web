@@ -1,5 +1,7 @@
 # Architecture
 
+2026-10-16 Linux DWG 转换（本地待发布）：官方 ODA 27.9 amd64 .deb 为 Git 外私有构建输入，可选包名/SHA256 build args；镜像安装 Xvfb/Qt 依赖，命令 python -m app.scripts.convert_dwg_oda --input {input} --output-dir {output_dir} 在私有虚拟显示转换。原 DWG→DXF→解析模型不变，命令分词后传参/不经 shell，超时终止进程组；不自动重转旧图。
+
 2026-10-15 GIF 实际参数（已部署，1997c3f / 生产运行合并 cd60dab3）：鉴权 POST /assets/gif-inspect 仅测量不落盘/不登记；复用 5 秒/帧与像素预算及两名额，测量平均 fps/变帧率/每帧最多实际颜色/尺寸/帧数/时长/循环/透明。手动结果 metadata 写 compression JSON；旧记录详情 inspect_metadata=true 在所有权验证后按需读文件，不写回，无迁移。
 
 2026-10-15 其他导航与 GIF 复用（已部署，f18b5d6 / 生产合并 ce56c34d）：生成页 StudioGlobalRailNav 与 AppShell 共用 OTHER_TOOLS_NAV（其他 /studio/other）；历史/当前结果可复制原始 GIF 和参数到压缩表单，手动提交后新增记录，不覆盖源记录；复用现有媒体读取/上传/历史 API，无后端/迁移。

@@ -42,6 +42,9 @@ services:
   backend:
     build:
       context: ./backend
+      args:
+        CAD_ODA_PACKAGE: ${QMDH_CAD_ODA_PACKAGE:-}
+        CAD_ODA_SHA256: ${QMDH_CAD_ODA_SHA256:-}
     env_file:
       - ./.env
     environment:
@@ -96,6 +99,9 @@ services:
   worker:
     build:
       context: ./backend
+      args:
+        CAD_ODA_PACKAGE: ${QMDH_CAD_ODA_PACKAGE:-}
+        CAD_ODA_SHA256: ${QMDH_CAD_ODA_SHA256:-}
     command: ["python", "-m", "app.worker"]
     deploy:
       replicas: 3

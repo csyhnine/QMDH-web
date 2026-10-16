@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+import os
+import shlex
+import signal
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -11,6 +14,7 @@ from pathlib import Path
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+_POSIX = os.name != "nt"
 
 
 @dataclass(frozen=True)
@@ -44,32 +48,26 @@ def _run_converter(
 ) -> subprocess.CompletedProcess[str]:
     oda_exe = _oda_executable(command_template)
     if oda_exe is not None:
-        return subprocess.run(
-            [
-                str(oda_exe),
-                str(input_path.parent),
-                str(output_dir),
-                "ACAD2018",
-                "DXF",
-                "0",
-                "1",
-                "*.dwg",
-            ],
-            shell=False,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=settings.cad_dwg_converter_timeout_seconds,
-        )
-    command = command_template.format(input=str(input_path), output_dir=str(output_dir))
-    return subprocess.run(
-        command,
-        shell=True,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=settings.cad_dwg_converter_timeout_seconds,
-    )
+        command = [str(oda_exe), str(input_path.parent), str(output_dir), "ACAD2018", "DXF", "0", "1", "*.dwg"]
+    else:
+        # Split the trusted template BEFORE substituting user-controlled paths.
+        command = [arg.format(input=str(input_path), output_dir=str(output_dir))
+                   for arg in shlex.split(command_template)]
+    with subprocess.Popen(command, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          text=True, start_new_session=_POSIX) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=settings.cad_dwg_converter_timeout_seconds)
+        except subprocess.TimeoutExpired:
+            try:
+                if _POSIX:
+                    os.killpg(process.pid, signal.SIGKILL)
+                else:
+                    process.kill()
+            except ProcessLookupError:
+                pass
+            process.communicate()
+            raise
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
 def convert_dwg_bytes(content: bytes, *, source_name: str) -> DwgConversionResult:
@@ -81,13 +79,10 @@ def convert_dwg_bytes(content: bytes, *, source_name: str) -> DwgConversionResul
             warnings=("服务端未配置 DWG 转换器。",),
         )
 
-    safe_name = Path(source_name).name or "upload.dwg"
-    if not safe_name.lower().endswith(".dwg"):
-        safe_name = f"{safe_name}.dwg"
-
+    # Each conversion has one isolated source; no user filename enters the CLI.
     with tempfile.TemporaryDirectory(prefix="qmdh-cad-dwg-") as temp_dir:
         temp_path = Path(temp_dir)
-        input_path = temp_path / safe_name
+        input_path = temp_path / "source.dwg"
         output_dir = temp_path / "out"
         output_dir.mkdir(parents=True, exist_ok=True)
         input_path.write_bytes(content)
@@ -96,7 +91,7 @@ def convert_dwg_bytes(content: bytes, *, source_name: str) -> DwgConversionResul
             completed = _run_converter(command_template, input_path=input_path, output_dir=output_dir)
         except subprocess.TimeoutExpired:
             return DwgConversionResult(ok=False, error="dwg_converter_timeout")
-        except OSError as exc:
+        except (OSError, ValueError, KeyError) as exc:
             logger.warning("cad_dwg_converter_failed", extra={"error": str(exc)})
             return DwgConversionResult(ok=False, error="dwg_converter_exec_failed")
 

@@ -36,8 +36,8 @@ Last aligned: `2026-10-15`。旧任务原文与开发顺序完整保存在 `arch
 | studio-perf-001 | ECS 容量评估 | TODO | 旧 9 月负载记录只作线索，升配/swap 前重新测量 |
 | studio-perf-002 | nginx 媒体直出 | DONE（代码已存在） | nginx alias + frontend 只读卷；本轮未复核生产运行配置 |
 | studio-perf-004 | 缩略图派生与懒加载覆盖 | TODO | 已有部分 lazy-load，不再描述全部 eager；缩略图仍待规划 |
-| cad-extract-001 | CAD 图纸提取 | DONE（已部署） | Linux ODA 尚未提供，生产先收 DXF，详见下方 |
-| cad-dwg-002 | Linux ODA 接入 | IN_PROGRESS（2026-10-16 新授权） | 用户要求配置转换器，官方 Linux 27.9 已取得；容器内接入/隔离验证后发布，旧图不重跑 |
+| cad-extract-001 | CAD 图纸提取 | DONE（已部署） | DXF 解析与 Linux ODA DWG 转换均可用，旧记录不自动重转 |
+| cad-dwg-002 | Linux ODA 接入 | DONE（已部署） | 0346eee/b1532b1；官方 ODA 27.9 与 Xvfb 容器内持久接入，新公开 DWG 转换/实体/预览/隔离上传通过，旧图不重跑 |
 | video-grok-timeout-001 | Grok 轮询超时 | TODO | 9 月上游问题；复核当前失败记录再处理，不自动重提任务 |
 | video-seedance-502-001 | Seedance 参考图代理/DNS | TODO | 历史上游问题；先确认当前是否仍发生 |
 
@@ -252,12 +252,12 @@ Last aligned: `2026-10-15`。旧任务原文与开发顺序完整保存在 `arch
 
 后续继续已记录的反馈客户端真实产物、浏览器视觉及真实 IP 信任链验收；不重复核实已 accepted 的测试事件或重做已上线接口。
 
-最新验收见 archive/handoff-2026-10-13-feedback-live-verification.md；冷启动红线见 archive/handoff-2026-10-13-next-conversation.md。反馈时间展示 b619413 已部署，生产 git 0a41ad8c，运行前端来自 b04ffb53；不要重做已上线接口。先直接只读查服务器反馈与正式 ID，并核对外部 E:/projects/test/agent-skills 当前版本；已有真实检索回传不等于素材核实通过。run_id=2 的核实/聚合已通过 SSH 完成；继续时间 UI 视觉与真实平台产物验收；扩大使用前核验真实 IP 信任链。媒体/类型基线/容量/缩略图/历史视频随后处理，CAD 等官方 Linux ODA 包。原访客样式、比较文档、_tmp_* 保留。
+最新验收见 archive/handoff-2026-10-13-feedback-live-verification.md；冷启动红线见 archive/handoff-2026-10-13-next-conversation.md。反馈时间展示 b619413 已部署，生产 git 0a41ad8c，运行前端来自 b04ffb53；不要重做已上线接口。先直接只读查服务器反馈与正式 ID，并核对外部 E:/projects/test/agent-skills 当前版本；已有真实检索回传不等于素材核实通过。run_id=2 的核实/聚合已通过 SSH 完成；继续时间 UI 视觉与真实平台产物验收；扩大使用前核验真实 IP 信任链。媒体/类型基线/容量/缩略图/历史视频随后处理，CAD Linux ODA 已于 2026-10-16 部署，旧图不自动重转。原访客样式、比较文档、_tmp_* 保留。
 
 
 ### Task: [cad-dwg-002] Linux ODA 转换器接入（2026-10-16）
 
-- 状态：IN_PROGRESS（本地/待发布），分支 codex/linux-dwg-converter。
+- 状态：DONE（已提交/推送/部署），功能 0346eee、Qt 依赖修复 b1532b1，生产运行合并 26095b9d，分支 codex/linux-dwg-converter。
 - 授权：用户明确要求配置服务器转换器，覆盖此前等待安装包/不自行下载安装的暂缓状态；其余旧图保护继续有效。
 - 目标：生产 DWG 上传经官方 ODA 27.9 Linux 转 DXF，再复用原解析链。
 - 边界：官方 amd64 .deb 作为服务器私有构建输入（不入 Git），SHA256 校验、可选 Docker/Compose build args，Xvfb 包装命令持久配置；不改 CAD 分区/布置/生成算法，不重转历史记录。

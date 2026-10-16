@@ -11,12 +11,14 @@
 
 ## Latest Handoffs
 
-### [2026-10-16] Linux ODA 转换器 — 接入中
+### [2026-10-16] Linux ODA 转换器 — 已部署
 
 - 用户新授权配置转换器，官方 Linux 27.9 已下载并校验；旧的等包限制由本次授权覆盖，其余旧图保护不变。
-- 可选构建输入/镜像依赖/Xvfb wrapper 与安全传参/超时进程组清理已实现，准备实包验证；不自动重转 ce_0abae8a9402f 或其他旧图，无迁移/算法改动。
+- 官方 ODA 27.9/Xvfb/Qt/OpenGL 已在后端与三个 worker 镜像持久接入，0346eee/b1532b1 已推送，生产运行合并 26095b9d；安全传参/超时进程组清理生效，无迁移/算法改动。
+- 本地后端 161 passed/1 skipped/16 subtests + CAD 专项 31 passed；Linux CI 162 passed/16 subtests、前端 31 项/类型基线/构建通过。新公开 DWG 2018 转换保留 LINE/预览、隔离 HTTP 201/status=ok，运行后端转换复验通过；旧 ce_0abae8a9402f 仍 needs_conversion，未重跑/改正式记录。
+- 配对备份 release-20261016-linux-oda 两端校验，5764 媒体/2 文件增量、官方包和日志保留；env 仅三个转换器键变化（key 不变），前端镜像不变，仅 nginx 平滑 reload。
 - 分支 codex/linux-dwg-converter，详见 archive/handoff-2026-10-16-linux-oda.md；原样式/临时文件/生产四文件差异继续保护。
-- Safe to hand off: Yes（配置/发布待续）。
+- Safe to hand off: Yes。
 
 ### [2026-10-15] GIF 原始与结果实际参数 — 已部署
 

@@ -11,6 +11,14 @@
 
 ## Latest Handoffs
 
+### [2026-10-16] 新对话冷启动留档 — 可直接接手
+
+- 用户要求先留档，下一对话继续。本轮仅 Git/生产只读核对与正式文档整理，不新增功能、不构建部署镜像、不写业务数据。冷启动主档：archive/handoff-2026-10-16-next-conversation.md，替代 10-13 旧 next-conversation 的“当前状态”，旧档保留作历史。
+- 留档前本地 codex/management-workbench，HEAD/origin/main 9420bf2、0/0。生产文档合并 5cc038b9，前端功能运行合并 787d2370，镜像 85b3652ed57b8ce9548d81940da1944d08fa7b538a795659f9b0fdede13ee7eb；schema a16c9e74b821，后端 healthy/三 worker/其他依赖正常，生产工作区干净。
+- 四视图工作台已部署，勿重复开发；六个授权账号含 admin 保持启用。只读快照项目 0、名册 5，后续须读实时数据。真实管理员公网登录 UI 验收、真实员工/项目录入仍待继续，不能用本地 mock 验收冒充；未承诺自动排程/导入/假期日历。
+- 最近功能 CI 38873245073 与发布文档 CI 38873869117 成功。原 styles.css +13/-0、比较文档与 _tmp_* 保持，未纳入提交。备份链、秘密来源、ODA/代理配置、CAD 禁重跑记录和其他未完任务均在冷启动主档。
+- 新对话先依 protocol 读 tasks/handoff/冷启动主档/相关代码，再按用户新需求推进；既有管理名单/管理员授权无需再问。Safe to hand off: Yes。
+
 ### [2026-10-16] 管理工作台与交互排期 — 已部署
 
 - 514a8cb/ce31075，生产前端运行合并 787d2370；同一 /management/projects 分管理总览/项目台账/项目计划/人员排期，台账列显隐分组排序、右侧详情与搜索勾选人员。旧六人授权（含 admin）、API、记录、金额语义保持，无迁移。
@@ -29,15 +37,4 @@
 - 本地后端 196 passed/1 skipped/16 subtests，CI 38865978617 成功：Linux 197 passed/16 subtests、前端 39 项/23 既有/0 新增类型错误/构建。组件事件覆盖新增阶段、保存、冲突保留输入；浏览器 kernel assets 路径故障，未宣称真实登录点击验收。
 - 配对备份 release-20261016-management-projects（/www/backup/qmdh-release-20261016-management-projects 与 E:/backups/QMDH-web/release-20261016-management-projects）发布前后数据库/config/5773 媒体零增量、23 份文件 SHA256 校验；restore-media-chain.json 引用旧完整链，旧镜像标签保留，env/key 不变。隔离验证库已删除，正式业务不删。
 - backend healthy/三 worker/新前端已运行；SQL READ ONLY 正式数据验证五人权限/台账/名册、无假项目、网站管理员/ops 拒绝。公网管理接口未登录 401、前端入口/health 200，ManagementProjectsPage-C61G32Jb.js；六条 CAD 代理检查通过，FFmpeg/Xvfb/ODA 输入、Nano Banana 生产历史差异、媒体卷/18010、原 styles 13 行等均保护。详情 archive/handoff-2026-10-16-management-projects.md。
-- Safe to hand off: Yes。
-
-### [2026-10-16] 系统通路建议与人工修改 — 已部署
-
-- 分支 codex/cad-auto-circulation；新只读 route-suggestions 生成入口分区/接待/大分区起点至可达分区的通路树，完整宽度避让墙柱/已知核心筒；未识别入口、不可达、缺墙图明确提示，不自动保存或穿墙补线。
-- 用户可预览采用、指定起点、手画、删除、修改折点/宽度；采用只换 system，manual/旧无来源保留，改后的系统通路转 manual。旧条件签名兼容，无迁移，尺度/用途确认保留。
-- 本地后端 181 passed/1 skipped/16 subtests（新增 9 项），前端 34 项/23 既有、0 新增类型错误/构建通过。事件级组件测试覆盖移点/改宽/保留手画/取消；cua 连接因 kernel assets 路径报错，本轮无真实浏览器点击验收。
-- 配对备份 release-20261016-cad-auto-route 两端校验、5773 媒体/空增量；restore-media-chain.json 引用前次完整包链，ODA 包仍在前次私有备份。env/key 不变，原文件/旧图/18010/数据卷保护。
-- 23ccfa8 已提交/推送/部署，生产运行合并 f060300c。CI 38862908047 成功：Linux 182 passed/16 subtests，前端 34 项/0 新增类型错误/构建。隔离真实 HTTP 建议/不写记录/采用手画共存/保存/三方案避让/跨账号拒绝通过，家具 51/33/62。
-- 真实 ce_1e513e72a64e 只读副本以既有估算比例与 1.2 米试跑：两平面均 partial，建议 2/1 条、连通 1/1 分区、未连通 4/2，6.6/3.52 秒；SQL READ ONLY＋媒体只读挂载，正式 payload 不变。不能宣称已生成完整交通系统，下一步需用户确认真实尺度/入口/门洞。
-- backend healthy/三 worker/新前端运行；公网六条 CAD 路由直接 401、建议接口未登录 401、健康 200、CadExtractPage-CIOFm6h9.js 含新界面；ODA/Xvfb/FFmpeg 保留、迁移 f7g8h9i0j1k2、env/key 不变。详见 archive/handoff-2026-10-16-cad-auto-route.md。
 - Safe to hand off: Yes。

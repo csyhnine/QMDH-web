@@ -15,7 +15,7 @@
 
 - 用户指出本机没有进度条、上传一张不能编辑。旧百分比为估算；本轮补无百分比动态条（排队/执行/恢复，ARIA不伪报数值、减少动画偏好），不冒充ComfyUI采样步数。
 - 已批准编辑图仍要求两图；原通用1–4张/已上传即可提交文案误导。上传标题与提示按本机模型明确第一目标图/第二参考图；按钮缺图直说、两图就绪可提交；后端两图校验保留。单图变体仍未实跑/未开放。提交阶段英文改中文。
-- 前端52检查、23既有TS/0新增与构建；Chrome真实组件1440/390截图/无溢出/动态条实际transform变化、单图禁交与解释、双图触发表单通过。transport替身、未发送GPU任务。仅前端，发布待验证；原styles13行与原未跟踪文件保持。
+- 前端52检查、23既有TS/0新增与构建；Chrome真实组件1440/390截图/无溢出/动态条实际transform变化、单图禁交与解释、双图触发表单通过。transport替身、未发送GPU任务。功能c048893、生产合并95794424，frontend ea1c9f24；公网index-BZjpV3Jk/GeneratePage-DLweP8Ox及CSS与容器SHA一致；其他容器ID/镜像/启动时间与env不变，六CAD401/health200。备份/www/backup/qmdh-comfy-feedback-20261019 ↔ E:/backups/QMDH-web/frp-20261019/comfy-feedback-backup：9文件SHA一致、DB/env/5823媒体清单/3增量及恢复链；旧frontend标签20261019-comfy-feedback可回退。原styles13行与原未跟踪文件保持。Safe to hand off: Yes。
 
 ### [2026-10-19] ComfyUI 创作框布局回归修复
 

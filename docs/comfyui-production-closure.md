@@ -1,6 +1,6 @@
 # ComfyUI 生产闭环（2026-10-19）
 
-状态：WIP，codex/comfyui-production-closure；不能把本地实现当已发布。
+状态：DONE，功能7a9874b已推main并部署；验收/恢复边界与材料以 [comfyui-frp.md](comfyui-frp.md) 为准。
 
 ## 已确认的原问题
 
@@ -24,10 +24,12 @@
 ## Windows 守护
 
 受限运行目录 C:/ProgramData/QMDH-FRP：证书/CA/token 配置已从备份目录复制为独立运行材料，私钥不变；环境只复制必要路径/模型缓存/CUDA字段，不复制token环境。
-windows-supervisor.ps1 守护回环ComfyUI与frpc、写health.json、证书到期前30天标记renewal_due、日志14天保留。当前会话没有管理员令牌：系统级启动任务与防火墙安装被Windows拒绝，不能声称已安装。
-管理员安装脚本 ops/frp/install-windows-supervisor.ps1 已准备；未执行前只能是用户会话守护，Windows重启/未登录启动尚未验收。
+windows-supervisor.ps1 守护回环ComfyUI与frpc、写health.json、证书到期前30天标记renewal_due、日志14天保留。最初因非管理员令牌安装被拒绝，随后用户已在管理员PowerShell成功执行安装器；原用户守护退出，受控停止原进程后，SYSTEM重拉ComfyUI/FRP及私网HTTP200已验证。当前令牌不可读SYSTEM任务/防火墙元数据；未做整机重启，不伪称已做该项。
 
-## 待完成验收与发布
+## 已完成验收与发布
 
 离线：串行FIFO/其他渠道并行、同事务回滚、租约/心跳/旧owner隔离、Redis故障、幂等409、丢响应找回、逐张结果、上传归属、有效尺寸/编辑画布、真实前端组件与菜单。
-生产：先备份DB/env/媒体恢复链/旧镜像，保留FRP overlay/ODA/FFmpeg/Nano Banana差异；迁移生产副本先测，再发布。连续提交、多张、双图、尺寸、断线/worker重启真实验收，保存任务/资产/上游ID/SHA与审计证据；不修改旧失败任务以伪装成功。
+生产：已备份DB/env/媒体恢复链/旧镜像，保留FRP overlay/ODA/FFmpeg/Nano Banana差异；生产副本迁移通过后发布。连续提交、多张、双图、尺寸、断线/worker重启真实验收已通过，任务/资产/上游ID/SHA与证据已保存；旧失败任务未修改或重跑。
+
+
+最终验收：九项真实Task/十一图、1K/2K/4K与自定义/双图、worker和FRP恢复、SYSTEM进程重拉均通过；25+10份发布前后备份两端SHA一致。CI39215244482后端227+24sub、前端50通过，生产四容器探活/前端阻断及CAD/健康保持。图生图限批准双图，整机重启与长期压测没有做；不把这些未测项说成已通过。

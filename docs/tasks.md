@@ -13,7 +13,7 @@ Last aligned: `2026-10-19`。旧任务原文与开发顺序完整保存在 `arch
 
 ## Next Conversation Checkpoint
 
-- comfyui-frp-001 已完成：隧道、回环收口、两个文生图模型及网站真实任务均通过并启用；勿重复生图验收。以 docs/comfyui-frp.md 为准，后续按用户新需求；图生图另列 comfyui-edit-002。
+- comfyui-production-004 / comfyui-edit-002 已发布完成：持久队列/恢复/幂等、1～3张、1K/2K/4K/自定义、双图编辑及SYSTEM守护均已验证；九项真实任务十一张。以 docs/comfyui-frp.md 为准，按用户新需求，不重复GPU验收/重装守护。
 - 用户已要求于 2026-10-16 先留档，后续在新对话继续。冷启动读取 archive/handoff-2026-10-16-next-conversation.md，10-13 的 next-conversation 仅保留历史，不代表当前部署。
 - 管理台账与四视图工作台均已上线，admin 已明确授权；下一步按用户新需求，优先实际管理员页面/真实资料验收，不能用本地样例冒充业务记录。本次留档不新增开发范围。
 
@@ -21,17 +21,17 @@ Last aligned: `2026-10-19`。旧任务原文与开发顺序完整保存在 `arch
 
 ### comfyui-production-004 — 生产任务闭环
 
-- 状态：IN_PROGRESS（codex/comfyui-production-closure，本地开发，尚未部署）。用户 2026-10-19 授权全部解决审计缺口。
+- 状态：DONE（已提交/推送main/部署，功能7a9874b，迁移b27d0f85c932）。用户2026-10-19授权全部解决审计缺口。
 - 目标/边界：同事务持久待办、领取租约/心跳/恢复、本机串行与多张逐张执行、提交幂等、断线核对与人工处理入口；统一参数/真实状态；分辨率与双图编辑；Windows 守护、重连/证书运维。
 - 禁止：覆盖原 styles.css +13 或原未跟踪文件、重置库/媒体/key、改 CAD/18010；不盲重交不确定 GPU 任务。
-- 验收：并发/丢响应/worker中断/Redis不可用/上游断线、真实双图及尺寸、租约隔离与权限、旧能力回归；备份后发布，实际未通过项不写 DONE。
+- 验收：九项真实任务十一张（8245～8250、8253～8255）及SHA/归属/账、SYSTEM重拉/FRP断线/worker恢复；PG副本49表保留/并发领取/同键唯一/容量、最终Linux隔离30项与CI后端227+24sub/前端50通过。25份发布备份、10份后验收备份两端SHA一致。未做整机重启/长期压测，不伪称该项通过。
 - 文档：tasks/handoff/comfyui-frp/architecture/server-operations；新增业务工件仍沉淀既有 Task/Asset，持久调度单独建表，为多步骤执行保留扩展边界。
 
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
 | comfyui-provider-ui-003 | ComfyUI 图片渠道前端接入 | DONE（已发布，01d6c11/13bbe74） | 补 ComfyUI adapter 标签、未知类型不再默认视频；生成页图片白名单包含 ComfyUI，本机独立分组，图片/视频/编辑菜单与后台真实组件回归 |
-| comfyui-frp-001 | Windows ComfyUI 私有隧道与文生图 | DONE（已上线并真实验收） | 回环收口；Z Image task8237/asset9263、Qwen task8238/asset9264 实跑、媒体SHA/归属/账记录通过；id60/61启用，1K单张；服务/长稳与图生图不计完成 |
-| comfyui-edit-002 | ComfyUI 双图编辑 | TODO（后续阶段，未启用） | 复用既有 API 图，须核验两图上传/白名单/归属/实际history，不沿用示例图；单图变体未实跑，不自动开启 |
+| comfyui-frp-001 | Windows ComfyUI 私有隧道与文生图 | DONE（已上线并真实验收） | 回环收口；Z Image task8237/asset9263、Qwen task8238/asset9264 实跑、媒体SHA/归属/账记录通过；id60/61启用；后续生产闭环/多张/尺寸/守护与编辑见004/002 |
+| comfyui-edit-002 | ComfyUI 双图编辑 | DONE（已发布） | id62启用，目标图+参考图归属/上传/绑定/回存；8248/8254/8255为1K/2K/4K实跑，单图变体不在批准范围 |
 | management-workbench-002 | 管理工作台与交互排期 | DONE（已部署，514a8cb/ce31075） | 四视图、列分组排序/右侧详情/搜索选人；DHTMLX 10.0.3 MIT，拖动预览/版本保存/失败保留；本地 Chrome 操作与窄屏检查、CI 后端 197/前端 43 通过，仅替换 frontend，六人授权/API/业务数据保留，无迁移 |
 | management-projects-001 | 公司管理层年度台账与人员甘特排期 | DONE（已部署，db376ec） | 独立公司权限/单位隔离，五位已核对账号及后续明确授权的 admin 已开通；台账全字段、人员、阶段甘特/里程碑/重叠、CSV、归档/版本保护；迁移 a16c9e74b821，生产副本与线上只读验证通过，无示例项目；真实浏览器点击因工具故障未验收 |
 | migration-bootstrap-001 | 历史空库迁移链完整性 | TODO | 纯空库 alembic upgrade head 在旧 chat_messages attachments 迁移缺表；生产副本升级和 Base.metadata 建表后新迁移均通过。本轮不改旧链，后续用独立任务修复并建立从零回归 |
@@ -76,8 +76,8 @@ Last aligned: `2026-10-19`。旧任务原文与开发顺序完整保存在 `arch
 
 ### Task: [comfyui-edit-002] ComfyUI 双图编辑
 
-- 状态：TODO（后续阶段，当前不启用）。目标：在既有公司账号/项目与ComfyUI私有通路上支持已提供的双图编辑工作流。
-- 边界：两张当前账号可访问图片的上传、准确LoadImage绑定、批准工作流参数、既有Task/Asset/ledger持久化；不改原示例图或原图生图模板，不顺手增加单图变体/任意graph/节点安装/服务自启。
+- 状态：DONE（2026-10-19已发布，id62启用）。批准双图图已接入既有账号/项目/私网；1K/2K/4K真实任务8248/8254/8255、资产9273/9279/9280及SHA/归属通过。
+- 边界：两张当前账号可访问图片的上传、准确LoadImage绑定、批准工作流参数、既有Task/Asset/ledger持久化；不改原示例图或原图生图模板，不增加单图变体/任意graph/节点安装；守护另在004完成。
 - 禁止：跨账号读图、传服务器本地路径给Windows、以模板示例图补缺图、全局interrupt/clear或重复执行状态不明任务，修改env/key/CAD/原未提交文件。
 - 依赖：本机API-HANDOFF与workflow-map的编辑图、LoadImage470/475及输出461；单图变体尚未实跑，另行定义。
 - 验收：双图上传返回值准确绑定，非本人图片拒绝、少图明确报错；真实history/图片下载/归属与SHA一致，原图不改，故障不混任务；每次真实GPU运行须在授权范围内。
@@ -87,7 +87,7 @@ Last aligned: `2026-10-19`。旧任务原文与开发顺序完整保存在 `arch
 
 - 状态：DONE（2026-10-19 已部署/已启用/真实验收）。边界：FRP服务端、专网、证书/认证、两个文生图adapter、Task checkpoint/GPU锁、图片回存；不含图生图或Windows服务/长稳。
 - 结果：回环127.0.0.1:8188；公网mTLS和错误凭证拒绝；frontend阻断、backend/三worker只读通路通过。正常公网网站API/现有admin账号与既有项目生成两张1024²，Z8237/9263/32480ms、Qwen8238/9264/46526ms；Task/Asset/ProviderCall/UsageLedger及本机/服务器/下载SHA一致，id60/61启用，GPU锁释放。
-- 配置：原启动器缓存导致副本全网卡监听，已停并保存listen=false；隐藏ComfyUI PID32112，frpc仍前台，无开机服务。完整私有路径/恢复链和证据见docs/comfyui-frp.md及handoff；不导出私钥、不公开8188、不改env/key/schema、CAD/18010/卷及原未提交文件。
+- 配置：原启动器已停、listen=false与回环保留。后续004已由SYSTEM开机守护接管ComfyUI/frpc，旧PID不再有效，运行材料C:/ProgramData/QMDH-FRP。001阶段原无schema变化，004追加两表；不导出私钥、不公开8188、不改env/key/CAD/18010/卷及原未提交文件。
 - 检查：此前本地232/24subtests、隔离14与功能CI通过；本轮只改本机运行配置/模型启用和正式验收记录，无源码变化，不重复全站测试。
 - 回退：先禁用id60/61再回旧镜像，不删除真实任务/媒体。最新DB/媒体增量恢复备份已配对，2文件3318213字节/7备份SHA一致。
 - 2.0：沿用Task/Asset/ProviderCall/ledger，workflow hash/prompt_id追踪，不引入新编排。同步tasks/handoff/architecture/server-operations/comfyui-frp。

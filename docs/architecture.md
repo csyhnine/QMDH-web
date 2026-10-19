@@ -1,10 +1,6 @@
-2026-10-19 图片渠道UI修复（01d6c11/13bbe74已部署，前端623a1841）：ModelsPage显式登记comfyui，未知adapter不回退视频；Studio图片可用性包含comfyui并保留能力检查，来源归本机ComfyUI，视频/未开放编辑不包含。带Haodeya/Grok字样的渠道也需video.generate才标视频分组；后端能力及数据未变。原API真实验收未覆盖该UI缺口，已加真实组件/菜单回归。
+2026-10-19 ComfyUI生产闭环已发布（7a9874b，b27d0f85c932）：三个真实图片渠道（文生图id60/61、双图编辑62），1K/2K/4K/自定义、1～3张逐张执行。Task与task_dispatches同事务，Redis仅唤醒；PG串行领取/容量、90秒租约/15秒心跳，本机FIFO不占用其他渠道执行槽。用户范围幂等、原prompt/client_id恢复、服务器已下载SHA恢复；未知执行不盲重交，终态失败释放、管理员核对关闭有审计。reference_uploads记录归属，编辑仅两图平台素材。Task/Asset/ProviderCall/ledger继续沉淀工件，独立调度表为后续步骤扩展保留边界。
 
-2026-10-19 文生图真实验收完成：id60/61启用；正常公网Task API→Redis/worker→Windows GPU→原Asset/ledger，任务8237/8238与图片SHA/归属通过。Windows仅127.0.0.1:8188，原自动重拉全网卡的启动器已停、listen=false保存，frpc仍前台；图生图/服务长稳未完成。代码仍621e2f1，详情docs/comfyui-frp.md；下方早前禁用/未验收描述是阶段历史。
-
-2026-10-19 FRP 与 ComfyUI 文生图 adapter 已部署（621e2f1 / 0562244e）：详见 docs/comfyui-frp.md 最新段。STCP visitor 对 backend/三 worker 专网提供 8188，frps 仅发布公网 7443，mTLS/token 正反向验证通过；Windows 公网 TLS1.3/mTLS 已通过，CSR 已签发。适配器仅实现两个文生图模板、固定专网 URL、提交 checkpoint、全局 Redis GPU 锁及受限结果持久化；编辑图尚未启用，两个 provider id60/61 保持禁用，等待本机客户端/真实 API 联调。
-
-2026-10-16 ComfyUI 接入准备（未部署/未新增 adapter）：方案见 [comfyui-frp.md](comfyui-frp.md)，公开模板位于 ops/frp。Windows→frps 使用 STCP/mTLS/token，服务器 visitor 仅向专用 Docker internal 网络的 backend/worker 暴露入口，无 ComfyUI 公网映射。现有三 worker 后续需共享 GPU 并发锁；工作流/结果以 Task、ProviderCall、Asset 归属持久化，当前仅契约，不代表已实现。
+STCP/mTLS/token仍仅公网7443、Windows回环8188与backend/三worker的internal网络；frontend不可达。SYSTEM开机守护已接管并验证进程重拉/隧道/真实GPU，不含整机重启/长稳压测。最终backend fc3ac003、worker1fbaa318、frontend3c01a252，env/key、FRP/DB/cache/search与ODA/Nano Banana保持。九任务十一图/CI已通过，参数、恢复/备份/私有路径见[comfyui-frp.md](comfyui-frp.md)，旧阶段说明已归档。
 
 2026-10-16 管理工作台改版（已部署，514a8cb/ce31075 / 生产前端运行合并 787d2370）：同一 /management/projects 下分管理总览/项目台账/项目计划/人员排期，复用全部现有公司授权、年度项目接口和版本检查，无迁移。台账列显隐/分组/排序、右侧详情与搜索勾选名册；总览按当前筛选范围计算节点、负荷和精确十进制已开票金额汇总。DHTMLX Gantt Community 10.0.3（MIT，精确锁版本与公开 license 文件）仅项目计划懒加载，独立实例销毁/重建；阶段日期转组件排他结束日，回存转包含结束日。拖动/拉伸/进度调整先暂存，展示前后变化，显式保存按项目版本顺序提交，成功项移出待办，失败/未尝试保留。任务树文本与负责人统一 HTML 转义，禁依赖编辑与自动排程；人员视图自建日历日负荷而不用 PRO 功能。仅管理工作台移动端 rail 局部适配，不改公共未提交 styles。
 
@@ -460,6 +456,3 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 - 主链路数据流
 - 依赖关系
 - 当前热点模块
-
-
-2026-10-19 WIP：生产任务闭环在 codex/comfyui-production-closure 本地开发，新增 task_dispatches/reference_uploads；部署前仍以原FRP/文生图状态为准。设计与验收见 [comfyui-production-closure.md](comfyui-production-closure.md)。

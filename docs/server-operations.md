@@ -1,8 +1,12 @@
-## 2026-10-19 FRP / ComfyUI 发布补充
+## 2026-10-19 ComfyUI 生产闭环（当前）
 
-- 已运行 STCP frps/visitor：公网仅 7443/TCP，backend/三 worker 的 comfy_backend internal 网络与 workflows 只读挂载依赖显式 overlay。后续管理这些服务时，使用 `docker compose -f docker-compose.yml -f /opt/qmdh-frp/compose.frp.yml ...`；仅主文件重建会丢掉专网/模板挂载。详见 docs/comfyui-frp.md 最新段。
-- 发布功能 621e2f1，生产代码合并 0562244e；原 backend/worker 镜像分别保存在 qmdh-release-backup-backend:20261019-comfyui、qmdh-release-backup-worker:20261019-comfyui。新镜像以原镜像为基础，只复制六个合并后的代码文件，构建说明 /opt/qmdh-frp/Dockerfile.adapter 及发布备份均保留；ODA/FFmpeg/Nano Banana 差异保全。程序回退先确认无运行任务，再恢复这两个旧镜像标签并重建对应服务，不降级数据库或删除媒体。两个新 provider id60/61 已经真实任务8237/8238验收并启用；回退旧镜像前必须先禁用两者，避免旧版未知adapter变成模拟执行。
-- .env/key/schema 未改；frontend/postgres/redis/meilisearch 容器未换。发布证据/DB/env/媒体增量与恢复链位于 /www/backup/qmdh-release-20261019-comfyui-prep，受限本机对应 E:/backups/QMDH-web/frp-20261019/release-backup。CA 私钥仅在本机受限离线目录，不在服务器、镜像或 Git。
+- 功能7a9874b、生产功能合并cb2bc791；迁移b27d0f85c932追加两表。backend fc3ac003/worker1fbaa318/frontend3c01a252已运行，env/key不变，ODA/FFmpeg/Xvfb/Nano Banana保留；FRP/数据库/cache/search容器ID与启动时间保持。
+- 必须使用 `docker compose -f docker-compose.yml -f /opt/qmdh-frp/compose.frp.yml ...` 并保留3worker；main单文件重建会丢专网/模板。最终私有构建输入 /opt/qmdh-frp/Dockerfile.closure 基于旧运行镜像复制合并后代码，源Git bundle与FRP运行包随发布备份保存。全量重建仍保留原ODA包/build args，不覆盖生产差异。
+- /providers/comfyui/status只读运行状态；/tasks/{id}/comfyui-recovery为ops/admin核对原任务或安全关闭，须备注，不能全局interrupt/clear。Redis不可用保留DB待办；不手工清GPU锁或重交未知prompt。容量每人10/总100，超过429，非法参数创建前422。
+- Windows用户已安装SYSTEM开机守护，受控停止原进程后自动重拉及真实GPU通过；运行材料C:/ProgramData/QMDH-FRP，health.json/私有logs，私钥权限未变。未做整机重启；旧手动前台记录不可当当前启动说明。详见本机私有windows/PRODUCTION-CLOSURE.md。
+- 发布前 /www/backup/qmdh-release-20261019-comfyui-closure ↔ E:/backups/QMDH-web/frp-20261019/closure-backup，25文件SHA一致；5805媒体/3增量3881989字节、DB/env/旧镜像、source-final.bundle/frp-runtime.tar.gz与检查。发布后 /www/backup/qmdh-comfy-closure-live-20261019 ↔ closure-live-backup，10文件SHA一致；5820媒体/15增量111458315字节、DB/最终能力与产物证据；tar已完整读取，链引用发布前及旧全链。不能只恢复最后增量。
+- 程序回退先排空持久待办/确认上游终态、禁用id60/61/62，再使用qmdh-release-backup-{backend,worker,frontend}:20261019-closure；不降迁移、不重置业务库/媒体/key。不让旧版对未知编辑adapter产生模拟结果。
+- 九任务十一图、最终CI39215244482、四容器探活/frontend阻断、三档与幂等、六CAD/health、公网bundle一致性通过；没有声称浏览器点击/长期压测。详细事实见[comfyui-frp.md](comfyui-frp.md)。
 
 # Server Operations Runbook
 

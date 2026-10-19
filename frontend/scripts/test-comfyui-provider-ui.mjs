@@ -95,6 +95,14 @@ test('local custom dimensions and resolution/count reach the actual submission p
   assert.equal(draft.payload.payload.image_count, 3);
 });
 
+test('selecting a resolution preset exits custom dimensions rather than silently ignoring the preset', () => {
+  const { ratioForResolutionChange } = load('features/studio/studioConstants.ts');
+  assert.equal(ratioForResolutionChange(image, '1536x1024'), '3:2');
+  assert.equal(ratioForResolutionChange(image, '1024x1536'), '2:3');
+  assert.equal(ratioForResolutionChange(image, '1392x1024'), '1:1');
+  assert.equal(ratioForResolutionChange(image, '16:9'), '16:9');
+});
+
 test('local editing requires exactly two images before submission', () => {
   const { validateStudioTaskSubmission } = load('features/studio/studioTaskSubmissionValidation.ts');
   const { defaultStudioForm } = load('features/studio/studioConstants.ts');

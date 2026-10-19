@@ -86,7 +86,7 @@ def prepare_graph(graph: dict, mapping: dict, payload: dict, *, seed: int, prefi
     if (width is None) != (height is None):
         raise ValueError("ComfyUI width and height must be supplied together")
     if width is None:
-        ratios = {"1:1": (1024, 1024), "16:9": (1344, 768), "9:16": (768, 1344),
+        ratios = {"1:1": (1024, 1024), "16:9": (1280, 720), "9:16": (720, 1280),
                   "4:3": (1152, 864), "3:4": (864, 1152), "3:2": (1248, 832), "2:3": (832, 1248), "21:9": (1568, 672)}
         ratio = str(payload.get("aspect_ratio") or "1:1")
         if ratio in ("匹配比例", "智能", "auto", "automatic", "smart"):
@@ -255,6 +255,36 @@ class ComfyUIProviderAdapter:
         graph, mapping = load_workflow(Path(settings.comfyui_workflow_root), self.profile.model_name)
         if capability != mapping["capability"]:
             raise ValueError("ComfyUI workflow capability mismatch")
+        if self.state and self.state.get("workflow_sha256") != mapping["sha256"]:
+            raise ValueError("ComfyUI saved workflow version differs; reconcile existing prompt first")
+        if self.state.get("stage") == "downloaded" and self.state.get("prompt_id") and self.state.get("storage_path"):
+            # A worker may die after durable download but before booking assets.
+            # ComfyUI history can be lost on restart; the verified server file is
+            # sufficient evidence and must not require another GPU execution.
+            prompt = str(UUID(self.state["prompt_id"]))
+            path = self.state["storage_path"]
+            if path not in [f"generated/comfyui/task-{self.task_id}/{prompt}.{ext}" for ext in ("png", "jpg", "webp")]:
+                raise ValueError("Invalid saved ComfyUI output path")
+            try:
+                data = read_binary_asset(path)
+            except FileNotFoundError:
+                data = None
+            if data and hashlib.sha256(data).hexdigest() == self.state.get("output_sha256"):
+                with Image.open(BytesIO(data)) as im:
+                    width, height = im.size
+                    im.verify()
+                self._save(stage="downloaded")  # fence the execution lease
+                redis = Redis.from_url(settings.redis_url, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
+                try:
+                    redis.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", 1, GPU_LOCK, str(self.task_id))
+                finally:
+                    redis.close()
+                return ExecutionOutcome(self.profile.model_name, 1, 0.0, self.profile.pricing_currency, True, {
+                    "summary": "ComfyUI verified saved output recovered", "adapter_mode": "comfyui", "elapsed_ms": 1,
+                    "storage_path": path, "storage_paths": [path], "output_count": 1, "requested_image_count": 1,
+                    "output_width": width, "output_height": height, "upstream_task_id": prompt, "comfyui": dict(self.state),
+                    "billing": {"cost": 0, "currency": self.profile.pricing_currency, "note": "Local GPU price not configured"},
+                })
         if capability == "image.edit" and payload.get("width") is None and str(payload.get("aspect_ratio")) in ("遵循原图", "遵循原图比例", "原图比例", "原图", "source", "match_source", "follow_source") and payload.get("resolution") in ("1k", "2k", "4k"):
             from app.database import SessionLocal
             from app.models import Task
@@ -266,8 +296,6 @@ class ComfyUIProviderAdapter:
             target = {"1k": 1024, "2k": 2048, "4k": 4096}[payload["resolution"]]
             factor = min(target / max(w, h), (target * target / (w * h)) ** .5)
             payload = {**payload, "width": max(256, round(w * factor / 8) * 8), "height": max(256, round(h * factor / 8) * 8)}
-        if self.state and self.state.get("workflow_sha256") != mapping["sha256"]:
-            raise ValueError("ComfyUI saved workflow version differs; reconcile existing prompt first")
         seed = self.state.get("seed", payload.get("seed"))
         if seed is None:
             seed = secrets.randbelow(2**53)

@@ -77,6 +77,16 @@ export const maxStudioImageCount = 3;
 
 export const studioImageCountOptions = [1, 2, 3] as const;
 
+/** Selecting a preset exits explicit dimensions, keeping a standard ratio where possible. */
+export function ratioForResolutionChange(provider: {adapter_kind?: string} | null | undefined, ratio: string): string {
+  const match = /^(\d+)x(\d+)$/.exec(ratio);
+  if (provider?.adapter_kind !== "comfyui" || !match) return ratio;
+  let a = Number(match[1]), b = Number(match[2]);
+  while (b) { const remainder = a % b; a = b; b = remainder; }
+  const standard = `${Number(match[1]) / a}:${Number(match[2]) / a}`;
+  return aspectRatioOptions.includes(standard) ? standard : "1:1";
+}
+
 export type ResolutionOption = { id: string; label: string };
 
 export const resolutionOptions: ResolutionOption[] = [

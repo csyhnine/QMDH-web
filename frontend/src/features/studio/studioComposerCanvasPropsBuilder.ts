@@ -4,6 +4,7 @@ import {
   isSourceAspectRatio,
   resolveProviderResolutionOptions,
   studioResolutionLabel,
+  ratioForResolutionChange,
 } from "./studioConstants";
 import {
   aspectRatioOptionsFor,
@@ -246,7 +247,8 @@ export function buildStudioComposerCanvasProps({
     onRegisterSeedancePrivateAvatar: referenceUpload.registerSeedancePrivateAvatar,
     onStartSeedanceRealAvatar: referenceUpload.startSeedanceRealAvatar,
     onCompleteSeedanceRealAvatar: referenceUpload.completeSeedanceRealAvatar,
-    onResolutionSelect: (resolutionId) => patchStudioForm({ resolution: resolutionId }),
+    onResolutionSelect: (resolutionId) => patchStudioForm({ resolution: resolutionId,
+      aspectRatio: ratioForResolutionChange(selectedProvider, studioForm.aspectRatio) }),
     onSaveCustomTemplate: () => void studioTemplates.saveCustomTemplate(),
     onSubmit: taskActions.handleSubmit,
     onTemplateDraftLabelChange: studioTemplates.setTemplateDraftLabel,

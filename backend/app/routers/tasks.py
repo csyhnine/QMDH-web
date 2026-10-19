@@ -51,6 +51,19 @@ def recover_comfyui_task(task_id: int, action: str = Body(embed=True), note: str
             if queue.get("queue_running") or queue.get("queue_pending"):
                 raise HTTPException(409, "ComfyUI 队列非空，不能解除占用。")
             prompt_id = (task.result or {}).get("comfyui", {}).get("prompt_id")
+            saved = task.result.get("comfyui", {})
+            if saved.get("stage") == "downloaded" or len(saved.get("batch_outputs", [])) >= int(task.payload.get("image_count", 1)):
+                raise HTTPException(409, "服务器已有已下载的结果，请恢复入库，不能关闭。")
+            if not prompt_id and saved.get("client_id"):
+                response = client.get("/history", params={"max_items": 200}); response.raise_for_status()
+                matches = []
+                for id, item in response.json().items():
+                    prompt = item.get("prompt", [])
+                    if len(prompt) > 3 and isinstance(prompt[3], dict) and prompt[3].get("client_id") == saved["client_id"]:
+                        matches.append(id)
+                if len(matches) > 1:
+                    raise HTTPException(409, "发现多个上游记录，须进一步核对，不能直接关闭。")
+                prompt_id = matches[0] if matches else None
             if prompt_id:
                 response = client.get(f"/history/{prompt_id}"); response.raise_for_status()
                 status_info = response.json().get(prompt_id, {}).get("status", {})

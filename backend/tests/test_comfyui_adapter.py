@@ -236,6 +236,18 @@ class ComfyUIAdapterTests(unittest.TestCase):
         self.run_adapter()
         self.assertFalse(any(r.method == "POST" for r in self.calls))
 
+    def test_downloaded_checkpoint_recovers_without_upstream_history(self):
+        path = f"generated/comfyui/task-42/{PROMPT_ID}.png"
+        self.adapter.bind_task(42, {"prompt_id": PROMPT_ID, "seed": 0, "stage": "downloaded",
+            "workflow_sha256": self.mapping["sha256"], "storage_path": path,
+            "output_sha256": hashlib.sha256(self.png.getvalue()).hexdigest()}, self.saved.append)
+        FakeRedis.values[c.GPU_LOCK] = "42"
+        with patch.object(c, "read_binary_asset", return_value=self.png.getvalue()):
+            result = self.run_adapter()
+        self.assertEqual(result.result["storage_path"], path)
+        self.assertEqual(self.calls, [])
+        self.assertNotIn(c.GPU_LOCK, FakeRedis.values)
+
     def test_invalid_image_is_not_materialized(self):
         def handler(request):
             if request.url.path == "/view":

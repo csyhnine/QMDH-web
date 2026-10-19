@@ -20,12 +20,12 @@
 
 - 本轮验证：本地关键集 + provider 回归 232 passed/1 skipped/24 subtests；生产隔离、无网络容器 14 项 unittest 通过；CI 39191698825 前后端成功；健康与六条 CAD 路由通过。数据库 schema a16c9e74b821、env 保持；两端 12 份发布备份文件 SHA256 一致。当前无真实 prompt、GPU 消耗或生成验收。
 
-## 对接值（10-16 原方案，以上更新优先）
+## 当前对接值
 
 | 项目 | 约定 |
 |---|---|
 | Windows serverAddr | `120.79.227.11`（现有服务器 SSH 地址；首次联调再核对） |
-| 公网 FRP 端口 | `7443/TCP`，准备值，当前未监听/未开放；不是 HTTPS 网站路径 |
+| 公网 FRP 端口 | `7443/TCP`，已监听并通过公网 TLS1.3/mTLS 校验；不是 HTTPS 网站路径 |
 | FRP 版本 | 双方固定 `0.71.0`，已查官方 tag；不是“自动使用最新版本” |
 | TLS serverName | `frp.qmdh.internal`，server 证书 SAN 必须包含此 DNS 名；连接仍用上方 IP，无需为此名字配置公共 DNS |
 | Windows user / proxy | `qmdh-windows` / `comfyui`，类型 `stcp` |
@@ -35,7 +35,7 @@
 | 内部 visitor 监听 | `172.30.218.2:8188`；绑定专用网卡，不绑定控制网络网卡 |
 | 公网 ComfyUI 端口 | 无，STCP 不设置 remotePort；不配置 nginx 转发或前端直连 |
 
-只读核对：生产 Compose v5.1.3；未发现 frps 命令；7443/7000/8188 没有 TCP 监听；宿主路由与现有 Docker 网段未与拟用 `172.30.218.0/28` 重叠。云安全组、上游策略未检查，以上不代表公网已可用。部署当天重新检查全部 Docker IPAM、路由和端口。
+10-16 初始只读记录（历史）：生产 Compose v5.1.3；当时未发现 frps 命令；当时 7443/7000/8188 没有 TCP 监听；宿主路由与现有 Docker 网段未与拟用 `172.30.218.0/28` 重叠。云安全组、上游策略未检查，以上不代表公网已可用。部署当天重新检查全部 Docker IPAM、路由和端口。
 
 ## 网络与隔离
 

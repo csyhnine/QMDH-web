@@ -1,3 +1,9 @@
+## 2026-10-19 FRP / ComfyUI 发布补充
+
+- 已运行 STCP frps/visitor：公网仅 7443/TCP，backend/三 worker 的 comfy_backend internal 网络与 workflows 只读挂载依赖显式 overlay。后续管理这些服务时，使用 `docker compose -f docker-compose.yml -f /opt/qmdh-frp/compose.frp.yml ...`；仅主文件重建会丢掉专网/模板挂载。详见 docs/comfyui-frp.md 最新段。
+- 发布功能 621e2f1，生产代码合并 0562244e；原 backend/worker 镜像分别保存在 qmdh-release-backup-backend:20261019-comfyui、qmdh-release-backup-worker:20261019-comfyui。新镜像以原镜像为基础，只复制六个合并后的代码文件，构建说明 /opt/qmdh-frp/Dockerfile.adapter 及发布备份均保留；ODA/FFmpeg/Nano Banana 差异保全。程序回退先确认无运行任务，再恢复这两个旧镜像标签并重建对应服务，不降级数据库或删除媒体。两个新 provider id60/61 保持禁用。
+- .env/key/schema 未改；frontend/postgres/redis/meilisearch 容器未换。发布证据/DB/env/媒体增量与恢复链位于 /www/backup/qmdh-release-20261019-comfyui-prep，受限本机对应 E:/backups/QMDH-web/frp-20261019/release-backup。CA 私钥仅在本机受限离线目录，不在服务器、镜像或 Git。
+
 # Server Operations Runbook
 
 2026-10-16 自动通路 23ccfa8 已部署，运行合并 f060300c；backend/worker/前端重建，backend healthy＋3 worker，无迁移、env/key 不变。备份 release-20261016-cad-auto-route 两端校验，5773 媒体/空增量；本次 restore-media-chain.json 引用 cad-preparation 目录既有完整包链及 ODA 包（未复制/删除旧包），恢复时按该链追加空增量。最新及前次目录 ACL 仅 Admin/SYSTEM，使用 (OI)(CI) 让受限文件可继承访问。回退镜像 qmdh-release-backup-{backend,worker,frontend}:20261016-cad-auto-route，不回退/删除业务 DB/媒体。只读建议接口不需迁移；隔离 HTTP 与真实图副本试跑/公网新包/路由/健康通过，真实图部分连通结论见 handoff，不自动保存建议。

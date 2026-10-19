@@ -1,6 +1,6 @@
 # Tasks
 
-Last aligned: `2026-10-16`。旧任务原文与开发顺序完整保存在 `archive/document-baseline-before-2026-10-08-alignment/tasks.md`，不作为当前排期。
+Last aligned: `2026-10-19`。旧任务原文与开发顺序完整保存在 `archive/document-baseline-before-2026-10-08-alignment/tasks.md`，不作为当前排期。
 
 ## Rules And Current Goal
 
@@ -21,7 +21,8 @@ Last aligned: `2026-10-16`。旧任务原文与开发顺序完整保存在 `arch
 
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
-| comfyui-frp-001 | Windows ComfyUI 私有隧道与接入准备 | IN_PROGRESS（FRP 已运行，适配器待联调） | 服务端/visitor 已部署及 mTLS 正反向验证，backend/三 worker 无重启接网；两个文生图适配器与持久 checkpoint/GPU 锁已准备，证书已签发且公网 mTLS 通过、适配器已部署/两模型禁用，待本机客户端与真实 API 输出 |
+| comfyui-frp-001 | Windows ComfyUI 私有隧道与文生图 | DONE（已上线并真实验收） | 回环收口；Z Image task8237/asset9263、Qwen task8238/asset9264 实跑、媒体SHA/归属/账记录通过；id60/61启用，1K单张；服务/长稳与图生图不计完成 |
+| comfyui-edit-002 | ComfyUI 双图编辑 | TODO（后续阶段，未启用） | 复用既有 API 图，须核验两图上传/白名单/归属/实际history，不沿用示例图；单图变体未实跑，不自动开启 |
 | management-workbench-002 | 管理工作台与交互排期 | DONE（已部署，514a8cb/ce31075） | 四视图、列分组排序/右侧详情/搜索选人；DHTMLX 10.0.3 MIT，拖动预览/版本保存/失败保留；本地 Chrome 操作与窄屏检查、CI 后端 197/前端 43 通过，仅替换 frontend，六人授权/API/业务数据保留，无迁移 |
 | management-projects-001 | 公司管理层年度台账与人员甘特排期 | DONE（已部署，db376ec） | 独立公司权限/单位隔离，五位已核对账号及后续明确授权的 admin 已开通；台账全字段、人员、阶段甘特/里程碑/重叠、CSV、归档/版本保护；迁移 a16c9e74b821，生产副本与线上只读验证通过，无示例项目；真实浏览器点击因工具故障未验收 |
 | migration-bootstrap-001 | 历史空库迁移链完整性 | TODO | 纯空库 alembic upgrade head 在旧 chat_messages attachments 迁移缺表；生产副本升级和 Base.metadata 建表后新迁移均通过。本轮不改旧链，后续用独立任务修复并建立从零回归 |
@@ -56,20 +57,14 @@ Last aligned: `2026-10-16`。旧任务原文与开发顺序完整保存在 `arch
 
 ## Current Task Details
 
-### Task: [comfyui-frp-001] Windows ComfyUI 私有接入准备
+### Task: [comfyui-frp-001] Windows ComfyUI 私有隧道与文生图
 
-- 2026-10-19 10:57：backend/三 worker 经完整 STCP 通路只读 GET /system_stats、/queue 均 200/JSON 正确，队列 0/0；只读联通子步骤 DONE。provider 保持禁用，无 GPU 任务；Windows 8188 全网卡监听仍待回环收口，服务/长稳和真实生成/网站资产仍待验收。证据见私有 SERVER-READONLY-STATUS.md。
-
-- 2026-10-19 更新：API-HANDOFF/三个 API 图已读取并核验哈希；FRP 已运行、秘密已生成（私有路径），mTLS 正向与四种错误凭证拒绝通过；专网接入 backend/三 worker、不重启，frontend 实际阻断。新增两个文生图 adapter/固定模板映射/Task checkpoint/全局 GPU 锁/只读 probe。Windows CSR 已签发、公网 mTLS 已通过、适配器已部署且两模型禁用；待本机客户端/真实 GPU 结果；编辑图未启用。下方 10-16 为阶段历史，当前事实详见 docs/comfyui-frp.md 最新段。
-
-- 状态：IN_PROGRESS（2026-10-16 本地，未部署）。用户要求先准备配置与接入方案，另一本机 agent 负责客户端/ComfyUI；首批先文生图、后图生图。
-- 本轮边界：ops/frp 公开模板与 docs/comfyui-frp.md 契约，生产只读端口/路由/网络核验。STCP 无公网 remotePort，7443/TCP 为拟用 FRP 入口；mTLS + token + STCP secret，专用 internal 网络仅 backend/worker 接入。
-- 代码事实：现有 provider 无 ComfyUI adapter，不能把配置准备标为网站接入完成。后续拆分材料签发/网络发布/文生图 adapter/图生图，不自行发布或创建业务 provider。
-- 禁止：公开 ComfyUI、跳过证书校验、聊天/Git 交接秘密、覆盖原 styles/比较文档/_tmp_*、更换 key、影响 CAD/18010/数据卷、未协调即重建运行任务的 worker。
-- 验收：模板通过 TOML/固定版本 frp verify 与合并 Compose 检查；后续需错误凭证拒绝、backend/全部 worker 可达、frontend/公网不可达、真实生成结果入库及断线/恢复验收。当前仅准备，不能声称真实隧道或生成已验收。
-- 依赖：本机 windows.csr、API 格式工作流、白名单绑定、模型/节点版本、成功/失败 history 与图片样例；秘密受限目录/SSH 交接，私钥各自保管。安全组未核验，尚无可领取生产证书/token。
-- 文档同步：本说明、handoff、architecture、docs/comfyui-frp.md；2.0 沿用 Task/ProviderCall/Asset，工作流版本/hash 与 prompt_id 支持追溯，保持账号归属，不引入任意 graph 执行。
-
+- 状态：DONE（2026-10-19 已部署/已启用/真实验收）。边界：FRP服务端、专网、证书/认证、两个文生图adapter、Task checkpoint/GPU锁、图片回存；不含图生图或Windows服务/长稳。
+- 结果：回环127.0.0.1:8188；公网mTLS和错误凭证拒绝；frontend阻断、backend/三worker只读通路通过。正常公网网站API/现有admin账号与既有项目生成两张1024²，Z8237/9263/32480ms、Qwen8238/9264/46526ms；Task/Asset/ProviderCall/UsageLedger及本机/服务器/下载SHA一致，id60/61启用，GPU锁释放。
+- 配置：原启动器缓存导致副本全网卡监听，已停并保存listen=false；隐藏ComfyUI PID32112，frpc仍前台，无开机服务。完整私有路径/恢复链和证据见docs/comfyui-frp.md及handoff；不导出私钥、不公开8188、不改env/key/schema、CAD/18010/卷及原未提交文件。
+- 检查：此前本地232/24subtests、隔离14与功能CI通过；本轮只改本机运行配置/模型启用和正式验收记录，无源码变化，不重复全站测试。
+- 回退：先禁用id60/61再回旧镜像，不删除真实任务/媒体。最新DB/媒体增量恢复备份已配对，2文件3318213字节/7备份SHA一致。
+- 2.0：沿用Task/Asset/ProviderCall/ledger，workflow hash/prompt_id追踪，不引入新编排。同步tasks/handoff/architecture/server-operations/comfyui-frp。
 
 ### Task: [cad-auto-route-001] 系统通路建议与人工修改
 

@@ -9,12 +9,16 @@ from pathlib import Path
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 
 def sign(ca_dir: Path, csr_path: Path, output: Path):
     csr = x509.load_pem_x509_csr(csr_path.read_bytes())
-    if not csr.is_signature_valid or csr.public_key().key_size < 256:
+    public = csr.public_key()
+    strong = (isinstance(public, rsa.RSAPublicKey) and public.key_size >= 2048) or (
+        isinstance(public, ec.EllipticCurvePublicKey) and public.key_size >= 256)
+    if not csr.is_signature_valid or not strong:
         raise ValueError("Invalid CSR signature or public key")
     ca = x509.load_pem_x509_certificate((ca_dir / "client-ca.crt").read_bytes())
     key = serialization.load_pem_private_key((ca_dir / "client-ca.key").read_bytes(), password=None)

@@ -2961,6 +2961,8 @@ def execute_task(task_id: int) -> None:
         task = db.get(Task, task_id)
         if not task:
             return
+        if task.status == TaskStatus.completed and task.result.get("adapter_mode") == "comfyui":
+            return  # A duplicated Redis delivery must not book a second local run.
 
         workflow = db.scalar(select(Workflow).where(Workflow.id == task.workflow_id))
         project = db.scalar(select(Project).where(Project.id == task.project_id))

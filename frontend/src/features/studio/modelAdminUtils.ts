@@ -70,6 +70,7 @@ export function publicProviderModelLine(provider: ProviderLike): string {
 export function providerGroupLabel(provider: Provider): string {
   const name = providerIdentity(provider);
   const model = provider.model_name.trim().toLowerCase();
+  if (provider.adapter_kind === "comfyui") return "本机 ComfyUI";
   // Haodeya Seedance 2 ToAPI — same Studio bucket as Grok / HappyHorse.
   if (
     model === "seedance-2" ||
@@ -100,7 +101,9 @@ export function groupProviders(providers: Provider[]): Array<{ label: string; pr
 }
 
 export function isRuntimeImageProvider(provider: Provider): boolean {
-  return provider.outbound && (provider.adapter_kind === "openai_compatible" || provider.provider_name.startsWith("modelscope_"));
+  return provider.outbound &&
+    provider.capabilities.some((capability) => capability === "image.generate" || capability === "image.edit") &&
+    (provider.adapter_kind === "openai_compatible" || provider.adapter_kind === "comfyui" || provider.provider_name.startsWith("modelscope_"));
 }
 
 export function isRuntimeVideoProvider(provider: Provider): boolean {

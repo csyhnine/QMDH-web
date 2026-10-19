@@ -249,6 +249,7 @@ const IMAGE_EDIT_STRATEGY_FOR_GENERATE: Record<string, string> = {
 };
 
 const adapterOptions: AdapterOption[] = [
+  { key: "comfyui", label: "ComfyUI 本机图片", support: "ready", note: "通过私有隧道调用本机批准工作流；当前支持文生图、1K、单张。图片编辑尚未开放。" },
   { key: "haodeya_grok", label: "Haodeya 视频（Grok / HappyHorse / Seedance 2）", support: "partial", note: "一条统一 profile + Studio 档位菜单；Seedance 探测出的裸/分 SKU 可停用，Studio 有统一 profile 时会自动隐藏。探测不会创建真实视频。" },
   { key: "volcengine_ark", label: "Volcengine Ark 视频", support: "partial", note: "火山 Ark 异步任务（非 Haodeya Seedance 2 ToAPI）；探测不会创建真实视频。" },
   { key: "openai_compatible", label: "OpenAI 兼容", support: "ready", note: "Chat、生图、图像编辑的默认适配器；具体走哪条 strategy 看下方 Strategies。" },
@@ -628,7 +629,12 @@ function supportLevelLabel(level: SupportLevel): string {
 }
 
 function getAdapterOption(adapterKind: string): AdapterOption {
-  return adapterOptions.find((o) => o.key === adapterKind) ?? adapterOptions[0];
+  return adapterOptions.find((o) => o.key === adapterKind) ?? {
+    key: adapterKind,
+    label: adapterKind || "未知适配器",
+    support: "planned",
+    note: "尚未登记此适配器，请核对服务端支持情况。",
+  };
 }
 
 function getCapabilityDefinition(capability: string): CapabilityDefinition {

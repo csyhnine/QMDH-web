@@ -21,6 +21,7 @@ Last aligned: `2026-10-19`。旧任务原文与开发顺序完整保存在 `arch
 
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
+| comfyui-provider-ui-003 | ComfyUI 图片渠道前端接入 | IN_PROGRESS（本地修复，待发布） | 补 ComfyUI adapter 标签、未知类型不再默认视频；生成页图片白名单包含 ComfyUI，本机独立分组，图片/视频/编辑菜单与后台真实组件回归 |
 | comfyui-frp-001 | Windows ComfyUI 私有隧道与文生图 | DONE（已上线并真实验收） | 回环收口；Z Image task8237/asset9263、Qwen task8238/asset9264 实跑、媒体SHA/归属/账记录通过；id60/61启用，1K单张；服务/长稳与图生图不计完成 |
 | comfyui-edit-002 | ComfyUI 双图编辑 | TODO（后续阶段，未启用） | 复用既有 API 图，须核验两图上传/白名单/归属/实际history，不沿用示例图；单图变体未实跑，不自动开启 |
 | management-workbench-002 | 管理工作台与交互排期 | DONE（已部署，514a8cb/ce31075） | 四视图、列分组排序/右侧详情/搜索选人；DHTMLX 10.0.3 MIT，拖动预览/版本保存/失败保留；本地 Chrome 操作与窄屏检查、CI 后端 197/前端 43 通过，仅替换 frontend，六人授权/API/业务数据保留，无迁移 |
@@ -56,6 +57,13 @@ Last aligned: `2026-10-19`。旧任务原文与开发顺序完整保存在 `arch
 | video-seedance-502-001 | Seedance 参考图代理/DNS | TODO | 历史上游问题；先确认当前是否仍发生 |
 
 ## Current Task Details
+
+### Task: [comfyui-provider-ui-003] ComfyUI 图片渠道前端接入
+
+- 状态：IN_PROGRESS（2026-10-19 本地修复，待前端发布）。用户反馈本机图片模型显示到视频渠道；API的image.generate能力正确，根因是ModelsPage未知adapter回退到第一项Haodeya视频，以及Studio图片adapter白名单遗漏comfyui。
+- 边界：ModelsPage的适配器选项/未知标签、modelAdminUtils图片可用性/ComfyUI来源分组、真实前端组件与菜单回归；不修改模型能力/秘密/价格、后台生成链路或原styles.css改动，不再跑GPU任务。
+- 验收：后台显示ComfyUI本机图片，未知adapter保留自身标识/未适配；两模型出现在文生图本机分组，不进入视频或未实现的图像编辑模式；45前端回归、无新增TS错误、构建及公网新chunk验证通过。保护真实记录和现有backend/worker/FRP运行，发布只换frontend。
+- 依赖/同步：现有真实provider id60/61、docs/comfyui-frp.md；更新tasks/handoff，架构图片入口说明。2.0仅纠正已有能力展示与路由筛选，不变数据/执行/归属。
 
 ### Task: [comfyui-edit-002] ComfyUI 双图编辑
 

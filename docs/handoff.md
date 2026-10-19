@@ -15,7 +15,7 @@
 
 - 用户明确不跑GPU，enabled保持。读取新版交接，编辑LoadImage470一图/easy seed502，文生图easy seed486；50步/GPU缓存，输出461，Z原样。哈希见docs/qwen-v1.1-preparation.md。
 - 准备分支codex/qwen-v11-preparation，未合main/未发布运行镜像；服务器独立/opt/qmdh-frp/prepared/qwen-v1.1-20261019暂存，线上旧模板/双图合同继续。共享种子源保留下游链接；一/双图按在用map合同输出API与前端校验，不硬切当前页面。
-- 本地静态合同/后端23与前端回归通过；600秒profile与硬上限相同，旧4K25步483秒不能证明新版50步能达标。超时保留原prompt恢复，不盲重交；本轮不改预算。服务器隔离检查与状态不变证据待补。后续激活需排空版本任务、成套部署与改展示名并受控GPU验收。
+- 本地静态合同/后端23与前端回归通过；600秒profile与硬上限相同，旧4K25步483秒不能证明新版50步能达标。超时保留原prompt恢复，不盲重交；本轮不改预算。服务器--network none/read-only静态合同和Linux23项通过；前端53项/TS0新增/构建通过。03e845d已推准备分支，未合main；模板与源码已暂存，verification.json证明active文件SHA、provider enabled/timeout、容器ID/镜像/启动时间均不变，9证据文件两端SHA一致。未调用/prompt/无GPU。准备任务DONE（不代表激活）。后续激活需排空版本任务、成套部署与改展示名并受控GPU验收。
 
 ### [2026-10-19] ComfyUI 执行反馈与双图提交提示
 

@@ -36,4 +36,4 @@
 
 ## 本轮结果
 
-本地静态合同三图通过，后端ComfyUI23项通过；前端完整检查及新版单图合同回归通过。服务器离线检查和两端SHA、运行不变证据完成后补齐。源码为准备分支，未合入main、未重建镜像/重启服务。
+本地及服务器隔离静态合同三图通过，后端ComfyUI23项在Windows/Linux均通过；前端完整53项、新版单图合同与构建通过，23既有TS/0新增。服务器隔离检查使用--network none，合同容器额外read-only/tmpfs，无生产数据库或媒体挂载。准备源码03e845d已推codex/qwen-v11-preparation，source.tar SHA256 146aac01b7b8e6f167aaf1839e1c920264999bd3be6cfa2cae48c02be139903d；未合main/未激活/未重建运行镜像。verification.json证明全部在用文件SHA、provider enabled/timeout与全部容器ID/镜像/启动时间不变；9份证据文件两端SHA一致。未调用/prompt，无GPU任务；实际耗时/显存/输出仍待验证。

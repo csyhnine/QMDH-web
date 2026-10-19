@@ -70,17 +70,20 @@ export function publicProviderModelLine(provider: ProviderLike): string {
 export function providerGroupLabel(provider: Provider): string {
   const name = providerIdentity(provider);
   const model = provider.model_name.trim().toLowerCase();
+  const hasVideo = provider.capabilities.includes("video.generate");
   if (provider.adapter_kind === "comfyui") return "本机 ComfyUI";
   // Haodeya Seedance 2 ToAPI — same Studio bucket as Grok / HappyHorse.
   if (
-    model === "seedance-2" ||
-    model === "haodeya_seedance" ||
-    model.startsWith("seedance-2-") ||
-    name.includes("haodeya_seedance")
+    hasVideo && (
+      model === "seedance-2" ||
+      model === "haodeya_seedance" ||
+      model.startsWith("seedance-2-") ||
+      name.includes("haodeya_seedance")
+    )
   ) {
     return "Grok 视频";
   }
-  if (name.includes("grok") || name.includes("haodeya") || name.includes("happyhorse")) return "Grok 视频";
+  if (hasVideo && (name.includes("grok") || name.includes("haodeya") || name.includes("happyhorse"))) return "Grok 视频";
   if (name.includes("firered")) return "魔搭 / FireRed";
   if (name.includes("z_image") || name.includes("z-image")) return "魔搭 / 造相 Z";
   if (name.includes("qwen")) return "魔搭 / Qwen";

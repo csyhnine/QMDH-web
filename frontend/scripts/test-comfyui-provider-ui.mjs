@@ -39,6 +39,13 @@ const zImage = { ...image, provider_name: 'comfyui-z-image', model_name: 'z_imag
 const video = { ...image, provider_name: 'video-only', model_name: 'video-model', display_name: 'Video', adapter_kind: 'volcengine_ark', capabilities: ['video.generate'] };
 const chat = { ...image, provider_name: 'chat-only', adapter_kind: 'openai_compatible', capabilities: ['chat.completions'] };
 
+test('an image channel name containing a video gateway does not make it a video group', () => {
+  const { providerGroupLabel } = load('features/studio/modelAdminUtils.ts');
+  const imageChannel = { ...image, provider_name: 'haodeya-gpt-image', model_name: 'gpt-image', adapter_kind: 'openai_compatible' };
+  assert.doesNotMatch(providerGroupLabel(imageChannel), /视频/);
+  assert.equal(providerGroupLabel({ ...video, provider_name: 'haodeya-grok', adapter_kind: 'haodeya_grok' }), 'Grok 视频');
+});
+
 test('actual Studio derived menus put ComfyUI in images, not video or unimplemented editing', () => {
   const { deriveStudioViewState } = load('features/studio/studioDerivedState.ts');
   const { defaultStudioForm } = load('features/studio/studioConstants.ts');

@@ -14,7 +14,7 @@
 ### [2026-10-19] ComfyUI 图片渠道显示修复 — 本地就绪、待前端发布
 
 - 用户反馈图片模型显示视频；数据库/API能力image.generate正确。漏掉前端comfyui登记，后台getAdapterOption把未知类型落到首项Haodeya视频；Studio图片白名单也缺ComfyUI，原API真实生成验收没有覆盖前端入口。这是本轮修复范围。
-- 新分支codex/comfyui-image-channel-fix：登记ComfyUI本机图片；未知adapter保留原标识/规划中；支持文生图列表且本机ComfyUI独立来源分组，保留能力检查，视频/未开放编辑不显示。真实ModelsPage组件与Studio derived菜单回归已加入，原styles13行不提交。45项前端回归通过、23既有TS错误/0新增、构建通过；待仅前端发布，禁止为此重跑GPU或重启backend/worker/FRP。
+- 新分支codex/comfyui-image-channel-fix：登记ComfyUI本机图片；未知adapter保留原标识/规划中；支持文生图列表且本机ComfyUI独立来源分组，保留能力检查，视频/未开放编辑不显示。Haodeya/Grok名称只有同时具备video.generate才可分到视频组，避免图片渠道因名称被误标。真实ModelsPage组件与Studio derived菜单回归已加入，原styles13行不提交。46项前端回归通过、23既有TS错误/0新增、构建通过；待仅前端发布，禁止为此重跑GPU或重启backend/worker/FRP。
 
 ### [2026-10-19] ComfyUI 文生图已启用 — 真实链路通过
 

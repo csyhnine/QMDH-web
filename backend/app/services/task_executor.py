@@ -3061,12 +3061,16 @@ def execute_task(task_id: int, *, dispatch_token: str | None = None) -> None:
                 }
         except Exception as exc:
             try:
+                if not db.is_active:
+                    db.rollback()
+                    task = db.get(Task, task_id, populate_existing=True)
                 check_dispatch_lease()
             except RuntimeError:
                 db.rollback()
                 return
             from app.services.provider_adapters.comfyui import ComfyDeferred
-            if isinstance(exc, ComfyDeferred):
+            checkpoint_uncertain = isinstance(locals().get("adapter"), ComfyUIProviderAdapter) and adapter.state.get("stage") in ("submitting", "submitted", "downloading", "downloaded", "between_images") and "ComfyUI execution failed" not in str(exc)
+            if isinstance(exc, ComfyDeferred) or checkpoint_uncertain:
                 task.status = TaskStatus.pending
                 task.result = {**task.result, "adapter_mode": "comfyui", "queued_stage": "recovering",
                                "recovery_error": str(exc), "summary": "本机连接或任务状态待恢复，请勿重复提交。"}

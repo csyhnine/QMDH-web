@@ -225,14 +225,16 @@ class ComfyUIProviderAdapter:
 
     def _execute(self, capability: str, payload: dict) -> ExecutionOutcome:
         count = _integer(payload.get("image_count", 1), "image_count", 1, 3)
-        completed = list(self.state.get("batch_outputs", []))
+        completed = deepcopy(self.state.get("batch_outputs", []))
         if len(completed) > count:
             raise ValueError("Saved batch count differs; reconcile before retry")
         while len(completed) < count:
             outcome = self._execute_one(capability, {**payload, "image_count": 1})
-            completed.append(outcome.result)
+            # Per-image entries must remain flat: embedding the live checkpoint
+            # would point back to this batch list on the second image.
+            completed.append({k: v for k, v in outcome.result.items() if k != "comfyui"})
             seed = (self.state["seed"] + 1) % (2**53)
-            self._save(stage="between_images", prompt_id=None, client_id=None, seed=seed, batch_outputs=completed)
+            self._save(stage="between_images", prompt_id=None, client_id=None, seed=seed, batch_outputs=deepcopy(completed))
         last = completed[-1]
         self._save(stage="downloaded")
         return ExecutionOutcome(self.profile.model_name, sum(i.get("elapsed_ms", 1) for i in completed),

@@ -166,6 +166,7 @@ class ComfyUIAdapterTests(unittest.TestCase):
         self.assertEqual(len(ids), 3)
         self.assertEqual(len(set(outcome.result["storage_paths"])), 3)
         self.assertEqual(len(self.saved[-1]["batch_outputs"]), 3)
+        json.dumps(self.saved[-1])  # real SQL JSON checkpoint must be serializable
         self.run_adapter(handler, image_count=3)
         self.assertEqual(len(ids), 3)
 
@@ -278,6 +279,6 @@ class ComfyUIAdapterTests(unittest.TestCase):
             executor.execute_task(task_id)
         with sessions() as db:
             task = db.get(Task, task_id)
-            self.assertEqual(task.status, TaskStatus.failed)
+            self.assertEqual(task.status, TaskStatus.pending)
             self.assertEqual(task.result["comfyui"]["prompt_id"], PROMPT_ID)
         engine.dispose()

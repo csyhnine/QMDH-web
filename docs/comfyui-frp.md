@@ -2,6 +2,12 @@
 
 2026-10-19：**两个文生图模型已上线并完成真实网站任务验收**。入口 `/studio/generate`，选择“本机 Z Image Turbo”或“本机 Qwen Image 2.1”，当前按 1K、单张使用。计算在 Windows GPU 上完成，结果保存到 QMDH 服务器及原资产库。图生图、Windows 服务/开机启动、长稳重连不在本次完成范围。
 
+## 2026-10-19 图片渠道前端修复
+
+用户反馈后台把本机图片渠道显示成视频；API能力一直是image.generate。实际根因：ModelsPage漏登记comfyui、未知adapter回退首项Haodeya视频；Studio图片白名单也遗漏comfyui。原真实生图验收只验证API/worker/产物链，未覆盖前端菜单。
+
+01d6c11/13bbe74（生产ae2901af）已补ComfyUI本机图片标签、未知adapter自身标识/规划中、文生图可选及本机独立分组；视频/未开放编辑不可选。Haodeya/Grok名称须有video.generate才分到视频组。真实ModelsPage组件及Studio derived菜单回归、46项前端检查/0新增类型错误/构建通过；仅换frontend623a1841，其他服务/数据不变，无新GPU任务。公网已核验新chunk，原本机ComfyUI/隧道/两个模型能力与真实验收记录保持。
+
 ## 当前连接与隔离
 
 | 项目 | 当前值 |

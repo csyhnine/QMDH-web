@@ -127,6 +127,7 @@ class Settings(BaseSettings):
     task_execution_mode: str = "background"
     redis_url: str = "redis://localhost:6379/0"
     redis_queue_name: str = "qmdh:tasks"
+    comfyui_workflow_root: str = "/app/integration/comfyui"
     openai_image_api_key: str | None = None
     openai_image_base_url: str = "https://api.openai.com/v1"
     openai_image_model: str = "gpt-image-1"

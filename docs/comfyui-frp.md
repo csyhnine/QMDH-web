@@ -2,7 +2,23 @@
 
 状态：2026-10-16，仅方案与配置模板，未部署、未签发生产材料、未开安全组、未注册网站 provider。用户确认先文生图，后图生图。本机另一 agent 负责 Windows frpc / ComfyUI；本会话负责服务器与网站。无自动跨 chat 发消息。
 
-## 对接值
+## 2026-10-19 当前准备与联调交接（优先于下方 10-16 方案）
+
+- 已读取本机 D:/ComfyUI-aki-v2/integration/qmdh/API-HANDOFF.md 与 workflow-map.json，三个 API 文件 SHA256 全部吻合，原图保存在私有运行目录，无图进 Git。当前仅文生图开放代码路径：Qwen Image 2.1 与 Z Image Turbo；Qwen 编辑图需要双图且尚无 API 真实输出验证，未启用 image.edit，不用示例图片填空。
+- FRP 0.71.0 官方 Linux 包哈希验证完成，scratch 镜像 qmdh-frp:0.71.0 已构建；frps/frpc verify 均通过。服务器 120.79.227.11:7443/TCP 已监听，服务器 visitor mTLS 登录成功。无 STCP remotePort；容器 7000 只发布为公网 FRP 7443，ComfyUI 8188 无宿主发布。误注册 TCP 的 allowPorts 仅容器 loopback 65535，且不发布。
+- backend 和三个 worker 已用 docker network connect 加入 qmdh-web_comfy_backend（internal、172.30.218.0/28），原容器 ID/启动时间未改变，四者 TCP 访问 visitor 8188 均成功；frontend 实际 nc 测试连接专网入口失败。专网 listener 不等于本机 ComfyUI 已连接，当前不宣称 /system_stats 或生图已成功。
+- mTLS 正向登录以及错误 token、错误 SAN、错误 CA、无客户端证书四项拒绝已验证。Windows 本机到公网 7443 实测超时，安全组/上游链路待确认，本机 CSR 尚待提供。尚未放宽云安全组，不公开 8188/7000。
+- 专用 CA/叶证书/随机 token/STCP 密钥已生成，离线 CA 私钥只在受限 E:/backups/QMDH-web/frp-20261019/ca。服务器 runtime 在 /opt/qmdh-frp/server 和 visitor；容器 UID 65532 只读自身材料，无 CA 私钥。Windows 材料在 E:/backups/QMDH-web/frp-20261019/windows：server-ca.crt、auth-token、windows.toml、manifest.json。windows.crt 待 CSR 签发；windows.key 由本机 agent 在 C:/ProgramData/QMDH-FRP 生成并保管。该目录 ACL 仅 Admin/SYSTEM 继承。客户端 config 使用上述材料绝对路径，私钥指向 C:/ProgramData/QMDH-FRP/windows.key。
+- server CA SHA256：c6430f148245ae94777383504b44f9e20744d6550cca30ce242e9bfea656a69f。CSR 到位后用 ops/frp/sign-client.py（--ca-dir 指向离线 ca、--csr 指向本机请求、--output 指向 windows/windows.crt）签发 clientAuth 证书；签发前核对 CSR 公钥指纹，拒绝覆盖已有证书，不读取/传输本机私钥。
+- 网站适配源码已准备，生产发布状态以最近 handoff 为准。get_provider_adapter 识别独立 comfyui 适配器，固定 private URL 与管理员模板目录，不接收浏览器任意图/模型/URL。Qwen 同步两处 prompt/seed、关闭增强，替换真正 EmptyLatent 输入；采样器/steps/CFG 固定、batch=1。支持明确 width/height（256..2048、8 的倍数、≤4MP）和已列比例对应尺寸，拒绝未验证的大分辨率预设。实际尺寸兼容性仍需本机 API 实跑。
+- 每个真实 Task 提交前将 seed/workflow hash/client_id/submitting 写入数据库；收到 prompt_id 后再次持久化，再按唯一 history 取 output 节点 461/9 的图片，拒绝跳转/路径越界/非图片与超限结果，写入原 media_storage 并沿用 Asset/ProviderCall/usage ledger。超时上限 600 秒，低于既有 running 15 分钟回收阈值，不改全站超时规则。
+- 三 worker 共享 Redis qmdh:comfyui:gpu:owner；忙时明确失败且不提交。提交状态未知或离线中断时保留锁，禁止自动 TTL 到期让第二任务挤入；需管理员用对应 prompt_id 和本机 queue/history 核对终态，再 compare-and-delete 释放同一 owner。不能全局 interrupt/clear，也不盲目重交。已知 prompt_id 在人工核对释放后可从原 Task checkpoint 续查，不宣称 worker 崩溃能自动恢复。正常终态释放锁，下载路径含 Task/prompt UUID，重复取回不会重新生成。
+- 两个禁用 provider 模板在 ops/frp/provider-profiles.example.json；api_key=frp-transport-authenticated 是兼容现有非空 API Key 字段的非秘密标记，不是 FRP token。FRP 秘密不得填入网站 provider 字段。未真实验收前不启用模型、不创建假项目/用户/任务、不套用云模型价格。
+- 联调后服务器只读探活：docker compose exec -T backend python -m app.scripts.comfyui_preflight；每个 worker 同样运行。只检 /system_stats 与工作流哈希，不提交 GPU。网络联通后再由本机 agent 给出两个文生图 API history/实际图片；图片编辑后续单独完成。
+- 准备发布恢复链：/www/backup/qmdh-release-20261019-comfyui-prep 与受限本机 E:/backups/QMDH-web/frp-20261019/release-backup。DB dump、env、运行镜像与 5800 媒体清单已保存；1 个媒体增量 13875126 字节，完整读取/哈希校验，restore-media-chain.json 引用 10-16 完整链；不把本轮增量当完整媒体备份。
+- 持久部署须始终合并主 compose 与 /opt/qmdh-frp/compose.frp.yml（或 Git ops/frp/compose.frp.yml）；手动 network connect 是本轮无中断接网方式，后续只用主文件重建会丢专网/模板挂载。适配器发布时需挂 workflows:/app/integration/comfyui:ro，并保护现有 ODA/Nano Banana 差异。
+
+## 对接值（10-16 原方案，以上更新优先）
 
 | 项目 | 约定 |
 |---|---|

@@ -47,6 +47,7 @@ from app.services.provider_adapters.base import (
     RequestDiagnostics,
 )
 from app.services.provider_adapters.bigjpg_upscale import BigjpgUpscaleProviderAdapter
+from app.services.provider_adapters.comfyui import ComfyUIProviderAdapter
 from app.services.provider_adapters.dashscope_video import DashScopeVideoProviderAdapter
 from app.services.provider_adapters.haodeya_grok_video import HaodeyaGrokVideoProviderAdapter
 from app.services.provider_adapters.volcengine_ark_video import VolcengineArkVideoProviderAdapter
@@ -343,6 +344,8 @@ def _materialize_preview_asset(*, provider_name: str, capability: str, prompt_su
 
 def get_provider_adapter(provider_name: str, db: Session | None = None) -> ProviderAdapter:
     definition = get_provider_definition(provider_name, db)
+    if definition.adapter_kind == "comfyui":
+        return ComfyUIProviderAdapter(definition, get_image_provider_profile(provider_name, db))
     if definition.adapter_kind in {
         "openai_compatible",
         "dashscope_native",
@@ -2984,6 +2987,11 @@ def execute_task(task_id: int) -> None:
 
         try:
             adapter = get_provider_adapter(task.requested_provider, db)
+            if isinstance(adapter, ComfyUIProviderAdapter):
+                def save_comfy_state(state: dict):
+                    task.result = {**task.result, "comfyui": state}
+                    db.commit()
+                adapter.bind_task(task.id, task.result.get("comfyui", {}), save_comfy_state)
             outcome = adapter.execute(workflow.provider_capability, task.payload)
             task.status = TaskStatus.completed
             task.latency_ms = outcome.latency_ms
@@ -3042,6 +3050,7 @@ def execute_task(task_id: int) -> None:
                 provider_name=task.requested_provider,
             )
             task.result = {
+                **({"comfyui": task.result["comfyui"]} if task.result.get("comfyui") else {}),
                 **failure,
                 **request_diagnostics,
                 "execution_mode": settings.task_execution_mode,

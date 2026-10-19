@@ -1,0 +1,32 @@
+[
+  {
+    "provider_name": "comfyui-qwen-t2i",
+    "display_name": "本机 Qwen Image 2.1（待联调）",
+    "base_url": "http://comfy-visitor:8188",
+    "model_name": "qwen_image_2_1_t2i",
+    "adapter_kind": "comfyui",
+    "capabilities": ["image.generate"],
+    "strategies": {"image.generate": "comfyui"},
+    "adapter_config": {"supported_resolutions": ["1k"]},
+    "api_key": "frp-transport-authenticated",
+    "enabled": false,
+    "timeout_seconds": 600,
+    "reference_mode": "disabled",
+    "unit_price": 0
+  },
+  {
+    "provider_name": "comfyui-z-image",
+    "display_name": "本机 Z Image Turbo（待联调）",
+    "base_url": "http://comfy-visitor:8188",
+    "model_name": "z_image_turbo",
+    "adapter_kind": "comfyui",
+    "capabilities": ["image.generate"],
+    "strategies": {"image.generate": "comfyui"},
+    "adapter_config": {"supported_resolutions": ["1k"]},
+    "api_key": "frp-transport-authenticated",
+    "enabled": false,
+    "timeout_seconds": 600,
+    "reference_mode": "disabled",
+    "unit_price": 0
+  }
+]

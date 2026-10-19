@@ -1,4 +1,4 @@
-# Overlay on docker-compose.yml. Preparatory only: do not apply to production yet.
+# Overlay on docker-compose.yml; requires private material in /opt/qmdh-frp.
 services:
   comfy-frps:
     image: qmdh-frp:0.71.0
@@ -37,8 +37,12 @@ services:
     logging: *frp_logging
   backend:
     networks: [default, comfy_backend]
+    volumes:
+      - ${QMDH_FRP_RUNTIME_DIR:-/opt/qmdh-frp}/workflows:/app/integration/comfyui:ro
   worker:
     networks: [default, comfy_backend]
+    volumes:
+      - ${QMDH_FRP_RUNTIME_DIR:-/opt/qmdh-frp}/workflows:/app/integration/comfyui:ro
 
 networks:
   frp_control: {}

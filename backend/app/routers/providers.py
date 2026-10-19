@@ -480,6 +480,20 @@ async def probe_provider_profile(
 
     checked_at = datetime.now(timezone.utc)
 
+    if profile.adapter_kind == "comfyui":
+        from pathlib import Path
+        from app.services.provider_adapters.comfyui import BASE_URL, load_workflow
+        if profile.base_url.rstrip("/") != BASE_URL:
+            return ProviderProfileProbeOut(ok=False, status="invalid_config", detail="ComfyUI 必须使用固定专网入口。", checked_url=None, checked_at=checked_at)
+        try:
+            load_workflow(Path(settings.comfyui_workflow_root), profile.model_name)
+            async with httpx.AsyncClient(trust_env=False, follow_redirects=False, timeout=5) as client:
+                response = await client.get(BASE_URL + "/system_stats")
+                response.raise_for_status()
+            return ProviderProfileProbeOut(ok=True, status="reachable", detail="ComfyUI 专网可达，工作流哈希核验通过；尚不代表真实生成验收。", checked_url=BASE_URL + "/system_stats", checked_at=checked_at)
+        except Exception:
+            return ProviderProfileProbeOut(ok=False, status="unavailable", detail="ComfyUI 尚未就绪，请核对本机连接、专网与工作流文件。", checked_url=BASE_URL + "/system_stats", checked_at=checked_at)
+
     try:
         api_key = decrypt_value_or_raise(profile.api_key)
     except EncryptionKeyUnavailableError:

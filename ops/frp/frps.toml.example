@@ -2,6 +2,9 @@
 bindAddr = "0.0.0.0"
 bindPort = 7000
 proxyBindAddr = "127.0.0.1"
+# STCP uses no remotePort. Any accidental TCP proxy is confined to this unused
+# container-loopback port, which is never published by Compose.
+allowPorts = [{ single = 65535 }]
 detailedErrorsToClient = false
 auth.method = "token"
 auth.additionalScopes = ["HeartBeats", "NewWorkConns"]

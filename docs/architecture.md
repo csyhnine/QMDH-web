@@ -1,3 +1,5 @@
+2026-10-19 FRP 已运行、ComfyUI adapter 准备：详见 docs/comfyui-frp.md 最新段。STCP visitor 对 backend/三 worker 专网提供 8188，frps 仅发布公网 7443，mTLS/token 正反向验证通过；Windows 公网连接和 CSR 待对接。适配器仅实现两个文生图模板、固定专网 URL、提交 checkpoint、全局 Redis GPU 锁及受限结果持久化；编辑图尚未启用，生产代码发布状态以最新 handoff 为准。
+
 2026-10-16 ComfyUI 接入准备（未部署/未新增 adapter）：方案见 [comfyui-frp.md](comfyui-frp.md)，公开模板位于 ops/frp。Windows→frps 使用 STCP/mTLS/token，服务器 visitor 仅向专用 Docker internal 网络的 backend/worker 暴露入口，无 ComfyUI 公网映射。现有三 worker 后续需共享 GPU 并发锁；工作流/结果以 Task、ProviderCall、Asset 归属持久化，当前仅契约，不代表已实现。
 
 2026-10-16 管理工作台改版（已部署，514a8cb/ce31075 / 生产前端运行合并 787d2370）：同一 /management/projects 下分管理总览/项目台账/项目计划/人员排期，复用全部现有公司授权、年度项目接口和版本检查，无迁移。台账列显隐/分组/排序、右侧详情与搜索勾选名册；总览按当前筛选范围计算节点、负荷和精确十进制已开票金额汇总。DHTMLX Gantt Community 10.0.3（MIT，精确锁版本与公开 license 文件）仅项目计划懒加载，独立实例销毁/重建；阶段日期转组件排他结束日，回存转包含结束日。拖动/拉伸/进度调整先暂存，展示前后变化，显式保存按项目版本顺序提交，成功项移出待办，失败/未尝试保留。任务树文本与负责人统一 HTML 转义，禁依赖编辑与自动排程；人员视图自建日历日负荷而不用 PRO 功能。仅管理工作台移动端 rail 局部适配，不改公共未提交 styles。

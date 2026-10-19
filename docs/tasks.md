@@ -21,7 +21,7 @@ Last aligned: `2026-10-16`。旧任务原文与开发顺序完整保存在 `arch
 
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
-| comfyui-frp-001 | Windows ComfyUI 私有隧道与接入准备 | IN_PROGRESS（本地方案，未部署） | 已准备 STCP/mTLS/token/Docker 隔离模板及交接契约；先文生图后图生图；待本机 CSR、API 工作流/绑定/真实 history，未生成生产秘密或注册 provider |
+| comfyui-frp-001 | Windows ComfyUI 私有隧道与接入准备 | IN_PROGRESS（FRP 已运行，适配器待联调） | 服务端/visitor 已部署及 mTLS 正反向验证，backend/三 worker 无重启接网；两个文生图适配器与持久 checkpoint/GPU 锁已准备，待 CSR 与公网 7443 放行及本机真实 API 输出 |
 | management-workbench-002 | 管理工作台与交互排期 | DONE（已部署，514a8cb/ce31075） | 四视图、列分组排序/右侧详情/搜索选人；DHTMLX 10.0.3 MIT，拖动预览/版本保存/失败保留；本地 Chrome 操作与窄屏检查、CI 后端 197/前端 43 通过，仅替换 frontend，六人授权/API/业务数据保留，无迁移 |
 | management-projects-001 | 公司管理层年度台账与人员甘特排期 | DONE（已部署，db376ec） | 独立公司权限/单位隔离，五位已核对账号及后续明确授权的 admin 已开通；台账全字段、人员、阶段甘特/里程碑/重叠、CSV、归档/版本保护；迁移 a16c9e74b821，生产副本与线上只读验证通过，无示例项目；真实浏览器点击因工具故障未验收 |
 | migration-bootstrap-001 | 历史空库迁移链完整性 | TODO | 纯空库 alembic upgrade head 在旧 chat_messages attachments 迁移缺表；生产副本升级和 Base.metadata 建表后新迁移均通过。本轮不改旧链，后续用独立任务修复并建立从零回归 |
@@ -57,6 +57,8 @@ Last aligned: `2026-10-16`。旧任务原文与开发顺序完整保存在 `arch
 ## Current Task Details
 
 ### Task: [comfyui-frp-001] Windows ComfyUI 私有接入准备
+
+- 2026-10-19 更新：API-HANDOFF/三个 API 图已读取并核验哈希；FRP 已运行、秘密已生成（私有路径），mTLS 正向与四种错误凭证拒绝通过；专网接入 backend/三 worker、不重启，frontend 实际阻断。新增两个文生图 adapter/固定模板映射/Task checkpoint/全局 GPU 锁/只读 probe。待 Windows CSR、7443 公网链路及真实 GPU 结果；编辑图未启用。下方 10-16 为阶段历史，当前事实详见 docs/comfyui-frp.md 最新段。
 
 - 状态：IN_PROGRESS（2026-10-16 本地，未部署）。用户要求先准备配置与接入方案，另一本机 agent 负责客户端/ComfyUI；首批先文生图、后图生图。
 - 本轮边界：ops/frp 公开模板与 docs/comfyui-frp.md 契约，生产只读端口/路由/网络核验。STCP 无公网 remotePort，7443/TCP 为拟用 FRP 入口；mTLS + token + STCP secret，专用 internal 网络仅 backend/worker 接入。

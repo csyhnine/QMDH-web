@@ -15,7 +15,7 @@
 
 - 用户截图暴露上次新增状态/尺寸两个根级 grid 子项占用原 auto/276px/auto 行，导致巨大留白。本轮恢复 leading/body/toolbar 三行；状态与自定义宽高放入既有比例/分辨率菜单，自定义默认折叠；新局部CSS，未动原styles.css +13。窄屏展开菜单占整行，输入框可读。
 - 本地真实组件 Chrome headless：1440/390 宽度、三可见行/无横向溢出、自定义1536x1024应用、菜单状态及截图检查通过；仅transport替身，不声称线上点击或GPU实测。前端51检查、23既有TS/0新增、构建通过。
-- 仅前端修复；后端、数据库结构、FRP、Windows守护保持。部署结果与回退备份在本轮发布后补齐。Safe to hand off: 发布待验证。
+- 仅前端修复；后端、数据库结构、FRP、Windows守护保持。功能0a83c2a，生产合并d5311599，frontend镜像22fdfede；公网index-Dvm2Tjrk.js/GeneratePage-C1TJupfk.js及CSS与容器SHA一致，六CAD401/health200；其他容器ID/镜像/启动时间与env不变。备份/www/backup/qmdh-composer-layout-20261019 ↔ E:/backups/QMDH-web/frp-20261019/composer-layout-backup，9文件SHA一致，DB/env/5820媒体清单/0增量/恢复链；旧镜像qmdh-release-backup-frontend:20261019-composer-layout可回退。Safe to hand off: Yes。
 
 ### [2026-10-19] ComfyUI 生产闭环 — 已发布、真实验收完成
 

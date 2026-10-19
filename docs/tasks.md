@@ -58,6 +58,8 @@ Last aligned: `2026-10-16`。旧任务原文与开发顺序完整保存在 `arch
 
 ### Task: [comfyui-frp-001] Windows ComfyUI 私有接入准备
 
+- 2026-10-19 10:57：backend/三 worker 经完整 STCP 通路只读 GET /system_stats、/queue 均 200/JSON 正确，队列 0/0；只读联通子步骤 DONE。provider 保持禁用，无 GPU 任务；Windows 8188 全网卡监听仍待回环收口，服务/长稳和真实生成/网站资产仍待验收。证据见私有 SERVER-READONLY-STATUS.md。
+
 - 2026-10-19 更新：API-HANDOFF/三个 API 图已读取并核验哈希；FRP 已运行、秘密已生成（私有路径），mTLS 正向与四种错误凭证拒绝通过；专网接入 backend/三 worker、不重启，frontend 实际阻断。新增两个文生图 adapter/固定模板映射/Task checkpoint/全局 GPU 锁/只读 probe。Windows CSR 已签发、公网 mTLS 已通过、适配器已部署且两模型禁用；待本机客户端/真实 GPU 结果；编辑图未启用。下方 10-16 为阶段历史，当前事实详见 docs/comfyui-frp.md 最新段。
 
 - 状态：IN_PROGRESS（2026-10-16 本地，未部署）。用户要求先准备配置与接入方案，另一本机 agent 负责客户端/ComfyUI；首批先文生图、后图生图。

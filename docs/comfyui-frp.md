@@ -4,6 +4,8 @@
 
 ## 2026-10-19 当前准备与联调交接（优先于下方 10-16 方案）
 
+- **10:57 北京时间更新：完整通路只读验收通过。** 已读取本机 CLIENT-STATUS.md；backend/三个 worker 分别 GET /system_stats 与 /queue 共 8 次 HTTP 200，核验 system/devices/queue JSON 结构，四份队列快照 running=0/pending=0。证据 /opt/qmdh-frp/evidence/server-readonly-20261019.json，私有本机 windows/server-evidence 同名副本及 SERVER-READONLY-STATUS.md。Windows frpc 以前台进程运行；ComfyUI 仍全网卡监听、未收口回环。本轮无 GPU/上传/重启，两个 provider 保持禁用；真实生成、输出下载和网站资产验收仍未完成。以下早前 reachable=false 是接通前快照。
+
 - 已读取本机 D:/ComfyUI-aki-v2/integration/qmdh/API-HANDOFF.md 与 workflow-map.json，三个 API 文件 SHA256 全部吻合，原图保存在私有运行目录，无图进 Git。当前仅文生图开放代码路径：Qwen Image 2.1 与 Z Image Turbo；Qwen 编辑图需要双图且尚无 API 真实输出验证，未启用 image.edit，不用示例图片填空。
 - FRP 0.71.0 官方 Linux 包哈希验证完成，scratch 镜像 qmdh-frp:0.71.0 已构建；frps/frpc verify 均通过。服务器 120.79.227.11:7443/TCP 已监听，服务器 visitor mTLS 登录成功。无 STCP remotePort；容器 7000 只发布为公网 FRP 7443，ComfyUI 8188 无宿主发布。误注册 TCP 的 allowPorts 仅容器 loopback 65535，且不发布。
 - backend 和三个 worker 已用 docker network connect 加入 qmdh-web_comfy_backend（internal、172.30.218.0/28），原容器 ID/启动时间未改变，四者 TCP 访问 visitor 8188 均成功；frontend 实际 nc 测试连接专网入口失败。专网 listener 不等于本机 ComfyUI 已连接，当前不宣称 /system_stats 或生图已成功。

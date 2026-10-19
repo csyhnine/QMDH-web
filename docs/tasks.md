@@ -13,7 +13,7 @@ Last aligned: `2026-10-19`。旧任务原文与开发顺序完整保存在 `arch
 
 ## Next Conversation Checkpoint
 
-- 当前新任务已切换为 comfyui-frp-001：按用户要求先准备服务器 FRP 与网站接入方案，先文生图后图生图；以 docs/comfyui-frp.md 的当前状态为准。
+- comfyui-frp-001 已完成：隧道、回环收口、两个文生图模型及网站真实任务均通过并启用；勿重复生图验收。以 docs/comfyui-frp.md 为准，后续按用户新需求；图生图另列 comfyui-edit-002。
 - 用户已要求于 2026-10-16 先留档，后续在新对话继续。冷启动读取 archive/handoff-2026-10-16-next-conversation.md，10-13 的 next-conversation 仅保留历史，不代表当前部署。
 - 管理台账与四视图工作台均已上线，admin 已明确授权；下一步按用户新需求，优先实际管理员页面/真实资料验收，不能用本地样例冒充业务记录。本次留档不新增开发范围。
 
@@ -56,6 +56,15 @@ Last aligned: `2026-10-19`。旧任务原文与开发顺序完整保存在 `arch
 | video-seedance-502-001 | Seedance 参考图代理/DNS | TODO | 历史上游问题；先确认当前是否仍发生 |
 
 ## Current Task Details
+
+### Task: [comfyui-edit-002] ComfyUI 双图编辑
+
+- 状态：TODO（后续阶段，当前不启用）。目标：在既有公司账号/项目与ComfyUI私有通路上支持已提供的双图编辑工作流。
+- 边界：两张当前账号可访问图片的上传、准确LoadImage绑定、批准工作流参数、既有Task/Asset/ledger持久化；不改原示例图或原图生图模板，不顺手增加单图变体/任意graph/节点安装/服务自启。
+- 禁止：跨账号读图、传服务器本地路径给Windows、以模板示例图补缺图、全局interrupt/clear或重复执行状态不明任务，修改env/key/CAD/原未提交文件。
+- 依赖：本机API-HANDOFF与workflow-map的编辑图、LoadImage470/475及输出461；单图变体尚未实跑，另行定义。
+- 验收：双图上传返回值准确绑定，非本人图片拒绝、少图明确报错；真实history/图片下载/归属与SHA一致，原图不改，故障不混任务；每次真实GPU运行须在授权范围内。
+- 文档同步：tasks/handoff/comfyui-frp，涉及接口边界更新architecture；2.0沿用workflow hash/prompt_id/Task与资产归属，不引入任意工作流执行器。
 
 ### Task: [comfyui-frp-001] Windows ComfyUI 私有隧道与文生图
 

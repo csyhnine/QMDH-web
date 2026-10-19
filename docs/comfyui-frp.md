@@ -1,22 +1,24 @@
 # Windows ComfyUI / QMDH 私有接入交接
 
-状态：2026-10-16，仅方案与配置模板，未部署、未签发生产材料、未开安全组、未注册网站 provider。用户确认先文生图，后图生图。本机另一 agent 负责 Windows frpc / ComfyUI；本会话负责服务器与网站。无自动跨 chat 发消息。
+状态：2026-10-19，FRP 服务端与网站文生图适配器已部署，证书已签发，公网 mTLS 已验证；两个 provider 保持禁用，等待本机 agent 联调与真实 API 生成验收。先文生图、后图生图；本机 agent 负责 Windows frpc/ComfyUI，本会话负责服务器与网站。
 
 ## 2026-10-19 当前准备与联调交接（优先于下方 10-16 方案）
 
 - 已读取本机 D:/ComfyUI-aki-v2/integration/qmdh/API-HANDOFF.md 与 workflow-map.json，三个 API 文件 SHA256 全部吻合，原图保存在私有运行目录，无图进 Git。当前仅文生图开放代码路径：Qwen Image 2.1 与 Z Image Turbo；Qwen 编辑图需要双图且尚无 API 真实输出验证，未启用 image.edit，不用示例图片填空。
 - FRP 0.71.0 官方 Linux 包哈希验证完成，scratch 镜像 qmdh-frp:0.71.0 已构建；frps/frpc verify 均通过。服务器 120.79.227.11:7443/TCP 已监听，服务器 visitor mTLS 登录成功。无 STCP remotePort；容器 7000 只发布为公网 FRP 7443，ComfyUI 8188 无宿主发布。误注册 TCP 的 allowPorts 仅容器 loopback 65535，且不发布。
 - backend 和三个 worker 已用 docker network connect 加入 qmdh-web_comfy_backend（internal、172.30.218.0/28），原容器 ID/启动时间未改变，四者 TCP 访问 visitor 8188 均成功；frontend 实际 nc 测试连接专网入口失败。专网 listener 不等于本机 ComfyUI 已连接，当前不宣称 /system_stats 或生图已成功。
-- mTLS 正向登录以及错误 token、错误 SAN、错误 CA、无客户端证书四项拒绝已验证。Windows 本机到公网 7443 实测超时，安全组/上游链路待确认。已收到本机 C:/ProgramData/QMDH-FRP/windows.csr，签名核验后签发 windows.crt。尚未放宽云安全组，不公开 8188/7000。
+- mTLS 正向登录以及错误 token、错误 SAN、错误 CA、无客户端证书四项拒绝已验证。Windows 本机首次到公网 7443 超时，用户补充云安全组后复测已完成 TLS 1.3/mTLS 校验。已收到本机 C:/ProgramData/QMDH-FRP/windows.csr，签名核验后签发 windows.crt。云安全组由用户处理，服务端不公开 8188/7000。
 - 专用 CA/叶证书/随机 token/STCP 密钥已生成，离线 CA 私钥只在受限 E:/backups/QMDH-web/frp-20261019/ca。服务器 runtime 在 /opt/qmdh-frp/server 和 visitor；容器 UID 65532 只读自身材料，无 CA 私钥。Windows 材料在 E:/backups/QMDH-web/frp-20261019/windows：server-ca.crt、auth-token、windows.toml、manifest.json。windows.crt 已签发（2027-01-17 10:47:39 北京时间到期）；windows.key 由本机 agent 在 C:/ProgramData/QMDH-FRP 生成并保管。该目录 ACL 仅 Admin/SYSTEM 继承。客户端 config 使用上述材料绝对路径，私钥指向 C:/ProgramData/QMDH-FRP/windows.key。
-- server CA SHA256：c6430f148245ae94777383504b44f9e20744d6550cca30ce242e9bfea656a69f。本次已用 ops/frp/sign-client.py（--ca-dir 指向离线 ca、--csr 指向本机请求、--output 指向 windows/windows.crt）签发 clientAuth 证书；CSR SPKI SHA256 为 531b51ec9a51353b9077b683f87a2ef98fbf35453539853bf8343a5007d22428，证书 SHA256 为 8b2f0b3403f6ffcd00c096a7206babd73506b44fc98fb1fa35555bed296f84d3；拒绝覆盖已有证书，不读取/传输本机私钥。
-- 网站适配源码已准备，生产发布状态以最近 handoff 为准。get_provider_adapter 识别独立 comfyui 适配器，固定 private URL 与管理员模板目录，不接收浏览器任意图/模型/URL。Qwen 同步两处 prompt/seed、关闭增强，替换真正 EmptyLatent 输入；采样器/steps/CFG 固定、batch=1。支持明确 width/height（256..2048、8 的倍数、≤4MP）和已列比例对应尺寸，拒绝未验证的大分辨率预设。实际尺寸兼容性仍需本机 API 实跑。
+- server CA 证书 DER SHA256 指纹：c6430f148245ae94777383504b44f9e20744d6550cca30ce242e9bfea656a69f。本次已用 ops/frp/sign-client.py（--ca-dir 指向离线 ca、--csr 指向本机请求、--output 指向 windows/windows.crt）签发 clientAuth 证书；CSR SPKI SHA256 为 531b51ec9a51353b9077b683f87a2ef98fbf35453539853bf8343a5007d22428，证书 SHA256 为 8b2f0b3403f6ffcd00c096a7206babd73506b44fc98fb1fa35555bed296f84d3；拒绝覆盖已有证书，不读取/传输本机私钥。
+- 网站适配器已发布：功能 621e2f1，生产合并 0562244e；backend 镜像 d66aa5c4806ca2448b82968eaec57c7e311a860950a230708e4ae2a564aca4b9，worker 镜像 827c9321e3ebbe8537bce9a729c73748c93643cfc6f5a5095a043bd97b2eecb6。依托原运行镜像仅复制合并后的六个代码文件，保留 ODA/FFmpeg/Nano Banana 生产差异。发布前 pending/running=0；重建 backend/三 worker，frontend/postgres/redis/meilisearch ID 与启动时间保持，env/schema 不变。get_provider_adapter 识别独立 comfyui 适配器，固定 private URL 与管理员模板目录，不接收浏览器任意图/模型/URL。Qwen 同步两处 prompt/seed、关闭增强，替换真正 EmptyLatent 输入；采样器/steps/CFG 固定、batch=1。支持明确 width/height（256..2048、8 的倍数、≤4MP）和已列比例对应尺寸，拒绝未验证的大分辨率预设。实际尺寸兼容性仍需本机 API 实跑。
 - 每个真实 Task 提交前将 seed/workflow hash/client_id/submitting 写入数据库；收到 prompt_id 后再次持久化，再按唯一 history 取 output 节点 461/9 的图片，拒绝跳转/路径越界/非图片与超限结果，写入原 media_storage 并沿用 Asset/ProviderCall/usage ledger。超时上限 600 秒，低于既有 running 15 分钟回收阈值，不改全站超时规则。
 - 三 worker 共享 Redis qmdh:comfyui:gpu:owner；忙时明确失败且不提交。提交状态未知或离线中断时保留锁，禁止自动 TTL 到期让第二任务挤入；需管理员用对应 prompt_id 和本机 queue/history 核对终态，再 compare-and-delete 释放同一 owner。不能全局 interrupt/clear，也不盲目重交。已知 prompt_id 在人工核对释放后可从原 Task checkpoint 续查，不宣称 worker 崩溃能自动恢复。正常终态释放锁，下载路径含 Task/prompt UUID，重复取回不会重新生成。
-- 两个禁用 provider 模板在 ops/frp/provider-profiles.example.json；api_key=frp-transport-authenticated 是兼容现有非空 API Key 字段的非秘密标记，不是 FRP token。FRP 秘密不得填入网站 provider 字段。未真实验收前不启用模型、不创建假项目/用户/任务、不套用云模型价格。
-- 联调后服务器只读探活：docker compose exec -T backend python -m app.scripts.comfyui_preflight；每个 worker 同样运行。只检 /system_stats 与工作流哈希，不提交 GPU。网络联通后再由本机 agent 给出两个文生图 API history/实际图片；图片编辑后续单独完成。
+- 两个 provider 已以禁用状态登记并留审计：id=60 comfyui-qwen-t2i、id=61 comfyui-z-image；模板在 ops/frp/provider-profiles.example.json；api_key=frp-transport-authenticated 是兼容现有非空 API Key 字段的非秘密标记，不是 FRP token。FRP 秘密不得填入网站 provider 字段。未真实验收前不启用模型、不创建假项目/用户/任务、不套用云模型价格。
+- 已在 backend/三个 worker 执行只读探活：模板哈希均通过，ComfyUI 尚未连接（reachable=false），没有提交 prompt。待本机启动 frpc 后复测：docker compose exec -T backend python -m app.scripts.comfyui_preflight；每个 worker 同样运行。只检 /system_stats 与工作流哈希，不提交 GPU。网络联通后再由本机 agent 给出两个文生图 API history/实际图片；图片编辑后续单独完成。
 - 准备发布恢复链：/www/backup/qmdh-release-20261019-comfyui-prep 与受限本机 E:/backups/QMDH-web/frp-20261019/release-backup。DB dump、env、运行镜像与 5800 媒体清单已保存；1 个媒体增量 13875126 字节，完整读取/哈希校验，restore-media-chain.json 引用 10-16 完整链；不把本轮增量当完整媒体备份。
 - 持久部署须始终合并主 compose 与 /opt/qmdh-frp/compose.frp.yml（或 Git ops/frp/compose.frp.yml）；手动 network connect 是本轮无中断接网方式，后续只用主文件重建会丢专网/模板挂载。适配器发布时需挂 workflows:/app/integration/comfyui:ro，并保护现有 ODA/Nano Banana 差异。
+
+- 本轮验证：本地关键集 + provider 回归 232 passed/1 skipped/24 subtests；生产隔离、无网络容器 14 项 unittest 通过；CI 39191698825 前后端成功；健康与六条 CAD 路由通过。数据库 schema a16c9e74b821、env 保持；两端 12 份发布备份文件 SHA256 一致。当前无真实 prompt、GPU 消耗或生成验收。
 
 ## 对接值（10-16 原方案，以上更新优先）
 
@@ -58,7 +60,7 @@ FRP 唯一 host publish 为 7443:7000；proxyBindAddr 强制 frps 容器 loopbac
 5. 聊天/Git 只交接路径、证书 SHA256 指纹、serial、notAfter、CSR 公钥指纹和配置版本，不贴 token、STCP secret、私钥、完整已填配置；秘密本身不写入 manifest。CA 指纹用独立已信任渠道核对，不能只信随包 manifest。目录不位于网站根目录，不经附件/公开 URL 传输。服务端材料保存在受限备份链中。
 6. auth-token 文件使用无换行 ASCII hex，双方 tokenSource 从文件读取；STCP secret 只填受限运行副本。模板中的 REPLACE 字符串不得用于运行。任一秘密泄漏，轮换 token 与 STCP secret；证书泄漏另换叶密钥。FRP 不能被假定支持单张客户端证书吊销，紧急吊销需要更换受信 client CA、重新签发未受影响客户端并重启隧道。
 
-当前没有生产 token、CA 或证书可领取；待本机 CSR 就绪后签发。此文的地址/端口/公开模板可直接给本机 agent。
+10-16 准备阶段尚无生产材料；10-19 已签发并放入上方受限路径。可给本机 agent 此文和私有 windows/SERVER-HANDOFF.md 的文件路径，秘密内容不贴聊天。
 
 ## 配置与部署准备
 
@@ -72,7 +74,7 @@ FRP 唯一 host publish 为 7443:7000；proxyBindAddr 强制 frps 容器 loopbac
 
 ## 工作流接口约定 v1（待双方实测签收）
 
-网站现有 `provider_strategy.py`、`task_executor.py` 与 `provider_adapters/base.py` 尚无 ComfyUI 策略。后续新增独立 `comfyui` adapter 与能力 `image.generate`，第二阶段 `image.edit`；不开任意 URL 代理，不伪装 OpenAI compatible。provider 先禁用，工作流确认和联调通过后再给正式模型入口。
+10-16 的代码当时尚无 ComfyUI 策略；10-19 已按上方现状新增独立 `comfyui` adapter 与能力 `image.generate`，第二阶段 `image.edit`；不开任意 URL 代理，不伪装 OpenAI compatible。provider 先禁用，工作流确认和联调通过后再给正式模型入口。
 
 本机 agent 提供以下文件到受限交接目录 `workflow/`，不含人名、真实业务图或秘密：
 
@@ -91,7 +93,7 @@ FRP 唯一 host publish 为 7443:7000；proxyBindAddr 强制 frps 容器 loopbac
 6. POST /prompt 响应丢失属于提交状态未知，禁止盲目重试；能通过已记录关联/queue/history 确认才续接，不能确认就明确待核查。Windows 离线、OOM、缺节点、超时、断网分别报告。超时不承诺已停止本机任务；不调用全局 interrupt/clear 误杀本机手动任务。取消按该 prompt_id 协商支持版本，第一期无精确取消时保留限制。
 7. 图生图阶段：worker 从当前账号可访问的参考图读字节，multipart `POST /upload/image`，image 文件名使用 QMDH 唯一 task 前缀、type=input、overwrite=false。使用返回的 name/subfolder 构造 LoadImage 值，再提交；不向 Windows 传服务器本地路径，也不让 Windows 拉取公开参考图 URL。不自动删除本机历史。
 
-## 本轮验证记录
+## 10-16 原准备验证记录（不覆盖上方 10-19 进展）
 
 - 本地 Python 3.12 tomllib：三份 TOML 模板全部解析通过。
 - 生产临时目录内合并现有主 Compose 与本 overlay，`docker compose ... config --quiet` 通过，未启动服务。
@@ -104,6 +106,6 @@ FRP 唯一 host publish 为 7443:7000；proxyBindAddr 强制 frps 容器 loopbac
 
 之后用双方同意的合成提示词进行 1 次文生图（消耗本机 GPU，正式启用前安排），核对 prompt_id→history→图片 SHA256→QMDH 归属持久化；再验证 worker 重启/提交不确定性/超时/并发锁/部分下载失败，最后接图生图。不能因隧道连通就标网站接入完成。
 
-当前阶段不新增产品执行逻辑；材料准备、网络部署、文生图 adapter、图生图分别验收。2.0 兼容：沿用 Task/ProviderCall/Asset 与账号所有权，工作流版本和 prompt_id 提供追溯/恢复依据；不引入任意工作流执行器或新的管理权限。
+10-16 阶段仅准备模板；10-19 已部署文生图 adapter，网络、文生图真实运行、图生图仍分别验收。2.0 兼容：沿用 Task/ProviderCall/Asset 与账号所有权，工作流版本和 prompt_id 提供追溯/恢复依据；不引入任意工作流执行器或新的管理权限。
 
 官方依据：[FRP v0.71.0 发布](https://github.com/fatedier/frp/releases/tag/v0.71.0)、[FRP TLS](https://gofrp.org/en/docs/features/common/network/network-tls/)、[visitor 配置](https://gofrp.org/en/docs/reference/visitor/)、[版本固定服务端示例](https://github.com/fatedier/frp/blob/v0.71.0/conf/frps_full_example.toml)、[客户端示例](https://github.com/fatedier/frp/blob/v0.71.0/conf/frpc_full_example.toml)、[ComfyUI API 示例](https://github.com/Comfy-Org/ComfyUI/blob/master/script_examples/websockets_api_example.py)、[ComfyUI server 路由](https://github.com/Comfy-Org/ComfyUI/blob/master/server.py)。ComfyUI master 仅作接口依据，最终以本机实际 commit/样例核验。

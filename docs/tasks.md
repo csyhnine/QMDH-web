@@ -19,6 +19,14 @@ Last aligned: `2026-10-19`。旧任务原文与开发顺序完整保存在 `arch
 
 ## Current Queue
 
+### qwen-v11-007 — v1.1 模板与适配准备
+
+- 状态：IN_PROGRESS（用户明确只准备，不激活、不跑GPU）。
+- 目标：共享easy seed/50步GPU缓存、单图合同与前后端校验兼容；服务器独立目录同步模板/哈希/源码并离线验证；核对600秒预算。
+- 禁止：改provider启用状态、覆盖在用map、发布运行镜像、提交GPU任务、修改Z/原styles13行/原未跟踪文件。
+- 验收：原始SHA、共享种子链接/一图/输出、后台测试/前端回归；服务器隔离无网络合同检查，active文件/provider/容器不变。
+- 文档：qwen-v1.1-preparation/tasks/handoff/comfyui-frp；后续激活/实际耗时输出为独立待授权验收，不混作完成。模板合同与checkpoint版本保留未来多步骤追溯。
+
 ### comfyui-feedback-006 — 执行进度与双图提交引导
 
 - 状态：DONE（功能c048893已推main，生产合并95794424，仅frontend部署）。

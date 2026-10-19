@@ -158,6 +158,26 @@ test('two-image editing describes the missing input and disables submission unti
   }
 });
 
+test('v1.1 single-image contract updates hints, validation and submit without breaking legacy two-image defaults', () => {
+  const provider = { ...image, capabilities: ['image.edit'], reference_input_count: 1 };
+  const { validateStudioTaskSubmission } = load('features/studio/studioTaskSubmissionValidation.ts');
+  const { composerReferenceHint, composerReferenceZoneLabel } = load('features/studio/studioComposerDockUtils.ts');
+  const { defaultStudioForm } = load('features/studio/studioConstants.ts');
+  const Submit = load('features/studio/StudioComposerSubmitActions.tsx').default;
+  assert.equal(composerReferenceZoneLabel('edit', provider), '编辑原图（必传 1 张）');
+  assert.match(composerReferenceHint('edit', 1, provider), /仅接收一张原图/);
+  for (const count of [0, 1, 2]) {
+    const result = validateStudioTaskSubmission({form: {...defaultStudioForm, creationMode:'edit', prompt:'fixture',
+      referenceImages: Array.from({length:count}, (_,i)=>`/media/${i}.png`)}, providerForSubmit:provider,
+      setState(){}, uploadingReference:false});
+    assert.equal(result.ok, count === 1);
+    const html = renderToStaticMarkup(require('react').createElement(Submit, {creationMode:'edit',
+      requiredReferenceCount:1, referenceUploadCount:count, availableProviderCount:1, hasActiveProject:true,
+      prompt:'fixture', submitting:false, uploadingReference:false, submissionProgress:null}));
+    assert.equal(html.includes('disabled=""'), count !== 1);
+  }
+});
+
 test('local waiting and recovery render truthful states without invented percent', () => {
   const Empty = load('features/studio/StudioFeedEmptyState.tsx').default;
   for (const [stage, label] of [['queued', '前方 2 项任务'], ['recovering', '请勿重复提交'], ['running', '本机正在生成']]) {

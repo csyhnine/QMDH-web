@@ -16,6 +16,7 @@ type StudioComposerSubmitActionsProps = {
   polishingPrompt?: boolean;
   onPolishPrompt?: () => void;
   requiresTwoImages?: boolean;
+  requiredReferenceCount?: number;
 };
 
 export default function StudioComposerSubmitActions({
@@ -31,16 +32,19 @@ export default function StudioComposerSubmitActions({
   polishingPrompt = false,
   onPolishPrompt,
   requiresTwoImages = false,
+  requiredReferenceCount,
 }: StudioComposerSubmitActionsProps) {
   const { isGuest } = useAuth();
-  const editNeedsReference = creationMode === "edit" && (requiresTwoImages ? referenceUploadCount !== 2 : referenceUploadCount === 0);
+  const requiredCount = requiredReferenceCount ?? (requiresTwoImages ? 2 : undefined);
+  const editNeedsReference = creationMode === "edit" && (requiredCount ? referenceUploadCount !== requiredCount : referenceUploadCount === 0);
   const submitLabel = isGuest
     ? "登录后生成"
     : submitting
       ? "正在创建..."
       : !hasActiveProject
         ? "请先新建项目"
-        : requiresTwoImages && editNeedsReference
+        : requiredCount === 1 && editNeedsReference ? "请仅上传一张原图"
+        : requiredCount === 2 && editNeedsReference
           ? referenceUploadCount === 0 ? "请上传两张图片" : referenceUploadCount === 1 ? "请补充第 2 张图" : "请仅保留两张图"
           : composerSubmitLabel(creationMode, submitting, referenceUploadCount);
   const showShortcut =

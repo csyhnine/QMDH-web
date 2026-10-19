@@ -1,4 +1,5 @@
 import type { Provider } from "../../api";
+import { comfyReferenceCount } from "./comfyReferenceContract";
 import type { StudioFormState } from "./studioTypes";
 import { getSelectedGrokSkuConfig, isGrokHaodeyaProvider } from "./grokVideoUtils";
 import { getSelectedHappyHorseSkuConfig, isHappyHorseProvider } from "./happyHorseVideoUtils";
@@ -15,7 +16,7 @@ export function composerModeLabel(mode: StudioFormState["creationMode"]): string
 
 export function composerReferenceZoneLabel(mode: StudioFormState["creationMode"], provider?: Provider): string {
   if (mode === "video") return "参考图（可选）";
-  if (mode === "edit" && provider?.adapter_kind === "comfyui") return "双图编辑（必传 2 张）";
+  if (mode === "edit" && provider?.adapter_kind === "comfyui") return comfyReferenceCount(provider) === 1 ? "编辑原图（必传 1 张）" : "双图编辑（必传 2 张）";
   return mode === "edit" ? "参考图（必传 1–4 张）" : "参考图（可选）";
 }
 
@@ -62,6 +63,9 @@ export function composerReferenceHint(
   }
   if (mode === "edit") {
     if (provider?.adapter_kind === "comfyui") {
+      if (comfyReferenceCount(provider) === 1) {
+        return referenceUploadCount === 1 ? "原图已就绪，请描述修改要求。当前工作流仅接收一张原图。" : "当前工作流需要一张原图，请仅保留要编辑的图片。";
+      }
       if (referenceUploadCount === 0) return "请依次上传两张图：第 1 张是要修改的目标图，第 2 张是参考图。当前工作流仅支持双图编辑。";
       if (referenceUploadCount === 1) return "已上传目标图，还需第 2 张参考图才能提交。当前工作流仅支持双图编辑。";
       if (referenceUploadCount === 2) return "两图已就绪：第 1 张目标图，第 2 张参考图。请在提示词中描述修改要求。";

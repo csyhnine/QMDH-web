@@ -443,6 +443,7 @@ class ProviderCapability(BaseModel):
     outbound: bool
     adapter_kind: str
     supported_resolutions: list[str] = Field(default_factory=list)
+    reference_input_count: int | None = None
 
 
 class ProviderProfileBase(BaseModel):

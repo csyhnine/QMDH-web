@@ -59,7 +59,31 @@ def load_workflow(root: Path, workflow_id: str) -> tuple[dict, dict]:
     return graph, mapping
 
 
+def reference_input_count(mapping: dict) -> int:
+    """The approved template defines input arity, including legacy two-image maps."""
+    loaders = mapping.get("image_loaders", [])
+    count = mapping.get("reference_input_count", len(loaders))
+    _integer(count, "reference_input_count", 1, 4)
+    if len(loaders) != count or len(set(loaders)) != count:
+        raise ValueError("ComfyUI reference input mapping differs from its declared count")
+    return count
+
+
+def validate_seed_links(graph: dict, mapping: dict) -> None:
+    if not mapping.get("seed_consumers"):
+        return  # Legacy graphs intentionally mapped literal seeds at both consumers.
+    if len(mapping["seed"]) != 1:
+        raise ValueError("ComfyUI shared seed mapping requires one source")
+    source, field = mapping["seed"][0]
+    if field != "seed" or graph[source]["class_type"] != "easy seed":
+        raise ValueError("ComfyUI shared seed source must be the approved easy seed node")
+    for node, field in mapping["seed_consumers"]:
+        if graph[node]["inputs"][field] != [source, 0]:
+            raise ValueError("ComfyUI shared seed consumer link differs from the approved mapping")
+
+
 def prepare_graph(graph: dict, mapping: dict, payload: dict, *, seed: int, prefix: str) -> dict:
+    validate_seed_links(graph, mapping)
     graph = deepcopy(graph)
     prompt = str(payload.get("prompt") or "").strip()
     supplement = str(payload.get("prompt_supplement") or "").strip()
@@ -125,19 +149,20 @@ def prepare_graph(graph: dict, mapping: dict, payload: dict, *, seed: int, prefi
     return graph
 
 
-def reference_paths(payload):
+def reference_paths(payload, mapping=None):
+    count = reference_input_count(mapping) if mapping is not None else 2
     values = payload.get("reference_images") or payload.get("source_images") or []
-    if not isinstance(values, list) or len(values) != 2 or not all(isinstance(p, str) for p in values):
-        raise ValueError("本机 Qwen 图像编辑需要两张图片：第一张为目标图，第二张为参考图。")
+    if not isinstance(values, list) or len(values) != count or not all(isinstance(p, str) and p for p in values):
+        raise ValueError(f"当前本机 Qwen 编辑工作流需要 {count} 张图片，实际输入必须与批准模板一致。")
     return values
 
 
-def owned_references(db, user_id, payload):
+def owned_references(db, user_id, payload, mapping=None):
     from sqlalchemy import select
     from app.models import Asset, Task, ReferenceUpload
     from urllib.parse import urlparse, unquote
     paths = []
-    for value in reference_paths(payload):
+    for value in reference_paths(payload, mapping):
         if value.startswith(("https://", "http://")):
             parsed = urlparse(value)
             allowed = {urlparse(settings.frontend_origin).netloc, urlparse(settings.public_media_base_url).netloc}
@@ -171,7 +196,7 @@ def validate_submission(db, user_id, workflow_id, payload):
     _integer(payload.get("image_count", 1), "image_count", 1, 3)
     prepare_graph(graph, mapping, {**payload, "image_count": 1}, seed=0, prefix="validation")
     if mapping["capability"] == "image.edit":
-        owned_references(db, user_id, payload)
+        owned_references(db, user_id, payload, mapping)
 
 
 def output_reference(history: dict, prompt_id: str, output_node: str) -> dict | None:
@@ -291,7 +316,7 @@ class ComfyUIProviderAdapter:
             from app.models import Task
             with SessionLocal() as db:
                 task = db.get(Task, self.task_id)
-                paths = owned_references(db, task.user_id, payload)
+                paths = owned_references(db, task.user_id, payload, mapping)
             with Image.open(BytesIO(read_binary_asset(paths[0]))) as im:
                 w, h = im.size
             target = {"1k": 1024, "2k": 2048, "4k": 4096}[payload["resolution"]]
@@ -363,7 +388,7 @@ class ComfyUIProviderAdapter:
                         from app.models import Task
                         with SessionLocal() as db:
                             task = db.get(Task, self.task_id)
-                            paths = owned_references(db, task.user_id, payload)
+                            paths = owned_references(db, task.user_id, payload, mapping)
                         for index, (node, path) in enumerate(zip(mapping["image_loaders"], paths)):
                             uploaded = json.loads(request("POST", "/upload/image", files={"image":
                                 (f"qmdh_{self.task_id}_{index}.png", read_binary_asset(path), "application/octet-stream")},

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 
-export default function ComfyRuntimeNotice({ editing }: { editing: boolean }) {
+export default function ComfyRuntimeNotice({ editing, referenceCount = 2 }: { editing: boolean; referenceCount?: number }) {
   const [message, setMessage] = useState("正在检查本机连接……");
   useEffect(() => {
     let alive = true;
@@ -10,5 +10,5 @@ export default function ComfyRuntimeNotice({ editing }: { editing: boolean }) {
     check(); const timer = setInterval(check, 15000);
     return () => { alive = false; clearInterval(timer); };
   }, []);
-  return <p className="composer-menu-note" role="status">{message} 多张逐张生成。{editing ? "请依次放入目标图和参考图。" : ""}</p>;
+  return <p className="composer-menu-note" role="status">{message} 多张逐张生成。{editing ? referenceCount === 1 ? "请上传一张要编辑的原图。" : "请依次放入目标图和参考图。" : ""}</p>;
 }

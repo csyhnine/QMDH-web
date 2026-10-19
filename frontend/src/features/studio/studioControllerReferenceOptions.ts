@@ -1,4 +1,5 @@
 import { defaultStudioForm } from "./studioConstants";
+import { comfyReferenceCount } from "./comfyReferenceContract";
 import { grokReferenceLimit } from "./grokVideoUtils";
 import { happyHorseReferenceLimit, isHappyHorseProvider } from "./happyHorseVideoUtils";
 import { isSeedance2Provider, seedance2ReferenceLimit } from "./seedanceVideoUtils";
@@ -30,7 +31,7 @@ export function buildStudioReferenceUploadOptions({
       controllerState.studioForm.creationMode === "video" && isSeedance2Provider(selectedProvider),
     fileInputRef: controllerState.fileInputRef,
     maxReferenceCount:
-      controllerState.studioForm.creationMode === "video" ? videoReferenceLimit : selectedProvider?.adapter_kind === "comfyui" ? 2 : 4,
+      controllerState.studioForm.creationMode === "video" ? videoReferenceLimit : selectedProvider?.adapter_kind === "comfyui" ? comfyReferenceCount(selectedProvider) : 4,
     onClearError: controllerState.clearLoadError,
     onError: controllerState.pushLoadError,
     selectedProviderLabel: selectedReferenceUploadProviderLabel({

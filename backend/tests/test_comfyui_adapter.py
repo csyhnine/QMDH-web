@@ -189,6 +189,42 @@ class ComfyUIAdapterTests(unittest.TestCase):
             prepared = c.prepare_graph(graph, mapping, {"prompt": "fixture", "aspect_ratio": ratio}, seed=0, prefix="fixture")
             self.assertEqual(prepared["switch"]["inputs"]["switch"], expected)
 
+    def test_shared_easy_seed_preserves_links_and_fixed_steps(self):
+        graph = json.loads(json.dumps(self.graph))
+        graph["486"] = {"class_type": "easy seed", "inputs": {"seed": 99}}
+        graph["459:458"]["inputs"].update(seed=["486", 0], steps=50)
+        graph["459:471"]["inputs"]["sampling_mode.seed"] = ["486", 0]
+        mapping = {**self.mapping, "seed": [["486", "seed"]],
+                   "seed_consumers": [["459:458", "seed"], ["459:471", "sampling_mode.seed"]]}
+        prepared = c.prepare_graph(graph, mapping, {"prompt": "new"}, seed=0, prefix="fixture")
+        self.assertEqual(prepared["486"]["inputs"]["seed"], 0)
+        self.assertEqual(graph["486"]["inputs"]["seed"], 99)
+        self.assertEqual(prepared["459:458"]["inputs"]["steps"], 50)
+        for node, field in mapping["seed_consumers"]:
+            self.assertEqual(prepared[node]["inputs"][field], ["486", 0])
+        graph["459:458"]["inputs"]["seed"] = 99
+        with self.assertRaisesRegex(ValueError, "consumer link"):
+            c.prepare_graph(graph, mapping, {"prompt": "new"}, seed=0, prefix="fixture")
+
+    def test_reference_arity_tracks_approved_template_and_provider_contract(self):
+        from app.routers.providers import _comfy_reference_count
+        from types import SimpleNamespace
+        profile = SimpleNamespace(adapter_kind="comfyui", capabilities=["image.edit"], model_name="qwen_image_2_1_t2i")
+        for count in (1, 2):
+            mapping = {**self.mapping, "capability": "image.edit", "reference_input_count": count,
+                       "image_loaders": [str(n) for n in range(count)]}
+            for actual in (0, 1, 2, 3):
+                payload = {"reference_images": [f"image-{i}.png" for i in range(actual)]}
+                if actual == count:
+                    self.assertEqual(len(c.reference_paths(payload, mapping)), count)
+                else:
+                    with self.assertRaises(ValueError):
+                        c.reference_paths(payload, mapping)
+            with patch.object(c, "load_workflow", return_value=({}, mapping)):
+                self.assertEqual(_comfy_reference_count(profile), count)
+        with self.assertRaises(ValueError):
+            c.reference_input_count({"reference_input_count": 1, "image_loaders": ["470", "475"]})
+
     def test_offline_preflight_does_not_leave_gpu_locked(self):
         def handler(request):
             raise httpx.ConnectError("offline")

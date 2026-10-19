@@ -18,6 +18,7 @@ from uuid import uuid4, UUID
 import httpx
 from PIL import Image, UnidentifiedImageError
 from redis import Redis
+from redis.exceptions import RedisError
 
 from app.core.config import ImageProviderProfile, settings
 from app.services.media_storage import write_binary_asset, read_binary_asset, coerce_relative_media_path
@@ -223,7 +224,7 @@ class ComfyUIProviderAdapter:
         except Exception as exc:
             uncertain = self.state.get("stage") in ("submitting", "submitted")
             retryable_status = isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (429, 500, 502, 503, 504)
-            if (uncertain and "ComfyUI execution failed" not in str(exc)) or isinstance(exc, (httpx.TransportError, TimeoutError, OSError)) or retryable_status or "GPU is occupied" in str(exc):
+            if (uncertain and "ComfyUI execution failed" not in str(exc)) or isinstance(exc, (httpx.TransportError, TimeoutError, OSError, RedisError)) or retryable_status or "GPU is occupied" in str(exc):
                 raise ComfyDeferred(str(exc), diagnostics=diagnostics) from exc
             raise ProviderExecutionError(str(exc), diagnostics=diagnostics) from exc
 

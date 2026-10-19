@@ -3199,7 +3199,7 @@ def mark_task_enqueue_failed(
 
 
 def enqueue_task(task_id: int) -> None:
-    client = Redis.from_url(settings.redis_url, decode_responses=True)
+    client = Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=2, socket_timeout=3)
     try:
         client.lpush(settings.redis_queue_name, str(task_id))
     finally:

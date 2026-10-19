@@ -197,6 +197,13 @@ class ComfyUIAdapterTests(unittest.TestCase):
         self.assertNotIn(c.GPU_LOCK, FakeRedis.values)
         self.assertEqual(self.saved, [])
 
+    def test_redis_outage_defers_gpu_job_without_submitting(self):
+        from redis.exceptions import ConnectionError
+        with patch.object(FakeRedis, "get", side_effect=ConnectionError("isolated outage")):
+            with self.assertRaises(c.ComfyDeferred): self.run_adapter()
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.saved, [])
+
     def test_completed_error_reports_failure_and_releases_lock(self):
         def handler(request):
             if request.url.path.startswith("/history/"):

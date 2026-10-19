@@ -16,7 +16,8 @@ def main() -> None:
         recovered = recover_stale_tasks(db)
         if recovered:
             print(f"Recovered {recovered} stale task(s) on worker startup")
-    client = Redis.from_url(settings.redis_url, decode_responses=True)
+    client = Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=2,
+                            socket_timeout=3, retry_on_timeout=False)
     print(f"Worker listening on {settings.redis_queue_name}")
     while True:
         try:

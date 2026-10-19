@@ -200,6 +200,20 @@ def test_uploaded_gif_endpoints_return_compressed_path_and_keep_original(route):
     app.include_router(assets.router)
     app.include_router(chat.router)
     app.dependency_overrides[get_current_auth_user] = lambda: AuthUserProfile(name="test", token="test")
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    from sqlalchemy.pool import StaticPool
+    from app.database import Base, get_db
+    from app.models import User
+    upload_engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(upload_engine)
+    with Session(upload_engine) as upload_db:
+        upload_db.add(User(name="test", role="designer", password_hash="fixture", project_codes=[]))
+        upload_db.commit()
+    def upload_session():
+        with Session(upload_engine) as upload_db:
+            yield upload_db
+    app.dependency_overrides[get_db] = upload_session
     original = animation(frames=2)
     with TemporaryDirectory() as folder, patch.object(settings, "media_root", folder), patch.object(storage, "_oss_enabled", return_value=False), patch.object(gif, "compress_gif", return_value=b"GIF89a-small"):
         response = TestClient(app).post(route, json={"file_name": "animation.gif", "data_url": "data:image/gif;base64," + b64encode(original).decode()})

@@ -249,14 +249,23 @@ def list_assets(
 def upload_reference_image(
     payload: ReferenceUploadIn,
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    db: Session = Depends(get_db),
 ) -> ReferenceUploadOut:
     extension = _extension_for_reference_upload(payload.file_name, payload.data_url)
     content = _decode_reference_upload(payload.data_url)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     safe_stub = "".join(char if char.isalnum() else "-" for char in payload.file_name.lower()).strip("-") or "reference"
-    relative_path = f"references/{timestamp}-{safe_stub[:40]}-{randint(1000, 9999)}.{extension}"
+    from uuid import uuid4
+    import hashlib
+    from app.models import ReferenceUpload, User
+    owner = db.scalar(select(User).where(User.name == auth_user.name))
+    if owner is None:
+        raise HTTPException(403, "上传需要有效用户。")
+    relative_path = f"references/{owner.id}/{timestamp}-{safe_stub[:40]}-{uuid4().hex}.{extension}"
     compression_info: dict = {}
     storage_path = write_uploaded_asset(relative_path, content, compression_info=compression_info)
+    db.add(ReferenceUpload(storage_path=storage_path, user_id=owner.id, sha256=hashlib.sha256(content).hexdigest()))
+    db.commit()
     return ReferenceUploadOut(file_name=payload.file_name, storage_path=resolve_storage_path(storage_path), compression=compression_info or None)
 
 

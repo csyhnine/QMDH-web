@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.models import Task, TaskStatus
+from app.models import Task, TaskStatus, TaskDispatch
 from app.services.usage_ledger import ensure_usage_ledger_for_task
 
 STALE_RUNNING_SECONDS = 15 * 60
@@ -48,6 +48,7 @@ def recover_stale_tasks(
     stale_tasks = db.scalars(
         select(Task).where(
             Task.deleted_at.is_(None),
+            ~Task.id.in_(select(TaskDispatch.task_id).where(TaskDispatch.state.in_(["queued", "leased", "review"]))),
             or_(
                 (Task.status == TaskStatus.running) & (Task.updated_at < running_cutoff),
                 (Task.status == TaskStatus.pending) & (Task.created_at < pending_cutoff),

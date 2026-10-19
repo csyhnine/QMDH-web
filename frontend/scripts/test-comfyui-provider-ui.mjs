@@ -83,3 +83,35 @@ test('ModelsPage renders ComfyUI image label and preserves an unknown adapter id
   assert.match(row, /future_image_adapter/);
   assert.doesNotMatch(row, /Haodeya 视频/);
 });
+
+test('local custom dimensions and resolution/count reach the actual submission payload', () => {
+  const { buildTaskSubmissionPayload } = load('features/studio/studioTaskSubmissionActions.ts');
+  const { defaultStudioForm } = load('features/studio/studioConstants.ts');
+  const draft = buildTaskSubmissionPayload({ provider: image, form: { ...defaultStudioForm,
+    prompt: 'fixture', projectCode: 'FIXTURE', aspectRatio: '1536x1024', resolution: '2k', imageCount: 3 } });
+  assert.equal(draft.payload.payload.width, 1536);
+  assert.equal(draft.payload.payload.height, 1024);
+  assert.equal(draft.payload.payload.resolution, '2k');
+  assert.equal(draft.payload.payload.image_count, 3);
+});
+
+test('local editing requires exactly two images before submission', () => {
+  const { validateStudioTaskSubmission } = load('features/studio/studioTaskSubmissionValidation.ts');
+  const { defaultStudioForm } = load('features/studio/studioConstants.ts');
+  const edit = { ...image, capabilities: ['image.edit'] };
+  for (const count of [0, 1, 2, 3]) {
+    const result = validateStudioTaskSubmission({form: { ...defaultStudioForm, prompt: 'fixture', creationMode: 'edit',
+      referenceImages: Array.from({length: count}, (_, i) => `/media/${i}.png`) },
+      providerForSubmit: edit, setState() {}, uploadingReference: false });
+    assert.equal(result.ok, count === 2);
+  }
+});
+
+test('local waiting and recovery render truthful states without invented percent', () => {
+  const Empty = load('features/studio/StudioFeedEmptyState.tsx').default;
+  for (const [stage, label] of [['queued', '前方 2 项任务'], ['recovering', '请勿重复提交'], ['running', '本机正在生成']]) {
+    const html = renderToStaticMarkup(require('react').createElement(Empty,
+      {isRunning: true, status: 'pending', virtualProgress: 78, localStage: stage, queuePosition: 2}));
+    assert.ok(html.includes(label)); assert.doesNotMatch(html, /78%/);
+  }
+});

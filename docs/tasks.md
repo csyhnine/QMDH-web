@@ -19,6 +19,14 @@ Last aligned: `2026-10-19`。旧任务原文与开发顺序完整保存在 `arch
 
 ## Current Queue
 
+### comfyui-production-004 — 生产任务闭环
+
+- 状态：IN_PROGRESS（codex/comfyui-production-closure，本地开发，尚未部署）。用户 2026-10-19 授权全部解决审计缺口。
+- 目标/边界：同事务持久待办、领取租约/心跳/恢复、本机串行与多张逐张执行、提交幂等、断线核对与人工处理入口；统一参数/真实状态；分辨率与双图编辑；Windows 守护、重连/证书运维。
+- 禁止：覆盖原 styles.css +13 或原未跟踪文件、重置库/媒体/key、改 CAD/18010；不盲重交不确定 GPU 任务。
+- 验收：并发/丢响应/worker中断/Redis不可用/上游断线、真实双图及尺寸、租约隔离与权限、旧能力回归；备份后发布，实际未通过项不写 DONE。
+- 文档：tasks/handoff/comfyui-frp/architecture/server-operations；新增业务工件仍沉淀既有 Task/Asset，持久调度单独建表，为多步骤执行保留扩展边界。
+
 | ID | 事项 | 状态 | 下一步或事实 |
 |---|---|---|---|
 | comfyui-provider-ui-003 | ComfyUI 图片渠道前端接入 | DONE（已发布，01d6c11/13bbe74） | 补 ComfyUI adapter 标签、未知类型不再默认视频；生成页图片白名单包含 ComfyUI，本机独立分组，图片/视频/编辑菜单与后台真实组件回归 |

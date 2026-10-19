@@ -355,6 +355,8 @@ def get_provider_adapter(provider_name: str, db: Session | None = None) -> Provi
         "bigjpg",
     }:
         return StrategyProviderAdapter(definition, get_image_provider_profile(provider_name, db))
+    if definition.outbound:
+        raise ValueError(f"Unsupported live provider adapter: {definition.adapter_kind}")
     return SimulatedProviderAdapter(definition)
 
 
@@ -2956,11 +2958,23 @@ def _materialize_assets(db: Session, task: Task, workflow: Workflow, project: Pr
     return assets
 
 
-def execute_task(task_id: int) -> None:
+def execute_task(task_id: int, *, dispatch_token: str | None = None) -> None:
     with SessionLocal() as db:
         task = db.get(Task, task_id)
         if not task:
             return
+        def check_dispatch_lease():
+            if dispatch_token is None:
+                return
+            from app.models import TaskDispatch
+            from datetime import datetime, timezone
+            job = db.get(TaskDispatch, task_id, populate_existing=True)
+            until = job.lease_until if job else None
+            if until and until.tzinfo is None:
+                until = until.replace(tzinfo=timezone.utc)
+            if not job or job.lease_owner != dispatch_token or job.state != "leased" or not until or until <= datetime.now(timezone.utc):
+                raise RuntimeError("Execution lease lost; this worker cannot persist or submit")
+        check_dispatch_lease()
         if task.status == TaskStatus.completed and task.result.get("adapter_mode") == "comfyui":
             return  # A duplicated Redis delivery must not book a second local run.
 
@@ -2991,10 +3005,12 @@ def execute_task(task_id: int) -> None:
             adapter = get_provider_adapter(task.requested_provider, db)
             if isinstance(adapter, ComfyUIProviderAdapter):
                 def save_comfy_state(state: dict):
+                    check_dispatch_lease()
                     task.result = {**task.result, "comfyui": state}
                     db.commit()
                 adapter.bind_task(task.id, task.result.get("comfyui", {}), save_comfy_state)
             outcome = adapter.execute(workflow.provider_capability, task.payload)
+            check_dispatch_lease()
             task.status = TaskStatus.completed
             task.latency_ms = outcome.latency_ms
             task.cost = outcome.cost
@@ -3044,6 +3060,18 @@ def execute_task(task_id: int) -> None:
                     "asset_warning": f"Asset materialization skipped: {asset_exc}",
                 }
         except Exception as exc:
+            try:
+                check_dispatch_lease()
+            except RuntimeError:
+                db.rollback()
+                return
+            from app.services.provider_adapters.comfyui import ComfyDeferred
+            if isinstance(exc, ComfyDeferred):
+                task.status = TaskStatus.pending
+                task.result = {**task.result, "adapter_mode": "comfyui", "queued_stage": "recovering",
+                               "recovery_error": str(exc), "summary": "本机连接或任务状态待恢复，请勿重复提交。"}
+                db.commit()
+                return
             task.status = TaskStatus.failed
             request_diagnostics = _diagnostics_from_exception(exc)
             failure = _build_failure_result(
@@ -3063,6 +3091,14 @@ def execute_task(task_id: int) -> None:
                 **_reference_image_result_fields(task.payload),
                 **_task_payload_result_fields(task.payload),
             }
+            completed_images = task.result.get("comfyui", {}).get("batch_outputs", [])
+            if completed_images:
+                task.result = {**task.result, "storage_path": completed_images[0]["storage_path"],
+                               "storage_paths": [i["storage_path"] for i in completed_images],
+                               "output_count": len(completed_images), "partial_outputs": True}
+                assets = _materialize_assets(db, task, workflow, project)
+                if assets:
+                    task.result = {**task.result, "asset_ids": [a.id for a in assets]}
 
             try:
                 provider_definition = get_provider_definition(task.requested_provider, db)

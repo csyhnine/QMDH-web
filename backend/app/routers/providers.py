@@ -63,6 +63,32 @@ _PROBE_IMAGE_DATA_URL = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yh3cAAAAASUVORK5CYII="
 )
 _DASHSCOPE_VIDEO_PROBE_ENDPOINT = "/services/aigc/video-generation/video-synthesis"
+
+
+@router.get("/comfyui/status")
+async def comfyui_runtime_status(db: Session = Depends(get_db), auth_user: AuthUserProfile = Depends(get_current_auth_user)):
+    from app.models import TaskDispatch
+    from sqlalchemy import func
+    queued = db.scalar(select(func.count()).select_from(TaskDispatch).where(
+        TaskDispatch.lane == "comfyui", TaskDispatch.state.in_(["queued", "review"])))
+    recovering = db.scalar(select(func.count()).select_from(TaskDispatch).where(
+        TaskDispatch.lane == "comfyui", TaskDispatch.state == "review"))
+    reviews = [{"task_id": job.task_id} for job in db.scalars(select(TaskDispatch).where(
+        TaskDispatch.lane == "comfyui", TaskDispatch.state == "review").order_by(TaskDispatch.task_id).limit(20))] if auth_user.role in ("admin", "ops", "owner") else []
+    try:
+        from app.services.provider_adapters.comfyui import BASE_URL
+        async with httpx.AsyncClient(trust_env=False, follow_redirects=False, timeout=3) as client:
+            response = await client.get(BASE_URL + "/queue")
+            response.raise_for_status()
+            upstream = response.json()
+        return {"status": "recovering" if recovering else "busy" if upstream.get("queue_running") or queued else "ready",
+                "queued": queued, "running": len(upstream.get("queue_running", [])),
+                "reviews": reviews,
+                "message": "正在核对本机任务，请勿重复提交。" if recovering else "本机在线，任务按顺序执行。"}
+    except Exception:
+        return {"status": "offline", "queued": queued, "running": 0,
+                "reviews": reviews,
+                "message": "本机暂时离线，已提交任务会保留并等待恢复。"}
 _ARK_VIDEO_PROBE_ENDPOINT = "/contents/generations/tasks"
 _HAODEYA_GROK_VIDEO_PROBE_ENDPOINT = "/videos"
 

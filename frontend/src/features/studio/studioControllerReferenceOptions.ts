@@ -30,7 +30,7 @@ export function buildStudioReferenceUploadOptions({
       controllerState.studioForm.creationMode === "video" && isSeedance2Provider(selectedProvider),
     fileInputRef: controllerState.fileInputRef,
     maxReferenceCount:
-      controllerState.studioForm.creationMode === "video" ? videoReferenceLimit : 4,
+      controllerState.studioForm.creationMode === "video" ? videoReferenceLimit : selectedProvider?.adapter_kind === "comfyui" ? 2 : 4,
     onClearError: controllerState.clearLoadError,
     onError: controllerState.pushLoadError,
     selectedProviderLabel: selectedReferenceUploadProviderLabel({

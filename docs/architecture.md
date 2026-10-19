@@ -460,3 +460,6 @@ MVP 1.0 当前还补充了一套单机服务器部署基线：
 - 主链路数据流
 - 依赖关系
 - 当前热点模块
+
+
+2026-10-19 WIP：生产任务闭环在 codex/comfyui-production-closure 本地开发，新增 task_dispatches/reference_uploads；部署前仍以原FRP/文生图状态为准。设计与验收见 [comfyui-production-closure.md](comfyui-production-closure.md)。

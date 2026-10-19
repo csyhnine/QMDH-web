@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useState } from "react";
+import ComfyOperations from "./ComfyOperations";
 import {
   api,
   type DiscoveredModel,
@@ -1532,6 +1533,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
 
   return (
     <section className="admin-page">
+      {providerProfiles.some((profile) => profile.adapter_kind === "comfyui") ? <ComfyOperations /> : null}
       <header className="admin-page-head">
         <div><h1>模型管理</h1><p>管理可用模型，查看使用情况、成本与配置</p></div>
         <div className="admin-head-actions">

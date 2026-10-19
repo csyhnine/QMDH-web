@@ -95,6 +95,7 @@ export function buildStudioComposerCanvasProps({
         current,
         {
           requestedProvider: providerName,
+          aspectRatio: provider?.adapter_kind !== "comfyui" && /^\d+x\d+$/.test(current.aspectRatio) ? "16:9" : current.aspectRatio,
           resolution: clampResolutionToOptions(current.resolution, nextOptions),
           grokVideoSku: videoSkuForProviderSelection(provider, current.grokVideoSku),
         },

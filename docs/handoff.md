@@ -11,6 +11,14 @@
 
 ## Latest Handoffs
 
+### [2026-10-19] ComfyUI 生产闭环 — WIP，尚未发布
+
+- 用户授权全部解决并发/恢复/可靠队列/参数/幂等/守护/就绪提示与尺寸/双图缺口。分支 codex/comfyui-production-closure，原 styles.css +13 与原未跟踪文件保留。
+- 已实现 Task 同事务 outbox、租约/心跳与本机 FIFO、丢响应核对而不盲重交、1～3张逐张checkpoint、提交幂等、真实状态/管理恢复入口、尺寸与双图素材归属。迁移 b27d0f85c932 是追加两表，不修改旧历史。当前只在本地，未部署/未做新真实GPU验收。
+- Windows 运行材料复制至受限 C:/ProgramData/QMDH-FRP，私钥未变；用户级隐藏守护 PID31796、HKCU Run 登录启动，health.json 只读本机就绪/证书期限。系统级任务/防火墙被Windows拒绝（当前令牌非管理员），安装脚本已准备，不能声称开机未登录启动通过。
+- 下一步：完成回归与生产副本迁移/并发验证，备份后发布，真实连续/多张/尺寸/双图与worker/隧道恢复验收。详见 docs/comfyui-production-closure.md。不得将WIP判完成。
+
+
 ### [2026-10-19] ComfyUI 图片渠道显示修复 — 已发布
 
 - 用户反馈图片模型显示视频；数据库/API能力image.generate正确。漏掉前端comfyui登记，后台getAdapterOption把未知类型落到首项Haodeya视频；Studio图片白名单也缺ComfyUI，原API真实生成验收没有覆盖前端入口。这是本轮修复范围。
@@ -27,11 +35,3 @@
 - 证据服务器 /opt/qmdh-frp/evidence/live-smoke-{zimage,qwen}.json，本机私有windows/server-evidence同名副本与windows/LIVE-ACCEPTANCE.md；最新备份 /www/backup/qmdh-comfy-live-20261019 与本机frp-20261019/live-backup：DB/5802媒体清单/2增量3318213字节，7文件两端SHA256一致，恢复链引用原发布与10-16完整链。程序回退先禁用id60/61，避免旧版未知adapter变模拟结果；不清库/媒体/任务。
 - comfyui-frp-001 的隧道/文生图准备及真实验收 DONE；图生图另列后续，服务/长稳重连/未测尺寸不算完成。私有材料/参数与全部边界见docs/comfyui-frp.md；下一步按用户新需求，不自动多跑GPU或装服务。Safe to hand off: Yes。
 
-### [2026-10-16] ComfyUI FRP 接入准备 — 未部署
-
-- 新分支 codex/comfyui-frp-plan，起点 0fc630f；原 styles.css 与所有未跟踪文件保持。此前管理模块只读复核：生产 d7f14138、前端镜像仍 85b3652e、schema a16c9e74b821、六人授权启用、项目 0/名册 5；浏览器验收因控制工具无法识别 URL 停止，没有真实点击通过结论。
-- 用户本轮改为准备自建 FRP 连接 Windows ComfyUI；已确认先文生图、后图生图。本机另一 agent 负责 frpc/工作流；未授权自动给其他 chat 发消息，交接文档由用户转交。
-- ops/frp 提供固定 0.71.0 的 frps/visitor/windows 模板、scratch Dockerfile 与显式 Compose overlay。STCP 不发布 ComfyUI，拟用 120.79.227.11:7443/TCP；mTLS、tokenSource 与独立 STCP secret；visitor 只绑定专用 internal 网络接口，backend/worker 保留 default 网络，frontend 不接入。
-- 生产只读无 7443/7000/8188 TCP 监听、无 frps 命令，拟用 172.30.218.0/28 未与当前路由重叠；安全组未核验。未开端口/启动服务/构建镜像/写业务数据/签发秘密。现有代码无 ComfyUI adapter，后续不得冒充 OpenAI 接口或声称网站已可生成。
-- 验证：三份 TOML 解析通过，生产临时合并 Compose config --quiet 通过（未启动）；官方包下载超过约 150 秒未完成，仅中止本轮下载并清理临时目录，包哈希/二进制 verify/TLS/镜像/真实业务联调仍未完成。
-- 详细地址、CSR/最小材料包、受限目录、签发/轮换、工作流白名单参数、prompt/history/view/结果持久化和验收在 docs/comfyui-frp.md。下一步接本机 windows.csr 与工作流包，再签发及安排网络联调；无须重问首批能力。当前无生产 token/证书可领取。Safe to hand off: Yes（方案可接手，功能尚未上线）。

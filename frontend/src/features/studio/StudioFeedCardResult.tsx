@@ -32,6 +32,8 @@ export default function StudioFeedCardResult({
       isRunning={showRunningState}
       status={task.status}
       virtualProgress={virtualProgress}
+      localStage={task.result["adapter_mode"] === "comfyui" ? String(task.result["queued_stage"] || "queued") : undefined}
+      queuePosition={Number(task.result["queue_position"] || 0)}
     />
   );
 }

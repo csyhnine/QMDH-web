@@ -129,6 +129,30 @@ class Task(Base):
     provider_calls: Mapped[list["ProviderCall"]] = relationship(back_populates="task")
 
 
+class TaskDispatch(Base):
+    """Durable outbox, execution lease and scoped submission deduplication."""
+    __tablename__ = "task_dispatches"
+    __table_args__ = (UniqueConstraint("user_id", "submission_key", name="uq_task_submission"),)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    submission_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    request_hash: Mapped[str] = mapped_column(String(64), default="")
+    lane: Mapped[str] = mapped_column(String(24), default="default", index=True)
+    state: Mapped[str] = mapped_column(String(24), default="queued", index=True)
+    lease_owner: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ReferenceUpload(Base):
+    __tablename__ = "reference_uploads"
+    storage_path: Mapped[str] = mapped_column(String(512), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    sha256: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Asset(Base):
     __tablename__ = "assets"
 

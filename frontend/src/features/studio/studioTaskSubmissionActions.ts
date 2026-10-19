@@ -51,7 +51,7 @@ export function buildTaskSubmissionPayload({
   const taskPayload =
     form.creationMode === "video"
       ? buildVideoPayload(form, provider, referenceUploads)
-      : buildImagePayload(form, workflowKey);
+      : buildImagePayload(form, workflowKey, provider);
   const templateId = templates.length > 0 ? resolveBoundTemplateId(form, templates) : form.activeTemplateId ?? undefined;
 
   return {

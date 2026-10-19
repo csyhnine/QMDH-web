@@ -2,13 +2,26 @@ type StudioFeedEmptyStateProps = {
   isRunning: boolean;
   status: string;
   virtualProgress: number;
+  localStage?: string;
+  queuePosition?: number;
 };
 
 export default function StudioFeedEmptyState({
   isRunning,
   status,
   virtualProgress,
+  localStage,
+  queuePosition,
 }: StudioFeedEmptyStateProps) {
+  if (isRunning && localStage) {
+    const waiting = localStage === "queued";
+    const recovering = localStage === "recovering";
+    return <div className="feed-gallery-empty" role="status">
+      <h3>{recovering ? "等待连接恢复或状态核对" : waiting ? "等待本机执行" : "本机正在生成"}</h3>
+      <p>{recovering ? "任务已保留，系统会继续核对原任务，请勿重复提交。" : waiting
+        ? `前方 ${queuePosition ?? 0} 项任务，轮到后自动执行。` : "生成完成后自动保存结果，多张图片会逐张生成。"}</p>
+    </div>;
+  }
   return (
     <div className="feed-gallery-empty">
       <h3>{isRunning ? "任务正在执行中" : "任务还没有返回预览"}</h3>

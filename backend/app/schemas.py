@@ -33,6 +33,7 @@ class TaskCreate(BaseModel):
     source_surface: str = "studio"
     canvas_node_id: str | None = Field(default=None, max_length=80)
     prompt_polished: bool = False
+    submission_key: str | None = Field(default=None, min_length=16, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class TaskDeleteIn(BaseModel):

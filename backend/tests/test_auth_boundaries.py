@@ -255,7 +255,7 @@ class AuthBoundaryTests(unittest.TestCase):
         )
         self.assertEqual(forbidden.status_code, 403)
 
-    def test_redis_enqueue_failure_marks_task_failed(self) -> None:
+    def test_redis_outage_keeps_durable_task_pending(self) -> None:
         with (
             patch("app.routers.tasks.settings.task_execution_mode", "redis"),
             patch("app.routers.tasks.enqueue_task", side_effect=RuntimeError("redis down")),
@@ -273,14 +273,15 @@ class AuthBoundaryTests(unittest.TestCase):
                 },
             )
 
-        self.assertEqual(response.status_code, 503, response.text)
+        self.assertEqual(response.status_code, 202, response.text)
 
         with self.SessionLocal() as db:
             task = db.query(Task).filter(Task.title == "Queue failure task").one()
 
-        self.assertEqual(task.status, TaskStatus.failed)
-        self.assertEqual(task.result["error_stage"], "task_enqueue")
-        self.assertEqual(task.result["queued_stage"], "failed")
+        self.assertEqual(task.status, TaskStatus.pending)
+        from app.models import TaskDispatch
+        with self.SessionLocal() as db:
+            self.assertEqual(db.get(TaskDispatch, task.id).state, "queued")
 
 
 if __name__ == "__main__":

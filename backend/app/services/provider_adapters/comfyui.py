@@ -20,15 +20,19 @@ from PIL import Image
 from redis import Redis
 
 from app.core.config import ImageProviderProfile, settings
-from app.services.media_storage import write_binary_asset
+from app.services.media_storage import write_binary_asset, read_binary_asset, coerce_relative_media_path
 from app.services.model_registry import ProviderDefinition
 from app.services.provider_adapters.base import ExecutionOutcome, ProviderExecutionError, RequestDiagnostics
 
 BASE_URL = "http://comfy-visitor:8188"
 GPU_LOCK = "qmdh:comfyui:gpu:owner"
-WORKFLOWS = {"qwen_image_2_1_t2i", "z_image_turbo"}
+WORKFLOWS = {"qwen_image_2_1_t2i", "z_image_turbo", "qwen_image_2_1_image_edit"}
 MAX_IMAGE_BYTES = 32 * 1024 * 1024
 MAX_PIXELS = 4096 * 4096
+
+
+class ComfyDeferred(ProviderExecutionError):
+    """Connectivity/ownership uncertainty: retain original job, never suggest rerun."""
 
 
 def _integer(value, name: str, low: int, high: int) -> int:
@@ -49,7 +53,7 @@ def load_workflow(root: Path, workflow_id: str) -> tuple[dict, dict]:
     if hashlib.sha256(raw).hexdigest() != mapping["sha256"]:
         raise ValueError("ComfyUI workflow hash mismatch")
     graph = json.loads(raw.decode("utf-8-sig"))
-    if not isinstance(graph, dict) or mapping["capability"] != "image.generate":
+    if not isinstance(graph, dict) or mapping["capability"] not in ("image.generate", "image.edit"):
         raise ValueError("Invalid ComfyUI API graph")
     return graph, mapping
 
@@ -57,11 +61,15 @@ def load_workflow(root: Path, workflow_id: str) -> tuple[dict, dict]:
 def prepare_graph(graph: dict, mapping: dict, payload: dict, *, seed: int, prefix: str) -> dict:
     graph = deepcopy(graph)
     prompt = str(payload.get("prompt") or "").strip()
+    supplement = str(payload.get("prompt_supplement") or "").strip()
+    if supplement:
+        prompt += "\n\n" + supplement
     if not prompt or len(prompt) > 16000:
         raise ValueError("ComfyUI requires a prompt of 1..16000 characters")
     if _integer(payload.get("image_count", 1), "image_count", 1, 1) != 1 or _integer(payload.get("batch_size", 1), "batch_size", 1, 1) != 1:
         raise ValueError("ComfyUI first release supports one image per task")
-    if any(payload.get(k) for k in ("reference_image", "reference_images", "source_image", "source_images", "image", "images", "image_urls")):
+    editing = mapping["capability"] == "image.edit"
+    if not editing and any(payload.get(k) for k in ("reference_image", "reference_images", "source_image", "source_images", "image", "images", "image_urls")):
         raise ValueError("ComfyUI text-to-image cannot accept reference images")
     for field, value in (("prompt", prompt), ("seed", seed)):
         for node_id, input_name in mapping[field]:
@@ -73,31 +81,93 @@ def prepare_graph(graph: dict, mapping: dict, payload: dict, *, seed: int, prefi
     for field in ("steps", "cfg", "sampler", "scheduler", "enhance_prompt", "negative_prompt", "megapixels"):
         if payload.get(field) not in (None, "", False):
             raise ValueError(f"ComfyUI {field} is fixed by the approved workflow")
+    source_canvas = False
     width, height = payload.get("width"), payload.get("height")
     if (width is None) != (height is None):
         raise ValueError("ComfyUI width and height must be supplied together")
     if width is None:
         ratios = {"1:1": (1024, 1024), "16:9": (1344, 768), "9:16": (768, 1344),
-                  "4:3": (1152, 896), "3:4": (896, 1152), "3:2": (1216, 832), "2:3": (832, 1216)}
+                  "4:3": (1152, 864), "3:4": (864, 1152), "3:2": (1248, 832), "2:3": (832, 1248), "21:9": (1568, 672)}
         ratio = str(payload.get("aspect_ratio") or "1:1")
+        if ratio in ("匹配比例", "智能", "auto", "automatic", "smart"):
+            ratio = "1:1"
+        source_canvas = editing and ratio in ("遵循原图", "遵循原图比例", "原图比例", "原图", "source", "match_source", "follow_source")
+        if source_canvas:
+            ratio = "1:1"  # unused latent; image branch below preserves source dimensions
         if ratio not in ratios:
             raise ValueError("Unsupported ComfyUI aspect ratio; supply explicit width/height")
         width, height = ratios[ratio]
     resolution = str(payload.get("resolution") or "1k").lower()
-    if resolution not in ("1k", "", "default"):
+    if resolution not in ("1k", "2k", "4k", "", "default"):
         raise ValueError("ComfyUI larger resolution presets require validation; use explicit width/height")
+    if payload.get("width") is None:
+        scale = {"2k": 2, "4k": 4}.get(resolution, 1)
+        # Presets use 1/4/16 megapixel budgets; keep every edge <= 4096.
+        factor = min(scale, 4096 / max(width, height))
+        width, height = round(width * factor / 8) * 8, round(height * factor / 8) * 8
     for field, value in (("width", width), ("height", height)):
-        value = _integer(value, field, 256, 2048)
+        value = _integer(value, field, 256, 4096)
         if value % 8:
             raise ValueError("ComfyUI dimensions must be multiples of 8")
         node, input_name = mapping[field]
         # Replace the actual link to ResolutionSelector, not its ineffective defaults.
         graph[node]["inputs"][input_name] = value
         graph[node]["inputs"]["batch_size"] = 1
-    if width * height > 2048 * 2048:
+    if width * height > MAX_PIXELS:
         raise ValueError("ComfyUI pixel budget exceeded")
+    if editing:
+        node, field = mapping["canvas_switch"]
+        graph[node]["inputs"][field] = not (payload.get("width") is None and source_canvas)
+        node, field = mapping["resolution"]
+        graph[node]["inputs"][field] = 0
     graph[mapping["output_node"]]["inputs"]["filename_prefix"] = prefix
     return graph
+
+
+def reference_paths(payload):
+    values = payload.get("reference_images") or payload.get("source_images") or []
+    if not isinstance(values, list) or len(values) != 2 or not all(isinstance(p, str) for p in values):
+        raise ValueError("本机 Qwen 图像编辑需要两张图片：第一张为目标图，第二张为参考图。")
+    return values
+
+
+def owned_references(db, user_id, payload):
+    from sqlalchemy import select
+    from app.models import Asset, Task, ReferenceUpload
+    from urllib.parse import urlparse, unquote
+    paths = []
+    for value in reference_paths(payload):
+        if value.startswith(("https://", "http://")):
+            parsed = urlparse(value)
+            allowed = {urlparse(settings.frontend_origin).netloc, urlparse(settings.public_media_base_url).netloc}
+            if parsed.netloc not in allowed or parsed.query or parsed.fragment:
+                raise ValueError("参考图必须来自当前用户的平台素材，不能使用外部地址。")
+            value = unquote(parsed.path)
+        path = coerce_relative_media_path(value)
+        if ".." in PurePosixPath(path).parts or ":" in path:
+            raise ValueError("Invalid reference path")
+        upload = db.get(ReferenceUpload, path)
+        asset = db.scalar(select(Asset.id).join(Task, Asset.source_task_id == Task.id)
+                          .where(Asset.storage_path == path, Task.user_id == user_id))
+        if not (upload and upload.user_id == user_id) and asset is None:
+            raise ValueError("参考图不属于当前用户；旧上传图请重新上传。")
+        data = read_binary_asset(path)
+        if len(data) > MAX_IMAGE_BYTES:
+            raise ValueError("参考图超过 32MB。")
+        with Image.open(BytesIO(data)) as im:
+            if im.format not in ("PNG", "JPEG", "WEBP") or im.width * im.height > MAX_PIXELS:
+                raise ValueError("参考图须为 PNG/JPEG/WebP，最多 1600 万像素。")
+            im.verify()
+        paths.append(path)
+    return paths
+
+
+def validate_submission(db, user_id, workflow_id, payload):
+    graph, mapping = load_workflow(Path(settings.comfyui_workflow_root), workflow_id)
+    _integer(payload.get("image_count", 1), "image_count", 1, 3)
+    prepare_graph(graph, mapping, {**payload, "image_count": 1}, seed=0, prefix="validation")
+    if mapping["capability"] == "image.edit":
+        owned_references(db, user_id, payload)
 
 
 def output_reference(history: dict, prompt_id: str, output_node: str) -> dict | None:
@@ -148,14 +218,48 @@ class ComfyUIProviderAdapter:
         try:
             return self._execute(capability, payload)
         except Exception as exc:
+            uncertain = self.state.get("stage") in ("submitting", "submitted", "downloading")
+            if (uncertain and "ComfyUI execution failed" not in str(exc)) or isinstance(exc, (httpx.TransportError, TimeoutError)) or "GPU is occupied" in str(exc):
+                raise ComfyDeferred(str(exc), diagnostics=diagnostics) from exc
             raise ProviderExecutionError(str(exc), diagnostics=diagnostics) from exc
 
     def _execute(self, capability: str, payload: dict) -> ExecutionOutcome:
-        if capability != "image.generate" or self.profile.base_url.rstrip("/") != BASE_URL:
-            raise ValueError("ComfyUI requires image.generate and the fixed private visitor URL")
+        count = _integer(payload.get("image_count", 1), "image_count", 1, 3)
+        completed = list(self.state.get("batch_outputs", []))
+        if len(completed) > count:
+            raise ValueError("Saved batch count differs; reconcile before retry")
+        while len(completed) < count:
+            outcome = self._execute_one(capability, {**payload, "image_count": 1})
+            completed.append(outcome.result)
+            seed = (self.state["seed"] + 1) % (2**53)
+            self._save(stage="between_images", prompt_id=None, client_id=None, seed=seed, batch_outputs=completed)
+        last = completed[-1]
+        self._save(stage="downloaded")
+        return ExecutionOutcome(self.profile.model_name, sum(i.get("elapsed_ms", 1) for i in completed),
+                                0.0, self.profile.pricing_currency, True, {
+            **last, "storage_paths": [i["storage_path"] for i in completed], "output_count": count,
+            "requested_image_count": count, "comfyui": dict(self.state),
+        })
+
+    def _execute_one(self, capability: str, payload: dict) -> ExecutionOutcome:
+        if capability not in ("image.generate", "image.edit") or self.profile.base_url.rstrip("/") != BASE_URL:
+            raise ValueError("ComfyUI requires the fixed private visitor URL")
         if not self.task_id or self.checkpoint is None:
             raise ValueError("ComfyUI cannot submit without a durable task context")
         graph, mapping = load_workflow(Path(settings.comfyui_workflow_root), self.profile.model_name)
+        if capability != mapping["capability"]:
+            raise ValueError("ComfyUI workflow capability mismatch")
+        if capability == "image.edit" and payload.get("width") is None and str(payload.get("aspect_ratio")) in ("遵循原图", "遵循原图比例", "原图比例", "原图", "source", "match_source", "follow_source") and payload.get("resolution") in ("1k", "2k", "4k"):
+            from app.database import SessionLocal
+            from app.models import Task
+            with SessionLocal() as db:
+                task = db.get(Task, self.task_id)
+                paths = owned_references(db, task.user_id, payload)
+            with Image.open(BytesIO(read_binary_asset(paths[0]))) as im:
+                w, h = im.size
+            target = {"1k": 1024, "2k": 2048, "4k": 4096}[payload["resolution"]]
+            factor = min(target / max(w, h), (target * target / (w * h)) ** .5)
+            payload = {**payload, "width": max(256, round(w * factor / 8) * 8), "height": max(256, round(h * factor / 8) * 8)}
         if self.state and self.state.get("workflow_sha256") != mapping["sha256"]:
             raise ValueError("ComfyUI saved workflow version differs; reconcile existing prompt first")
         seed = self.state.get("seed", payload.get("seed"))
@@ -171,7 +275,19 @@ class ComfyUIProviderAdapter:
         prior = redis.get(GPU_LOCK)
         # Even same-task duplicate workers must not run concurrently. The lock is
         # deliberately retained on uncertainty and can only be reconciled manually.
-        if prior is not None or not redis.set(GPU_LOCK, owner, nx=True):
+        if prior == owner:
+            # Only the durable dispatcher with a live lease may resume an owner.
+            from app.database import SessionLocal
+            from app.models import TaskDispatch
+            from datetime import datetime, timezone
+            with SessionLocal() as db:
+                job = db.get(TaskDispatch, self.task_id)
+                until = job.lease_until if job else None
+                if until and until.tzinfo is None:
+                    until = until.replace(tzinfo=timezone.utc)
+                if not job or job.state != "leased" or not until or until <= datetime.now(timezone.utc):
+                    raise ValueError("ComfyUI resume requires an active execution lease")
+        elif prior is not None or not redis.set(GPU_LOCK, owner, nx=True):
             raise ValueError("ComfyUI GPU is occupied or awaiting reconciliation; no task was submitted")
         safe_release = True
         try:
@@ -192,16 +308,45 @@ class ComfyUIProviderAdapter:
                 prompt_id = self.state.get("prompt_id")
                 if self.state.get("stage") in ("submitting", "submitted") and not prompt_id:
                     safe_release = False
-                    raise ValueError("ComfyUI prior submission is uncertain; do not resubmit")
+                    queue = json.loads(request("GET", "/queue"))
+                    history = json.loads(request("GET", "/history", params={"max_items": 200}))
+                    candidates = list(queue.get("queue_running", [])) + list(queue.get("queue_pending", []))
+                    candidates += [v.get("prompt", []) for v in history.values()]
+                    matches = {str(item[1]) for item in candidates if len(item) > 3 and
+                               isinstance(item[3], dict) and item[3].get("client_id") == self.state.get("client_id")}
+                    if len(matches) != 1:
+                        raise ValueError("ComfyUI submission uncertain; retained for reconciliation, never resubmitted")
+                    prompt_id = str(UUID(matches.pop()))
+                    self._save(stage="submitted", prompt_id=prompt_id)
                 if not prompt_id:
                     # Connectivity check is read-only and happens before submit intent.
                     json.loads(request("GET", "/system_stats"))
+                    if capability == "image.edit":
+                        from app.database import SessionLocal
+                        from app.models import Task
+                        with SessionLocal() as db:
+                            task = db.get(Task, self.task_id)
+                            paths = owned_references(db, task.user_id, payload)
+                        for index, (node, path) in enumerate(zip(mapping["image_loaders"], paths)):
+                            uploaded = json.loads(request("POST", "/upload/image", files={"image":
+                                (f"qmdh_{self.task_id}_{index}.png", read_binary_asset(path), "application/octet-stream")},
+                                data={"type": "input", "overwrite": "false", "subfolder": f"qmdh/{self.task_id}"}))
+                            name, folder = uploaded.get("name"), uploaded.get("subfolder", "")
+                            if not isinstance(name, str) or not name or "/" in name or "\\" in name or ":" in name or name in (".", "..") or ".." in PurePosixPath(folder).parts or PurePosixPath(folder).is_absolute() or ":" in folder or "\\" in folder:
+                                raise ValueError("Unsafe ComfyUI upload reference")
+                            graph[node]["inputs"]["image"] = f"{folder}/{name}" if folder else name
                     # Persist intent before POST so a lost response never triggers a
                     # second GPU run automatically. FRP/ComfyUI has no idempotency guarantee.
                     self._save(stage="submitting", seed=seed, workflow_id=self.profile.model_name,
                                workflow_sha256=mapping["sha256"], client_id=str(uuid4()))
                     safe_release = False
-                    submitted = json.loads(request("POST", "/prompt", json={"prompt": graph, "client_id": self.state["client_id"]}))
+                    try:
+                        submitted = json.loads(request("POST", "/prompt", json={"prompt": graph, "client_id": self.state["client_id"]}))
+                    except httpx.HTTPStatusError as exc:
+                        if exc.response.status_code == 400:
+                            safe_release = True
+                            self._save(stage="rejected")
+                        raise
                     if submitted.get("node_errors") or not submitted.get("prompt_id"):
                         raise ValueError("ComfyUI submission response invalid; reconcile before retry")
                     prompt_id = str(UUID(submitted["prompt_id"]))
@@ -229,9 +374,10 @@ class ComfyUIProviderAdapter:
                             im.verify()
                         storage = write_binary_asset(f"generated/comfyui/task-{self.task_id}/{prompt_id}.{extension}", image)
                         self._save(stage="downloaded", storage_path=storage, output_sha256=hashlib.sha256(image).hexdigest())
-                        return ExecutionOutcome(self.profile.model_name, max(1, round((monotonic() - started) * 1000)),
+                        elapsed_ms = max(1, round((monotonic() - started) * 1000))
+                        return ExecutionOutcome(self.profile.model_name, elapsed_ms,
                                                 0.0, self.profile.pricing_currency, True, {
-                            "summary": "ComfyUI image saved to QMDH storage", "adapter_mode": "comfyui",
+                            "summary": "ComfyUI image saved to QMDH storage", "adapter_mode": "comfyui", "elapsed_ms": elapsed_ms,
                             "storage_path": storage, "storage_paths": [storage], "output_count": 1,
                             "requested_image_count": 1, "output_width": width, "output_height": height,
                             "upstream_task_id": prompt_id, "comfyui": dict(self.state),

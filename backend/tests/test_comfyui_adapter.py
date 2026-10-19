@@ -97,10 +97,11 @@ class ComfyUIAdapterTests(unittest.TestCase):
 
     def run_adapter(self, handler=None, **payload):
         original_client = httpx.Client
-        client = original_client(transport=httpx.MockTransport(handler or self.handler), base_url=c.BASE_URL,
-                                 trust_env=False, follow_redirects=False)
+        def client_factory(*args, **kwargs):
+            return original_client(transport=httpx.MockTransport(handler or self.handler), base_url=c.BASE_URL,
+                                   trust_env=False, follow_redirects=False)
         with patch.object(settings, "comfyui_workflow_root", str(self.root)), patch.object(c, "Redis", FakeRedis), \
-             patch.object(c.httpx, "Client", return_value=client), \
+             patch.object(c.httpx, "Client", side_effect=client_factory), \
              patch.object(c, "write_binary_asset", side_effect=lambda path, data: path):
             return self.adapter.execute("image.generate", {"prompt": "a synthetic test", "seed": 0, **payload})
 
@@ -142,6 +143,51 @@ class ComfyUIAdapterTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertEqual(FakeRedis.values[c.GPU_LOCK], "other-task")
 
+    def test_resolution_changes_effective_latent_and_all_visible_ratios(self):
+        for tier, edge in (("1k", 1024), ("2k", 2048), ("4k", 4096)):
+            graph = c.prepare_graph(self.graph, self.mapping, {"prompt": "fixture", "resolution": tier}, seed=0, prefix="fixture")
+            self.assertEqual(graph["459:456"]["inputs"]["width"], edge)
+        for ratio in ("匹配比例", "21:9", "16:9", "3:2", "4:3", "1:1", "3:4", "2:3", "9:16"):
+            graph = c.prepare_graph(self.graph, self.mapping, {"prompt": "fixture", "resolution": "4k", "aspect_ratio": ratio}, seed=0, prefix="fixture")
+            self.assertLessEqual(max(graph["459:456"]["inputs"][key] for key in ("width", "height")), 4096)
+
+    def test_batch_persists_each_output_and_never_resubmits_completed_batch(self):
+        from uuid import uuid4
+        ids = []
+        def handler(request):
+            if request.url.path == "/prompt":
+                self.calls.append(request); ids.append(str(uuid4()))
+                return httpx.Response(200, json={"prompt_id": ids[-1], "node_errors": {}})
+            if request.url.path.startswith("/history/"):
+                prompt = request.url.path.split("/")[-1]
+                return httpx.Response(200, json={prompt: self.history()[PROMPT_ID]})
+            return self.handler(request)
+        outcome = self.run_adapter(handler, image_count=3)
+        self.assertEqual(len(ids), 3)
+        self.assertEqual(len(set(outcome.result["storage_paths"])), 3)
+        self.assertEqual(len(self.saved[-1]["batch_outputs"]), 3)
+        self.run_adapter(handler, image_count=3)
+        self.assertEqual(len(ids), 3)
+
+    def test_lost_submit_response_reconciles_client_id_without_second_post(self):
+        client_id = "unique-fixture-client"
+        self.adapter.bind_task(42, {"stage": "submitting", "seed": 0, "client_id": client_id,
+                              "workflow_sha256": self.mapping["sha256"]}, self.saved.append)
+        def handler(request):
+            if request.url.path == "/queue":
+                return httpx.Response(200, json={"queue_running": [[0, PROMPT_ID, {}, {"client_id": client_id}]], "queue_pending": []})
+            if request.url.path == "/history": return httpx.Response(200, json={})
+            return self.handler(request)
+        self.run_adapter(handler)
+        self.assertFalse(any(r.method == "POST" for r in self.calls))
+
+    def test_edit_canvas_switch_has_effective_dimensions_and_source_branch(self):
+        graph = {**self.graph, "switch": {"inputs": {"switch": False}}, "encoder": {"inputs": {"resolution": 0}}}
+        mapping = {**self.mapping, "capability": "image.edit", "canvas_switch": ["switch", "switch"], "resolution": ["encoder", "resolution"]}
+        for ratio, expected in (("遵循原图", False), ("16:9", True)):
+            prepared = c.prepare_graph(graph, mapping, {"prompt": "fixture", "aspect_ratio": ratio}, seed=0, prefix="fixture")
+            self.assertEqual(prepared["switch"]["inputs"]["switch"], expected)
+
     def test_offline_preflight_does_not_leave_gpu_locked(self):
         def handler(request):
             raise httpx.ConnectError("offline")
@@ -168,11 +214,11 @@ class ComfyUIAdapterTests(unittest.TestCase):
     def test_reference_images_and_unverified_edit_rejected(self):
         with self.assertRaises(ProviderExecutionError):
             self.run_adapter(reference_images=["private.png"])
-        with self.assertRaises(ValueError):
+        with self.assertRaises((ValueError, KeyError)):
             c.load_workflow(self.root, "qwen_image_2_1_image_edit")
 
     def test_bad_dimensions_and_batch_rejected(self):
-        for args in ({"width": 1024}, {"width": 257, "height": 1024}, {"image_count": 2}, {"resolution": "4k"}):
+        for args in ({"width": 1024}, {"width": 257, "height": 1024}, {"image_count": 4}, {"resolution": "8k"}):
             with self.subTest(args=args), self.assertRaises(ProviderExecutionError):
                 self.run_adapter(**args)
 

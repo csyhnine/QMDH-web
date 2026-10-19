@@ -47,7 +47,7 @@ function videoReferenceImages(
   });
 }
 
-export function buildImagePayload(form: StudioFormState, workflowKey: string): Record<string, unknown> {
+export function buildImagePayload(form: StudioFormState, workflowKey: string, provider?: Provider): Record<string, unknown> {
   const isImageEdit = workflowKey === IMAGE_EDIT_WORKFLOW_KEY;
   const referenceImages = isImageEdit
     ? form.referenceImages.filter((value) => Boolean(value) && !value.toLowerCase().startsWith("asset://"))
@@ -67,6 +67,11 @@ export function buildImagePayload(form: StudioFormState, workflowKey: string): R
     prompt: form.prompt,
     edit_prompt: isImageEdit ? form.prompt : "",
   };
+  const customSize = /^(\d{3,4})x(\d{3,4})$/.exec(form.aspectRatio);
+  if (customSize && provider?.adapter_kind === "comfyui") {
+    payload.width = Number(customSize[1]);
+    payload.height = Number(customSize[2]);
+  }
 
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => {

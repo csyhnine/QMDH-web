@@ -160,6 +160,10 @@ export function validateStudioTaskSubmission({
   }
 
   const referenceImageCount = clampReferenceImageCount(form.referenceImages.length);
+  if (providerForSubmit.adapter_kind === "comfyui" && form.creationMode === "edit" && form.referenceImages.filter(Boolean).length !== 2) {
+    setState((current) => ({ ...current, error: "本机 Qwen 编辑需要两张图片：先放目标图，再放参考图。" }));
+    return { ok: false };
+  }
   if (form.creationMode === "edit" && referenceImageCount < 1) {
     setState((current) => ({
       ...current,

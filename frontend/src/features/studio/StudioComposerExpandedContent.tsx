@@ -1,6 +1,8 @@
 import StudioComposerBody from "./StudioComposerBody";
 import StudioComposerLeading from "./StudioComposerLeading";
 import StudioComposerToolbar from "./StudioComposerToolbar";
+import ComfyRuntimeNotice from "./ComfyRuntimeNotice";
+import ComfySizeControls from "./ComfySizeControls";
 import { getStudioComposerExpandedContentProps } from "./studioComposerExpandedContentProps";
 import type { StudioComposerExpandedContentProps } from "./studioComposerExpandedContentTypes";
 import { usePromptPolishEnabled } from "../../lib/usePromptPolishEnabled";
@@ -30,6 +32,8 @@ export default function StudioComposerExpandedContent(props: StudioComposerExpan
   return (
     <>
       <StudioComposerLeading {...leadingProps} />
+      {props.selectedProvider?.adapter_kind === "comfyui" ? <ComfyRuntimeNotice editing={props.studioForm.creationMode === "edit"} /> : null}
+      {props.selectedProvider?.adapter_kind === "comfyui" ? <ComfySizeControls ratio={props.studioForm.aspectRatio} onChange={props.onAspectRatioSelect} /> : null}
 
       <StudioComposerBody
         {...bodyProps}

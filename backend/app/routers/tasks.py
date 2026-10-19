@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
+import json
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_auth_user, get_optional_auth_user
@@ -11,7 +13,8 @@ from app.core.audit import write_audit_log
 from app.core.config import AuthUserProfile
 from app.core.config import settings
 from app.database import get_db
-from app.models import AuditLog, Project, Task, TaskStatus, User, Workflow
+from app.models import AuditLog, Project, Task, TaskDispatch, TaskStatus, User, Workflow
+from app.services.task_dispatch import add_dispatch
 from app.schemas import GenerationOutcomeIn, GenerationOutcomeOut, TaskCreate, TaskDeleteIn, TaskOut
 from app.services.generation_outcome_service import record_generation_outcome
 from app.services.task_archive import ensure_task_archive
@@ -24,6 +27,49 @@ from app.services.task_stale_recovery import recover_stale_tasks
 from app.services.usage_ledger import ensure_usage_ledger_for_task
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+@router.post("/{task_id}/comfyui-recovery")
+def recover_comfyui_task(task_id: int, action: str = Body(embed=True), note: str = Body(embed=True),
+                        db: Session = Depends(get_db), auth_user: AuthUserProfile = Depends(get_current_auth_user)):
+    from app.core.auth import require_ops_access
+    from app.services.task_dispatch import _lock
+    from app.services.provider_adapters.comfyui import BASE_URL, GPU_LOCK
+    from redis import Redis
+    import httpx
+    require_ops_access(auth_user)
+    if action not in ("resume", "close") or len(note.strip()) < 10:
+        raise HTTPException(422, "操作须为 resume/close，并填写至少十字的核对说明。")
+    _lock(db)
+    job = db.get(TaskDispatch, task_id)
+    task = db.get(Task, task_id)
+    if not job or job.lane != "comfyui" or job.state != "review":
+        raise HTTPException(409, "只能处理等待核对的本机任务，不能干预活动 worker。")
+    if action == "close":
+        with httpx.Client(base_url=BASE_URL, trust_env=False, follow_redirects=False, timeout=5) as client:
+            response = client.get("/queue"); response.raise_for_status(); queue = response.json()
+            if queue.get("queue_running") or queue.get("queue_pending"):
+                raise HTTPException(409, "ComfyUI 队列非空，不能解除占用。")
+            prompt_id = (task.result or {}).get("comfyui", {}).get("prompt_id")
+            if prompt_id:
+                response = client.get(f"/history/{prompt_id}"); response.raise_for_status()
+                status_info = response.json().get(prompt_id, {}).get("status", {})
+                if status_info.get("completed") and status_info.get("status_str") != "error":
+                    raise HTTPException(409, "原任务已生成成功，请恢复获取结果，不能将其关闭。")
+        redis = Redis.from_url(settings.redis_url, decode_responses=True, socket_timeout=5)
+        try:
+            redis.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", 1, GPU_LOCK, str(task_id))
+        finally:
+            redis.close()
+        task.status, job.state = TaskStatus.failed, "done"
+        task.result = {**task.result, "queued_stage": "failed", "error": "管理员核对后关闭了未完成的本机任务。", "recovery_note": note}
+    else:
+        job.state = "queued"
+        task.status = TaskStatus.pending
+    db.add(AuditLog(event_type="comfyui.recovery", actor_name=auth_user.name,
+                    details={"task_id": task_id, "action": action, "note": note}))
+    db.commit()
+    return {"task_id": task_id, "state": job.state}
 
 
 def _explicit_project_codes(auth_user: AuthUserProfile) -> tuple[str, ...]:
@@ -101,6 +147,19 @@ def _get_or_create_user(db: Session, auth_user: AuthUserProfile) -> User:
 
 
 def _to_task_out(task: Task) -> TaskOut:
+    result = dict(task.result or {})
+    from sqlalchemy.orm import object_session
+    from sqlalchemy import func
+    db = object_session(task)
+    job = db.get(TaskDispatch, task.id) if db else None
+    if job and job.lane == "comfyui" and task.status in (TaskStatus.pending, TaskStatus.running):
+        position = db.scalar(select(func.count()).select_from(TaskDispatch).where(
+            TaskDispatch.lane == "comfyui", TaskDispatch.state.in_(["queued", "leased", "review"]),
+            TaskDispatch.task_id < task.id))
+        result.update(queue_position=position, queued_stage="recovering" if job.state == "review" else
+                      "queued" if job.state == "queued" else "running", adapter_mode="comfyui")
+        result["summary"] = "等待本机连接恢复或执行状态核对，请勿重复提交。" if job.state == "review" else (
+            f"本机任务排队中，前方 {position} 项任务。" if job.state == "queued" else "本机正在生成，结果会自动保存。")
     return TaskOut(
         id=task.id,
         title=task.title,
@@ -114,7 +173,7 @@ def _to_task_out(task: Task) -> TaskOut:
         cost=task.cost,
         cost_currency=task.cost_currency or "CNY",
         latency_ms=task.latency_ms,
-        result=resolve_storage_payload(task.result),
+        result=resolve_storage_payload(result),
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
@@ -202,6 +261,29 @@ def create_task(
         raise HTTPException(status_code=403, detail="Project access denied")
 
     user = _get_or_create_user(db, auth_user)
+    fingerprint = hashlib.sha256(json.dumps(payload.model_dump(mode="json", exclude={"submission_key"}),
+                                           sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    if payload.submission_key:
+        if db.bind.dialect.name == "postgresql":
+            lock_id = int.from_bytes(hashlib.sha256(f"{user.id}:{payload.submission_key}".encode()).digest()[:8], "big", signed=True)
+            db.execute(text("SELECT pg_advisory_xact_lock(:id)"), {"id": lock_id})
+        previous = db.scalar(select(TaskDispatch).where(TaskDispatch.user_id == user.id,
+                              TaskDispatch.submission_key == payload.submission_key))
+        if previous:
+            if previous.request_hash != fingerprint:
+                raise HTTPException(409, "同一提交标识的参数发生变化，请创建新提交。")
+            return _to_task_out(db.get(Task, previous.task_id))
+    if provider.adapter_kind == "comfyui":
+        from sqlalchemy import func
+        pending_query = select(func.count()).select_from(TaskDispatch).where(
+            TaskDispatch.lane == "comfyui", TaskDispatch.state.in_(["queued", "leased", "review"]))
+        if db.scalar(pending_query.where(TaskDispatch.user_id == user.id)) >= 10 or db.scalar(pending_query) >= 100:
+            raise HTTPException(429, "本机待执行任务已达上限，请等待现有任务完成。")
+        from app.services.provider_adapters.comfyui import validate_submission
+        try:
+            validate_submission(db, user.id, provider.model_name, payload.payload)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
     enforce_user_quota(db, user=user)
     reference_image_storage_paths = _reference_image_storage_paths(payload.payload)
 
@@ -227,6 +309,8 @@ def create_task(
     )
     db.add(task)
     db.flush()
+    add_dispatch(db, task, comfy=provider.adapter_kind == "comfyui", key=payload.submission_key,
+                 fingerprint=fingerprint, state="queued" if settings.task_execution_mode == "redis" else "done")
 
     record_generation_intent_for_task(
         db,
@@ -263,9 +347,9 @@ def create_task(
         try:
             enqueue_task(task.id)
         except Exception as exc:
-            failure = mark_task_enqueue_failed(db, task, exc)
-            db.commit()
-            raise HTTPException(status_code=503, detail=str(failure["error_summary"])) from exc
+            # The committed outbox is authoritative; a lost wakeup is recoverable.
+            import logging
+            logging.getLogger(__name__).warning("Redis wakeup failed for durable task %s: %s", task.id, type(exc).__name__)
     else:
         background_tasks.add_task(execute_task, task.id)
 

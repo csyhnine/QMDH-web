@@ -606,6 +606,7 @@ export type ProjectStatus = {
 };
 
 export type TaskCreatePayload = {
+  submission_key?: string;
   title: string;
   workflow_key: string;
   project_code: string;
@@ -1988,7 +1989,28 @@ export const api = {
     }>;
   }) =>
     postJson<void>("/chat/telemetry", payload),
-  createTask: (payload: TaskCreatePayload) => postJson<Task>("/tasks", payload),
+  createTask: async (payload: TaskCreatePayload) => {
+    // Retain only a request digest + random key after a lost response. Explicit
+    // successful repeats receive a new key; ambiguous retries reuse the old one.
+    const bytes = new TextEncoder().encode(JSON.stringify(payload));
+    const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)))
+      .map((n) => n.toString(16).padStart(2, "0")).join("");
+    const slot = `qmdh:task-submit:${digest}`;
+    let key = payload.submission_key || crypto.randomUUID();
+    try { key = payload.submission_key || sessionStorage.getItem(slot) || key; sessionStorage.setItem(slot, key); } catch { /* storage may be disabled */ }
+    try {
+      const task = await postJson<Task>("/tasks", { ...payload, submission_key: key });
+      try { sessionStorage.removeItem(slot); } catch { /* no storage */ }
+      return task;
+    } catch (error) {
+      if (/请求失败（4\d\d）/.test(String(error))) {
+        try { sessionStorage.removeItem(slot); } catch { /* no storage */ }
+      }
+      throw error;
+    }
+  },
+  comfyuiStatus: () => request<{ status: string; queued: number; running: number; message: string; reviews: Array<{task_id: number}> }>("/providers/comfyui/status"),
+  recoverComfyuiTask: (id: number, action: "resume" | "close", note: string) => postJson(`/tasks/${id}/comfyui-recovery`, {action, note}),
   recordGenerationOutcome: (taskId: number, payload: GenerationOutcomePayload) =>
     postJson<GenerationOutcomeResult>(`/tasks/${taskId}/generation-outcomes`, payload),
   deleteTask: (taskId: number) => deleteRequest(`/tasks/${taskId}`),

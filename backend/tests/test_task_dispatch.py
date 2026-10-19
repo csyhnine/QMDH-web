@@ -102,3 +102,36 @@ class DispatchTests(unittest.TestCase):
         with self.sessions() as db:
             for value in ("https://example.com/x.png", "/media/references/someone-else.png"):
                 with self.assertRaises(ValueError): owned_references(db, self.user, {"reference_images": [value, value]})
+
+    def test_admin_cannot_close_lost_response_with_successful_history(self):
+        import httpx
+        task_id = self.job(state="review")
+        with self.sessions() as db:
+            db.get(Task, task_id).result = {"comfyui": {"stage": "submitting", "client_id": "lost-response-fixture"}}
+            db.commit()
+        app = FastAPI(); app.include_router(tasks.router)
+        def session():
+            with self.sessions() as db: yield db
+        app.dependency_overrides[get_db] = session
+        app.dependency_overrides[get_current_auth_user] = lambda: AuthUserProfile(name="fixture-admin", user_id=self.user, role="admin", token="fixture")
+        prompt_id = "348e35b7-9b6e-4912-aad5-83b44d2f7a92"
+        history = {prompt_id: {"prompt": [0, prompt_id, {}, {"client_id": "lost-response-fixture"}],
+                               "status": {"completed": True, "status_str": "success"}}}
+        def handler(request):
+            self.assertEqual(request.method, "GET")
+            return httpx.Response(200, json={"queue_running": [], "queue_pending": []} if request.url.path == "/queue" else history)
+        original_client = httpx.Client
+        client = TestClient(app)
+        with patch.object(httpx, "Client", side_effect=lambda **kw: original_client(transport=httpx.MockTransport(handler), **kw)):
+            r = client.post(f"/tasks/{task_id}/comfyui-recovery", json={"action": "close", "note": "checked isolated fixture history successfully"})
+        self.assertEqual(r.status_code, 409, r.text)
+        with self.sessions() as db: self.assertEqual(db.get(TaskDispatch, task_id).state, "review")
+
+    def test_designer_cannot_release_gpu_recovery_job(self):
+        app = FastAPI(); app.include_router(tasks.router)
+        app.dependency_overrides[get_current_auth_user] = lambda: AuthUserProfile(name="designer", role="designer", token="fixture")
+        def session():
+            with self.sessions() as db: yield db
+        app.dependency_overrides[get_db] = session
+        r = TestClient(app).post("/tasks/1/comfyui-recovery", json={"action": "close", "note": "not permitted even with a note"})
+        self.assertEqual(r.status_code, 403)

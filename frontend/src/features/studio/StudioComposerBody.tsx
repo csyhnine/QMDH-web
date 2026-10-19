@@ -8,6 +8,7 @@ export default function StudioComposerBody({
   promptTextareaRef,
   referenceHint,
   maxReferenceCount,
+  selectedProvider,
   referenceUploads,
   studioForm,
   onModeChange,
@@ -39,7 +40,7 @@ export default function StudioComposerBody({
             studioForm.creationMode === "edit" ? "is-edit-mode" : "is-generate-mode",
           ].join(" ")}
         >
-          <span className="reference-zone-label">{composerReferenceZoneLabel(studioForm.creationMode)}</span>
+          <span className="reference-zone-label">{composerReferenceZoneLabel(studioForm.creationMode, selectedProvider)}</span>
           <StudioReferenceDropzone
             creationMode={studioForm.creationMode}
             referenceUploads={referenceUploads}

@@ -1,0 +1,7 @@
+.comfy-task-progress { margin: 12px 0; overflow: hidden; }
+.comfy-task-progress > b { width: 35%; animation: comfy-progress-travel 1.8s ease-in-out infinite; }
+.comfy-task-progress.is-recovering > b { background: #d97706; animation-duration: 3s; }
+@keyframes comfy-progress-travel { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+@media (prefers-reduced-motion: reduce) {
+  .comfy-task-progress > b { width: 100%; animation: none; opacity: 0.5; }
+}

@@ -13,8 +13,9 @@ export function composerModeLabel(mode: StudioFormState["creationMode"]): string
   return mode === "edit" ? "图生图" : "文生图";
 }
 
-export function composerReferenceZoneLabel(mode: StudioFormState["creationMode"]): string {
+export function composerReferenceZoneLabel(mode: StudioFormState["creationMode"], provider?: Provider): string {
   if (mode === "video") return "参考图（可选）";
+  if (mode === "edit" && provider?.adapter_kind === "comfyui") return "双图编辑（必传 2 张）";
   return mode === "edit" ? "参考图（必传 1–4 张）" : "参考图（可选）";
 }
 
@@ -60,6 +61,12 @@ export function composerReferenceHint(
       : "视频生成可选上传参考图；仅文本也可提交。";
   }
   if (mode === "edit") {
+    if (provider?.adapter_kind === "comfyui") {
+      if (referenceUploadCount === 0) return "请依次上传两张图：第 1 张是要修改的目标图，第 2 张是参考图。当前工作流仅支持双图编辑。";
+      if (referenceUploadCount === 1) return "已上传目标图，还需第 2 张参考图才能提交。当前工作流仅支持双图编辑。";
+      if (referenceUploadCount === 2) return "两图已就绪：第 1 张目标图，第 2 张参考图。请在提示词中描述修改要求。";
+      return "双图编辑仅支持 2 张图片，请移除多余图片。";
+    }
     return referenceUploadCount > 0
       ? `图生图已上传 ${referenceUploadCount} 张参考图，将按提示词编辑。`
       : "图生图需至少 1 张参考图；上传后再描述修改方式。";

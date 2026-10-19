@@ -25,6 +25,7 @@ export default function StudioComposerToolbar(props: StudioComposerToolbarProps)
         <StudioComposerToolbarMenus {...props} />
       </div>
       <StudioComposerSubmitActions
+        requiresTwoImages={props.selectedProvider?.adapter_kind === "comfyui" && props.studioForm.creationMode === "edit"}
         availableProviderCount={availableProviderCount}
         creationMode={props.studioForm.creationMode}
         hasActiveProject={hasActiveProject}

@@ -48,6 +48,7 @@ export type StudioComposerBodyProps = Pick<
   | "promptTextareaRef"
   | "referenceHint"
   | "maxReferenceCount"
+  | "selectedProvider"
   | "referenceUploads"
   | "studioForm"
   | "onModeChange"

@@ -24,6 +24,7 @@ function load(relative) {
     if (name.endsWith('.css')) return {};
     const target = resolve(dirname(file), name);
     if (target === resolve(sourceRoot, 'api')) return { api: {} };
+    if (target === resolve(sourceRoot, 'context/AuthContext')) return { useAuth: () => ({ isGuest: false }) };
     const path = ['.ts', '.tsx', '/index.ts', '/index.tsx'].map(ext => target + ext).find(existsSync);
     if (!path) throw new Error(`Missing test module: ${name} from ${file}`);
     return load(path);
@@ -138,11 +139,32 @@ test('local editing requires exactly two images before submission', () => {
   }
 });
 
+test('two-image editing describes the missing input and disables submission until ready', () => {
+  const { composerReferenceHint, composerReferenceZoneLabel } = load('features/studio/studioComposerDockUtils.ts');
+  const Submit = load('features/studio/StudioComposerSubmitActions.tsx').default;
+  const edit = { ...image, capabilities: ['image.edit'] };
+  assert.equal(composerReferenceZoneLabel('edit', edit), '双图编辑（必传 2 张）');
+  assert.match(composerReferenceZoneLabel('edit', chat), /1–4/);
+  for (const count of [0, 1, 2, 3]) {
+    const html = renderToStaticMarkup(require('react').createElement(Submit, {creationMode: 'edit',
+      availableProviderCount: 1, hasActiveProject: true, prompt: '修改衣服', referenceUploadCount: count,
+      requiresTwoImages: true, submitting: false, uploadingReference: false, submissionProgress: null}));
+    assert.equal(html.includes('disabled=""'), count !== 2);
+    if (count === 1) {
+      assert.match(html, /请补充第 2 张图/);
+      assert.match(composerReferenceHint('edit', count, edit), /还需第 2 张参考图才能提交/);
+    }
+    if (count === 2) assert.match(html, /开始编辑/);
+  }
+});
+
 test('local waiting and recovery render truthful states without invented percent', () => {
   const Empty = load('features/studio/StudioFeedEmptyState.tsx').default;
   for (const [stage, label] of [['queued', '前方 2 项任务'], ['recovering', '请勿重复提交'], ['running', '本机正在生成']]) {
     const html = renderToStaticMarkup(require('react').createElement(Empty,
       {isRunning: true, status: 'pending', virtualProgress: 78, localStage: stage, queuePosition: 2}));
     assert.ok(html.includes(label)); assert.doesNotMatch(html, /78%/);
+    assert.match(html, /role="progressbar"/);
+    assert.doesNotMatch(html, /aria-valuenow/);
   }
 });

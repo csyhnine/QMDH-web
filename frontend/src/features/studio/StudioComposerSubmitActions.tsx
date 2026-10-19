@@ -15,6 +15,7 @@ type StudioComposerSubmitActionsProps = {
   promptPolishEnabled?: boolean;
   polishingPrompt?: boolean;
   onPolishPrompt?: () => void;
+  requiresTwoImages?: boolean;
 };
 
 export default function StudioComposerSubmitActions({
@@ -29,29 +30,32 @@ export default function StudioComposerSubmitActions({
   promptPolishEnabled = false,
   polishingPrompt = false,
   onPolishPrompt,
+  requiresTwoImages = false,
 }: StudioComposerSubmitActionsProps) {
   const { isGuest } = useAuth();
-  const editNeedsReference = creationMode === "edit" && referenceUploadCount === 0;
+  const editNeedsReference = creationMode === "edit" && (requiresTwoImages ? referenceUploadCount !== 2 : referenceUploadCount === 0);
   const submitLabel = isGuest
     ? "登录后生成"
     : submitting
       ? "正在创建..."
       : !hasActiveProject
         ? "请先新建项目"
-        : composerSubmitLabel(creationMode, submitting, referenceUploadCount);
+        : requiresTwoImages && editNeedsReference
+          ? referenceUploadCount === 0 ? "请上传两张图片" : referenceUploadCount === 1 ? "请补充第 2 张图" : "请仅保留两张图"
+          : composerSubmitLabel(creationMode, submitting, referenceUploadCount);
   const showShortcut =
     !isGuest &&
     !submitting &&
     hasActiveProject &&
     availableProviderCount > 0 &&
-    !uploadingReference;
+    !uploadingReference && !editNeedsReference;
   const canPolish = promptPolishEnabled && prompt.trim().length > 0 && !polishingPrompt && !submitting;
 
   return (
     <div className="composer-toolbar-actions">
       {submissionProgress ? (
         <div className="composer-quickmeta">
-          <span>{submissionProgress.stage}</span>
+          <span>{({running: "执行中", completed: "已提交", queued: "排队中", pending: "等待中", failed: "提交失败"} as Record<string, string>)[submissionProgress.stage] ?? submissionProgress.stage}</span>
         </div>
       ) : null}
 

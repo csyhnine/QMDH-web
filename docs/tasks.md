@@ -19,6 +19,14 @@ Last aligned: `2026-10-19`。旧任务原文与开发顺序完整保存在 `arch
 
 ## Current Queue
 
+### comfyui-feedback-006 — 执行进度与双图提交引导
+
+- 状态：IN_PROGRESS（修复与本地验收完成，待前端发布）。
+- 目标：补无百分比动态条；本机编辑两图条件在标题/提示/按钮一致，单图不再显示可提交；提交阶段中文。
+- 禁止：取消后端两图验证、开放未验证单图变体、改后端/FRP/Windows/原styles.css。
+- 验收：52前端检查、TS零新增/构建；Chrome1440/390动态/双图条件/无溢出，公网bundle和容器SHA一致。
+- 文档：tasks/handoff/comfyui-frp；仅展示与输入引导，无2.0结构变化。
+
 ### comfyui-composer-layout-005 — 创作框布局回归
 
 - 状态：DONE（0a83c2a已推main，生产合并d5311599；仅frontend部署）。

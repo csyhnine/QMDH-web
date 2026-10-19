@@ -11,6 +11,12 @@
 
 ## Latest Handoffs
 
+### [2026-10-19] ComfyUI 执行反馈与双图提交提示
+
+- 用户指出本机没有进度条、上传一张不能编辑。旧百分比为估算；本轮补无百分比动态条（排队/执行/恢复，ARIA不伪报数值、减少动画偏好），不冒充ComfyUI采样步数。
+- 已批准编辑图仍要求两图；原通用1–4张/已上传即可提交文案误导。上传标题与提示按本机模型明确第一目标图/第二参考图；按钮缺图直说、两图就绪可提交；后端两图校验保留。单图变体仍未实跑/未开放。提交阶段英文改中文。
+- 前端52检查、23既有TS/0新增与构建；Chrome真实组件1440/390截图/无溢出/动态条实际transform变化、单图禁交与解释、双图触发表单通过。transport替身、未发送GPU任务。仅前端，发布待验证；原styles13行与原未跟踪文件保持。
+
 ### [2026-10-19] ComfyUI 创作框布局回归修复
 
 - 用户截图暴露上次新增状态/尺寸两个根级 grid 子项占用原 auto/276px/auto 行，导致巨大留白。本轮恢复 leading/body/toolbar 三行；状态与自定义宽高放入既有比例/分辨率菜单，自定义默认折叠；新局部CSS，未动原styles.css +13。窄屏展开菜单占整行，输入框可读。
@@ -26,11 +32,4 @@
 - 最终CI39215244482（7a9874b）两job成功：后端227+24subtests；前端50/23既有TS/0新增/构建。Linux最终镜像隔离30项；PG副本49旧表计数保留、并发串行/同键唯一/容量10项通过。公网四容器探活、frontend不可达、三渠道/三档/幂等/422、bundle SHA、六CAD+health通过。IAB工具超时，未声称真实浏览器点击验收。
 - 发布前 /www/backup/qmdh-release-20261019-comfyui-closure ↔ 本机frp-20261019/closure-backup：5805媒体/3增量3881989字节、DB/env/旧镜像/Git bundle/FRP运行包及验证，25文件SHA配对。发布后 /www/backup/qmdh-comfy-closure-live-20261019 ↔ closure-live-backup：5820媒体/15增量111458315字节、DB/证据，10文件SHA配对，完整读取tar；恢复链引用发布前及之前全链。隔离验证数据库已删除。
 - 重建带 /opt/qmdh-frp/compose.frp.yml overlay及3 worker，保留ODA材料；回退先排空/核对上游并禁用60/61/62，再回qmdh-release-backup-{backend,worker,frontend}:20261019-closure，不降schema/清库/删媒体。原styles.css +13与所有原未跟踪文件保持，未混提交。下一步仅按用户新需求。Safe to hand off: Yes。详见docs/comfyui-frp.md。
-
-### [2026-10-19] ComfyUI 图片渠道显示修复 — 已发布
-
-- 用户反馈图片模型显示视频；数据库/API能力image.generate正确。漏掉前端comfyui登记，后台getAdapterOption把未知类型落到首项Haodeya视频；Studio图片白名单也缺ComfyUI，原API真实生成验收没有覆盖前端入口。这是本轮修复范围。
-- 新分支codex/comfyui-image-channel-fix：登记ComfyUI本机图片；未知adapter保留原标识/规划中；支持文生图列表且本机ComfyUI独立来源分组，保留能力检查，视频/未开放编辑不显示。Haodeya/Grok名称只有同时具备video.generate才可分到视频组，避免图片渠道因名称被误标。真实ModelsPage组件与Studio derived菜单回归已加入，原styles13行不提交。46项前端回归通过、23既有TS错误/0新增、构建通过；01d6c11/13bbe74已发布，生产合并ae2901af，仅frontend镜像623a1841；backend/worker/FRP/DB/cache/search ID/启动时间与env保持，未重跑GPU。公网ModelsPage-CTuUDlVF.js及studioTaskSubmissionActions-DBF-XrvR.js与容器SHA一致，入口index-Ll-Dz75_.js，health/六CAD路由通过。
-
-- 发布备份 /www/backup/qmdh-release-20261019-comfyui-provider-ui 与本机 E:/backups/QMDH-web/release-20261019-comfyui-provider-ui：DB/env/5802媒体清单、0媒体增量及完整恢复链引用、运行快照/公网证据，13文件SHA一致；旧frontend镜像qmdh-release-backup-frontend:20261019-comfyui-provider-ui可回退。原styles13行、比较文档与_tmp_*保留。Safe to hand off: Yes。
 

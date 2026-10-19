@@ -287,6 +287,8 @@ def create_task(
                 raise HTTPException(409, "同一提交标识的参数发生变化，请创建新提交。")
             return _to_task_out(db.get(Task, previous.task_id))
     if provider.adapter_kind == "comfyui":
+        from app.services.task_dispatch import _lock
+        _lock(db)  # Capacity checks and insertion must be atomic across API workers.
         from sqlalchemy import func
         pending_query = select(func.count()).select_from(TaskDispatch).where(
             TaskDispatch.lane == "comfyui", TaskDispatch.state.in_(["queued", "leased", "review"]))

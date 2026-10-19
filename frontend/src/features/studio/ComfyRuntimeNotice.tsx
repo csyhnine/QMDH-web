@@ -10,5 +10,5 @@ export default function ComfyRuntimeNotice({ editing }: { editing: boolean }) {
     check(); const timer = setInterval(check, 15000);
     return () => { alive = false; clearInterval(timer); };
   }, []);
-  return <p role="status">{message} 多张逐张生成。{editing ? "请依次放入目标图和参考图。" : ""}</p>;
+  return <p className="composer-menu-note" role="status">{message} 多张逐张生成。{editing ? "请依次放入目标图和参考图。" : ""}</p>;
 }

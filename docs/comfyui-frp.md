@@ -77,3 +77,7 @@ frps仅发布7443（容器7000），不开放公网8188/7000、不配Nginx Comfy
 重建必须保留 `docker compose -f docker-compose.yml -f /opt/qmdh-frp/compose.frp.yml`、三个worker、模板只读挂载/专网和ODA构建材料。回退先排空待办/确认上游终态、禁用id60/61/62，再用 qmdh-release-backup-{backend,worker,frontend}:20261019-closure；不downgrade、不删Task/媒体/新表、不换key。旧代码可能把未知adapter退成模拟图，尤其不能带着编辑渠道回退。
 
 原阶段记录归档于 [comfyui-frp-before-production-closure-20261019.md](archive/comfyui-frp-before-production-closure-20261019.md)。
+
+### 创作区显示入口（2026-10-19 布局修复）
+
+自定义宽高与本机连接状态位于底部“比例／分辨率”菜单内，自定义尺寸默认折叠；不再作为创作框根级行。1K/2K/4K、张数、双图编辑与提交链路保持。

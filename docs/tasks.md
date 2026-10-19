@@ -19,6 +19,14 @@ Last aligned: `2026-10-19`。旧任务原文与开发顺序完整保存在 `arch
 
 ## Current Queue
 
+### comfyui-composer-layout-005 — 创作框布局回归
+
+- 状态：IN_PROGRESS（修复/本地验证完成，待前端发布）。
+- 目标：恢复三行创作框，连接状态/自定义宽高移入既有显示菜单；保留所有生成参数功能。
+- 禁止：原styles.css未提交13行、后端/数据/FRP/Windows运行状态。
+- 验收：51前端检查/TS无新增/构建；Chrome真实组件1440/390宽度截图、无溢出、尺寸交互；公网包与容器一致，仅frontend替换。
+- 文档：tasks/handoff/comfyui-frp；纯展示位置调整，无2.0结构影响。
+
 ### comfyui-production-004 — 生产任务闭环
 
 - 状态：DONE（已提交/推送main/部署，功能7a9874b，迁移b27d0f85c932）。用户2026-10-19授权全部解决审计缺口。

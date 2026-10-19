@@ -1,0 +1,10 @@
+.comfy-size-controls { min-width: 0; font-size: 0.8rem; }
+.composer-menu .comfy-size-controls summary { cursor: pointer; color: var(--text); padding: 6px 0; width: auto; white-space: normal; }
+.comfy-size-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.comfy-size-fields label { display: grid; gap: 5px; color: var(--muted); }
+.comfy-size-fields input { width: 100%; min-width: 0; box-sizing: border-box; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: white; color: var(--text); }
+.comfy-size-fields button { grid-column: 1 / -1; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: rgba(37, 99, 235, 0.08); color: var(--accent-deep); cursor: pointer; }
+.comfy-size-fields button:disabled { opacity: 0.5; cursor: not-allowed; }
+@media (max-width: 720px) {
+  .composer-toolbar-menus > .composer-menu:has(.comfy-size-controls) { grid-column: 1 / -1; }
+}

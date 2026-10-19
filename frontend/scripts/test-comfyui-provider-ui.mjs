@@ -21,6 +21,7 @@ function load(relative) {
   }).outputText;
   vm.runInNewContext(code, { exports, console, URL, URLSearchParams, require(name) {
     if (!name.startsWith('.')) return require(name);
+    if (name.endsWith('.css')) return {};
     const target = resolve(dirname(file), name);
     if (target === resolve(sourceRoot, 'api')) return { api: {} };
     const path = ['.ts', '.tsx', '/index.ts', '/index.tsx'].map(ext => target + ext).find(existsSync);
@@ -38,6 +39,28 @@ const image = {
 const zImage = { ...image, provider_name: 'comfyui-z-image', model_name: 'z_image_turbo', display_name: '本机 Z Image Turbo' };
 const video = { ...image, provider_name: 'video-only', model_name: 'video-model', display_name: 'Video', adapter_kind: 'volcengine_ark', capabilities: ['video.generate'] };
 const chat = { ...image, provider_name: 'chat-only', adapter_kind: 'openai_compatible', capabilities: ['chat.completions'] };
+
+test('ComfyUI controls stay inside the display menu and leave the three composer rows intact', () => {
+  const source = ts.createSourceFile('expanded.tsx', readFileSync(resolve(sourceRoot,
+    'features/studio/StudioComposerExpandedContent.tsx'), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let root;
+  function visit(node) {
+    if (ts.isJsxFragment(node)) root = node;
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  const children = root.children.filter(node => !ts.isJsxText(node) || node.text.trim());
+  assert.deepEqual(children.map(node => node.openingElement?.tagName.getText(source) ?? node.tagName?.getText(source)),
+    ['StudioComposerLeading', 'StudioComposerBody', 'input', 'StudioComposerToolbar']);
+  const Panel = load('features/studio/StudioComposerDisplayMenuPanel.tsx').default;
+  const { defaultStudioForm } = load('features/studio/studioConstants.ts');
+  const props = { aspectRatioOptions: ['1:1', '16:9'], resolutionOptions: [], studioForm: defaultStudioForm,
+    onAspectRatioSelect() {}, onResolutionSelect() {} };
+  const render = selectedProvider => renderToStaticMarkup(require('react').createElement(Panel, { ...props, selectedProvider }));
+  assert.match(render(image), /class="comfy-size-controls"/);
+  assert.match(render(image), /class="composer-menu-note" role="status"/);
+  assert.doesNotMatch(render(chat), /comfy-size-controls|role="status"/);
+});
 
 test('an image channel name containing a video gateway does not make it a video group', () => {
   const { providerGroupLabel } = load('features/studio/modelAdminUtils.ts');

@@ -250,7 +250,7 @@ const IMAGE_EDIT_STRATEGY_FOR_GENERATE: Record<string, string> = {
 };
 
 const adapterOptions: AdapterOption[] = [
-  { key: "comfyui", label: "ComfyUI 本机图片", support: "ready", note: "通过私有隧道调用本机批准工作流；当前支持文生图、1K、单张。图片编辑尚未开放。" },
+  { key: "comfyui", label: "ComfyUI 本机图片", support: "ready", note: "通过私有隧道调用批准工作流；支持文生图、Qwen双图编辑、1K/2K/4K及自定义尺寸，1～3张逐张生成。" },
   { key: "haodeya_grok", label: "Haodeya 视频（Grok / HappyHorse / Seedance 2）", support: "partial", note: "一条统一 profile + Studio 档位菜单；Seedance 探测出的裸/分 SKU 可停用，Studio 有统一 profile 时会自动隐藏。探测不会创建真实视频。" },
   { key: "volcengine_ark", label: "Volcengine Ark 视频", support: "partial", note: "火山 Ark 异步任务（非 Haodeya Seedance 2 ToAPI）；探测不会创建真实视频。" },
   { key: "openai_compatible", label: "OpenAI 兼容", support: "ready", note: "Chat、生图、图像编辑的默认适配器；具体走哪条 strategy 看下方 Strategies。" },

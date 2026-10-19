@@ -3069,7 +3069,16 @@ def execute_task(task_id: int, *, dispatch_token: str | None = None) -> None:
                 db.rollback()
                 return
             from app.services.provider_adapters.comfyui import ComfyDeferred
-            checkpoint_uncertain = isinstance(locals().get("adapter"), ComfyUIProviderAdapter) and adapter.state.get("stage") in ("submitting", "submitted", "downloading", "downloaded", "between_images") and "ComfyUI execution failed" not in str(exc)
+            from sqlalchemy.exc import SQLAlchemyError
+            cause, database_failure = exc, False
+            for _ in range(8):
+                if cause is None:
+                    break
+                database_failure = database_failure or isinstance(cause, SQLAlchemyError)
+                cause = cause.__cause__
+            checkpoint_uncertain = isinstance(locals().get("adapter"), ComfyUIProviderAdapter) and (
+                database_failure or adapter.state.get("stage") in ("submitting", "submitted")
+            ) and "ComfyUI execution failed" not in str(exc)
             if isinstance(exc, ComfyDeferred) or checkpoint_uncertain:
                 task.status = TaskStatus.pending
                 task.result = {**task.result, "adapter_mode": "comfyui", "queued_stage": "recovering",

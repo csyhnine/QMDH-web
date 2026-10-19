@@ -241,8 +241,9 @@ class ComfyUIAdapterTests(unittest.TestCase):
             if request.url.path == "/view":
                 return httpx.Response(200, content=b"not an image")
             return self.handler(request)
-        with self.assertRaises(ProviderExecutionError):
+        with self.assertRaises(ProviderExecutionError) as failure:
             self.run_adapter(handler)
+        self.assertNotIsInstance(failure.exception, c.ComfyDeferred)
         self.assertNotEqual(self.saved[-1]["stage"], "downloaded")
 
     def test_adapter_factory_selects_real_comfy_not_simulated(self):
@@ -281,4 +282,40 @@ class ComfyUIAdapterTests(unittest.TestCase):
             task = db.get(Task, task_id)
             self.assertEqual(task.status, TaskStatus.pending)
             self.assertEqual(task.result["comfyui"]["prompt_id"], PROMPT_ID)
+        engine.dispose()
+
+    def test_three_images_through_real_sql_checkpoints_and_asset_materialization(self):
+        from sqlalchemy import create_engine, select
+        from sqlalchemy.orm import sessionmaker
+        from app.database import Base
+        from app.models import Project, Task, TaskStatus, Workflow, User, Asset, ProviderCall
+        from app.services import task_executor as executor
+        from uuid import uuid4
+        engine = create_engine("sqlite://")
+        Base.metadata.create_all(engine); sessions = sessionmaker(bind=engine)
+        with sessions() as db:
+            user = User(name="batch-synthetic", role="designer", password_hash="fixture", project_codes=[])
+            project = Project(code="BATCH-FIXTURE", name="Synthetic")
+            workflow = Workflow(key="batch-fixture", name="Synthetic", description="", category="image", priority="P1", version="v1", provider_capability="image.generate")
+            db.add_all([user, project, workflow]); db.flush()
+            task = Task(title="Batch synthetic", workflow_id=workflow.id, project_id=project.id, user_id=user.id,
+                        requested_provider="local-comfy", payload={"prompt": "fixture", "image_count": 3}, result={})
+            db.add(task); db.commit(); task_id = task.id
+        def handler(request):
+            if request.url.path == "/prompt": return httpx.Response(200, json={"prompt_id": str(uuid4()), "node_errors": {}})
+            if request.url.path.startswith("/history/"):
+                return httpx.Response(200, json={request.url.path.split("/")[-1]: self.history()[PROMPT_ID]})
+            return self.handler(request)
+        original_client = httpx.Client
+        with patch.object(executor, "SessionLocal", sessions), patch.object(executor, "get_provider_adapter", return_value=self.adapter), \
+             patch.object(settings, "comfyui_workflow_root", str(self.root)), patch.object(settings, "media_root", str(self.root / "media")), \
+             patch.object(settings, "storage_backend", "local"), patch.object(c, "Redis", FakeRedis), \
+             patch.object(c.httpx, "Client", side_effect=lambda **kw: original_client(transport=httpx.MockTransport(handler), **kw)):
+            executor.execute_task(task_id)
+        with sessions() as db:
+            task = db.get(Task, task_id)
+            self.assertEqual(task.status, TaskStatus.completed, task.result)
+            self.assertEqual(len(db.scalars(select(Asset).where(Asset.source_task_id == task_id)).all()), 3)
+            self.assertEqual(len(db.scalars(select(ProviderCall).where(ProviderCall.task_id == task_id)).all()), 1)
+            self.assertEqual(len(task.result["comfyui"]["batch_outputs"]), 3)
         engine.dispose()

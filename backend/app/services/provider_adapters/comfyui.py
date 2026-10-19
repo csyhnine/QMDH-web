@@ -16,7 +16,7 @@ from typing import Callable
 from uuid import uuid4, UUID
 
 import httpx
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from redis import Redis
 
 from app.core.config import ImageProviderProfile, settings
@@ -154,10 +154,13 @@ def owned_references(db, user_id, payload):
         data = read_binary_asset(path)
         if len(data) > MAX_IMAGE_BYTES:
             raise ValueError("参考图超过 32MB。")
-        with Image.open(BytesIO(data)) as im:
-            if im.format not in ("PNG", "JPEG", "WEBP") or im.width * im.height > MAX_PIXELS:
-                raise ValueError("参考图须为 PNG/JPEG/WebP，最多 1600 万像素。")
-            im.verify()
+        try:
+            with Image.open(BytesIO(data)) as im:
+                if im.format not in ("PNG", "JPEG", "WEBP") or im.width * im.height > MAX_PIXELS:
+                    raise ValueError("参考图须为 PNG/JPEG/WebP，最多 1600 万像素。")
+                im.verify()
+        except (UnidentifiedImageError, OSError, SyntaxError) as exc:
+            raise ValueError("参考图文件无法解码，请重新上传有效图片。") from exc
         paths.append(path)
     return paths
 
@@ -218,8 +221,9 @@ class ComfyUIProviderAdapter:
         try:
             return self._execute(capability, payload)
         except Exception as exc:
-            uncertain = self.state.get("stage") in ("submitting", "submitted", "downloading")
-            if (uncertain and "ComfyUI execution failed" not in str(exc)) or isinstance(exc, (httpx.TransportError, TimeoutError)) or "GPU is occupied" in str(exc):
+            uncertain = self.state.get("stage") in ("submitting", "submitted")
+            retryable_status = isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (429, 500, 502, 503, 504)
+            if (uncertain and "ComfyUI execution failed" not in str(exc)) or isinstance(exc, (httpx.TransportError, TimeoutError, OSError)) or retryable_status or "GPU is occupied" in str(exc):
                 raise ComfyDeferred(str(exc), diagnostics=diagnostics) from exc
             raise ProviderExecutionError(str(exc), diagnostics=diagnostics) from exc
 
@@ -302,8 +306,10 @@ class ComfyUIProviderAdapter:
                         response.raise_for_status()
                         data = bytearray()
                         for chunk in response.iter_bytes():
-                            if monotonic() >= deadline or len(data) + len(chunk) > limit:
-                                raise ValueError("ComfyUI response exceeded time/size budget")
+                            if monotonic() >= deadline:
+                                raise TimeoutError("ComfyUI response exceeded time budget")
+                            if len(data) + len(chunk) > limit:
+                                raise ValueError("ComfyUI response exceeded size budget")
                             data.extend(chunk)
                         return bytes(data)
 
@@ -363,17 +369,21 @@ class ComfyUIProviderAdapter:
                         terminal = history.get(prompt_id, {}).get("status", {})
                         if terminal.get("completed") is True or terminal.get("status_str") == "error":
                             safe_release = True
+                            self._save(stage="upstream_failed")
                         raise
                     if ref is not None:
                         safe_release = True  # Upstream execution is confirmed terminal.
-                        self._save(stage="downloading", output=ref)
+                        self._save(stage="downloading", output=ref, upstream_terminal=True)
                         image = request("GET", "/view", params=ref, limit=MAX_IMAGE_BYTES)
-                        with Image.open(BytesIO(image)) as im:
-                            if im.format not in ("PNG", "JPEG", "WEBP") or im.width * im.height > MAX_PIXELS:
-                                raise ValueError("ComfyUI output is not an approved image")
-                            width, height = im.size
-                            extension = {"PNG": "png", "JPEG": "jpg", "WEBP": "webp"}[im.format]
-                            im.verify()
+                        try:
+                            with Image.open(BytesIO(image)) as im:
+                                if im.format not in ("PNG", "JPEG", "WEBP") or im.width * im.height > MAX_PIXELS:
+                                    raise ValueError("ComfyUI output is not an approved image")
+                                width, height = im.size
+                                extension = {"PNG": "png", "JPEG": "jpg", "WEBP": "webp"}[im.format]
+                                im.verify()
+                        except (UnidentifiedImageError, OSError, SyntaxError) as exc:
+                            raise ValueError("ComfyUI returned an invalid image") from exc
                         storage = write_binary_asset(f"generated/comfyui/task-{self.task_id}/{prompt_id}.{extension}", image)
                         self._save(stage="downloaded", storage_path=storage, output_sha256=hashlib.sha256(image).hexdigest())
                         elapsed_ms = max(1, round((monotonic() - started) * 1000))

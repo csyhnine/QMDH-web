@@ -16,7 +16,7 @@ if (-not (Get-NetFirewallRule -Name 'QMDH-Comfy-Block-Inbound' -ErrorAction Sile
 }
 # Stop only the identified old user watchdog, never the ComfyUI/frpc children.
 Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object {
-    $_.ProcessId -ne $PID -and $_.CommandLine -like '*-File*C:\ProgramData\QMDH-FRP\windows-supervisor.ps1*'
+    $_.ProcessId -ne $PID -and ($_.CommandLine -replace '/', '\') -like '*-File*C:\ProgramData\QMDH-FRP\windows-supervisor.ps1*'
 } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 Remove-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'QMDH-Comfy-Supervisor' -ErrorAction SilentlyContinue
 Start-ScheduledTask -TaskName 'QMDH-Comfy-Supervisor'

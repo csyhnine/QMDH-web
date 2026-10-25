@@ -1,6 +1,10 @@
-## 2026-10-26修复发布候选
+## 2026-10-26修复发布（当前）
 
-候选PG空库及b27构造升级到e51、受控应用启动/路由/种子边界通过；尚未生产切换，实际生产仍为下文10-19镜像及b27。见[执行记录](release-execution-2026-10-26.md)。
+2026-10-26发布完成：源码e6add45已推送，草稿PR #5未合并；backend健康/3worker运行/frontend新包生效，生产迁移e51、源码/静态包/公网核验通过。23文件私有配对备份SHA一致，24媒体归档恢复链中2个基础包依赖本机。当前第三Compose和有效发布目录必须保留，详见[执行记录](release-execution-2026-10-26.md)。72待验收、25冻结及R98唯一DONE保持。
+
+当前镜像backend65a9cfbe7969/worker3783fe13579c三副本/frontenddf9975fa4bb7，实际迁移e51。保留主Compose + /opt/qmdh-frp/compose.frp.yml + /opt/qmdh-release-candidate-20261025/compose.release.yml，禁止旧Git重建，candidate目录现在是生效发布目录。env/key/挂载/网络/ODA/FFmpeg/Xvfb保持。
+
+配对备份 /www/backup/qmdh-release-20261026 ↔ E:/backups/QMDH-web/release-20261026，23文件SHA一致；媒体5843文件/15增量66179868字节。resolved-media-chain.json按24归档恢复，完整基础包及一段早期增量仅本机持有，必须结合本机基础包。旧缺链已在新清单中解析，旧归档未改。回滚先暂停入口/排空与核上游，使用compose.rollback.yml和qmdh-release-backup-{backend,worker,frontend}:20261026；只退镜像、不降迁移/覆盖新业务数据。无真实生成/GPU/历史补账或清理。
 
 ## 2026-10-19 Qwen v1.1 运行切换（当前）
 

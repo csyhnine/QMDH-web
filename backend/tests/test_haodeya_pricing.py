@@ -1,15 +1,16 @@
 import unittest
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.core.encryption import encrypt_value
 from app.database import Base
 from app.models import ProviderPricingRule, ProviderProfile
 from app.services.haodeya_pricing import (
     calculate_grok_video_billing,
     sync_haodeya_pricing,
+    profile_pricing_fingerprint,
+    PRICING_CATALOG_ID,
 )
 
 
@@ -20,6 +21,8 @@ class HaodeyaPricingTests(unittest.TestCase):
             connect_args={"check_same_thread": False},
             poolclass=StaticPool,
         )
+        self.addCleanup(self.engine.dispose)
+        event.listen(self.engine, "connect", lambda c, _: c.execute("PRAGMA foreign_keys=ON"))
         Base.metadata.create_all(bind=self.engine)
         self.SessionLocal = sessionmaker(bind=self.engine)
 
@@ -41,12 +44,21 @@ class HaodeyaPricingTests(unittest.TestCase):
         )
         self.assertEqual(billing_10s["cost"], 6.66)
 
+    def _confirmed_plan(self):
+        with self.SessionLocal() as db:
+            profiles = list(db.scalars(select(ProviderProfile)))
+            return {"version": 1, "catalog_id": PRICING_CATALOG_ID, "supplier": "haodeya", "currency": "CNY",
+                    "endpoint": "https://newapi.haodeya.xyz/v1", "source": "synthetic confirmed configuration contract",
+                    "profiles": [{"profile_id": row.id, "provider": row.provider_name, "model": row.model_name,
+                                  "fingerprint": profile_pricing_fingerprint(db, row),
+                                  **({"video_family": "grok"} if row.model_name == "grok-imagine-video" else {})} for row in profiles]}
+
     def test_sync_haodeya_pricing_updates_profiles_and_chat_rules(self) -> None:
         with self.SessionLocal() as db:
             db.add(
                 ProviderProfile(
                     provider_name="openai_gpt-5.4",
-                    api_key=encrypt_value("test-key"),
+                    api_key="synthetic-unused",
                     base_url="https://newapi.haodeya.xyz/v1",
                     model_name="openai/gpt-5.4",
                     adapter_kind="openai_compatible",
@@ -60,7 +72,7 @@ class HaodeyaPricingTests(unittest.TestCase):
             db.add(
                 ProviderProfile(
                     provider_name="google_gemini-3.1-flash-image-preview",
-                    api_key=encrypt_value("test-key"),
+                    api_key="synthetic-unused",
                     base_url="https://newapi.haodeya.xyz/v1",
                     model_name="google/gemini-3.1-flash-image-preview",
                     adapter_kind="openai_compatible",
@@ -74,7 +86,7 @@ class HaodeyaPricingTests(unittest.TestCase):
             db.add(
                 ProviderProfile(
                     provider_name="openai_gpt-5.4-image-2",
-                    api_key=encrypt_value("test-key"),
+                    api_key="synthetic-unused",
                     base_url="https://newapi.haodeya.xyz/v1",
                     model_name="openai/gpt-5.4-image-2",
                     adapter_kind="openai_compatible",
@@ -88,7 +100,7 @@ class HaodeyaPricingTests(unittest.TestCase):
             db.add(
                 ProviderProfile(
                     provider_name="haodeya_grok",
-                    api_key=encrypt_value("test-key"),
+                    api_key="synthetic-unused",
                     base_url="https://newapi.haodeya.xyz/v1",
                     model_name="grok-imagine-video",
                     adapter_kind="haodeya_grok",
@@ -101,7 +113,7 @@ class HaodeyaPricingTests(unittest.TestCase):
             )
             db.commit()
 
-            result = sync_haodeya_pricing(db)
+            result = sync_haodeya_pricing(db, confirmed_plan=self._confirmed_plan())
             chat_profile = db.scalar(
                 select(ProviderProfile).where(ProviderProfile.provider_name == "openai_gpt-5.4")
             )

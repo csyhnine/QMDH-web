@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from app.core.config import ImageProviderProfile, settings
+from app.services.generated_media_validation import validate_generated_media
 from app.services.media_storage import ensure_public_object_url, write_binary_asset
 
 
@@ -105,7 +106,7 @@ def persist_generated_video(
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     safe_stub = "".join(char if char.isalnum() else "-" for char in prompt.lower())[:40].strip("-") or "video"
     video_bytes, content_type = download_generated_video(video_url, timeout_seconds=timeout_seconds)
-    extension = extension_for_downloaded_video(video_url, content_type, output_format)
+    extension = extension_for_downloaded_video(video_url, content_type, output_format, video_bytes=video_bytes)
     relative_path = f"generated/{provider_name}/{timestamp}-{safe_stub}-{randint(1000, 9999)}.{extension}"
     return write_binary_asset(relative_path, video_bytes)
 
@@ -119,7 +120,7 @@ def persist_generated_video_bytes(
 ) -> str:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     safe_stub = "".join(char if char.isalnum() else "-" for char in prompt.lower())[:40].strip("-") or "video"
-    extension = (output_format or "mp4").strip().lstrip(".") or "mp4"
+    extension = validate_generated_media(video_bytes, kind="video")
     relative_path = f"generated/{provider_name}/{timestamp}-{safe_stub}-{randint(1000, 9999)}.{extension}"
     return write_binary_asset(relative_path, video_bytes)
 
@@ -137,17 +138,12 @@ def download_generated_video(video_url: str, *, timeout_seconds: float) -> tuple
         raise ValueError(f"Generated video download request failed: {exc.reason}") from exc
 
 
-def extension_for_downloaded_video(video_url: str, content_type: str, output_format: str) -> str:
-    if content_type:
-        guessed = mimetypes.guess_extension(content_type)
-        if guessed:
-            return guessed.lstrip(".").replace("mpeg", "mpg")
-    parsed = urlparse(video_url)
-    suffix = parsed.path.rsplit(".", 1)[-1].lower() if "." in parsed.path else ""
-    if suffix in {"mp4", "webm", "mov", "m4v"}:
-        return suffix
-    normalized = (output_format or "mp4").strip().lower()
-    return normalized if normalized in {"mp4", "webm", "mov", "m4v"} else "mp4"
+def extension_for_downloaded_video(
+    video_url: str, content_type: str, output_format: str, *, video_bytes: bytes | None = None,
+) -> str:
+    if video_bytes is None:
+        raise ValueError("Generated video bytes are required for format validation")
+    return validate_generated_media(video_bytes, kind="video", content_type=content_type)
 
 
 def extract_video_urls(payload: dict) -> list[str]:

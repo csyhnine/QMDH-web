@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.review_media_fixtures import PNG_BYTES, JPEG_BYTES
 
 import json
 import shutil
@@ -49,7 +50,7 @@ class _FakeBinaryResponse:
         return False
 
 
-_MIN_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+_MIN_PNG = PNG_BYTES
 
 class BigjpgUpscaleExecutorTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -237,7 +238,7 @@ class BigjpgUpscaleExtensionTests(unittest.TestCase):
             "https://cdn.example.test/download/1796",
             "image/jpeg",
             "png",
-            b"\xff\xd8\xff\xe0" + b"\x00" * 8,
+            JPEG_BYTES,
         )
         self.assertEqual(extension, "jpg")
 

@@ -1,4 +1,5 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useMemo } from "react";
+import { useContentEditor } from "./useContentEditor";
 
 import {
   api,
@@ -69,7 +70,7 @@ function statusLabel(row: SiteAnnouncementRecord, now = Date.now()): string {
 export type AnnouncementsPageProps = {
   announcements: SiteAnnouncementRecord[];
   error: string;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<void>;
   onSetError: (error: string) => void;
 };
 
@@ -77,103 +78,58 @@ export default function AnnouncementsPage({
   announcements,
   error,
   onRefresh,
-  onSetError,
 }: AnnouncementsPageProps) {
-  const [selectedId, setSelectedId] = useState<number | null>(announcements[0]?.id ?? null);
-  const [draft, setDraft] = useState<AnnouncementDraft>(defaultDraft);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const editor = useContentEditor(announcements, (row) => row ? {
+    title: row.title, body: row.body, is_active: row.is_active,
+    starts_at: toDatetimeLocalValue(row.starts_at), ends_at: toDatetimeLocalValue(row.ends_at), priority: row.priority,
+  } : defaultDraft(), onRefresh);
+  const { selectedId, draft } = editor;
+  const selected = editor.model.record;
+  const saving = editor.saving;
+  const deleting = editor.deleting;
 
-  const selected = announcements.find((item) => item.id === selectedId) ?? null;
   const activeCount = useMemo(
     () => announcements.filter((item) => statusLabel(item) === "展示中").length,
     [announcements]
   );
 
-  useEffect(() => {
-    if (!selected) {
-      if (selectedId === null || announcements.length === 0) {
-        setDraft(defaultDraft());
-      }
-      return;
-    }
-    setDraft({
-      title: selected.title,
-      body: selected.body,
-      is_active: selected.is_active,
-      starts_at: toDatetimeLocalValue(selected.starts_at),
-      ends_at: toDatetimeLocalValue(selected.ends_at),
-      priority: selected.priority,
-    });
-  }, [announcements.length, selected, selectedId]);
-
-  function handleCreateNew() {
-    setSelectedId(null);
-    setDraft(defaultDraft());
-    onSetError("");
-  }
+  function handleCreateNew() { editor.select(null); }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft.title.trim() || !draft.body.trim()) {
-      onSetError("请填写公告标题和正文。");
-      return;
-    }
-    if (!draft.starts_at || !draft.ends_at) {
-      onSetError("请设置开始与结束时间。");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const startsAt = fromDatetimeLocalValue(draft.starts_at);
-      const endsAt = fromDatetimeLocalValue(draft.ends_at);
-      if (new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
-        onSetError("结束时间必须晚于开始时间。");
-        return;
-      }
-
-      const payload: SiteAnnouncementCreatePayload = {
-        title: draft.title.trim(),
-        body: draft.body.trim(),
-        is_active: draft.is_active,
-        starts_at: startsAt,
-        ends_at: endsAt,
-        priority: Number(draft.priority) || 0,
-      };
-
-      const next = selected
-        ? await api.updateAdminAnnouncement(selected.id, payload)
-        : await api.createAdminAnnouncement(payload);
-      setSelectedId(next.id);
-      onSetError("");
-      onRefresh();
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "保存公告失败");
-    } finally {
-      setSaving(false);
-    }
+    return editor.run(async (operation) => {
+      try {
+        const values = operation.values;
+        if (!values.title.trim() || !values.body.trim()) { editor.report("请填写公告标题和正文。", operation); return; }
+        if (!values.starts_at || !values.ends_at) { editor.report("请设置开始与结束时间。", operation); return; }
+        const startsAt = fromDatetimeLocalValue(values.starts_at);
+        const endsAt = fromDatetimeLocalValue(values.ends_at);
+        if (new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+          editor.report("结束时间必须晚于开始时间。", operation); return;
+        }
+        const payload: SiteAnnouncementCreatePayload = {
+          title: values.title.trim(), body: values.body.trim(), is_active: values.is_active,
+          starts_at: startsAt, ends_at: endsAt, priority: Number(values.priority) || 0,
+        };
+        const next = operation.id !== null
+          ? await api.updateAdminAnnouncement(operation.id, payload)
+          : await api.createAdminAnnouncement(payload);
+        editor.saved(operation, next);
+        await editor.refreshAfter(operation);
+      } catch (err) { editor.report(err instanceof Error ? err.message : "保存公告失败", operation); }
+    });
   }
 
   async function handleDelete() {
-    if (!selected) {
-      onSetError("请先选择要删除的公告。");
-      return;
-    }
+    if (selectedId === null || !selected) { editor.report("请先选择要删除的公告。"); return; }
     if (!confirm(`确认删除公告「${selected.title}」吗？`)) return;
-
-    setDeleting(true);
-    try {
-      await api.deleteAdminAnnouncement(selected.id);
-      setSelectedId(null);
-      setDraft(defaultDraft());
-      onSetError("");
-      onRefresh();
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "删除公告失败");
-    } finally {
-      setDeleting(false);
-    }
+    return editor.run(async (operation) => {
+      try {
+        await api.deleteAdminAnnouncement(operation.id!);
+        editor.deleted(operation);
+        await editor.refreshAfter(operation);
+      } catch (err) { editor.report(err instanceof Error ? err.message : "删除公告失败", operation); }
+    }, "delete");
   }
 
   return (
@@ -187,7 +143,7 @@ export default function AnnouncementsPage({
           <button type="button" className="ghost-button" onClick={handleCreateNew}>
             新建公告
           </button>
-          <button type="button" className="admin-primary-button" onClick={onRefresh}>
+          <button type="button" className="admin-primary-button" onClick={() => void editor.refreshList()}>
             刷新列表
           </button>
         </div>
@@ -226,8 +182,8 @@ export default function AnnouncementsPage({
                 <button
                   key={item.id}
                   type="button"
-                  className={selected?.id === item.id ? "template-card is-active" : "template-card"}
-                  onClick={() => setSelectedId(item.id)}
+                  className={selectedId === item.id ? "template-card is-active" : "template-card"}
+                  onClick={() => editor.select(item)}
                 >
                   <strong>{item.title}</strong>
                   <span>{item.body.slice(0, 80) || "（无正文）"}</span>
@@ -248,7 +204,7 @@ export default function AnnouncementsPage({
         <aside className="admin-detail-panel">
           <form className="admin-side-form" onSubmit={(event) => void handleSubmit(event)}>
             <div className="admin-detail-head">
-              <h2>{selected ? "编辑公告" : "新建公告"}</h2>
+              <h2>{selectedId !== null ? "编辑公告" : "新建公告"}</h2>
               <p>{selected ? `最近更新 ${formatDate(selected.updated_at)}` : "保存后，登录用户进入生成页时会按时间窗展示。"}</p>
             </div>
 
@@ -257,7 +213,7 @@ export default function AnnouncementsPage({
                 <span>标题</span>
                 <input
                   value={draft.title}
-                  onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                  onChange={(event) => editor.setField("title", event.target.value)}
                   placeholder="例如：系统维护通知"
                 />
               </label>
@@ -267,7 +223,7 @@ export default function AnnouncementsPage({
                 <textarea
                   className="feedback-textarea"
                   value={draft.body}
-                  onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))}
+                  onChange={(event) => editor.setField("body", event.target.value)}
                   placeholder="公告详细内容"
                 />
               </label>
@@ -278,7 +234,7 @@ export default function AnnouncementsPage({
                   <input
                     type="datetime-local"
                     value={draft.starts_at}
-                    onChange={(event) => setDraft((current) => ({ ...current, starts_at: event.target.value }))}
+                    onChange={(event) => editor.setField("starts_at", event.target.value)}
                   />
                 </label>
                 <label className="composer-menu-field">
@@ -286,7 +242,7 @@ export default function AnnouncementsPage({
                   <input
                     type="datetime-local"
                     value={draft.ends_at}
-                    onChange={(event) => setDraft((current) => ({ ...current, ends_at: event.target.value }))}
+                    onChange={(event) => editor.setField("ends_at", event.target.value)}
                   />
                 </label>
               </div>
@@ -298,7 +254,7 @@ export default function AnnouncementsPage({
                     type="number"
                     value={draft.priority}
                     onChange={(event) =>
-                      setDraft((current) => ({ ...current, priority: Number(event.target.value) || 0 }))
+                      editor.setField("priority", Number(event.target.value) || 0)
                     }
                   />
                 </label>
@@ -309,7 +265,7 @@ export default function AnnouncementsPage({
                       type="checkbox"
                       checked={draft.is_active}
                       onChange={(event) =>
-                        setDraft((current) => ({ ...current, is_active: event.target.checked }))
+                        editor.setField("is_active", event.target.checked)
                       }
                     />
                     <span>在时间窗内展示</span>
@@ -319,13 +275,20 @@ export default function AnnouncementsPage({
             </div>
 
             {error ? <div className="floating-error">{error}</div> : null}
+            {editor.error ? <div className="floating-error">{editor.error}</div> : null}
+            {editor.model.notice ? <div className="floating-notice" role="status">{editor.model.notice}</div> : null}
+            {editor.model.missing ? <p role="status">原公告已从列表中移除，当前草稿及原身份已保留，请核对后新建。</p> : null}
+            {editor.model.conflicts.size ? <div role="status">
+              <p>服务器同字段已更新，当前草稿已保留。加载服务器版本会替换当前草稿。</p>
+              <button type="button" onClick={editor.loadRemote}>加载服务器版本</button>
+            </div> : null}
 
             <div className="template-editor-actions">
-              <button type="submit" className="submit-button" disabled={saving}>
+              <button type="submit" className="submit-button" disabled={editor.busy || editor.model.missing || editor.model.unconfirmed}>
                 {saving ? "保存中..." : selected ? "保存修改" : "创建公告"}
               </button>
               {selected ? (
-                <button type="button" className="ghost-button" disabled={deleting} onClick={() => void handleDelete()}>
+                <button type="button" className="ghost-button" disabled={editor.busy || editor.model.missing || editor.model.unconfirmed} onClick={() => void handleDelete()}>
                   {deleting ? "删除中..." : "删除公告"}
                 </button>
               ) : null}

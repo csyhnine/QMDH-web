@@ -10,10 +10,13 @@ Write policy (2026-07-26):
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
+from types import SimpleNamespace
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import String, cast, delete, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -899,6 +902,17 @@ def tool_memory_forget(db: Session, *, user_id: int | None, memory_id: int) -> d
 
 
 @dataclass(frozen=True)
+class LegacyMemoryIndexUpdate:
+    id: int
+    user_id: int
+    conversation_id: int | None
+    memory_type: str
+    content: str
+    source_turn_ref: str
+    is_paused: bool
+
+
+@dataclass(frozen=True)
 class LegacyMemoryScrubStats:
     scanned: int = 0
     deleted_turn_summaries: int = 0
@@ -906,6 +920,10 @@ class LegacyMemoryScrubStats:
     distilled_durable: int = 0
     compacted_sessions: int = 0
     unchanged: int = 0
+    review_required: int = 0
+    review_candidates: tuple[dict[str, object], ...] = ()
+    index_updates: tuple[LegacyMemoryIndexUpdate, ...] = ()
+    index_deletes: tuple[int, ...] = ()
 
 
 def _is_protected_fact(entry: AgentMemoryEntry) -> bool:
@@ -917,137 +935,198 @@ def _is_protected_fact(entry: AgentMemoryEntry) -> bool:
         return True
     return False
 
+def _legacy_memory_values(entry: AgentMemoryEntry) -> dict[str, object]:
+    return {column.name: getattr(entry, column.name) for column in AgentMemoryEntry.__table__.columns}
+
+
+def _legacy_memory_fingerprint(entry: AgentMemoryEntry | dict[str, object]) -> str:
+    values = entry if isinstance(entry, dict) else _legacy_memory_values(entry)
+    serial = {key: value.isoformat() if hasattr(value, "isoformat") else value for key, value in values.items()}
+    return hashlib.sha256(json.dumps(serial, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def _legacy_memory_protected(entry: AgentMemoryEntry) -> bool:
+    ref = (entry.source_turn_ref or "").strip().lower()
+    return bool(entry.is_paused or _is_protected_fact(entry) or ref == "manual" or ref.startswith(("tool:", "manual_", "manual:", "manual/")))
+
+
+def _legacy_memory_change(entry: AgentMemoryEntry) -> tuple[str, str, str] | None:
+    """Reuse the legacy cleanup rules only after explicit-source protection."""
+    content = entry.content or ""
+    if entry.memory_type == "summary":
+        if not _is_session_summary(entry):
+            return "deleted_turn_summaries", entry.memory_type, ""
+        compacted = compact_session_summary_content(content)
+        if compacted and compacted != content.strip():
+            return "compacted_sessions", entry.memory_type, compacted
+    elif entry.memory_type in {"preference", "feedback", "thought", "experience"}:
+        signal = classify_user_memory_signal(content)
+        fact = distill_durable_memory_fact(content, signal) if signal is not None else None
+        if fact is None:
+            return "deleted_noise_durable", entry.memory_type, ""
+        if fact != content.strip() or signal != entry.memory_type:
+            return "distilled_durable", signal, fact
+    elif entry.memory_type == "fact":
+        fact = distill_durable_memory_fact(content, "fact")
+        if fact is None or len(fact) < 4:
+            return "deleted_noise_durable", entry.memory_type, ""
+        if fact != content.strip():
+            return "distilled_durable", entry.memory_type, fact
+    return None
+
+
+def _legacy_memory_approvals(plan: dict[str, object] | None, *, dry_run: bool, user_id: int | None) -> dict[int, dict[str, object]]:
+    if plan is None:
+        if dry_run:
+            return {}
+        raise ValueError("apply requires an explicitly reviewed legacy plan")
+    if not isinstance(plan, dict) or type(plan.get("version")) is not int or plan["version"] != 1 or not isinstance(plan.get("entries"), list):
+        raise ValueError("invalid legacy plan version or entries")
+    approvals = {}
+    for row in plan["entries"]:
+        if not isinstance(row, dict) or type(row.get("id")) is not int or row["id"] <= 0 or type(row.get("user_id")) is not int or row["user_id"] <= 0:
+            raise ValueError("legacy plan requires exact memory and user ids")
+        if row["id"] in approvals or (user_id is not None and row["user_id"] != user_id):
+            raise ValueError("duplicate or out-of-user-scope legacy plan entry")
+        for key in ("fingerprint", "result_fingerprint"):
+            value = row.get(key)
+            if key == "result_fingerprint" and key in row and value is None:
+                continue
+            if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+                raise ValueError("legacy plan requires SHA256 fingerprints")
+        if not isinstance(row.get("legacy_evidence"), str) or not row["legacy_evidence"].strip():
+            raise ValueError("legacy source/period must be confirmed in legacy_evidence")
+        approvals[row["id"]] = row
+    return approvals
+
 
 def scrub_legacy_agent_memories(
     db: Session,
     *,
     dry_run: bool = True,
     user_id: int | None = None,
+    approved_plan: dict[str, object] | None = None,
 ) -> LegacyMemoryScrubStats:
-    """One-shot cleanup for memories written under the old raw-extract policy.
+    """Preview uncertain rows; apply only operator-confirmed, fingerprinted old auto rows.
 
-    - Delete per-turn ``summary`` rows (keep only ``session_summary``).
-    - Drop durable preference/feedback/thought rows that fail the tightened classifier.
-    - Distill remaining durable rows into short facts.
-    - Compact oversized session summaries.
+    This service never publishes index changes. The maintenance caller must commit
+    first, then pass the returned snapshots to sync_legacy_agent_memory_index.
+    Source patterns alone cannot establish an old extraction version or period.
     """
-    stmt = select(AgentMemoryEntry).order_by(AgentMemoryEntry.id.asc())
+    if not dry_run and (db.new or db.dirty or db.deleted):
+        raise ValueError("apply requires a clean maintenance session")
+    approvals = _legacy_memory_approvals(approved_plan, dry_run=dry_run, user_id=user_id)
+    stmt = select(AgentMemoryEntry, cast(AgentMemoryEntry.created_at, String).label("_legacy_stored_created_at")).order_by(AgentMemoryEntry.id.asc())
     if user_id is not None:
         stmt = stmt.where(AgentMemoryEntry.user_id == user_id)
-    rows = list(db.scalars(stmt).all())
+    if not dry_run:
+        stmt = stmt.where(AgentMemoryEntry.id.in_(approvals)).with_for_update()
+    with db.no_autoflush:
+        selected = db.execute(stmt.execution_options(populate_existing=not dry_run)).all()
+        rows = [row[0] for row in selected]
+        stored_timestamps = {row[0].id: row[1] for row in selected}
+        # Missing rows may be a repeated delete; changed ownership is a conflict.
+        present = {entry.id for entry in rows}
+        missing = set(approvals) - present
+        for memory_id in missing:
+            owner = db.scalar(select(AgentMemoryEntry.user_id).where(AgentMemoryEntry.id == memory_id))
+            if owner is not None:
+                raise ValueError("legacy memory changed ownership or is outside the selected user")
 
-    deleted_turn = 0
-    deleted_noise = 0
-    distilled = 0
-    compacted = 0
+    counts = dict(deleted_turn_summaries=0, deleted_noise_durable=0, distilled_durable=0, compacted_sessions=0)
     unchanged = 0
-    to_delete: list[AgentMemoryEntry] = []
-
+    candidates = []
+    actions = []
+    index_updates = []
+    index_deletes = list(sorted(missing)) if not dry_run else []
+    review_required = 0
     for entry in rows:
-        if entry.memory_type == "summary":
-            if _is_session_summary(entry):
-                compacted_text = compact_session_summary_content(entry.content or "")
-                if compacted_text and compacted_text != (entry.content or "").strip():
-                    compacted += 1
-                    if not dry_run:
-                        entry.content = compacted_text
-                        try:
-                            from app.integrations.search.agent_memory_index import index_agent_memory_entry
-
-                            index_agent_memory_entry(entry)
-                        except Exception:
-                            pass
-                else:
-                    unchanged += 1
-                continue
-
-            deleted_turn += 1
-            to_delete.append(entry)
+        approval = approvals.get(entry.id)
+        if approval is not None and approval["user_id"] != entry.user_id:
+            raise ValueError("legacy memory changed ownership")
+        if _legacy_memory_protected(entry):
+            unchanged += 1
             continue
-
-        if entry.memory_type in {"preference", "feedback", "thought", "experience"}:
-            signal = classify_user_memory_signal(entry.content or "")
-            if signal is None:
-                deleted_noise += 1
-                to_delete.append(entry)
-                continue
-            fact = distill_durable_memory_fact(entry.content or "", signal)
-            if fact is None:
-                deleted_noise += 1
-                to_delete.append(entry)
-                continue
-            changed = fact != (entry.content or "").strip() or signal != entry.memory_type
-            if changed:
-                distilled += 1
-                if not dry_run:
-                    entry.memory_type = signal
-                    entry.content = fact
-                    try:
-                        from app.integrations.search.agent_memory_index import index_agent_memory_entry
-
-                        index_agent_memory_entry(entry)
-                    except Exception:
-                        pass
-            else:
+        before = _legacy_memory_values(entry)
+        fingerprint = _legacy_memory_fingerprint(before)
+        if approval is not None and fingerprint != approval["fingerprint"]:
+            if fingerprint == approval.get("result_fingerprint"):
                 unchanged += 1
-            continue
-
-        if entry.memory_type == "fact":
-            if _is_protected_fact(entry):
-                fact = distill_durable_memory_fact(entry.content or "", "fact")
-                if fact and fact != (entry.content or "").strip() and len(entry.content or "") > DURABLE_FACT_MAX_CHARS:
-                    distilled += 1
-                    if not dry_run:
-                        entry.content = fact
-                        try:
-                            from app.integrations.search.agent_memory_index import index_agent_memory_entry
-
-                            index_agent_memory_entry(entry)
-                        except Exception:
-                            pass
-                else:
-                    unchanged += 1
-                continue
-            # Unscoped facts: keep only if they still look durable after distill.
-            fact = distill_durable_memory_fact(entry.content or "", "fact")
-            if fact is None or len(fact) < 4:
-                deleted_noise += 1
-                to_delete.append(entry)
-                continue
-            if fact != (entry.content or "").strip():
-                distilled += 1
                 if not dry_run:
-                    entry.content = fact
-                    try:
-                        from app.integrations.search.agent_memory_index import index_agent_memory_entry
-
-                        index_agent_memory_entry(entry)
-                    except Exception:
-                        pass
-            else:
-                unchanged += 1
+                    index_updates.append(LegacyMemoryIndexUpdate(**{key: before[key] for key in LegacyMemoryIndexUpdate.__dataclass_fields__}))
+                continue
+            raise ValueError("legacy memory fingerprint changed; preview and review again")
+        change = _legacy_memory_change(entry)
+        if change is None:
+            unchanged += 1
             continue
-
-        unchanged += 1
+        action, next_type, next_content = change
+        eligible_source = re.fullmatch(r"conv:[1-9]\d*:(?:chat|agent|summary|preference|feedback|thought|fact|experience|session_summary)", entry.source_turn_ref or "") is not None
+        after = None if action.startswith("deleted_") else dict(before, memory_type=next_type, content=next_content)
+        candidate = {
+            "id": entry.id, "user_id": entry.user_id, "fingerprint": fingerprint,
+            "result_fingerprint": _legacy_memory_fingerprint(after) if after is not None else None,
+            "action": action, "eligible_source": eligible_source,
+            "before": {key: value.isoformat() if hasattr(value, "isoformat") else value for key, value in before.items()},
+            "after": {"memory_type": next_type, "content": next_content} if after is not None else None,
+            "legacy_evidence": approval["legacy_evidence"] if approval is not None else "",
+        }
+        candidates.append(candidate)
+        if approval is None:
+            review_required += 1
+            continue
+        if not eligible_source:
+            raise ValueError("unknown memory source is preview-only")
+        if candidate["result_fingerprint"] != approval["result_fingerprint"]:
+            raise ValueError("legacy cleanup result differs from the reviewed plan")
+        counts[action] += 1
+        actions.append((entry, before, after))
 
     if not dry_run:
-        for entry in to_delete:
-            memory_id = entry.id
-            db.delete(entry)
-            try:
-                from app.integrations.search.agent_memory_index import delete_agent_memory_entry
-
-                if memory_id is not None:
-                    delete_agent_memory_entry(memory_id)
-            except Exception:
-                pass
-        db.flush()
-
+        try:
+            with db.no_autoflush:
+                for entry, before, after in actions:
+                    # All original columns participate, including pause, owner and provenance.
+                    # SQLite server_default timestamps may omit fractional seconds.
+                    # Compare their exact stored representation, not a reformatted bind.
+                    conditions = [cast(AgentMemoryEntry.created_at, String) == stored_timestamps[entry.id] if key == "created_at" else getattr(AgentMemoryEntry, key) == value for key, value in before.items()]
+                    if after is None:
+                        statement = delete(AgentMemoryEntry).where(*conditions)
+                    else:
+                        statement = update(AgentMemoryEntry).where(*conditions).values(memory_type=after["memory_type"], content=after["content"])
+                    result = db.execute(statement, execution_options={"synchronize_session": False})
+                    if result.rowcount != 1:
+                        raise ValueError("legacy memory changed during apply; transaction rolled back")
+                    if after is None:
+                        index_deletes.append(entry.id)
+                    else:
+                        index_updates.append(LegacyMemoryIndexUpdate(**{key: after[key] for key in LegacyMemoryIndexUpdate.__dataclass_fields__}))
+            db.flush()
+            for entry, _, _ in actions:
+                db.expire(entry)
+        except Exception:
+            db.rollback()
+            raise
     return LegacyMemoryScrubStats(
-        scanned=len(rows),
-        deleted_turn_summaries=deleted_turn,
-        deleted_noise_durable=deleted_noise,
-        distilled_durable=distilled,
-        compacted_sessions=compacted,
-        unchanged=unchanged,
+        scanned=len(rows), unchanged=unchanged, review_required=review_required,
+        review_candidates=tuple(candidates), index_updates=tuple(index_updates),
+        index_deletes=tuple(index_deletes), **counts,
     )
+
+
+def sync_legacy_agent_memory_index(stats: LegacyMemoryScrubStats) -> dict[str, object]:
+    """Best-effort replayable index work; the caller must have committed successfully."""
+    failed_ids = []
+    from app.integrations.search.agent_memory_index import delete_agent_memory_entry, index_agent_memory_entry
+
+    for memory_id in stats.index_deletes:
+        try:
+            delete_agent_memory_entry(memory_id)
+        except Exception:
+            failed_ids.append(memory_id)
+    for snapshot in stats.index_updates:
+        try:
+            index_agent_memory_entry(SimpleNamespace(**snapshot.__dict__))
+        except Exception:
+            failed_ids.append(snapshot.id)
+    return {"delete_attempts": len(stats.index_deletes), "upsert_attempts": len(stats.index_updates), "failed_ids": failed_ids}

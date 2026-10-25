@@ -1,3 +1,4 @@
+from tests.review_media_fixtures import MP4_BYTES
 import json
 import os
 import shutil
@@ -97,7 +98,7 @@ class DashScopeVideoProviderAdapterTests(unittest.TestCase):
                         "request_id": "poll-1",
                     }
                 )
-            return _FakeBinaryResponse(b"fake-mp4")
+            return _FakeBinaryResponse(MP4_BYTES)
 
         with patch("app.services.provider_adapters.dashscope_video.urlopen", side_effect=fake_urlopen):
             with patch("app.services.provider_adapters.video_common.urlopen", side_effect=fake_urlopen):
@@ -126,7 +127,7 @@ class DashScopeVideoProviderAdapterTests(unittest.TestCase):
         self.assertTrue(outcome.result["storage_path"].startswith("generated/dashscope_wan/"))
         saved_path = os.path.join(self.tempdir, outcome.result["storage_path"].replace("/", os.sep))
         self.assertTrue(os.path.exists(saved_path))
-        self.assertEqual(open(saved_path, "rb").read(), b"fake-mp4")
+        self.assertEqual(open(saved_path, "rb").read(), MP4_BYTES)
 
 
 class DashScopeVideoTaskExecutionTests(unittest.TestCase):
@@ -218,7 +219,7 @@ class DashScopeVideoTaskExecutionTests(unittest.TestCase):
                         "request_id": "poll-1",
                     }
                 )
-            return _FakeBinaryResponse(b"fake-video")
+            return _FakeBinaryResponse(MP4_BYTES)
 
         with patch("app.services.task_executor.SessionLocal", self.SessionLocal):
             with patch("app.services.provider_adapters.dashscope_video.urlopen", side_effect=fake_urlopen):

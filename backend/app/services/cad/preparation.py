@@ -10,6 +10,7 @@ from typing import Any
 from PIL import Image, ImageDraw
 
 from app.services.cad.polygons import attach_room_polygons, frame_of
+from app.services.cad.unit_scale import calibrated_unit_scale
 from app.services.media_storage import read_binary_asset
 
 ROOM_KINDS = {"office", "reception", "meeting", "reading", "activity", "cafe", "toilet", "storage", "empty"}
@@ -72,6 +73,7 @@ def save_preparation(payload: dict[str, Any], inputs: dict[str, Any]) -> dict[st
                 usable["area_m2"] = round(float(usable.get("area_m2") or 0) * factor * factor, 2)
                 usable["polygons"] = [[[x * factor, y * factor] for x, y in ring] for ring in usable.get("polygons", [])]
     frame = frame_of(floor)
+    unit_info = calibrated_unit_scale(floor, mpp * frame["scale"])
     frame["meters_per_unit"] = mpp * frame["scale"]
     floor["geometry"] = frame
     floor["square_meters_per_pixel"] = mpp * mpp
@@ -94,6 +96,7 @@ def save_preparation(payload: dict[str, Any], inputs: dict[str, Any]) -> dict[st
     floor["preparation"]["signature"] = preparation_signature(floor, raw)
     floor["scheme_zh"] = "方案：" + "、".join(dict.fromkeys(str(r.get("proposal") or r.get("function") or "") for r in rooms if r["room_id"] in required)) + "。"
     floor["scale_note"] = "本平面已按两点已知长度校准，面积随比例更新。"
+    floor["unit_info"] = unit_info
     return payload
 
 

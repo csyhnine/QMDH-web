@@ -80,8 +80,8 @@ export type StudioReferenceDropzoneProps = {
   onRemoveReferenceUpload: (index: number) => void;
   onReplaceReferenceUpload?: (index: number, item: ReferenceUploadItem) => void;
   onRegisterSeedancePrivateAvatar?: (index: number) => void;
-  onStartSeedanceRealAvatar?: (index: number) => Promise<{ taskId: string; h5Link: string }>;
-  onCompleteSeedanceRealAvatar?: (index: number, verifyTaskId: string) => Promise<void> | void;
+  onStartSeedanceRealAvatar?: (index: number, signal?: AbortSignal) => Promise<{ taskId: string; h5Link: string }>;
+  onCompleteSeedanceRealAvatar?: (index: number, verifyTaskId: string, signal?: AbortSignal) => Promise<void> | void;
 };
 
 export type StudioPromptTextareaProps = Pick<

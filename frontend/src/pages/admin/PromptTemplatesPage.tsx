@@ -1,3 +1,5 @@
+import { useContentEditor } from "./useContentEditor";
+import { useContentUploads } from "./useContentUploads";
 import { type ChangeEvent, type DragEvent, type FormEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, type PromptTemplateCreatePayload, type PromptTemplateRecord } from "../../api";
@@ -9,7 +11,7 @@ import {
   templatePrimaryCategory,
   templateSecondaryCategory,
 } from "../../features/studio/studioTemplateUtils";
-import { formatUploadSize, MAX_REFERENCE_UPLOAD_BYTES, validateReferenceImageSize } from "../../utils/uploads";
+import { formatUploadSize, MAX_REFERENCE_UPLOAD_BYTES } from "../../utils/uploads";
 
 type PromptTemplateDraft = PromptTemplateCreatePayload;
 type UploadField = "source_image_path" | "preview_image_path";
@@ -62,6 +64,7 @@ function countInCategory(templates: PromptTemplateRecord[], category: string, su
 type ImageUploaderProps = {
   altLabel: string;
   clearLabel: string;
+  clearable?: boolean;
   dragging: boolean;
   field: UploadField;
   imagePath: string;
@@ -81,10 +84,10 @@ function TemplateImageUploader(props: ImageUploaderProps) {
       <div className="template-preview-upload-head">
         <strong>{props.title}</strong>
         <div className="template-editor-actions">
-          <button type="button" className="ghost-button" onClick={props.onPick} disabled={props.uploading}>
-            {props.uploading ? "上传中..." : props.imagePath ? `更换${props.title}` : `上传${props.title}`}
+          <button type="button" className="ghost-button" onClick={props.onPick} aria-busy={props.uploading}>
+            {props.uploading ? `重新选择${props.title}` : props.imagePath ? `更换${props.title}` : `上传${props.title}`}
           </button>
-          {props.imagePath ? (
+          {props.imagePath || props.uploading || props.clearable ? (
             <button type="button" className="ghost-button" onClick={props.onClear}>
               {props.clearLabel}
             </button>
@@ -110,7 +113,7 @@ function TemplateImageUploader(props: ImageUploaderProps) {
         }}
         onDragLeave={() => props.onSetDragging(null)}
         onDrop={(event) => void props.onDrop(props.field, event)}
-        disabled={props.uploading}
+        aria-busy={props.uploading}
       >
         {props.imagePath ? (
           <div className="template-preview-image-card">
@@ -130,17 +133,25 @@ function TemplateImageUploader(props: ImageUploaderProps) {
 export type PromptTemplatesPageProps = {
   templates: PromptTemplateRecord[];
   error: string;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<void>;
   onSetError: (error: string) => void;
 };
 
-export default function PromptTemplatesPage({ templates, error, onRefresh, onSetError }: PromptTemplatesPageProps) {
-  const [selectedId, setSelectedId] = useState<number | null>(templates[0]?.id ?? null);
-  const [draft, setDraft] = useState<PromptTemplateDraft>(defaultDraft);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [uploadingField, setUploadingField] = useState<UploadField | null>(null);
-  const [draggingField, setDraggingField] = useState<UploadField | null>(null);
+export default function PromptTemplatesPage({ templates, error, onRefresh }: PromptTemplatesPageProps) {
+  const editor = useContentEditor<PromptTemplateDraft, PromptTemplateRecord>(templates, (row) => row ? {
+    media_type: row.media_type ?? "image", category: row.category || "", subcategory: row.subcategory || "",
+    is_featured: row.is_featured, label: row.label, title: row.title, prompt: row.prompt, style: row.style,
+    aspect_ratio: row.aspect_ratio, resolution: row.resolution, deliverable: row.deliverable, notes: row.notes,
+    source_image_path: row.source_image_path || "", preview_image_path: row.preview_image_path || "",
+  } : defaultDraft, onRefresh, "模板");
+  const { selectedId, draft, saving, deleting } = editor;
+  const uploads = useContentUploads<UploadField>({ fields: ["source_image_path", "preview_image_path"],
+    labels: { source_image_path: "原图", preview_image_path: "最终图" }, sourceLabel: draft.label || "未命名模板",
+    capture: editor.captureField, isCurrent: editor.isCurrentEditor, readError: "模板展示图读取失败", uploadError: "上传模板展示图失败" });
+  const uploadingField = uploads.hasPending();
+  const [dragTarget, setDragTarget] = useState<{ owner: object; field: UploadField | null } | null>(null);
+  const draggingField = dragTarget?.owner === editor.model ? dragTarget.field : null;
+  function setDraggingField(field: UploadField | null) { setDragTarget({ owner: editor.model, field }); }
   const [listSearch, setListSearch] = useState("");
   const [mediaFilter, setMediaFilter] = useState("all");
   const [activeCategory, setActiveCategory] = useState("all");
@@ -149,7 +160,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
   const sourceInputRef = useRef<HTMLInputElement | null>(null);
   const resultInputRef = useRef<HTMLInputElement | null>(null);
 
-  const selectedTemplate = templates.find((item) => item.id === selectedId) ?? null;
+  const selectedTemplate = editor.model.record;
   const featuredCount = useMemo(() => templates.filter((item) => item.is_featured).length, [templates]);
   const withDualImagesCount = useMemo(
     () => templates.filter((item) => item.source_image_path && item.preview_image_path).length,
@@ -200,35 +211,8 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
     });
   }, [selectedTemplate]);
 
-  useEffect(() => {
-    if (!selectedTemplate) {
-      if (selectedId === null || templates.length === 0) {
-        setDraft(defaultDraft);
-      }
-      return;
-    }
-    setDraft({
-      media_type: selectedTemplate.media_type ?? "image",
-      category: selectedTemplate.category || "",
-      subcategory: selectedTemplate.subcategory || "",
-      is_featured: selectedTemplate.is_featured,
-      label: selectedTemplate.label,
-      title: selectedTemplate.title,
-      prompt: selectedTemplate.prompt,
-      style: selectedTemplate.style,
-      aspect_ratio: selectedTemplate.aspect_ratio,
-      resolution: selectedTemplate.resolution,
-      deliverable: selectedTemplate.deliverable,
-      notes: selectedTemplate.notes,
-      source_image_path: selectedTemplate.source_image_path || "",
-      preview_image_path: selectedTemplate.preview_image_path || "",
-    });
-  }, [selectedId, selectedTemplate?.id, selectedTemplate?.updated_at, templates.length]);
-
   function handleCreateNew() {
-    setSelectedId(null);
-    setDraft(defaultDraft);
-    onSetError("");
+    editor.select(null);
   }
 
   function selectCategoryFilter(category: string, subcategory = "all") {
@@ -252,113 +236,53 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
     });
   }
 
-  async function uploadTemplateImage(field: UploadField, file: File) {
-    const sizeError = validateReferenceImageSize(file);
-    if (sizeError) {
-      onSetError(sizeError);
-      return;
-    }
-
-    setUploadingField(field);
-    try {
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(new Error("模板展示图读取失败"));
-        reader.readAsDataURL(file);
-      });
-
-      const uploaded = await api.uploadReferenceImage({
-        file_name: file.name,
-        data_url: dataUrl,
-      });
-
-      setDraft((current) => ({ ...current, [field]: uploaded.storage_path }));
-      onSetError("");
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "上传模板展示图失败");
-    } finally {
-      setUploadingField(null);
-      setDraggingField(null);
-    }
-  }
-
   async function handleImageUpload(field: UploadField, event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (!file) return;
-    await uploadTemplateImage(field, file);
     event.target.value = "";
+    if (file) await uploads.start(field, file);
   }
-
   async function handleImageDrop(field: UploadField, event: DragEvent<HTMLButtonElement>) {
-    event.preventDefault();
+    event.preventDefault(); setDraggingField(null);
     const file = event.dataTransfer.files?.[0];
-    if (!file) {
-      setDraggingField(null);
-      return;
-    }
-    await uploadTemplateImage(field, file);
+    if (file) await uploads.start(field, file);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft.label.trim() || !draft.title.trim() || !draft.prompt.trim()) {
-      onSetError("请先填写模板名称、标题和完整提示词。");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const payload: PromptTemplateCreatePayload = {
-        media_type: draft.media_type ?? "image",
-        category: draft.category.trim(),
-        subcategory: draft.subcategory.trim(),
-        is_featured: draft.is_featured,
-        label: draft.label.trim(),
-        title: draft.title.trim(),
-        prompt: draft.prompt.trim(),
-        style: draft.style.trim() || "modern",
-        aspect_ratio: draft.aspect_ratio.trim() || "16:9",
-        resolution: draft.resolution.trim() || "1k",
-        deliverable: draft.deliverable.trim(),
-        notes: draft.notes.trim(),
-        source_image_path: draft.source_image_path.trim(),
-        preview_image_path: draft.preview_image_path.trim(),
-      };
-      const nextTemplate = selectedTemplate
-        ? await api.updateAdminPromptTemplate(selectedTemplate.id, payload)
-        : await api.createAdminPromptTemplate(payload);
-      setSelectedId(nextTemplate.id);
-      onSetError("");
-      onRefresh();
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "保存模板提示词失败");
-    } finally {
-      setSaving(false);
-    }
+    if (uploads.hasPending()) { editor.report("请等待当前图片上传完成，或先清空该字段。"); return; }
+    return editor.run(async (operation) => {
+      try {
+        const values = operation.values;
+        if (!values.label.trim() || !values.title.trim() || !values.prompt.trim()) {
+          editor.report("请先填写模板名称、标题和完整提示词。", operation); return;
+        }
+        const payload: PromptTemplateCreatePayload = {
+          media_type: values.media_type ?? "image",
+          category: values.category.trim(), subcategory: values.subcategory.trim(), is_featured: values.is_featured,
+          label: values.label.trim(), title: values.title.trim(), prompt: values.prompt.trim(),
+          style: values.style.trim() || "modern", aspect_ratio: values.aspect_ratio.trim() || "16:9",
+          resolution: values.resolution.trim() || "1k", deliverable: values.deliverable.trim(), notes: values.notes.trim(),
+          source_image_path: values.source_image_path.trim(), preview_image_path: values.preview_image_path.trim(),
+        };
+        const nextTemplate = operation.id !== null
+          ? await api.updateAdminPromptTemplate(operation.id, payload)
+          : await api.createAdminPromptTemplate(payload);
+        editor.saved(operation, nextTemplate);
+        await editor.refreshAfter(operation);
+      } catch (err) { editor.report(err instanceof Error ? err.message : "保存模板提示词失败", operation); }
+    });
   }
 
   async function handleDelete() {
-    if (!selectedTemplate) {
-      onSetError("请先选择要删除的模板。");
-      return;
-    }
-    if (!confirm(`确认删除共享模板“${selectedTemplate.label}”吗？`)) {
-      return;
-    }
-
-    setDeleting(true);
-    try {
-      await api.deleteAdminPromptTemplate(selectedTemplate.id);
-      setSelectedId(null);
-      setDraft(defaultDraft);
-      onSetError("");
-      onRefresh();
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "删除模板提示词失败");
-    } finally {
-      setDeleting(false);
-    }
+    if (selectedId === null || !selectedTemplate) { editor.report("请先选择要删除的模板。"); return; }
+    if (!confirm(`确认删除共享模板“${selectedTemplate.label}”吗？`)) return;
+    return editor.run(async (operation) => {
+      try {
+        await api.deleteAdminPromptTemplate(operation.id!);
+        editor.deleted(operation);
+        await editor.refreshAfter(operation);
+      } catch (err) { editor.report(err instanceof Error ? err.message : "删除模板提示词失败", operation); }
+    }, "delete");
   }
 
   return (
@@ -372,7 +296,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
           <button type="button" className="ghost-button" onClick={handleCreateNew}>
             新建模板
           </button>
-          <button type="button" className="admin-primary-button" onClick={onRefresh}>
+          <button type="button" className="admin-primary-button" onClick={() => void editor.refreshList()}>
             刷新列表
           </button>
         </div>
@@ -520,8 +444,8 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
                   <button
                     key={template.id}
                     type="button"
-                    className={selectedTemplate?.id === template.id ? "template-card is-active" : "template-card"}
-                    onClick={() => setSelectedId(template.id)}
+                    className={selectedId === template.id ? "template-card is-active" : "template-card"}
+                    onClick={() => editor.select(template)}
                   >
                     <strong>{template.label}</strong>
                     <span>{template.title}</span>
@@ -546,7 +470,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
         <aside className="admin-detail-panel">
           <form className="admin-side-form" onSubmit={handleSubmit}>
             <div className="admin-detail-head">
-              <h2>{selectedTemplate ? "编辑共享模板" : "新建共享模板"}</h2>
+              <h2>{selectedId !== null ? "编辑共享模板" : "新建共享模板"}</h2>
               <p>
                 {selectedTemplate
                   ? `创建人：${selectedTemplate.user_name}，最近更新 ${formatDate(selectedTemplate.updated_at)}，热度 ${selectedTemplate.popularity_score.toFixed(1)}`
@@ -557,7 +481,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
             <div className="template-editor">
               <label className="composer-menu-field">
                 <span>模板用途</span>
-                <select value={draft.media_type ?? "image"} onChange={(event) => setDraft(current => ({ ...current, media_type: event.target.value as "image" | "video" }))}>
+                <select value={draft.media_type ?? "image"} onChange={(event) => editor.setField("media_type", event.target.value as "image" | "video")}>
                   <option value="image">图片生成</option>
                   <option value="video">视频生成</option>
                 </select>
@@ -566,11 +490,11 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
               <div className="template-editor-row">
                 <label className="composer-menu-field">
                   <span>模板名称</span>
-                  <input value={draft.label} onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))} placeholder="例如：建筑分镜" />
+                  <input value={draft.label} onChange={(event) => editor.setField("label", event.target.value)} placeholder="例如：建筑分镜" />
                 </label>
                 <label className="composer-menu-field">
                   <span>标题</span>
-                  <input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder="例如：建筑立面分镜模板" />
+                  <input value={draft.title} onChange={(event) => editor.setField("title", event.target.value)} placeholder="例如：建筑立面分镜模板" />
                 </label>
               </div>
 
@@ -580,7 +504,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
                   <input
                     list="admin-prompt-category-options"
                     value={draft.category}
-                    onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}
+                    onChange={(event) => editor.setField("category", event.target.value)}
                     placeholder="例如：效果渲染"
                   />
                   <datalist id="admin-prompt-category-options">
@@ -594,7 +518,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
                   <input
                     list="admin-prompt-subcategory-options"
                     value={draft.subcategory}
-                    onChange={(event) => setDraft((current) => ({ ...current, subcategory: event.target.value }))}
+                    onChange={(event) => editor.setField("subcategory", event.target.value)}
                     placeholder="例如：建筑渲染"
                   />
                   <datalist id="admin-prompt-subcategory-options">
@@ -609,7 +533,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
                     <input
                       type="checkbox"
                       checked={draft.is_featured}
-                      onChange={(event) => setDraft((current) => ({ ...current, is_featured: event.target.checked }))}
+                      onChange={(event) => editor.setField("is_featured", event.target.checked)}
                     />
                     <span>加入“热度”筛选</span>
                   </label>
@@ -621,7 +545,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
                 <textarea
                   className="feedback-textarea"
                   value={draft.prompt}
-                  onChange={(event) => setDraft((current) => ({ ...current, prompt: event.target.value }))}
+                  onChange={(event) => editor.setField("prompt", event.target.value)}
                   placeholder="请输入完整模板提示词。"
                 />
               </label>
@@ -629,22 +553,22 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
               <div className="template-editor-row">
                 <label className="composer-menu-field">
                   <span>风格</span>
-                  <input value={draft.style} onChange={(event) => setDraft((current) => ({ ...current, style: event.target.value }))} placeholder="modern / editorial / minimal" />
+                  <input value={draft.style} onChange={(event) => editor.setField("style", event.target.value)} placeholder="modern / editorial / minimal" />
                 </label>
                 <label className="composer-menu-field">
                   <span>比例</span>
-                  <input disabled={draft.media_type === "video"} value={draft.aspect_ratio} onChange={(event) => setDraft((current) => ({ ...current, aspect_ratio: event.target.value }))} placeholder="16:9" />
+                  <input disabled={draft.media_type === "video"} value={draft.aspect_ratio} onChange={(event) => editor.setField("aspect_ratio", event.target.value)} placeholder="16:9" />
                 </label>
               </div>
 
               <div className="template-editor-row">
                 <label className="composer-menu-field">
                   <span>分辨率</span>
-                  <input disabled={draft.media_type === "video"} value={draft.resolution} onChange={(event) => setDraft((current) => ({ ...current, resolution: event.target.value }))} placeholder="1k" />
+                  <input disabled={draft.media_type === "video"} value={draft.resolution} onChange={(event) => editor.setField("resolution", event.target.value)} placeholder="1k" />
                 </label>
                 <label className="composer-menu-field">
                   <span>交付说明</span>
-                  <input value={draft.deliverable} onChange={(event) => setDraft((current) => ({ ...current, deliverable: event.target.value }))} placeholder="例如：汇报图 / 分镜图 / 景观专用" />
+                  <input value={draft.deliverable} onChange={(event) => editor.setField("deliverable", event.target.value)} placeholder="例如：汇报图 / 分镜图 / 景观专用" />
                 </label>
               </div>
 
@@ -653,7 +577,7 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
                 <textarea
                   className="feedback-textarea"
                   value={draft.notes}
-                  onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
+                  onChange={(event) => editor.setField("notes", event.target.value)}
                   placeholder="说明这个模板适合什么场景，哪些内容必须保留。"
                 />
               </label>
@@ -675,12 +599,13 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
                     imagePath={draft.source_image_path}
                     inputRef={sourceInputRef}
                     onChange={(event) => void handleImageUpload("source_image_path", event)}
-                    onClear={() => setDraft((current) => ({ ...current, source_image_path: "" }))}
+                    onClear={() => uploads.clear("source_image_path")}
                     onDrop={handleImageDrop}
                     onPick={() => sourceInputRef.current?.click()}
                     onSetDragging={(field) => setDraggingField(field)}
                     title="原图"
-                    uploading={uploadingField !== null}
+                    clearable={uploads.hasSelection("source_image_path")}
+                    uploading={uploads.isBusy("source_image_path")}
                   />
                   <TemplateImageUploader
                     altLabel={`${draft.label || "模板"} 最终图`}
@@ -690,25 +615,39 @@ export default function PromptTemplatesPage({ templates, error, onRefresh, onSet
                     imagePath={draft.preview_image_path}
                     inputRef={resultInputRef}
                     onChange={(event) => void handleImageUpload("preview_image_path", event)}
-                    onClear={() => setDraft((current) => ({ ...current, preview_image_path: "" }))}
+                    onClear={() => uploads.clear("preview_image_path")}
                     onDrop={handleImageDrop}
                     onPick={() => resultInputRef.current?.click()}
                     onSetDragging={(field) => setDraggingField(field)}
                     title="最终图"
-                    uploading={uploadingField !== null}
+                    clearable={uploads.hasSelection("preview_image_path")}
+                    uploading={uploads.isBusy("preview_image_path")}
                   />
                 </div>
               </div>
             </div>
 
             {error ? <div className="floating-error">{error}</div> : null}
+            {uploads.errors.map(item => <div key={item.field} className="floating-error">{item.message}</div>)}
+            {uploads.available.map(item => <div key={item.id} className="content-upload-recovery" role="status">
+              <p>{`已上传，尚未应用：${item.sourceLabel} · ${item.fieldLabel} · ${item.fileName}`}</p>
+              <button type="button" disabled={!item.canRecover()} onClick={() => uploads.recover(item.id)}>恢复这张图片</button>
+              <small>仅可恢复到原条目或原新建草稿。</small>
+            </div>)}
+            {editor.error ? <div className="floating-error">{editor.error}</div> : null}
+            {editor.model.notice ? <div className="floating-notice" role="status">{editor.model.notice}</div> : null}
+            {editor.model.missing ? <p role="status">原模板已从列表中移除，当前草稿已保留，请核对后新建。</p> : null}
+            {editor.model.conflicts.size ? <div role="status">
+              <p>服务器同字段已更新，当前草稿已保留。加载服务器版本会替换当前草稿。</p>
+              <button type="button" onClick={editor.loadRemote}>加载服务器版本</button>
+            </div> : null}
 
             <div className="template-editor-actions">
-              <button type="submit" className="submit-button" disabled={saving || uploadingField !== null}>
+              <button type="submit" className="submit-button" disabled={editor.busy || editor.model.missing || editor.model.unconfirmed || uploadingField}>
                 {saving ? "保存中..." : selectedTemplate ? "保存修改" : "创建模板"}
               </button>
               {selectedTemplate ? (
-                <button type="button" className="ghost-button" disabled={deleting} onClick={() => void handleDelete()}>
+                <button type="button" className="ghost-button" disabled={editor.busy || editor.model.missing || editor.model.unconfirmed} onClick={() => void handleDelete()}>
                   {deleting ? "删除中..." : "删除模板"}
                 </button>
               ) : null}

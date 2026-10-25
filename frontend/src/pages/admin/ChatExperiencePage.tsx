@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useWindowQuery } from "./useWindowQuery";
 
 import {
   api,
@@ -28,7 +29,8 @@ const CLIENT_EVENT_LABELS: Record<string, string> = {
   "chat.attachment.upload.error": "附件上传失败",
 };
 
-function formatPercent(value: number): string {
+function formatPercent(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
   return `${(value * 100).toFixed(1)}%`;
 }
 
@@ -59,8 +61,8 @@ function formatBytes(value: number): string {
   return `${value} B`;
 }
 
-function formatDuration(ms: number): string {
-  if (ms <= 0) return "—";
+function formatDuration(ms: number | null | undefined, allowZero = false): string {
+  if (ms == null || !Number.isFinite(ms) || ms < 0 || (ms === 0 && !allowZero)) return "—";
   if (ms >= 1000) {
     return `${(ms / 1000).toFixed(1)}s`;
   }
@@ -72,65 +74,32 @@ function userLabel(row: ChatExperienceTurnRow): string {
 }
 
 export default function ChatExperiencePage() {
-  const [days, setDays] = useState(30);
-  const [overview, setOverview] = useState<ChatExperienceOverview | null>(null);
-  const [turns, setTurns] = useState<ChatExperienceTurnRow[]>([]);
-  const [turnTotal, setTurnTotal] = useState(0);
-  const [alerts, setAlerts] = useState<ChatTelemetryAlertRecord[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [evaluatingAlerts, setEvaluatingAlerts] = useState(false);
-  const [alertMessage, setAlertMessage] = useState("");
-  const [error, setError] = useState("");
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const [nextOverview, nextTurns, nextAlerts] = await Promise.all([
+  const query = useWindowQuery(() => 30,
+    { overview: null as ChatExperienceOverview | null, turns: [] as ChatExperienceTurnRow[], turnTotal: 0, alerts: [] as ChatTelemetryAlertRecord[] },
+    async (days) => {
+      const [overview, turns, alerts] = await Promise.all([
         api.chatExperienceOverview(days),
         api.chatExperienceTurns(days, 50, 0),
         api.chatExperienceAlerts("open", 20),
       ]);
-      setOverview(nextOverview);
-      setTurns(nextTurns.items);
-      setTurnTotal(nextTurns.total);
-      setAlerts(nextAlerts.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "加载 Chat 体验分析失败");
-      setOverview(null);
-      setTurns([]);
-      setTurnTotal(0);
-      setAlerts([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [days]);
+      return { overview, turns: turns.items, turnTotal: turns.total, alerts: alerts.items };
+    }, "加载 Chat 体验分析失败");
+  const { params: days, setParams: setDays, loading, error, refresh } = query;
+  const { overview, turns, turnTotal, alerts } = query.data;
+  const dataDays = query.snapshot?.params ?? days;
+  const evaluatingAlerts = query.isActionBusy("evaluate");
+  const alertMessage = query.actionMessage;
 
-  async function runAlertEvaluation() {
-    setEvaluatingAlerts(true);
-    setAlertMessage("");
-    setError("");
-    try {
+  function runAlertEvaluation() {
+    return query.runAction("evaluate", async () => {
       const result = await api.chatExperienceEvaluateAlerts();
-      const summary = [
+      return [
         result.created ? `新建 ${result.created}` : "",
         result.updated ? `更新 ${result.updated}` : "",
         result.resolved ? `恢复 ${result.resolved}` : "",
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      setAlertMessage(summary || "未发现新的告警");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "告警评估失败");
-    } finally {
-      setEvaluatingAlerts(false);
-    }
+      ].filter(Boolean).join(" · ") || "未发现新的告警";
+    });
   }
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
 
   const outcomeEntries = useMemo(() => {
     if (!overview) return [];
@@ -183,7 +152,12 @@ export default function ChatExperiencePage() {
         </div>
       </header>
 
+      <p className="ops-query-source" role="status">
+        {query.snapshot ? `数据窗口：${dataDays} 天。` : "尚无已加载数据。"}
+        {loading ? `正在加载 ${days} 天窗口。` : dataDays !== days ? `所选 ${days} 天窗口未更新成功。` : ""}
+      </p>
       {error ? <div className="floating-error">{error}</div> : null}
+      {query.actionError ? <div className="floating-error">{`操作失败：${query.actionError}`}</div> : null}
       {alertMessage ? <div className="floating-notice success">{alertMessage}</div> : null}
 
       {alerts.length > 0 ? (
@@ -233,7 +207,7 @@ export default function ChatExperiencePage() {
                 <span>上游调用率</span>
                 <strong>{formatPercent(overview.upstream_call_rate)}</strong>
               </div>
-              <p>真正调用模型 API 的请求比例</p>
+              <p>已知轮次中的模型调用尝试比例；已知 {formatCount(overview.upstream_known_turn_count)}，未知 {formatCount(overview.upstream_unknown_turn_count)}</p>
             </article>
             <article className="ops-kpi-card ops-kpi-orange">
               <div>
@@ -245,9 +219,16 @@ export default function ChatExperiencePage() {
             <article className="ops-kpi-card ops-kpi-blue">
               <div>
                 <span>TTFT P95</span>
-                <strong>{formatDuration(overview.p95_ttft_ms)}</strong>
+                <strong>{formatDuration(overview.p95_ttft_ms, true)}</strong>
               </div>
-              <p>首字延迟 95 分位</p>
+              <p>首字延迟 95 分位；{formatCount(overview.ttft_sample_count)} 个已测样本，非流式 Agent 不可测</p>
+            </article>
+            <article className="ops-kpi-card ops-kpi-purple">
+              <div>
+                <span>模型首响应 P95</span>
+                <strong>{formatDuration(overview.p95_first_response_ms, true)}</strong>
+              </div>
+              <p>非流式完整响应；{formatCount(overview.first_response_sample_count)} 个已测样本</p>
             </article>
             <article className="ops-kpi-card ops-kpi-green">
               <div>
@@ -320,7 +301,7 @@ export default function ChatExperiencePage() {
                 <span title={row.provider_name}>{row.model_name || "—"}</span>
                 <span>{OUTCOME_LABELS[row.outcome] || row.outcome}</span>
                 <span>{formatDuration(row.pack_duration_ms)}</span>
-                <span>{row.upstream_called ? "是" : "否"}</span>
+                <span title={row.model_call_count == null ? "请求次数未采集" : `${row.model_call_count_complete ? "共" : "已观测"} ${row.model_call_count} 次模型请求`}>{row.upstream_called == null ? "未知" : row.upstream_called ? "是" : "否"}</span>
                 <span>
                   {row.attachment_count > 0
                     ? `${row.attachment_count} · ${formatBytes(row.attachment_total_bytes)}`

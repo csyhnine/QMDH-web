@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useAuth } from "../../context/AuthContext";
+import { useWindowQuery } from "./useWindowQuery";
 
 import { api, type UsageLogPage, type UsageLogRecord } from "../../api";
 
@@ -127,22 +129,32 @@ function formatWindowCost(rows: UsageLogPage["window_cost_by_currency"]): string
     .join(" + ");
 }
 
-export default function UsageLogsPage() {
-  const [filters, setFilters] = useState<FilterDraft>(defaultFilters);
-  const [appliedFilters, setAppliedFilters] = useState<FilterDraft>(defaultFilters);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
-  const [data, setData] = useState<UsageLogPage | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [reloadKey, setReloadKey] = useState(0);
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+function describeFilters(filters: FilterDraft): string {
+  const types: Record<string, string> = { "provider_call.recorded": "Provider 调用", "chat.message.completed": "对话消息", "task.finalized": "任务汇总" };
+  return [
+    `${filters.startAt || "不限"} 至 ${filters.endAt || "不限"}`,
+    filters.userName.trim() ? `用户：${filters.userName.trim()}` : "",
+    filters.groupName.trim() ? `分组：${filters.groupName.trim()}` : "",
+    filters.modelName.trim() ? `模型：${filters.modelName.trim()}` : "",
+    filters.providerName.trim() ? `Provider：${filters.providerName.trim()}` : "",
+    filters.capability ? `能力：${capabilityLabel(filters.capability)}` : "",
+    filters.entryType !== "all" ? `类型：${types[filters.entryType] || filters.entryType}` : "",
+    filters.status !== "all" ? `状态：${filters.status === "success" ? "成功" : "失败"}` : "",
+    filters.includeTaskSummary ? "含任务汇总" : "不含任务汇总",
+  ].filter(Boolean).join(" · ");
+}
 
-  const loadLogs = useCallback(async (nextPage: number, nextFilters: FilterDraft, nextPageSize: number) => {
-    setLoading(true);
-    setError("");
-    try {
-      const response = await api.usageLogs({
+export default function UsageLogsPage() {
+  const { currentUser, isGuest } = useAuth();
+  return <UsageLogsContent key={JSON.stringify([currentUser?.id, currentUser?.name, isGuest])} />;
+}
+
+function UsageLogsContent() {
+  const [filters, setFilters] = useState<FilterDraft>(defaultFilters);
+  const revision = useRef(0);
+  const query = useWindowQuery(() => ({ appliedFilters: filters, page: 1, pageSize: 20, revision: 0 }),
+    null as UsageLogPage | null, async ({ page: nextPage, appliedFilters: nextFilters, pageSize: nextPageSize }) => {
+      return api.usageLogs({
         page: nextPage,
         page_size: nextPageSize,
         start_at: toIsoParam(nextFilters.startAt),
@@ -156,51 +168,52 @@ export default function UsageLogsPage() {
         status: nextFilters.status !== "all" ? nextFilters.status : undefined,
         include_task_summary: nextFilters.includeTaskSummary,
       });
-      setData(response);
-      setLastRefreshedAt(new Date());
-      if (response.page !== nextPage) {
-        setPage(response.page);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "加载使用日志失败");
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadLogs(page, appliedFilters, pageSize);
-  }, [appliedFilters, loadLogs, page, pageSize, reloadKey]);
-
-  function handleRefresh() {
-    const nowEnd = defaultEndAt();
-    setFilters((current) => ({ ...current, endAt: nowEnd }));
-    setAppliedFilters((current) => ({ ...current, endAt: nowEnd }));
-    setReloadKey((current) => current + 1);
-  }
-
+    }, "加载使用日志失败");
+  const { appliedFilters, page, pageSize } = query.params;
+  const { loading, error, data } = query;
+  const source = query.snapshot;
+  const shownFilters = source?.params.appliedFilters ?? appliedFilters;
+  const shownPageSize = data?.page_size ?? source?.params.pageSize ?? pageSize;
+  const lastRefreshedAt = source ? new Date(source.updatedAt) : null;
+  const isCurrentResult = Boolean(data && source?.params.revision === query.params.revision);
   const totalPages = data?.total_pages ?? 1;
   const safePage = data?.page ?? page;
+
+  function updateQuery(change: (current: typeof query.params) => typeof query.params) {
+    const nextRevision = ++revision.current;
+    query.setParams(current => {
+      // A server clamp is data; normalize it only for a later explicit user query.
+      const base = source?.params.revision === current.revision && source.data
+        ? { ...current, page: source.data.page } : current;
+      return { ...change(base), revision: nextRevision };
+    });
+  }
+  function handleRefresh() {
+    const nowEnd = defaultEndAt();
+    setFilters(current => ({ ...current, endAt: nowEnd }));
+    updateQuery(current => ({ ...current, appliedFilters: { ...current.appliedFilters, endAt: nowEnd } }));
+  }
+  function changePage(nextPage: number) {
+    if (loading || !isCurrentResult || revision.current !== query.params.revision) return;
+    updateQuery(current => ({ ...current, page: nextPage }));
+  }
 
   const pageSummary = useMemo(() => {
     const total = data?.total ?? 0;
     if (total === 0) return "共 0 条记录";
-    const start = (safePage - 1) * pageSize + 1;
-    const end = Math.min(safePage * pageSize, total);
+    const start = (safePage - 1) * shownPageSize + 1;
+    const end = Math.min(safePage * shownPageSize, total);
     return `共 ${total} 条记录，当前显示 ${start}-${end}`;
-  }, [data?.total, pageSize, safePage]);
+  }, [data?.total, shownPageSize, safePage]);
 
   function applyFilters() {
-    setPage(1);
-    setAppliedFilters(filters);
+    updateQuery(current => ({ ...current, page: 1, appliedFilters: filters }));
   }
 
   function resetFilters() {
     const next = defaultFilters();
     setFilters(next);
-    setAppliedFilters(next);
-    setPage(1);
+    updateQuery(current => ({ ...current, page: 1, appliedFilters: next }));
   }
 
   return (
@@ -219,6 +232,13 @@ export default function UsageLogsPage() {
           </button>
         </div>
       </header>
+      <p className="usage-log-query-source" role="status">
+        {source && data
+          ? `数据来源：${describeFilters(source.params.appliedFilters)} · 第 ${data.page} 页 · 每页 ${shownPageSize} 条。`
+          : "尚无已加载数据。"}
+        {loading ? `正在查询：${describeFilters(appliedFilters)} · 第 ${page} 页 · 每页 ${pageSize} 条。` : ""}
+        {error && source ? "所选查询未更新成功，当前保留上次成功结果。" : ""}
+      </p>
 
       <div className="admin-kpi-grid admin-kpi-grid-4">
         <article className="admin-kpi-card admin-blue">
@@ -238,13 +258,13 @@ export default function UsageLogsPage() {
           <strong>
             {safePage} / {Math.max(totalPages, 1)}
           </strong>
-          <small>每页 {pageSize} 条</small>
+          <small>每页 {shownPageSize} 条</small>
           <i>●</i>
         </article>
         <article className="admin-kpi-card admin-gray">
           <span>时间范围</span>
-          <strong>{appliedFilters.startAt.slice(0, 10)}</strong>
-          <small>至 {appliedFilters.endAt.slice(0, 10)}</small>
+          <strong>{shownFilters.startAt.slice(0, 10) || "不限"}</strong>
+          <small>至 {shownFilters.endAt.slice(0, 10) || "不限"}</small>
           <i>●</i>
         </article>
       </div>
@@ -356,8 +376,8 @@ export default function UsageLogsPage() {
             <select
               value={pageSize}
               onChange={(event) => {
-                setPageSize(Number(event.target.value));
-                setPage(1);
+                const nextPageSize = Number(event.target.value);
+                updateQuery(current => ({ ...current, pageSize: nextPageSize, page: 1 }));
               }}
             >
               {PAGE_SIZE_OPTIONS.map((size) => (
@@ -417,12 +437,12 @@ export default function UsageLogsPage() {
             </div>
           ))}
           {!loading && (data?.items.length ?? 0) === 0 ? (
-            <div className="admin-table-empty">当前筛选条件下没有使用记录。</div>
+            <div className="admin-table-empty">{data ? "已加载范围内没有使用记录。" : "尚未加载使用记录。"}</div>
           ) : null}
         </div>
 
         <div className="admin-pagination">
-          <button type="button" disabled={safePage <= 1 || loading} onClick={() => setPage((current) => current - 1)}>
+          <button type="button" disabled={safePage <= 1 || loading || !isCurrentResult} onClick={() => changePage(safePage - 1)}>
             上一页
           </button>
           <span>
@@ -430,8 +450,8 @@ export default function UsageLogsPage() {
           </span>
           <button
             type="button"
-            disabled={safePage >= totalPages || loading}
-            onClick={() => setPage((current) => current + 1)}
+            disabled={safePage >= totalPages || loading || !isCurrentResult}
+            onClick={() => changePage(safePage + 1)}
           >
             下一页
           </button>

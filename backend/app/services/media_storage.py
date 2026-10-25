@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
+from hashlib import sha256
+from tempfile import NamedTemporaryFile
 from base64 import b64decode
 from html import escape
 from mimetypes import guess_type
@@ -19,6 +22,9 @@ if TYPE_CHECKING:
 
 class StorageBackend(Protocol):
     def write(self, relative_path: str, data: bytes, *, overwrite: bool = True) -> str:
+        ...
+
+    def create(self, relative_path: str, data: bytes) -> str:
         ...
 
     def read(self, relative_path: str) -> bytes:
@@ -127,6 +133,33 @@ def coerce_relative_media_path(path: str) -> str:
     return _normalize_relative_path(normalized)
 
 
+class StorageConflictError(OSError):
+    def __init__(self, path: str, local: bytes, remote: bytes) -> None:
+        self.local_sha256 = sha256(local).hexdigest()
+        self.remote_sha256 = sha256(remote).hexdigest()
+        super().__init__(f"Media copies differ for {path}: local_sha256={self.local_sha256}, remote_sha256={self.remote_sha256}")
+
+
+def _publish_local_without_overwrite(target: Path, data: bytes) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        # Publish only a completed file. Hardlink creation is exclusive; unlike
+        # rename/replace it cannot replace an existing destination on either OS.
+        with NamedTemporaryFile(dir=target.parent, prefix=".qmdh-write-", delete=False) as stream:
+            temporary = Path(stream.name)
+            if stream.write(data) != len(data):
+                raise OSError("Incomplete non-overwrite media write")
+        try:
+            os.link(temporary, target)
+        except FileExistsError:
+            if not target.is_file():
+                raise
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
 class LocalStorage:
     def __init__(self, root: str, url_prefix: str) -> None:
         self._root = root
@@ -149,10 +182,31 @@ class LocalStorage:
 
     def write(self, relative_path: str, data: bytes, *, overwrite: bool = True) -> str:
         normalized = _normalize_relative_path(relative_path)
+        if not overwrite:
+            try:
+                target = self._resolved_file(normalized)
+            except ValueError:
+                target = self._resolved_file(normalized)
+            _publish_local_without_overwrite(target, data)
+            return normalized
         target = self._resolved_file(normalized)
         target.parent.mkdir(parents=True, exist_ok=True)
         if overwrite or not target.exists():
             target.write_bytes(data)
+        return normalized
+
+    def create(self, relative_path: str, data: bytes) -> str:
+        normalized = _normalize_relative_path(relative_path)
+        try:
+            target = self._resolved_file(normalized)
+        except ValueError:
+            # Windows can transiently return an extended path prefix while a
+            # peer creates the target. Revalidate; never bypass the root guard.
+            target = self._resolved_file(normalized)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("xb") as stream:
+            if stream.write(data) != len(data):
+                raise OSError("Incomplete new media write")
         return normalized
 
     def read(self, relative_path: str) -> bytes:
@@ -258,6 +312,12 @@ class OSSStorage:
         return _content_type_for_path(relative_path, data)
 
     def write(self, relative_path: str, data: bytes, *, overwrite: bool = True) -> str:
+        if not overwrite:
+            normalized = _normalize_relative_path(relative_path)
+            try:
+                return self.create(normalized, data)
+            except FileExistsError:
+                return normalized
         del overwrite  # OSS objects are overwritten by key; callers retain a uniform interface.
         normalized = _normalize_relative_path(relative_path)
         bucket = self._get_bucket()
@@ -274,6 +334,23 @@ class OSSStorage:
                 self._sleep(backoffs[attempt])
 
         raise RuntimeError(f"OSS upload failed for {normalized}")
+
+    def create(self, relative_path: str, data: bytes) -> str:
+        normalized = _normalize_relative_path(relative_path)
+        try:
+            bucket = self._get_bucket()
+            versioning = bucket.get_bucket_versioning()
+            if not hasattr(versioning, "status") or versioning.status not in (None, ""):
+                raise OSError("Exclusive OSS creation requires a non-versioned bucket")
+            bucket.put_object(normalized, data, headers={
+                "Content-Type": self._content_type_for(normalized, data),
+                "x-oss-forbid-overwrite": "true",
+            })
+        except Exception as exc:
+            if getattr(exc, "status", None) == 409 and getattr(exc, "code", None) == "FileAlreadyExists":
+                raise FileExistsError(normalized) from exc
+            raise OSError(f"OSS exclusive creation failed for {normalized}") from exc
+        return normalized
 
     def read(self, relative_path: str) -> bytes:
         normalized = _normalize_relative_path(relative_path)
@@ -363,13 +440,45 @@ def resolve_storage_payload(payload: Any) -> Any:
 
 def _mirror_to_oss(relative_path: str, content: bytes, *, overwrite: bool) -> None:
     try:
+        if not overwrite:
+            _write_binary_asset_without_overwrite(relative_path, content)
+            return
         get_storage_backend().write(relative_path, content, overwrite=overwrite)
     except Exception:
         logger.exception("Background OSS mirror failed for %s", relative_path)
 
 
+def _write_binary_asset_without_overwrite(relative_path: str, content: bytes) -> str:
+    normalized = _normalize_relative_path(relative_path)
+    local = get_local_storage()
+    if not _oss_enabled():
+        return local.write(normalized, content, overwrite=False)
+    try:
+        retained = local.read(normalized)
+    except FileNotFoundError:
+        retained = None
+    remote = get_storage_backend()
+    try:
+        try:
+            canonical = remote.read(normalized)
+        except FileNotFoundError:
+            remote.write(normalized, retained if retained is not None else content, overwrite=False)
+            canonical = remote.read(normalized)
+    except Exception as exc:
+        raise OSError(f"Cannot confirm non-overwrite OSS object {normalized}") from exc
+    if retained is not None and retained != canonical:
+        raise StorageConflictError(normalized, retained, canonical)
+    local.write(normalized, canonical, overwrite=False)
+    published = local.read(normalized)
+    if published != canonical:
+        raise StorageConflictError(normalized, published, canonical)
+    return normalized
+
+
 def write_binary_asset(relative_path: str, content: bytes, *, overwrite: bool = True) -> str:
-    """Write local first (fast API/UI). When OSS is on, mirror asynchronously."""
+    """Default writes mirror asynchronously; False synchronously preserves existing copies."""
+    if not overwrite:
+        return _write_binary_asset_without_overwrite(relative_path, content)
     normalized = get_local_storage().write(relative_path, content, overwrite=overwrite)
     if _oss_enabled():
         threading.Thread(
@@ -382,15 +491,27 @@ def write_binary_asset(relative_path: str, content: bytes, *, overwrite: bool = 
     return normalized
 
 
+def create_binary_asset(relative_path: str, content: bytes) -> str:
+    """Create a new identity; never publish local bytes over an existing remote key."""
+    normalized = _normalize_relative_path(relative_path)
+    local = get_local_storage()
+    if _oss_enabled():
+        if local.exists(normalized):
+            raise FileExistsError(normalized)
+        get_storage_backend().create(normalized, content)
+    return local.create(normalized, content)
+
+
 def write_uploaded_asset(relative_path: str, content: bytes, *, compression_info: dict | None = None,
-                         gif_options: GifOptions | None = None) -> str:
+                         gif_options: GifOptions | None = None, create_new: bool = False) -> str:
     """Keep the original upload; use a smaller GIF derivative when available."""
     from app.services.gif_compression import compress_gif, is_gif
 
     gif = is_gif(content)
     if gif:
         relative_path = str(Path(relative_path).with_suffix(".gif"))
-    original = write_binary_asset(relative_path, content)
+    writer = create_binary_asset if create_new else write_binary_asset
+    original = writer(relative_path, content)
     if not gif:
         return original
     def report(path: str, output_bytes: int) -> str:
@@ -407,7 +528,7 @@ def write_uploaded_asset(relative_path: str, content: bytes, *, compression_info
         return report(original, len(content))
     derivative = str(Path(original).with_suffix(".compressed.gif"))
     try:
-        return report(write_binary_asset(derivative, optimized), len(optimized))
+        return report(writer(derivative, optimized), len(optimized))
     except OSError:
         logger.warning("GIF derivative storage failed; using original upload")
         return report(original, len(content))
@@ -442,7 +563,7 @@ def ensure_public_object_url(path: str) -> str:
     if _oss_enabled():
         oss = get_storage_backend()
         if not oss.exists(relative):
-            oss.write(relative, read_binary_asset(relative), overwrite=True)
+            _write_binary_asset_without_overwrite(relative, read_binary_asset(relative))
 
     public_base = settings.public_media_base_url.strip().rstrip("/")
     media_prefix = settings.media_url_prefix.rstrip("/")

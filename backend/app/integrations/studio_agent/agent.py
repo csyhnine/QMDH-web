@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import uuid
 from typing import Any, Callable
 
 from sqlalchemy import select
@@ -178,14 +179,14 @@ def _resolve_provider(db: Session, provider_id: int | None) -> ProviderProfile:
         if provider and provider.enabled and "chat.completions" in (provider.capabilities or []):
             return provider
 
-    provider = db.scalars(
+    for provider in db.scalars(
         select(ProviderProfile)
         .where(ProviderProfile.enabled == True)  # noqa: E712
         .order_by(ProviderProfile.id.asc())
-    ).first()
-    if provider is None or "chat.completions" not in (provider.capabilities or []):
-        raise StudioAgentUnavailableError("No enabled chat provider is available for Studio agent.")
-    return provider
+    ):
+        if "chat.completions" in (provider.capabilities or []):
+            return provider
+    raise StudioAgentUnavailableError("No enabled chat provider is available for Studio agent.")
 
 
 def _provider_api_key(profile: ProviderProfile) -> str:
@@ -277,6 +278,7 @@ def _register_chat_tools(
     thinking_callback: Callable[[ChatAgentThinkingStep], None] | None = None,
 ) -> None:
     allowed = set(allowlist)
+    submission_namespace = uuid.uuid4().hex
 
     if "search_inspiration_posts" in allowed:
 
@@ -396,7 +398,9 @@ def _register_chat_tools(
                     title=title,
                     project_code=project_code,
                 )
-                return auto_submit_chat_agent_proposal(ctx.deps, proposal)
+                call_id = getattr(ctx, "tool_call_id", None)
+                identity = f"{submission_namespace}:create_image_generate_task:{call_id}" if call_id else None
+                return auto_submit_chat_agent_proposal(ctx.deps, proposal, submission_identity=identity)
 
             wrapped = _wrap_tool(_run, "create_image_generate_task", recorder, proposal_recorder, thinking_callback)
             return wrapped()
@@ -443,7 +447,9 @@ def _register_chat_tools(
                     title=title,
                     project_code=project_code,
                 )
-                return auto_submit_chat_agent_proposal(ctx.deps, proposal)
+                call_id = getattr(ctx, "tool_call_id", None)
+                identity = f"{submission_namespace}:create_image_edit_task:{call_id}" if call_id else None
+                return auto_submit_chat_agent_proposal(ctx.deps, proposal, submission_identity=identity)
 
             wrapped = _wrap_tool(_run, "create_image_edit_task", recorder, proposal_recorder, thinking_callback)
             return wrapped()
@@ -485,7 +491,9 @@ def _register_chat_tools(
                     title=title,
                     project_code=project_code,
                 )
-                return auto_submit_chat_agent_proposal(ctx.deps, proposal)
+                call_id = getattr(ctx, "tool_call_id", None)
+                identity = f"{submission_namespace}:create_video_generate_task:{call_id}" if call_id else None
+                return auto_submit_chat_agent_proposal(ctx.deps, proposal, submission_identity=identity)
 
             wrapped = _wrap_tool(_run, "create_video_generate_task", recorder, proposal_recorder, thinking_callback)
             return wrapped()
@@ -570,6 +578,7 @@ def run_studio_agent(
     thinking_callback: Callable[[ChatAgentThinkingStep], None] | None = None,
     memory_context: str = "",
     allowlist_override: tuple[str, ...] | None = None,
+    model_observation=None,
 ) -> StudioAgentReply:
     if not _PYDANTIC_AI_AVAILABLE:
         raise StudioAgentUnavailableError("pydantic-ai is not installed.")
@@ -591,6 +600,9 @@ def run_studio_agent(
         provider.model_name,
         provider=OpenAIProvider(base_url=provider.base_url.rstrip("/"), api_key=api_key),
     )
+    if model_observation is not None:
+        from app.services.chat_model_observation import observe_model
+        model = observe_model(model, model_observation)
     model_settings = ModelSettings(max_tokens=STUDIO_AGENT_MAX_TOKENS)
     agent = Agent(
         model,

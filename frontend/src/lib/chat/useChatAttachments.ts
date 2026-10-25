@@ -1,4 +1,4 @@
-import { type ChangeEvent, type DragEvent, useRef, useState } from "react";
+import { type ChangeEvent, type DragEvent, useEffect, useRef, useState } from "react";
 
 import {
   CHAT_FILE_ACCEPT,
@@ -23,7 +23,24 @@ export function useChatAttachments(options: UseChatAttachmentsOptions = {}) {
   const conversationId = options.conversationId ?? null;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragDepthRef = useRef(0);
-  const [attachments, setAttachments] = useState<ChatPendingAttachment[]>([]);
+  const [attachments, setAttachmentState] = useState<ChatPendingAttachment[]>([]);
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
+  const mounted = useRef(true);
+  function setAttachments(update: ChatPendingAttachment[] | ((current: ChatPendingAttachment[]) => ChatPendingAttachment[])) {
+    if (!mounted.current) return;
+    const next = typeof update === "function" ? update(attachmentsRef.current) : update;
+    attachmentsRef.current = next;
+    setAttachmentState(next);
+  }
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      releaseChatAttachmentPreviews(attachmentsRef.current);
+      attachmentsRef.current = [];
+    };
+  }, []);
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState("");
@@ -36,7 +53,7 @@ export function useChatAttachments(options: UseChatAttachmentsOptions = {}) {
   }
 
   async function addFiles(files: File[]) {
-    if (files.length === 0) {
+    if (!mounted.current || files.length === 0) {
       return;
     }
 
@@ -72,6 +89,7 @@ export function useChatAttachments(options: UseChatAttachmentsOptions = {}) {
     setError("");
     setAttachments((current) => [...current, ...pendingItems]);
     await yieldToBrowserPaint();
+    if (!mounted.current) return;
 
     const failures: string[] = [];
     try {
@@ -125,13 +143,13 @@ export function useChatAttachments(options: UseChatAttachmentsOptions = {}) {
         }),
       );
 
-      if (failures.length > 0) {
+      if (mounted.current && failures.length > 0) {
         const anyReady = results.some((item) => item.ok);
         setError(anyReady ? `部分附件上传失败：${failures[0]}` : failures[0]);
       }
     } finally {
-      setUploading(false);
-      if (fileInputRef.current) {
+      if (mounted.current) setUploading(false);
+      if (mounted.current && fileInputRef.current) {
         fileInputRef.current.value = "";
       }
     }
@@ -194,17 +212,34 @@ export function useChatAttachments(options: UseChatAttachmentsOptions = {}) {
     });
   }
 
-  function clearAttachments() {
-    releaseChatAttachmentPreviews(attachments);
-    setAttachments([]);
+  function getAttachments(): ChatPendingAttachment[] {
+    return attachmentsRef.current.map(item => ({ ...item }));
+  }
+  function takeAttachments(localIds: string[]): ChatPendingAttachment[] {
+    const selected = new Set(localIds);
+    const taken = attachmentsRef.current.filter(item => selected.has(item.localId));
+    setAttachments(current => current.filter(item => !selected.has(item.localId)));
+    return taken.map(item => ({ ...item }));
+  }
+  function restoreAttachments(items: ChatPendingAttachment[]): boolean {
+    const existing = new Set(attachmentsRef.current.map(item => item.localId));
+    const added = items.filter(item => !existing.has(item.localId));
+    if (attachmentsRef.current.length + added.length > MAX_CHAT_ATTACHMENTS) return false;
+    setAttachments(current => [...current, ...added.map(item => ({ ...item }))]);
+    return true;
+  }
+  function clearAttachments(localIds?: string[]) {
+    const selected = localIds ? new Set(localIds) : null;
+    setAttachments(current => {
+      releaseChatAttachmentPreviews(current.filter(item => !selected || selected.has(item.localId)));
+      return selected ? current.filter(item => !selected.has(item.localId)) : [];
+    });
     setError("");
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function toSendPayload(): ChatSendAttachment[] {
-    return attachments
+    return attachmentsRef.current
       .filter((item) => item.status === "ready" && item.storagePath)
       .map((item) => ({
         storage_path: item.storagePath,
@@ -231,6 +266,9 @@ export function useChatAttachments(options: UseChatAttachmentsOptions = {}) {
     handleDrop,
     removeAttachment,
     clearAttachments,
+    getAttachments,
+    takeAttachments,
+    restoreAttachments,
     toSendPayload,
     canAddMore: attachments.length < MAX_CHAT_ATTACHMENTS,
   };

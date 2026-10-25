@@ -1,4 +1,19 @@
-## 2026-10-19 ComfyUI 生产闭环（当前）
+## 2026-10-26修复发布候选
+
+候选PG空库及b27构造升级到e51、受控应用启动/路由/种子边界通过；尚未生产切换，实际生产仍为下文10-19镜像及b27。见[执行记录](release-execution-2026-10-26.md)。
+
+## 2026-10-19 Qwen v1.1 运行切换（当前）
+
+- 后续种子热修qwen-v11-009已发布，当前backendf8822343/worker3cc0ece1（三副本），frontend仍d5dfe72b。只更新comfyui适配器，修复easy seed 2^50含上界的随机/显式/批量范围；任务8264被拒绝的失败记录不重跑。固定源码与镜像见/opt/qmdh-frp/releases/qwen-v1.1-seed-fix-20261019，主RELEASE.json已记录热修SHA；旧Git HEAD不能用于覆盖当前镜像。
+- 热修备份/www/backup/qmdh-qwen-v11-seed-fix-20261019 ↔ E:/backups/QMDH-web/frp-20261019/qwen-v11-seed-fix，21文件SHA一致，DB/env/5828媒体清单/0增量，恢复链接上一v1.1发布备份；回退镜像标签20261019-qwen-v11-seed-fix仅回到种子未修版本，不能作为继续使用的稳定方案。模板/前端/原容器/env/挂载/网络/迁移保持。Windows/Linux专项27+12sub、实际object_info范围/公开健康/六CAD通过，无GPU生成验证。下方首次切换镜像为此前状态。
+
+- 用户明确命令切换后，03e845d准备源码已发布：backend6d3c4d91、workerfa6f6e69（3副本）、frontendd5dfe72b；活跃map ae4127ee5d20a1239a8ac597f4ae1183b9126a8c5250d4842bafca4e3b511c94。id60显示v1.1、id62显示v1.1单图编辑/API reference_input_count=1；Z/三渠道enabled/600秒预算不变。未提交GPU任务，不能声称实际生成/耗时/显存通过。
+- 无commit/push/merge，服务器Git仍c70eac02且工作树未修改；运行版本以`/opt/qmdh-frp/releases/qwen-v1.1-20261019/RELEASE.json`为准。源码tar来自03e845d已核验哈希，专用Dockerfile继承发布前镜像，仅改providers/schemas/comfyui并新增静态检查器，保留生产差异。重建不得直接用服务器旧Git源码覆盖当前镜像；本地c39d8e71a624空库迁移修复未发布，线上仍b27d0f85c932。
+- 排空所有Task/dispatch与上游队列/锁后暂停入口，成套替换前后端/模板；主Compose+FRP叠加文件、3worker、原挂载/网络保持。FRP/PG/Redis/Meilisearch及其他容器ID/镜像/启动时间、env/key均保持。
+- 备份`/www/backup/qmdh-qwen-v11-release-20261019` ↔ `E:/backups/QMDH-web/frp-20261019/qwen-v11-release`，27文件两端SHA一致，含DB/env/旧模板/Git bundle/源码/验证；5828媒体清单/5增量51190080字节，恢复链继承comfy-feedback及原全链。旧镜像`qmdh-release-backup-{backend,worker,frontend}:20261019-qwen-v11`保留。回退须先停止新入口、排空并核对v1.1任务/上游，再还原旧模板map与旧镜像、旧展示名；不downgrade/不清锁/不覆盖新业务库。
+- Linux隔离后端23+8sub、三图合同、前端53/23既有TS0新增/构建、公开单图API/三份bundle SHA/健康/六CAD401通过；backend/worker读取object_info确认节点类可用，仅GET。详细事实见qwen-v1.1-preparation.md与archive/handoff-2026-10-19-qwen-v11-activation.md。
+
+## 2026-10-19 ComfyUI 生产闭环（此前）
 
 - 功能7a9874b、生产功能合并cb2bc791；迁移b27d0f85c932追加两表。backend fc3ac003/worker1fbaa318/frontend3c01a252已运行，env/key不变，ODA/FFmpeg/Xvfb/Nano Banana保留；FRP/数据库/cache/search容器ID与启动时间保持。
 - 必须使用 `docker compose -f docker-compose.yml -f /opt/qmdh-frp/compose.frp.yml ...` 并保留3worker；main单文件重建会丢专网/模板。最终私有构建输入 /opt/qmdh-frp/Dockerfile.closure 基于旧运行镜像复制合并后代码，源Git bundle与FRP运行包随发布备份保存。全量重建仍保留原ODA包/build args，不覆盖生产差异。

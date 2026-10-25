@@ -1,8 +1,9 @@
-import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { api, type Asset, type AuthUser, type PromptTemplateRecord, type Task } from "../../api";
+import { api, type Asset, type AuthUser, type PromptTemplateRecord, type Project, type Task } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import type { LoadState } from "./studioTypes";
+import { StudioProjectCollection, type ProjectMutation, type ProjectRead } from "./studioProjectCollection";
 
 type LoadDataOptions = {
   force?: boolean;
@@ -14,6 +15,7 @@ type UseStudioDataLoaderOptions = {
   setPromptTemplates: (templates: PromptTemplateRecord[]) => void;
   setState: Dispatch<SetStateAction<LoadState>>;
   tasks: Task[];
+  projects?: Project[];
 };
 
 export type StudioDataLoader = ReturnType<typeof useStudioDataLoader>;
@@ -66,6 +68,7 @@ export function useStudioDataLoader({
   setPromptTemplates,
   setState,
   tasks,
+  projects = [],
 }: UseStudioDataLoaderOptions) {
   const { isGuest } = useAuth();
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
@@ -84,16 +87,48 @@ export function useStudioDataLoader({
   const resumeSyncPendingRef = useRef(false);
   const loadDataRef = useRef<(options?: LoadDataOptions) => Promise<void>>(async () => {});
 
+  const projectScopeRef = useRef<StudioProjectCollection | null>(null);
+  const projectScope = useMemo(() => new StudioProjectCollection(projectScopeRef.current ? [] : projects), [currentUser?.id, currentUser?.name, isGuest]);
+  const isProjectScopeCurrent = () => projectScope.active && projectScopeRef.current === projectScope;
+  useLayoutEffect(() => {
+    if (projectScopeRef.current) projectScopeRef.current.active = false;
+    projectScopeRef.current = projectScope; projectScope.active = true;
+    setState((current) => isProjectScopeCurrent() && current.projects !== projectScope.items
+      ? { ...current, projects: projectScope.items } : current);
+    return () => { projectScope.active = false; };
+  }, [projectScope]);
+  function getProjects(): Project[] { return isProjectScopeCurrent() ? projectScope.items : []; }
+  function applyProjectMutation(change: ProjectMutation) {
+    if (!isProjectScopeCurrent()) return;
+    projectScope.mutate(change);
+    setState((current) => isProjectScopeCurrent() ? { ...current, projects: projectScope.items } : current);
+  }
+  async function refreshProjects(isCurrent: () => boolean): Promise<Project[]> {
+    if (!isProjectScopeCurrent() || !isCurrent()) return [];
+    const ticket = projectScope.read();
+    const incoming = await api.projects();
+    if (!isProjectScopeCurrent() || !isCurrent()) return [];
+    projectScope.accept(ticket, incoming);
+    setState((current) => isProjectScopeCurrent() && isCurrent()
+      ? { ...current, projects: projectScope.items } : current);
+    return projectScope.items;
+  }
+  function acceptProjectRead(ticket: ProjectRead, incoming: Project[]): Project[] {
+    if (isProjectScopeCurrent()) return projectScope.accept(ticket, incoming);
+    return projectScopeRef.current?.items ?? [];
+  }
+
   async function refreshConfiguration(requestId: number) {
     if (Date.now() - lastConfigAttemptRef.current < CONFIG_REFRESH_MS) return;
     lastConfigAttemptRef.current = Date.now();
+    const projectRead = projectScope.read();
     try {
       const [health, projects, providers, workflows, templates] = await Promise.all([
         api.health(), api.projects(), api.providers(), api.workflows(), api.promptTemplates(),
       ]);
       if (requestId !== loadRequestIdRef.current) return;
       configurationErrorRef.current = "";
-      setState((current) => ({ ...current, health: health.status, projects, providers, workflows, error: taskSyncErrorRef.current }));
+      setState((current) => ({ ...current, health: health.status, projects: acceptProjectRead(projectRead, projects), providers, workflows, error: taskSyncErrorRef.current }));
       setPromptTemplates(templates);
     } catch (error) {
       if (requestId !== loadRequestIdRef.current) return;
@@ -198,6 +233,7 @@ export function useStudioDataLoader({
       return;
     }
 
+    const projectRead = projectScope.read();
     let templateLoadError = "";
     lastConfigAttemptRef.current = Date.now();
 
@@ -228,7 +264,7 @@ export function useStudioDataLoader({
       }
       setState((current) => ({
         health: health.status,
-        projects,
+        projects: acceptProjectRead(projectRead, projects),
         providers,
         workflows,
         tasks: mergeTasksPreservingHistory(current.tasks, loadedTasks),
@@ -345,6 +381,9 @@ export function useStudioDataLoader({
   }, [currentUser?.name, isGuest, hasRunningTask]);
 
   return {
+    getProjects,
+    applyProjectMutation,
+    refreshProjects,
     lastSyncedAt,
     loadData,
     loadMoreHistory,

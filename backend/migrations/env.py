@@ -52,7 +52,9 @@ from app.models import (  # noqa: F401
 target_metadata = Base.metadata
 
 # Set database URL from settings
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# ConfigParser treats '%' as interpolation. Preserve URL-encoded passwords
+# and connection options when passing the settings URL through Alembic config.
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

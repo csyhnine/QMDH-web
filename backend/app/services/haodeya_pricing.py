@@ -1,7 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
+import hashlib
+import json
+import math
+import re
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,6 +18,7 @@ from app.services.billing import CHAT_PRICING_METRICS
 # Source: upstream Haodeya contract for qmdh / default group (2026-07-03).
 CHAT_UNIT_SIZE = 1_000_000.0
 PRICING_CURRENCY = "CNY"
+PRICING_CATALOG_ID = "haodeya-qmdh-2026-07-03"
 
 GROK_VIDEO_SKU_PRICES: dict[str, float] = {
     "x-ai/grok-imagine-video-i2v": 3.33,
@@ -127,6 +134,8 @@ class PricingSyncResult:
     updated_rules: list[str]
     deactivated_rules: list[str]
     skipped_profiles: list[str]
+    samples: list[dict[str, Any]] = field(default_factory=list)
+    dry_run: bool = False
 
 
 def _grok_sku_duration_tier(sku: str) -> str:
@@ -238,124 +247,209 @@ def _upsert_chat_rule(
     updated_rules.append(f"{profile.provider_name}:{metric}={unit_price}")
 
 
-def sync_haodeya_pricing(db: Session) -> PricingSyncResult:
-    updated_profiles: list[str] = []
-    updated_rules: list[str] = []
-    deactivated_rules: list[str] = []
-    skipped_profiles: list[str] = []
+def _pricing_fingerprint(profile: ProviderProfile, rules: list[ProviderPricingRule]) -> str:
+    def columns(row):
+        return {column.name: getattr(row, column.name) for column in row.__table__.columns}
+    def encode(value):
+        if isinstance(value, datetime):
+            return value.isoformat()
+        raise TypeError("Unsupported pricing configuration field")
+    raw = {"profile": columns(profile), "rules": [columns(rule) for rule in sorted(rules, key=lambda row: row.id)]}
+    return hashlib.sha256(json.dumps(raw, sort_keys=True, default=encode, allow_nan=False).encode()).hexdigest()
 
-    profiles = db.scalars(select(ProviderProfile).order_by(ProviderProfile.provider_name.asc())).all()
-    rules = db.scalars(select(ProviderPricingRule).order_by(ProviderPricingRule.id.asc())).all()
-    rules_by_key = {(rule.provider_profile_id, rule.capability, rule.metric): rule for rule in rules}
 
-    for profile in profiles:
-        model_name = _normalize_model_name(profile.model_name)
-        provider_name = _normalize_model_name(profile.provider_name)
-        changed = False
+def profile_pricing_fingerprint(db: Session, profile: ProviderProfile) -> str:
+    with db.no_autoflush:
+        rules = list(db.scalars(select(ProviderPricingRule).where(ProviderPricingRule.provider_profile_id == profile.id)))
+        return _pricing_fingerprint(profile, rules)
 
-        if provider_name == "haodeya_grok" or model_name in GROK_VIDEO_SKU_PRICES or model_name in {
-            "grok-imagine-video",
-            "haodeya_grok",
-        }:
-            profile.pricing_currency = PRICING_CURRENCY
-            profile.pricing_unit = "per_video"
-            profile.unit_price = HAODEYA_GROK_PROFILE_FALLBACK_PRICE
-            adapter_config = dict(profile.adapter_config or {})
-            adapter_config["unit_price_1k"] = 3.33
-            adapter_config["unit_price_2k"] = 6.66
-            profile.adapter_config = adapter_config
-            updated_profiles.append(f"{profile.provider_name}:5s=3.33,10s=6.66 {PRICING_CURRENCY}")
-            changed = True
 
-        if (
-            provider_name == "haodeya_happyhorse"
-            or model_name in HAPPYHORSE_VIDEO_SKU_PRICES
-            or "happyhorse" in model_name.lower()
-            or "happyhorse" in provider_name.lower()
-        ):
-            profile.pricing_currency = PRICING_CURRENCY
-            profile.pricing_unit = "per_video"
-            profile.unit_price = 3.4
-            adapter_config = dict(profile.adapter_config or {})
-            adapter_config["unit_price_1k"] = 3.4
-            adapter_config["unit_price_2k"] = 6.8
-            profile.adapter_config = adapter_config
-            updated_profiles.append(f"{profile.provider_name}:5s=3.4,10s=6.8 {PRICING_CURRENCY}")
-            changed = True
+def _confirmed_sync_plan(plan: dict | None, *, dry_run: bool) -> dict | None:
+    if plan is None:
+        if dry_run:
+            return None
+        raise ValueError("Pricing sync apply requires an explicitly confirmed contract plan")
+    if (not isinstance(plan, dict) or type(plan.get("version")) is not int or plan["version"] != 1
+            or plan.get("catalog_id") != PRICING_CATALOG_ID or plan.get("supplier") != "haodeya" or plan.get("currency") != "CNY"):
+        raise ValueError("Unsupported pricing contract version, supplier, catalog or currency")
+    endpoint = urlsplit(str(plan.get("endpoint") or ""))
+    if not endpoint.scheme or not endpoint.netloc or not isinstance(plan.get("source"), str) or not plan["source"].strip():
+        raise ValueError("Pricing contract requires an endpoint and confirmed source")
+    if not isinstance(plan.get("profiles"), list):
+        raise ValueError("Pricing contract requires exact profile entries")
+    entries = {}
+    for entry in plan["profiles"]:
+        if (not isinstance(entry, dict) or type(entry.get("profile_id")) is not int or entry["profile_id"] <= 0
+                or entry["profile_id"] in entries or not all(isinstance(entry.get(k), str) and entry[k].strip() for k in ("provider", "model"))
+                or not isinstance(entry.get("fingerprint"), str) or re.fullmatch(r"[0-9a-f]{64}", entry["fingerprint"]) is None):
+            raise ValueError("Pricing contract requires unique profile identity and approved fingerprint")
+        retired = entry.get("deactivate_rule_ids", [])
+        if not isinstance(retired, list) or any(type(value) is not int or value <= 0 for value in retired) or len(set(retired)) != len(retired):
+            raise ValueError("Pricing contract requires exact distinct rule ids for deactivation")
+        if "image_4k_quote" in entry:
+            quote = entry["image_4k_quote"]
+            value = quote.get("unit_price") if isinstance(quote, dict) else None
+            try:
+                valid_price = type(value) in (int, float) and math.isfinite(value) and value >= 0
+            except OverflowError:
+                valid_price = False
+            if (not isinstance(quote, dict) or type(quote.get("version")) is not int or quote["version"] != 1 or not valid_price
+                    or quote.get("currency") != "CNY" or quote.get("pricing_unit") != "per_image"
+                    or not isinstance(quote.get("source"), str) or not quote["source"].strip()):
+                raise ValueError("4K supplement requires an explicit finite CNY/per_image quote and source")
+        entries[entry["profile_id"]] = entry
+    return {**plan, "_entries": entries}
 
-        if (
-            provider_name in {"haodeya_seedance", "haodeya_seedance_2"}
-            or model_name in SEEDANCE2_VIDEO_SKU_PRICES
-            or model_name in {"seedance-2", "haodeya_seedance"}
-            or "seedance-2" in model_name.lower()
-            or ("seedance" in model_name.lower() and "haodeya" in provider_name.lower())
-        ):
-            # Duration tiers only (5s→1k, 10s→2k); quality-specific SKU prices stay in SEEDANCE2 map.
-            profile.pricing_currency = PRICING_CURRENCY
-            profile.pricing_unit = "per_video"
-            profile.unit_price = 7.0
-            adapter_config = dict(profile.adapter_config or {})
-            adapter_config["unit_price_1k"] = 7.0
-            adapter_config["unit_price_2k"] = 14.0
-            profile.adapter_config = adapter_config
-            updated_profiles.append(f"{profile.provider_name}:5s=7.0,10s=14.0 {PRICING_CURRENCY}")
-            changed = True
 
-        image_pricing = _image_pricing_for_model(model_name)
-        if image_pricing and "image.generate" in (profile.capabilities or []):
-            updated_profiles.append(_apply_image_profile_pricing(profile, image_pricing))
-            changed = True
+def _sync_endpoint_matches(actual: str, expected: str) -> bool:
+    def parts(value):
+        url = urlsplit(value)
+        return url.scheme.lower(), url.netloc.lower(), url.path.rstrip("/"), url.query
+    return parts(actual) == parts(expected)
 
-        chat_prices = _chat_rule_prices(model_name)
-        if chat_prices and "chat.completions" in (profile.capabilities or []):
-            for metric in ("input_tokens", "output_tokens"):
-                _upsert_chat_rule(
-                    db,
-                    profile=profile,
-                    metric=metric,
-                    unit_price=float(chat_prices[metric]),
-                    existing_rules=rules_by_key,
-                    updated_rules=updated_rules,
-                )
-            cached_key = (profile.id, "chat.completions", "cached_input_tokens")
-            cached_rule = rules_by_key.get(cached_key)
-            if cached_rule is None:
-                cached_rule = ProviderPricingRule(
-                    provider_profile_id=profile.id,
-                    capability="chat.completions",
-                    metric="cached_input_tokens",
-                )
-                db.add(cached_rule)
-                rules_by_key[cached_key] = cached_rule
-            cached_rule.unit_size = CHAT_UNIT_SIZE
-            cached_rule.unit_price = 0.0
-            cached_rule.currency = PRICING_CURRENCY
-            cached_rule.is_active = True
-            updated_rules.append(f"{profile.provider_name}:cached_input_tokens=0")
-            changed = True
 
-        for rule in list(profile.pricing_rules):
-            if rule.capability == "chat.completions" and rule.metric not in CHAT_PRICING_METRICS:
-                if rule.is_active:
-                    rule.is_active = False
-                    deactivated_rules.append(f"{profile.provider_name}:{rule.metric}")
-                    changed = True
-            if (
-                rule.capability == "chat.completions"
-                and chat_prices is None
-                and "chat.completions" not in (profile.capabilities or [])
-                and rule.is_active
-            ):
-                rule.is_active = False
-                deactivated_rules.append(f"{profile.provider_name}:{rule.metric}")
+def _video_sync_prices(model: str, entry: dict) -> dict | None:
+    for family, catalog in (("grok", GROK_VIDEO_SKU_PRICES), ("happyhorse", HAPPYHORSE_VIDEO_SKU_PRICES), ("seedance", SEEDANCE2_VIDEO_SKU_PRICES)):
+        if model not in catalog:
+            continue
+        short = model.removesuffix("-10s") if family == "grok" else re.sub(r"-(5|10)s$", "-5s", model)
+        long = short + "-10s" if family == "grok" else short.removesuffix("-5s") + "-10s"
+        return {"unit_price": catalog[model], "unit_price_1k": catalog[short], "unit_price_2k": catalog[long]}
+    if model in {"grok-imagine-video", "haodeya_grok"} and entry.get("video_family") == "grok":
+        return {"unit_price": HAODEYA_GROK_PROFILE_FALLBACK_PRICE, "unit_price_1k": 3.33, "unit_price_2k": 6.66}
+    return None
 
-        if not changed:
-            skipped_profiles.append(profile.provider_name)
 
-    db.commit()
-    return PricingSyncResult(
-        updated_profiles=updated_profiles,
-        updated_rules=updated_rules,
-        deactivated_rules=deactivated_rules,
-        skipped_profiles=skipped_profiles,
-    )
+def _sync_candidate(profile: ProviderProfile, rules: list[ProviderPricingRule], plan: dict | None) -> tuple[dict | None, str, dict]:
+    fingerprint = _pricing_fingerprint(profile, rules)
+    sample = {"profile_id": profile.id, "provider": profile.provider_name, "model": profile.model_name,
+              "endpoint": profile.base_url, "fingerprint": fingerprint, "old_currency": profile.pricing_currency,
+              "contract_id": plan["catalog_id"] if plan else None, "contract_source": plan["source"] if plan else None}
+    if plan is None:
+        return None, "contract_required", sample
+    entry = plan["_entries"].get(profile.id)
+    if entry is None:
+        return None, "profile_not_approved", sample
+    if entry["fingerprint"] != fingerprint:
+        raise ValueError(f"Profile {profile.id} or its pricing rules changed; preview and confirm again")
+    if entry["provider"] != profile.provider_name or entry["model"] != profile.model_name:
+        return None, "profile_identity_mismatch", sample
+    if not _sync_endpoint_matches(profile.base_url, plan["endpoint"]):
+        return None, "contract_endpoint_mismatch", sample
+    by_key = {(rule.provider_profile_id, rule.capability, rule.metric): rule for rule in rules}
+    if len(by_key) != len(rules):
+        return None, "ambiguous_duplicate_rules", sample
+    model, capabilities = _normalize_model_name(profile.model_name), set(profile.capabilities or [])
+    image = _image_pricing_for_model(model) if capabilities & {"image.generate", "image.edit"} else None
+    video = _video_sync_prices(model, entry) if "video.generate" in capabilities else None
+    chat = CHAT_MODEL_PRICES.get(model) if "chat.completions" in capabilities else None
+    if sum(value is not None for value in (image, video, chat)) != 1:
+        return None, "sku_or_capability_not_in_confirmed_catalog", sample
+    desired = {}
+    quote = entry.get("image_4k_quote")
+    if quote:
+        sample["image_4k_quote"] = dict(quote)
+    if quote and image is None:
+        return None, "four_k_quote_not_image", sample
+    if image is not None or video is not None:
+        config = dict(profile.adapter_config or {})
+        if profile.pricing_currency != "CNY" and any(key.startswith("unit_price_") and key not in {"unit_price_1k", "unit_price_2k", "unit_price_4k"} for key in config):
+            return None, "foreign_custom_tier_unconfirmed", sample
+        if image is not None:
+            rates = dict(image)
+            if "unit_price_4k" in config and "unit_price_4k" not in rates and not quote and profile.pricing_currency == "CNY":
+                sample["preserved_custom_four_k"] = config["unit_price_4k"]
+            if quote and "unit_price_4k" in rates and abs(quote["unit_price"] - rates["unit_price_4k"]) >= 0.000001:
+                return None, "four_k_catalog_quote_conflict", sample
+            if quote:
+                rates["unit_price_4k"] = quote["unit_price"]
+            if "unit_price_4k" in config and "unit_price_4k" not in rates and profile.pricing_currency != "CNY":
+                return None, "foreign_custom_four_k_quote_required", sample
+            config.update({key: value for key, value in rates.items() if key.startswith("unit_price_")})
+            desired = {"pricing_currency": "CNY", "pricing_unit": rates["pricing_unit"], "unit_price": rates["unit_price_1k"], "adapter_config": config}
+        else:
+            if "unit_price_4k" in config and profile.pricing_currency != "CNY":
+                return None, "foreign_custom_video_tier_unconfirmed", sample
+            config.update({key: value for key, value in video.items() if key != "unit_price"})
+            desired = {"pricing_currency": "CNY", "pricing_unit": "per_video", "unit_price": video["unit_price"], "adapter_config": config}
+    changes = {key: value for key, value in desired.items() if getattr(profile, key) != value}
+    rule_updates = []
+    if chat is not None:
+        for metric, price in {**chat, "cached_input_tokens": 0.0}.items():
+            rule = by_key.get((profile.id, "chat.completions", metric))
+            if rule is None or (rule.unit_size, rule.unit_price, rule.currency, rule.is_active) != (CHAT_UNIT_SIZE, float(price), "CNY", True):
+                rule_updates.append((metric, float(price)))
+    owned = {rule.id: rule for rule in rules}
+    deactivated = []
+    for rule_id in entry.get("deactivate_rule_ids", []):
+        if rule_id not in owned or owned[rule_id].capability != "chat.completions":
+            raise ValueError("Deactivation must name a chat rule owned by the approved profile")
+        rule = owned[rule_id]
+        if chat is not None and rule.metric in CHAT_PRICING_METRICS:
+            raise ValueError("Cannot deactivate a standard rule activated by the confirmed catalog")
+        if rule.is_active:
+            deactivated.append(rule)
+    visible_changes = {key: value for key, value in changes.items() if key != "adapter_config"}
+    if "adapter_config" in changes:
+        visible_changes["adapter_prices"] = {key: value for key, value in changes["adapter_config"].items() if key.startswith("unit_price_")}
+    sample.update(profile_changes=visible_changes, rule_updates=[{"metric": metric, "unit_price": price, "currency": "CNY"} for metric, price in rule_updates],
+                  deactivate_rule_ids=[rule.id for rule in deactivated])
+    if not changes and not rule_updates and not deactivated:
+        return None, "unchanged", sample
+    return {"changes": changes, "rule_updates": rule_updates, "by_key": by_key, "deactivated": deactivated}, "eligible", sample
+
+
+def _apply_sync_candidate(db: Session, profile: ProviderProfile, candidate: dict, result: PricingSyncResult) -> None:
+    for name, value in candidate["changes"].items():
+        setattr(profile, name, value)
+    if candidate["changes"]:
+        result.updated_profiles.append(f"{profile.provider_name}:confirmed {PRICING_CATALOG_ID}")
+    for metric, price in candidate["rule_updates"]:
+        _upsert_chat_rule(db, profile=profile, metric=metric, unit_price=price, existing_rules=candidate["by_key"], updated_rules=result.updated_rules)
+    for rule in candidate["deactivated"]:
+        rule.is_active = False
+        result.deactivated_rules.append(f"{profile.provider_name}:{rule.metric}")
+
+
+def sync_haodeya_pricing(db: Session, *, confirmed_plan: dict | None = None, dry_run: bool = False) -> PricingSyncResult:
+    plan = _confirmed_sync_plan(confirmed_plan, dry_run=dry_run)
+    if not dry_run and (db.in_transaction() or db.new or db.dirty or db.deleted):
+        raise ValueError("Pricing apply requires a fresh clean maintenance session")
+    result = PricingSyncResult([], [], [], [], dry_run=dry_run)
+    try:
+        if not dry_run and db.get_bind().dialect.name == "sqlite":
+            db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        with db.no_autoflush:
+            profiles_query = select(ProviderProfile).order_by(ProviderProfile.provider_name, ProviderProfile.id)
+            rules_query = select(ProviderPricingRule).order_by(ProviderPricingRule.id)
+            if not dry_run:
+                profiles_query, rules_query = profiles_query.with_for_update(), rules_query.with_for_update()
+            profiles, rules = list(db.scalars(profiles_query)), list(db.scalars(rules_query))
+            if plan is not None and set(plan["_entries"]) - {profile.id for profile in profiles}:
+                raise ValueError("An approved pricing profile no longer exists")
+            prepared = []
+            for profile in profiles:
+                owned = [rule for rule in rules if rule.provider_profile_id == profile.id]
+                candidate, reason, sample = _sync_candidate(profile, owned, plan)
+                if candidate is None:
+                    result.skipped_profiles.append(profile.provider_name)
+                else:
+                    prepared.append((profile, candidate))
+                    reason = "would_update" if dry_run else "updated"
+                result.samples.append({**sample, "reason": reason})
+        if dry_run:
+            # Describe the same actions without mutating ORM instances.
+            for profile, candidate in prepared:
+                if candidate["changes"]:
+                    result.updated_profiles.append(f"{profile.provider_name}:confirmed {PRICING_CATALOG_ID}")
+                result.updated_rules.extend(f"{profile.provider_name}:{metric}={price}" for metric, price in candidate["rule_updates"])
+                result.deactivated_rules.extend(f"{profile.provider_name}:{rule.metric}" for rule in candidate["deactivated"])
+        else:
+            for profile, candidate in prepared:
+                _apply_sync_candidate(db, profile, candidate, result)
+            db.commit()
+        return result
+    except Exception:
+        if not dry_run:
+            db.rollback()
+        raise

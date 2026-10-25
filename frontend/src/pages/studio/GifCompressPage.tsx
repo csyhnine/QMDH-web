@@ -1,8 +1,9 @@
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { formatChinaMonthDayTime } from "../../lib/datetime";
 import { api, type GifToolResult, type GifMediaInfo } from "../../api";
 import GifMediaDetails from "./GifMediaDetails";
+import { useGifDisplay } from "./useGifDisplay";
 import { useAuth } from "../../context/AuthContext";
 import { fileToDataUrl } from "../../features/studio/studioAssetUtils";
 import { downloadMediaUrl } from "../../features/studio/studioMediaDownload";
@@ -34,8 +35,9 @@ export default function GifCompressPage() {
   const [allowResize, setAllowResize] = useState(true);
   const [allowFrameReduction, setAllowFrameReduction] = useState(true);
   const file = files[selected];
-  const [historyResult, setHistoryResult] = useState<GifToolResult | null>(null);
-  const result = historyResult ?? jobs[selected]?.result;
+  const scopeKey = JSON.stringify([currentUser?.id, currentUser?.name, isGuest]);
+  const { historyResult, result, displayError, showLocal, showHistory, beginDisplayOperation } =
+    useGifDisplay(scopeKey, recordId, jobs[selected]?.result, !isGuest);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
@@ -47,8 +49,14 @@ export default function GifCompressPage() {
   const [sourceInfo, setSourceInfo] = useState<GifMediaInfo | null>(null);
   const [infoMessage, setInfoMessage] = useState("");
   const input = useRef<HTMLInputElement | null>(null);
-  const request = useRef(0);
-  useEffect(() => () => { request.current++; }, []);
+  const request = useRef(0), accountScope = useRef(scopeKey);
+  useLayoutEffect(() => {
+    accountScope.current = scopeKey;
+    setFiles([]); setJobs([]); setSelected(0); setCopiedFrom("");
+    setHistory([]); setHistoryError(""); setError("");
+    setBusy(false); setDownloading(false); setRestoring(false);
+    return () => { request.current++; accountScope.current = ""; };
+  }, [scopeKey]);
   useEffect(() => {
     if (!file) { setPreview(""); return; }
     const url = URL.createObjectURL(file);
@@ -59,20 +67,11 @@ export default function GifCompressPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setHistory([]); setHistoryResult(null); setHistoryError("");
-    if (!isGuest) api.gifHistory().then(items => { if (!cancelled) setHistory(items); })
-      .catch(err => { if (!cancelled) setHistoryError(err instanceof Error ? err.message : "历史加载失败，请刷新重试。"); });
+    setHistory([]); setHistoryError("");
+    if (!isGuest) api.gifHistory().then(items => { if (!cancelled && accountScope.current === scopeKey) setHistory(current => accountScope.current === scopeKey ? items : current); })
+      .catch(err => { if (!cancelled && accountScope.current === scopeKey) setHistoryError(current => accountScope.current === scopeKey ? err instanceof Error ? err.message : "历史加载失败，请刷新重试。" : current); });
     return () => { cancelled = true; };
   }, [isGuest, currentUser?.id]);
-  useEffect(() => {
-    let cancelled = false;
-    if (!isGuest && Number.isSafeInteger(recordId) && recordId > 0) {
-      api.gifHistoryRecord(recordId).then(item => { if (!cancelled) setHistoryResult(item); })
-        .catch(err => { if (!cancelled) setHistoryError(err instanceof Error ? err.message : "无法读取压缩记录。"); });
-    }
-    return () => { cancelled = true; };
-  }, [recordId, isGuest, currentUser?.id]);
-
   useEffect(() => {
     let cancelled = false;
     setSourceInfo(null); setInfoMessage(file ? "正在读取原始 GIF 参数…" : "");
@@ -83,39 +82,31 @@ export default function GifCompressPage() {
       .catch(err => { if (!cancelled) setInfoMessage(err instanceof Error ? err.message : "原始参数读取失败，请重新选择文件。"); });
     return () => { cancelled = true; };
   }, [file, isGuest]);
-  const detailId = result?.record_id;
-  useEffect(() => {
-    let cancelled = false;
-    if (detailId && result && (!result.source_info || !result.output_info)) {
-      api.gifHistoryRecord(detailId).then(item => { if (!cancelled) setHistoryResult(item); })
-        .catch(err => { if (!cancelled) setHistoryError(err instanceof Error ? err.message : "历史参数读取失败。"); });
-    }
-    return () => { cancelled = true; };
-  }, [detailId]);
-
   function chooseFiles(next: File[]) {
     if (!next.length || busy || downloading || restoring) return;
     const message = validateGifBatch(next);
     if (message) { setError(message); return; }
-    setCopiedFrom(""); setHistoryResult(null); setFiles(next); setSelected(0); setJobs(next.map(() => ({ status: "waiting" }))); setError("");
+    setCopiedFrom(""); showLocal(); setFiles(next); setSelected(0); setJobs(next.map(() => ({ status: "waiting" }))); setError("");
   }
 
   async function copyToCompressor(record: GifToolResult) {
     if (busy || downloading || restoring || isGuest) return;
+    const isDisplayCurrent = beginDisplayOperation(record);
+    if (!isDisplayCurrent) return;
     const id = ++request.current;
     setRestoring(true); setError("");
     try {
       const original = await restoreGifOriginal(record);
-      if (id !== request.current) return;
+      if (id !== request.current || !isDisplayCurrent()) return;
       const params = gifParametersFromRecord(record);
       setTarget(params.target_kb); setMaxEdge(params.max_edge); setMaxFps(params.max_fps);
       setMaxColors(params.max_colors); setAllowResize(params.allow_resize); setAllowFrameReduction(params.allow_frame_reduction);
-      setFiles([original]); setSelected(0); setJobs([{ status: "waiting" }]); setHistoryResult(null);
+      setFiles([original]); setSelected(0); setJobs([{ status: "waiting" }]); showLocal();
       setCopiedFrom(record.file_name);
       const query = new URLSearchParams(searchParams); query.delete("record_id");
       setSearchParams(query, { replace: true });
       form.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    } catch (err) { if (id === request.current) setError(err instanceof Error ? err.message : "复制失败，请重试。"); }
+    } catch (err) { if (id === request.current && isDisplayCurrent()) setError(err instanceof Error ? err.message : "复制失败，请重试。"); }
     finally { if (id === request.current) setRestoring(false); }
   }
 
@@ -123,7 +114,7 @@ export default function GifCompressPage() {
     event.preventDefault();
     if (!files.length || busy || isGuest || downloading || restoring) return;
     const id = ++request.current;
-    setHistoryResult(null); setBusy(true); setError(""); setJobs(files.map(() => ({ status: "waiting" })));
+    showLocal(); setBusy(true); setError(""); setJobs(files.map(() => ({ status: "waiting" })));
     try {
       await runGifBatch(files, async file => {
         const dataUrl = await fileToDataUrl(file);
@@ -132,10 +123,10 @@ export default function GifCompressPage() {
           max_edge: maxEdge, max_fps: maxFps, max_colors: maxColors,
           allow_resize: allowResize, allow_frame_reduction: allowFrameReduction });
       }, (index, job) => {
-        setJobs(previous => previous.map((old, i) => i === index ? job : old));
+        setJobs(previous => id === request.current ? previous.map((old, i) => i === index ? job : old) : previous);
         if (job.result) {
           const saved = job.result;
-          setHistory(previous => [saved, ...previous.filter(item => item.record_id !== saved.record_id)].slice(0, 20));
+          setHistory(previous => id === request.current ? [saved, ...previous.filter(item => item.record_id !== saved.record_id)].slice(0, 20) : previous);
         }
       }, () => id === request.current);
     } finally { if (id === request.current) setBusy(false); }
@@ -159,9 +150,10 @@ export default function GifCompressPage() {
 
   async function download() {
     if (!result || downloading || restoring) return;
+    const id = request.current;
     setDownloading(true);
     try { await downloadMediaUrl(result.storage_path, result.file_name.replace(/\.gif$/i, "") + "-compressed.gif"); }
-    finally { setDownloading(false); }
+    finally { if (id === request.current) setDownloading(false); }
   }
 
   return <section className="gif-tool-page">
@@ -212,7 +204,7 @@ export default function GifCompressPage() {
           <ul className="gif-batch-list">{files.map((entry, index) => {
             const job = jobs[index];
             const status = job?.status === "processing" ? "正在压缩" : job?.status === "error" ? "失败" : job?.result ? `${formatGifSize(job.result.compression.output_bytes)} · ${job.result.compression.target_met ? "已达标" : "未达标"}` : "等待压缩";
-            return <li key={index}><button type="button" className={selected === index ? "is-selected" : ""} aria-pressed={selected === index} onClick={() => { setHistoryResult(null); setSelected(index); }}><strong>{entry.name}</strong><span>{status}</span></button></li>;
+            return <li key={index}><button type="button" className={selected === index ? "is-selected" : ""} aria-pressed={selected === index} onClick={() => { showLocal(); setSelected(index); }}><strong>{entry.name}</strong><span>{status}</span></button></li>;
           })}</ul>
           {jobs[selected]?.error ? <p role="alert" className="gif-error">{jobs[selected].error}</p> : null}
         </> : null}
@@ -242,9 +234,9 @@ export default function GifCompressPage() {
     <section className="feedback-panel gif-history-panel" aria-label="压缩历史">
       <div className="gif-batch-summary"><h2>压缩历史</h2><Link to="/studio/library">前往资产库</Link></div>
       <p className="gif-footnote">最近 20 条，按当前账号保存；刷新或重新登录后仍可查看。点击记录查看原件与压缩结果。</p>
-      {historyError ? <p className="gif-error" role="alert">{historyError}</p> : null}
+      {historyError || displayError ? <p className="gif-error" role="alert">{displayError || historyError}</p> : null}
       <ul className="gif-batch-list">{history.map(item => <li key={item.record_id}>
-        <button type="button" className={historyResult?.record_id === item.record_id ? "is-selected" : ""} onClick={() => setHistoryResult(item)}>
+        <button type="button" className={historyResult?.record_id === item.record_id ? "is-selected" : ""} onClick={() => showHistory(item)}>
           <strong>{item.file_name}<small>{formatChinaMonthDayTime(item.created_at)}</small></strong>
           <span>{formatGifSize(item.compression.output_bytes)} · {item.compression.target_met ? "已达标" : "未达标"}</span>
         </button>

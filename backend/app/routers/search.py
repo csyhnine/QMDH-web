@@ -9,6 +9,7 @@ from app.core.config import AuthUserProfile
 from app.database import get_db
 from app.integrations.search.service import check_meilisearch_health, get_search_engine_name, search_domain
 from app.integrations.search.sync import sync_inspiration_index, sync_templates_index
+from app.services.search_index_generation_service import SearchIndexSyncError
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -103,8 +104,12 @@ def sync_search_indexes(
 
     if not settings.meilisearch_enabled:
         raise HTTPException(status_code=400, detail="Meilisearch is disabled. Set QMDH_MEILISEARCH_ENABLED=true first.")
-    return SearchSyncOut(
-        inspiration_documents=sync_inspiration_index(db),
-        template_documents=sync_templates_index(db),
-        engine="meilisearch",
-    )
+    try:
+        return SearchSyncOut(
+            inspiration_documents=sync_inspiration_index(db),
+            template_documents=sync_templates_index(db),
+            engine="meilisearch",
+        )
+    except SearchIndexSyncError as exc:
+        raise HTTPException(status_code=409 if exc.code == "source_changed" else 503,
+            detail=f"Search sync for {exc.domain} is unconfirmed ({exc.code}).") from None

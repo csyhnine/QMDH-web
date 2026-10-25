@@ -82,8 +82,15 @@ def validate_seed_links(graph: dict, mapping: dict) -> None:
             raise ValueError("ComfyUI shared seed consumer link differs from the approved mapping")
 
 
+def seed_maximum(graph: dict, mapping: dict) -> int:
+    # Easy-Use's seed node accepts 0..2**50 inclusive. Literal KSampler/Z
+    # mappings retain the existing JavaScript-safe range.
+    return 2**50 if any(graph[node]["class_type"] == "easy seed" for node, _ in mapping["seed"]) else 2**53 - 1
+
+
 def prepare_graph(graph: dict, mapping: dict, payload: dict, *, seed: int, prefix: str) -> dict:
     validate_seed_links(graph, mapping)
+    _integer(seed, "seed", 0, seed_maximum(graph, mapping))
     graph = deepcopy(graph)
     prompt = str(payload.get("prompt") or "").strip()
     supplement = str(payload.get("prompt_supplement") or "").strip()
@@ -194,7 +201,8 @@ def owned_references(db, user_id, payload, mapping=None):
 def validate_submission(db, user_id, workflow_id, payload):
     graph, mapping = load_workflow(Path(settings.comfyui_workflow_root), workflow_id)
     _integer(payload.get("image_count", 1), "image_count", 1, 3)
-    prepare_graph(graph, mapping, {**payload, "image_count": 1}, seed=0, prefix="validation")
+    prepare_graph(graph, mapping, {**payload, "image_count": 1},
+                  seed=payload["seed"] if payload.get("seed") is not None else 0, prefix="validation")
     if mapping["capability"] == "image.edit":
         owned_references(db, user_id, payload, mapping)
 
@@ -263,7 +271,8 @@ class ComfyUIProviderAdapter:
             # Per-image entries must remain flat: embedding the live checkpoint
             # would point back to this batch list on the second image.
             completed.append({k: v for k, v in outcome.result.items() if k != "comfyui"})
-            seed = (self.state["seed"] + 1) % (2**53)
+            graph, mapping = load_workflow(Path(settings.comfyui_workflow_root), self.profile.model_name)
+            seed = (self.state["seed"] + 1) % (seed_maximum(graph, mapping) + 1)
             self._save(stage="between_images", prompt_id=None, client_id=None, seed=seed, batch_outputs=deepcopy(completed))
         last = completed[-1]
         self._save(stage="downloaded")
@@ -311,22 +320,10 @@ class ComfyUIProviderAdapter:
                     "output_width": width, "output_height": height, "upstream_task_id": prompt, "comfyui": dict(self.state),
                     "billing": {"cost": 0, "currency": self.profile.pricing_currency, "note": "Local GPU price not configured"},
                 })
-        if capability == "image.edit" and payload.get("width") is None and str(payload.get("aspect_ratio")) in ("遵循原图", "遵循原图比例", "原图比例", "原图", "source", "match_source", "follow_source") and payload.get("resolution") in ("1k", "2k", "4k"):
-            from app.database import SessionLocal
-            from app.models import Task
-            with SessionLocal() as db:
-                task = db.get(Task, self.task_id)
-                paths = owned_references(db, task.user_id, payload, mapping)
-            with Image.open(BytesIO(read_binary_asset(paths[0]))) as im:
-                w, h = im.size
-            target = {"1k": 1024, "2k": 2048, "4k": 4096}[payload["resolution"]]
-            factor = min(target / max(w, h), (target * target / (w * h)) ** .5)
-            payload = {**payload, "width": max(256, round(w * factor / 8) * 8), "height": max(256, round(h * factor / 8) * 8)}
         seed = self.state.get("seed", payload.get("seed"))
         if seed is None:
-            seed = secrets.randbelow(2**53)
-        seed = _integer(seed, "seed", 0, 2**53 - 1)
-        graph = prepare_graph(graph, mapping, payload, seed=seed, prefix=f"qmdh_task_{self.task_id}")
+            seed = secrets.randbelow(seed_maximum(graph, mapping) + 1)
+        seed = _integer(seed, "seed", 0, seed_maximum(graph, mapping))
         started = monotonic()
         budget = max(10.0, min(float(self.profile.timeout_seconds), 600.0))
         deadline = started + budget
@@ -383,6 +380,18 @@ class ComfyUIProviderAdapter:
                 if not prompt_id:
                     # Connectivity check is read-only and happens before submit intent.
                     json.loads(request("GET", "/system_stats"))
+                    if capability == "image.edit" and payload.get("width") is None and str(payload.get("aspect_ratio")) in ("遵循原图", "遵循原图比例", "原图比例", "原图", "source", "match_source", "follow_source") and payload.get("resolution") in ("1k", "2k", "4k"):
+                        from app.database import SessionLocal
+                        from app.models import Task
+                        with SessionLocal() as db:
+                            task = db.get(Task, self.task_id)
+                            paths = owned_references(db, task.user_id, payload, mapping)
+                        with Image.open(BytesIO(read_binary_asset(paths[0]))) as im:
+                            w, h = im.size
+                        target = {"1k": 1024, "2k": 2048, "4k": 4096}[payload["resolution"]]
+                        factor = min(target / max(w, h), (target * target / (w * h)) ** .5)
+                        payload = {**payload, "width": max(256, round(w * factor / 8) * 8), "height": max(256, round(h * factor / 8) * 8)}
+                    graph = prepare_graph(graph, mapping, payload, seed=seed, prefix=f"qmdh_task_{self.task_id}")
                     if capability == "image.edit":
                         from app.database import SessionLocal
                         from app.models import Task
@@ -400,7 +409,15 @@ class ComfyUIProviderAdapter:
                     # Persist intent before POST so a lost response never triggers a
                     # second GPU run automatically. FRP/ComfyUI has no idempotency guarantee.
                     self._save(stage="submitting", seed=seed, workflow_id=self.profile.model_name,
-                               workflow_sha256=mapping["sha256"], client_id=str(uuid4()))
+                               workflow_sha256=mapping["sha256"], client_id=str(uuid4()),
+                               execution_context={
+                                   "width": graph[mapping["width"][0]]["inputs"][mapping["width"][1]],
+                                   "height": graph[mapping["height"][0]]["inputs"][mapping["height"][1]],
+                                   "resolution": str(payload.get("resolution") or "1k"),
+                                   "aspect_ratio": str(payload.get("aspect_ratio") or "1:1"),
+                                   "workflow_id": self.profile.model_name, "workflow_sha256": mapping["sha256"],
+                                   "seed": seed,
+                               })
                     safe_release = False
                     try:
                         submitted = json.loads(request("POST", "/prompt", json={"prompt": graph, "client_id": self.state["client_id"]}))

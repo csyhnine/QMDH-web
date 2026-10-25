@@ -1,3 +1,4 @@
+import type { PromptPolishApplyOptions } from "../../lib/promptPolishOwnership";
 import type { ChangeEvent, DragEvent, FormEvent, RefObject } from "react";
 
 import type { PromptTemplateRecord, Provider } from "../../api";
@@ -43,7 +44,7 @@ export type StudioComposerDockProps = {
   onImageCountSelect: (count: number) => void;
   onModeChange: (mode: StudioFormState["creationMode"]) => void;
   onOpenReferencePicker: () => void;
-  onPromptChange: (value: string) => void;
+  onPromptChange: (value: string, application?: PromptPolishApplyOptions<StudioFormState>) => void;
   onPromptPolished?: () => void;
   onProviderSelect: (providerName: string) => void;
   onGrokVideoSkuSelect: (sku: import("./studioComposerGrokSkuMenuTypes").StudioVideoSku) => void;
@@ -51,8 +52,8 @@ export type StudioComposerDockProps = {
   onReplaceReferenceUpload: (index: number, item: ReferenceUploadItem) => void;
   enableSeedanceAvatar?: boolean;
   onRegisterSeedancePrivateAvatar?: (index: number) => void;
-  onStartSeedanceRealAvatar?: (index: number) => Promise<{ taskId: string; h5Link: string }>;
-  onCompleteSeedanceRealAvatar?: (index: number, verifyTaskId: string) => Promise<void> | void;
+  onStartSeedanceRealAvatar?: (index: number, signal?: AbortSignal) => Promise<{ taskId: string; h5Link: string }>;
+  onCompleteSeedanceRealAvatar?: (index: number, verifyTaskId: string, signal?: AbortSignal) => Promise<void> | void;
   onReferenceDrop: (event: DragEvent<HTMLElement>) => void;
   onReferenceInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onResolutionSelect: (resolutionId: string) => void;

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.models import GenerationIntent, Task, TaskStatus, Workflow
 from app.services.generation_fingerprints import prompt_fingerprint, ref_fingerprint
 from app.services.generation_outcome_service import record_generation_outcome_from_task_payload
-from app.services.generation_session_service import assign_intent_to_session
+from app.services.generation_session_service import _session_update, assign_intent_to_session
 
 SESSION_GAP_MINUTES = 30
 
@@ -147,24 +147,25 @@ def sync_generation_intent_from_task(db: Session, task: Task) -> GenerationInten
 
 def backfill_generation_intents(db: Session, *, limit: int = 1000) -> dict[str, int]:
     """Create intents for historical tasks that predate analytics rollout."""
-    existing_task_ids = set(db.scalars(select(GenerationIntent.task_id)).all())
-    tasks = db.scalars(
-        select(Task)
-        .where(Task.deleted_at.is_(None))
-        .order_by(Task.created_at.desc())
-        .limit(max(limit, 1))
-    ).all()
+    with _session_update(db):
+        existing_task_ids = set(db.scalars(select(GenerationIntent.task_id)).all())
+        tasks = db.scalars(
+            select(Task)
+            .where(Task.deleted_at.is_(None))
+            .order_by(Task.created_at.desc(), Task.id.desc())
+            .limit(max(limit, 1))
+        ).all()
 
-    created = 0
-    skipped = 0
-    for task in tasks:
-        if task.id in existing_task_ids:
-            skipped += 1
-            continue
-        workflow = db.get(Workflow, task.workflow_id)
-        workflow_key = workflow.key if workflow else ""
-        record_generation_intent_for_task(db, task=task, workflow_key=workflow_key)
-        sync_generation_intent_from_task(db, task)
-        created += 1
+        created = 0
+        skipped = 0
+        for task in tasks:
+            if task.id in existing_task_ids:
+                skipped += 1
+                continue
+            workflow = db.get(Workflow, task.workflow_id)
+            workflow_key = workflow.key if workflow else ""
+            record_generation_intent_for_task(db, task=task, workflow_key=workflow_key)
+            sync_generation_intent_from_task(db, task)
+            created += 1
 
-    return {"created": created, "skipped": skipped, "scanned": len(tasks)}
+        return {"created": created, "skipped": skipped, "scanned": len(tasks)}

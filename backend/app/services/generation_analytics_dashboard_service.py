@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditEventType
 from app.models import AuditLog, GenerationIntent, GenerationSession, PromptTemplate, User
-from app.services.generation_outcome_service import SETTLE_OUTCOME_TYPES
+from app.services.generation_outcome_service import SETTLE_OUTCOME_TYPES, summarize_session_outcomes
 
 DEFAULT_LOOKBACK_DAYS = 30
 
@@ -329,6 +329,7 @@ def get_template_quality_scores(db: Session, *, days: int = DEFAULT_LOOKBACK_DAY
             continue
         bucket = buckets[template_id]
         bucket["intent_count"] += 1
+        _merge_outcome_totals(bucket["outcome_totals"], summarize_session_outcomes([intent]))
         if (intent.outcome_signals or {}).get("settled"):
             bucket["settled_intent_count"] += 1
         if intent.session_id is not None:
@@ -340,7 +341,6 @@ def get_template_quality_scores(db: Session, *, days: int = DEFAULT_LOOKBACK_DAY
                 bucket["explore_pairs"].append((session.explore_score, 1))
                 bucket["settle_pairs"].append((float(metrics.get("settle_score") or 0.0), 1))
                 bucket["completion_pairs"].append((_completion_rate(session), 1))
-                _merge_outcome_totals(bucket["outcome_totals"], metrics)
 
     items = []
     for template_id, bucket in buckets.items():

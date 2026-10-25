@@ -34,11 +34,11 @@ function formatToken(value: number): string {
 }
 
 function formatCurrencyAmount(value: number, currency: string): string {
-  return `${currency === "CNY" ? "¥" : "$"}${value.toFixed(2)}`;
+  return `${value.toFixed(2)} ${currency}`;
 }
 
 function formatCostRows(rows: Array<Record<string, unknown>>): string {
-  if (rows.length === 0) return "¥0.00";
+  if (rows.length === 0) return "0.00 CNY";
   return rows
     .map((row) => formatCurrencyAmount(Number(row.total_cost || 0), String(row.currency || "CNY")))
     .join(" + ");
@@ -62,18 +62,23 @@ function quotaStatusLabel(value: unknown): string {
   return "正常";
 }
 
-function rowMax<T>(rows: T[], pick: (row: T) => number): number {
-  return rows.reduce((max, row) => Math.max(max, pick(row)), 0);
+function formatAccountQuota(row: DashboardAccountUsage): string {
+  const monthCosts = formatAccountCostRows(row.quota_cost_by_currency || []);
+  if (row.quota_comparable !== true && row.quota_comparable !== false) {
+    return "月额度口径待同步，见分币明细";
+  }
+  if (row.quota_limit == null) {
+    return `${row.billing_plan || "standard"} / ${row.billing_status || "active"} · 无限制 · 本月 ${monthCosts}`;
+  }
+  if (!row.quota_comparable || row.quota_used == null) {
+    return `本月 ${monthCosts} · 额度无法按单币比较，见分币明细`;
+  }
+  const remaining = row.quota_remaining == null ? "" : ` · 剩余 ${formatCurrencyAmount(row.quota_remaining, "CNY")}`;
+  return `本月已用 ${formatCurrencyAmount(row.quota_used, "CNY")} / 额度 ${formatCurrencyAmount(row.quota_limit, "CNY")} · ${quotaStatusLabel(row.quota_status)}${remaining}`;
 }
 
-function buildDateWindow(days: number): { startDate: string; endDate: string } {
-  const endDate = new Date();
-  const startDate = new Date(endDate);
-  startDate.setDate(endDate.getDate() - (days - 1));
-  return {
-    startDate: startDate.toISOString().slice(0, 10),
-    endDate: endDate.toISOString().slice(0, 10),
-  };
+function rowMax<T>(rows: T[], pick: (row: T) => number): number {
+  return rows.reduce((max, row) => Math.max(max, pick(row)), 0);
 }
 
 function groupLabel(groupName: string): string {
@@ -110,9 +115,13 @@ export type DashboardPageProps = {
   groupSummaries: UserGroupSummary[];
   userCanUseOpsViews: boolean;
   dashboardStatsDays: number;
+  dashboardDateRange: DashboardDateRange;
   groupSummaryRange: DashboardDateRange;
   groupRangeFollowsDashboard: boolean;
   lastSyncedAt: string | null;
+  dataSource?: { dashboardStatsDays: number; dashboardDateRange: DashboardDateRange; groupSummaryRange: DashboardDateRange; groupRangeFollowsDashboard: boolean };
+  loading?: boolean;
+  queryError?: string;
   onChangeDays: (days: number) => void;
   onApplyGroupSummaryRange: (range: DashboardDateRange) => void;
   onSyncGroupSummaryRange: () => void;
@@ -124,9 +133,13 @@ export default function DashboardPage({
   groupSummaries,
   userCanUseOpsViews,
   dashboardStatsDays,
+  dashboardDateRange,
   groupSummaryRange,
   groupRangeFollowsDashboard,
   lastSyncedAt,
+  dataSource,
+  loading = false,
+  queryError = "",
   onChangeDays,
   onApplyGroupSummaryRange,
   onSyncGroupSummaryRange,
@@ -176,7 +189,9 @@ export default function DashboardPage({
   if (!dashboard) {
     return (
       <section className="ops-dashboard">
-        <div className="template-empty">看板数据加载中。</div>
+        <div className="template-empty">{loading ? "看板数据加载中。" : "尚无已加载数据。"}</div>
+        {queryError ? <div className="floating-error">{queryError}</div> : null}
+        <button type="button" onClick={onRefresh} disabled={loading}>重试</button>
       </section>
     );
   }
@@ -218,8 +233,9 @@ export default function DashboardPage({
     groupSummaryPageStart,
     groupSummaryPageStart + GROUP_SUMMARY_PAGE_SIZE,
   );
-  const { startDate, endDate } = buildDateWindow(dashboardStatsDays);
-  const { startDate: groupStartDate, endDate: groupEndDate } = groupSummaryRange;
+  const shown = dataSource ?? { dashboardStatsDays, dashboardDateRange, groupSummaryRange, groupRangeFollowsDashboard };
+  const { startDate, endDate } = shown.dashboardDateRange;
+  const { startDate: groupStartDate, endDate: groupEndDate } = shown.groupSummaryRange;
 
   function handleApplyGroupRange() {
     if (!groupRangeDraft.startDate || !groupRangeDraft.endDate) {
@@ -266,11 +282,16 @@ export default function DashboardPage({
             <span>{`统计窗口：${startDate} 至 ${endDate}`}</span>
             <span>{`刷新于 ${formatDateTime(lastSyncedAt)}`}</span>
           </div>
-          <button type="button" className="ops-icon-button" onClick={onRefresh}>
-            刷新
+          <button type="button" className="ops-icon-button" onClick={onRefresh} disabled={loading}>
+            {loading ? "刷新中..." : "刷新"}
           </button>
         </div>
       </header>
+      <p className="ops-query-source" role="status">
+        {`数据窗口：${shown.dashboardStatsDays} 天。`}
+        {loading ? `正在加载所选 ${dashboardStatsDays} 天及分组日期窗口。` : queryError ? "所选查询未更新成功，当前保留上次成功数据。" : ""}
+      </p>
+      {queryError ? <div className="floating-error">{queryError}</div> : null}
 
       <div className="ops-kpi-grid">
         <article className="ops-kpi-card ops-kpi-blue">
@@ -524,8 +545,8 @@ export default function DashboardPage({
             <div>
               <h2>分组支出统计</h2>
               <span>
-                {groupRangeFollowsDashboard
-                  ? `结算窗口：${groupStartDate} 至 ${groupEndDate}（跟随看板 ${dashboardStatsDays} 天）`
+                {shown.groupRangeFollowsDashboard
+                  ? `结算窗口：${groupStartDate} 至 ${groupEndDate}（跟随看板 ${shown.dashboardStatsDays} 天）`
                   : `结算窗口：${groupStartDate} 至 ${groupEndDate}（自定义）`}
               </span>
             </div>
@@ -672,11 +693,6 @@ export default function DashboardPage({
                   Number(row.image_edit_count || 0) +
                   Number(row.video_generate_count || 0) +
                   Number(row.chat_turn_count || 0);
-                const quotaCurrency = String(row.quota_currency || "CNY");
-                const quotaLimit = row.quota_limit == null ? null : Number(row.quota_limit || 0);
-                const quotaUsed = Number(row.quota_used || 0);
-                const quotaRemaining = row.quota_remaining == null ? null : Number(row.quota_remaining || 0);
-                const hasMeteredSpend = Array.isArray(row.cost_by_currency) && row.cost_by_currency.length > 0;
                 return (
                   <div key={String(row.name)} className="ops-execution-body">
                     <span className="ops-execution-user">
@@ -697,14 +713,7 @@ export default function DashboardPage({
                     <span>{formatToken(Number(row.chat_total_tokens || 0))}</span>
                     <span className="ops-execution-stack">
                       <strong>{formatAccountCostRows(row.cost_by_currency || [])}</strong>
-                      <small>
-                        {quotaLimit == null
-                          ? `${String(row.billing_plan || "standard")} / ${String(row.billing_status || "active")} · ${quotaStatusLabel(row.quota_status)}`
-                          : hasMeteredSpend
-                            ? `${formatCurrencyAmount(quotaUsed, quotaCurrency)} / ${formatCurrencyAmount(quotaLimit, quotaCurrency)} · ${quotaStatusLabel(row.quota_status)}`
-                            : `已用 0 / 配额 ${quotaLimit.toFixed(2)} · ${quotaStatusLabel(row.quota_status)}`}
-                        {quotaRemaining == null || !hasMeteredSpend ? "" : ` · 剩余 ${formatCurrencyAmount(quotaRemaining, quotaCurrency)}`}
-                      </small>
+                      <small>{formatAccountQuota(row)}</small>
                     </span>
                     <span>{formatDateTime(String(row.last_activity_at || ""))}</span>
                   </div>

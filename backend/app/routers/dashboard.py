@@ -191,6 +191,26 @@ def _activity_sort_key(
     )
 
 
+def _dashboard_currency(entry: UsageLedger) -> str:
+    return str(entry.cost_currency or "CNY").strip().upper() or "CNY"
+
+
+def _dashboard_costs(entries: list[UsageLedger]) -> Counter[str]:
+    totals: Counter[str] = Counter()
+    for entry in entries:
+        totals[_dashboard_currency(entry)] += float(entry.cost or 0)
+    return totals
+
+
+def _dashboard_money(totals: Counter[str]) -> dict[str, object]:
+    single_currency = len(totals) <= 1
+    return {
+        "total_cost": _round(next(iter(totals.values()), 0.0)) if single_currency else None,
+        "cost_currency": next(iter(totals), "CNY") if single_currency else "multiple currencies",
+        "cost_by_currency": [{"currency": currency, "total_cost": _round(amount)} for currency, amount in totals.most_common()],
+    }
+
+
 @router.get("/stats", response_model=DashboardStats)
 def get_dashboard_stats(
     days: int = Query(default=30, ge=1, le=365),
@@ -281,12 +301,11 @@ def get_dashboard_stats(
     total_tasks = len(task_entries)
     successful_tasks = sum(1 for entry in task_entries if entry.task_status == TaskStatus.completed)
     failed_tasks = sum(1 for entry in task_entries if entry.task_status == TaskStatus.failed)
-    cost_by_currency_counter: Counter[str] = Counter()
-    for entry in billable_task_entries:
-        cost_by_currency_counter[(entry.cost_currency or "CNY").upper()] += float(entry.cost or 0)
-    total_cost = sum(cost_by_currency_counter.values())
-    primary_currency = cost_by_currency_counter.most_common(1)[0][0] if cost_by_currency_counter else "CNY"
-    avg_cost = total_cost / total_tasks if total_tasks else 0.0
+    cost_by_currency_counter = _dashboard_costs(billable_task_entries)
+    total_money = _dashboard_money(cost_by_currency_counter)
+    total_cost = total_money["total_cost"]
+    primary_currency = total_money["cost_currency"]
+    avg_cost = None if total_cost is None else (total_cost / total_tasks if total_tasks else 0.0)
     avg_latency = sum(int(entry.latency_ms or 0) for entry in task_entries) / total_tasks if total_tasks else 0.0
     audit_logs = db.scalar(select(func.count(AuditLog.id))) or 0
     outbound_tasks = sum(1 for entry in task_entries if entry.requested_provider)
@@ -307,9 +326,7 @@ def get_dashboard_stats(
         provider_tasks = [entry for entry in task_entries if entry.requested_provider == name]
         provider_success = sum(1 for entry in provider_tasks if entry.task_status == TaskStatus.completed)
         provider_failed = sum(1 for entry in provider_tasks if entry.task_status == TaskStatus.failed)
-        provider_cost = sum(float(entry.cost or 0) for entry in provider_tasks if not _is_legacy_local_pricing_entry(entry))
-        provider_currency_counts = Counter((entry.cost_currency or "CNY").upper() for entry in provider_tasks)
-        provider_currency = provider_currency_counts.most_common(1)[0][0] if provider_currency_counts else "CNY"
+        provider_money = _dashboard_money(_dashboard_costs([entry for entry in provider_tasks if not _is_legacy_local_pricing_entry(entry)]))
         provider_latency = (
             sum(int(entry.latency_ms or 0) for entry in provider_tasks) / len(provider_tasks)
             if provider_tasks
@@ -322,8 +339,7 @@ def get_dashboard_stats(
                 "successful_tasks": provider_success,
                 "failed_tasks": provider_failed,
                 "success_rate": _success_rate(provider_success, count),
-                "total_cost": _round(provider_cost),
-                "cost_currency": provider_currency,
+                **provider_money,
                 "average_latency_ms": _round(provider_latency),
             }
         )
@@ -347,6 +363,21 @@ def get_dashboard_stats(
     if user_name:
         user_filters.append(User.name == user_name)
     users = db.scalars(select(User).where(*user_filters).order_by(User.created_at.desc(), User.id.desc())).all()
+
+    month_start_date = end_date.replace(day=1)
+    next_month_date = (month_start_date + timedelta(days=32)).replace(day=1)
+    monthly_entries_by_user: dict[int, list[UsageLedger]] = defaultdict(list)
+    # Quotas use the whole account month, independently of the dashboard filters.
+    monthly_entries = db.scalars(
+        select(UsageLedger).where(
+            UsageLedger.user_id.in_([user.id for user in users]),
+            UsageLedger.entry_type.in_(("task.finalized", "chat.message.completed")),
+            UsageLedger.recorded_at >= _shanghai_day_start_utc(month_start_date),
+            UsageLedger.recorded_at < _shanghai_day_start_utc(next_month_date),
+        )
+    ).all()
+    for entry in monthly_entries:
+        monthly_entries_by_user[entry.user_id].append(entry)
 
     tasks_by_user: dict[int, list[UsageLedger]] = defaultdict(list)
     chats_by_user: dict[int, list[UsageLedger]] = defaultdict(list)
@@ -391,18 +422,7 @@ def get_dashboard_stats(
         user_total = len(user_tasks)
         user_success = sum(1 for entry in user_tasks if entry.task_status == TaskStatus.completed)
         user_failed = sum(1 for entry in user_tasks if entry.task_status == TaskStatus.failed)
-        user_currency_costs: Counter[str] = Counter()
-        for entry in user_tasks:
-            if _is_legacy_local_pricing_entry(entry):
-                continue
-            user_currency_costs[(entry.cost_currency or "CNY").upper()] += float(entry.cost or 0)
-        for entry in user_chats:
-            user_currency_costs[(entry.cost_currency or "CNY").upper()] += float(entry.cost or 0)
-        user_cost = round(sum(user_currency_costs.values()), 4)
-        user_currency_counts = Counter(
-            {currency: total_cost for currency, total_cost in user_currency_costs.items() if total_cost > 0}
-        )
-        user_currency = user_currency_counts.most_common(1)[0][0] if user_currency_counts else "CNY"
+        user_currency_costs = _dashboard_costs([entry for entry in user_tasks if not _is_legacy_local_pricing_entry(entry)] + user_chats)
         user_latency = (
             sum(int(entry.latency_ms or 0) for entry in user_tasks) / user_total
             if user_total
@@ -425,7 +445,11 @@ def get_dashboard_stats(
             _apply_chat_usage(task_bucket, entry)
 
         quota_limit = user.monthly_quota
-        quota_remaining = None if quota_limit is None else _round(max(quota_limit - user_cost, 0.0))
+        month_costs = _dashboard_costs(monthly_entries_by_user.get(user.id, []))
+        quota_comparable = all(currency == "CNY" for currency in month_costs)
+        quota_used = _round(month_costs.get("CNY", 0.0)) if quota_comparable else None
+        quota_remaining = None if quota_limit is None or not quota_comparable else _round(max(quota_limit - quota_used, 0.0))
+        quota_status = _quota_status(quota_limit, quota_used) if quota_comparable else ("unlimited" if quota_limit is None else "incomparable")
         last_activity = max(
             [entry.recorded_at for entry in user_tasks] + [entry.recorded_at for entry in user_chats],
             default=None,
@@ -439,10 +463,13 @@ def get_dashboard_stats(
                 is_active=user.is_active,
                 project_codes=user.project_codes or [],
                 quota_limit=quota_limit,
-                quota_used=_round(user_cost),
-                quota_currency=user_currency,
+                quota_used=quota_used,
+                quota_currency="CNY",
+                quota_comparable=quota_comparable,
+                quota_month=month_start_date.strftime("%Y-%m"),
+                quota_cost_by_currency=[DashboardCurrencySpend(**row) for row in _dashboard_money(month_costs)["cost_by_currency"]],
                 quota_remaining=quota_remaining,
-                quota_status=_quota_status(quota_limit, user_cost),
+                quota_status=quota_status,
                 billing_plan=user.billing_plan,
                 billing_status=user.billing_status,
                 quota_policy=user.quota_policy,
@@ -458,11 +485,7 @@ def get_dashboard_stats(
                 model_calls=[
                     {"name": name, "count": count} for name, count in user_models.most_common(5)
                 ],
-                cost_by_currency=[
-                    DashboardCurrencySpend(currency=currency, total_cost=_round(total_cost))
-                    for currency, total_cost in user_currency_costs.most_common()
-                    if total_cost > 0
-                ],
+                cost_by_currency=[DashboardCurrencySpend(**row) for row in _dashboard_money(user_currency_costs)["cost_by_currency"]],
                 last_task_at=max((entry.recorded_at for entry in user_tasks), default=None),
                 last_activity_at=last_activity,
                 **task_bucket,
@@ -501,6 +524,7 @@ def get_dashboard_stats(
             )
         for entry in daily_chat_map.get(day_key, []):
             _apply_chat_usage(task_bucket, entry)
+        daily_money = _dashboard_money(_dashboard_costs([entry for entry in daily_tasks_map.get(day_key, []) if not _is_legacy_local_pricing_entry(entry)]))
         daily_series.append(
             DashboardDailyPoint(
                 date=day_key,
@@ -511,7 +535,7 @@ def get_dashboard_stats(
                 failed_tasks=sum(
                     1 for entry in daily_tasks_map.get(day_key, []) if entry.task_status == TaskStatus.failed
                 ),
-                total_cost=_round(sum(float(entry.cost or 0) for entry in daily_tasks_map.get(day_key, []))),
+                **daily_money,
                 image_generate_count=task_bucket["image_generate_count"],
                 image_edit_count=task_bucket["image_edit_count"],
                 video_generate_count=task_bucket["video_generate_count"],
@@ -627,8 +651,7 @@ def get_dashboard_stats(
                 "video_task_count": 0,
                 "chat_turn_count": 0,
                 "chat_total_tokens": 0,
-                "total_cost": 0.0,
-                "cost_currency": primary_currency,
+                "currency_costs": Counter(),
             }
             model_rows_map[name] = row
         return row
@@ -647,7 +670,7 @@ def get_dashboard_stats(
         if capability == "video.generate":
             row["video_task_count"] = int(row["video_task_count"]) + 1
         if not _is_legacy_local_pricing_entry(entry):
-            row["total_cost"] = float(row["total_cost"]) + float(entry.cost or 0)
+            row["currency_costs"][_dashboard_currency(entry)] += float(entry.cost or 0)
 
     for entry in chat_entries:
         model_name = str(entry.model_name or entry.provider_name or entry.requested_provider or "Chat").strip() or "Chat"
@@ -655,7 +678,7 @@ def get_dashboard_stats(
         row["chat_turn_count"] = int(row["chat_turn_count"]) + 1
         row["chat_total_tokens"] = int(row["chat_total_tokens"]) + int(entry.total_tokens or 0)
         if not _is_legacy_local_pricing_entry(entry):
-            row["total_cost"] = float(row["total_cost"]) + float(entry.cost or 0)
+            row["currency_costs"][_dashboard_currency(entry)] += float(entry.cost or 0)
 
     model_rankings = sorted(
         (
@@ -668,8 +691,7 @@ def get_dashboard_stats(
                 "video_task_count": int(values["video_task_count"]),
                 "chat_turn_count": int(values["chat_turn_count"]),
                 "chat_total_tokens": int(values["chat_total_tokens"]),
-                "total_cost": _round(float(values["total_cost"])),
-                "cost_currency": str(values["cost_currency"] or primary_currency),
+                **_dashboard_money(values["currency_costs"]),
                 "success_rate": _success_rate(int(values["successful_tasks"]), int(values["count"])),
             }
             for values in model_rows_map.values()
@@ -689,14 +711,14 @@ def get_dashboard_stats(
         successful_tasks=successful_tasks,
         failed_tasks=failed_tasks,
         success_rate=success_rate,
-        average_cost=round(float(avg_cost), 2),
+        average_cost=round(float(avg_cost), 2) if avg_cost is not None else None,
         average_latency_ms=round(float(avg_latency), 2),
         audit_coverage_rate=audit_coverage_rate,
         outbound_tasks=outbound_tasks,
-        total_cost=round(total_cost, 2),
+        total_cost=round(total_cost, 2) if total_cost is not None else None,
         cost_unit=primary_currency if len(cost_by_currency_counter) <= 1 else "multiple currencies",
         cost_formula=(
-            "总成本按币种分别汇总：total_cost = sum(tasks.cost)。"
+            "窗口生成任务成本按币种分别汇总，混币不合并；Chat支出见模型与账号分币明细。"
             "运营主视图同时展示出图张数、视频任务次数与 Chat 轮次。"
         ),
         cost_notes=[
@@ -706,13 +728,9 @@ def get_dashboard_stats(
             "只有在模型配置里维护了 pricing_currency、pricing_unit 和 unit_price 后，成本才代表真实计费口径。",
             "旧版 gpt-image-2 的本地 CNY 历史已从当前运营支出口径中排除，原始记录仍保留在账本中。",
             "Chat token 统计仅从本次版本之后的新消息开始准确记录，历史消息不做回填。",
-            "账号额度目前仍是软监管，只做展示与预警，不会阻断任务创建。",
+            "月额度按人民币和上海自然月统计；含其他币种时仅列分币支出，不换算额度。",
         ],
-        cost_by_currency=[
-            {"currency": currency, "total_cost": _round(cost)}
-            for currency, cost in cost_by_currency_counter.most_common()
-            if abs(float(cost)) > 0
-        ],
+        cost_by_currency=total_money["cost_by_currency"],
         user_rankings=[{"name": name, "count": count} for name, count in user_counts.most_common(10)],
         project_rankings=[{"code": code, "count": count} for code, count in project_counts.most_common(10)],
         provider_rankings=provider_rows,

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import GenerationIntent, GenerationSession
@@ -88,91 +89,102 @@ def recompute_session_metrics(db: Session, session_id: int) -> GenerationSession
     return session
 
 
-def assign_intent_to_session(db: Session, intent: GenerationIntent) -> GenerationSession:
-    submitted_at = _utc(intent.submitted_at) or datetime.now(timezone.utc)
-    ref_fp = intent.ref_fingerprint or ""
+@contextmanager
+def _session_update(db: Session):
+    """Keep maintenance in the caller's transaction, including SQLite savepoints."""
+    connection = db.connection()
+    if connection.dialect.name == "sqlite" and not connection.connection.driver_connection.in_transaction:
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+    with db.begin_nested():
+        yield
 
-    recent_intent = db.scalar(
-        select(GenerationIntent)
-        .where(
-            GenerationIntent.user_id == intent.user_id,
-            GenerationIntent.ref_fingerprint == ref_fp,
-            GenerationIntent.id != intent.id,
-        )
-        .order_by(GenerationIntent.submitted_at.desc(), GenerationIntent.id.desc())
-    )
 
-    session: GenerationSession | None = None
-    if recent_intent is not None:
-        recent_at = _utc(recent_intent.submitted_at)
-        if recent_at and submitted_at - recent_at <= SESSION_GAP and recent_intent.session_id is not None:
-            session = db.get(GenerationSession, recent_intent.session_id)
+def _session_key(row) -> tuple[int, str]:
+    return row.user_id, row.ref_fingerprint or ""
 
-    if session is None:
-        session = GenerationSession(
-            user_id=intent.user_id,
-            project_id=intent.project_id,
-            ref_fingerprint=ref_fp,
-            session_started_at=submitted_at,
-            session_ended_at=submitted_at,
-        )
-        db.add(session)
-        db.flush()
 
-    intent.session_id = session.id
+def _cluster_generation_intents(intents: list[GenerationIntent]) -> list[list[GenerationIntent]]:
+    if any(_utc(intent.submitted_at) is None for intent in intents):
+        raise ValueError("Session clustering requires an explicit historical submission time")
+    ordered = sorted(intents, key=lambda row: (*_session_key(row), _utc(row.submitted_at), row.id))
+    components = []
+    for intent in ordered:
+        previous = components[-1][-1] if components else None
+        gap = _utc(intent.submitted_at) - _utc(previous.submitted_at) if previous is not None else None
+        if previous is None or _session_key(previous) != _session_key(intent) or not (timedelta(0) <= gap <= SESSION_GAP):
+            components.append([])
+        components[-1].append(intent)
+    return components
+
+
+def _reconcile_generation_sessions(db: Session, intents: list[GenerationIntent], sessions: list[GenerationSession], *, full: bool) -> dict[str, int]:
+    components = _cluster_generation_intents(intents)
+    old = {session.id: session for session in sessions}
+    members = defaultdict(set)
+    for intent in intents:
+        if intent.session_id is not None:
+            members[intent.session_id].add(intent.id)
+    if not full and old:
+        outside = db.scalar(select(GenerationIntent.id).where(
+            GenerationIntent.session_id.in_(old), GenerationIntent.id.not_in([intent.id for intent in intents])).limit(1))
+        mismatched = any(intent.session_id in old and _session_key(old[intent.session_id]) != _session_key(intent) for intent in intents)
+        if outside is not None or mismatched:
+            raise ValueError("Historical session crosses user/reference keys; explicit full reconciliation is required")
+
+    used = set()
+    inserted = 0
+    metrics_ids = []
+    for component in components:
+        key = _session_key(component[0])
+        candidates = sorted({intent.session_id for intent in component
+                             if intent.session_id in old and intent.session_id not in used and _session_key(old[intent.session_id]) == key})
+        if candidates:
+            session = old[candidates[0]]
+        else:
+            session = GenerationSession(user_id=key[0], project_id=component[0].project_id, ref_fingerprint=key[1],
+                                        session_started_at=_utc(component[0].submitted_at), session_ended_at=_utc(component[-1].submitted_at))
+            db.add(session)
+            db.flush()
+            inserted += 1
+        used.add(session.id)
+        if full or members[session.id] != {intent.id for intent in component}:
+            metrics_ids.append(session.id)
+        for intent in component:
+            if intent.session_id != session.id:
+                intent.session = session
+                intent.session_id = session.id
     db.flush()
-    recompute_session_metrics(db, session.id)
-    return session
+    for session_id in metrics_ids:
+        recompute_session_metrics(db, session_id)
+    obsolete = set(old) - used
+    removed = 0
+    if obsolete:
+        # Move/flush all FKs first; ORM parent deletion could otherwise null loaded relationships.
+        removed = db.execute(delete(GenerationSession).where(
+            GenerationSession.id.in_(obsolete), ~GenerationSession.intents.any()
+        ).execution_options(synchronize_session="fetch")).rowcount
+    return {"intents_processed": len(intents),
+            # Retain the old API's rebuilt-component count; report actual inserts separately.
+            "sessions_created": len(components), "sessions_inserted": inserted,
+            "sessions_reused": len(components) - inserted, "sessions_removed": removed}
+
+
+def assign_intent_to_session(db: Session, intent: GenerationIntent) -> GenerationSession:
+    with _session_update(db):
+        user_id, ref = _session_key(intent)
+        same_ref = or_(GenerationIntent.ref_fingerprint == ref, GenerationIntent.ref_fingerprint.is_(None)) if not ref else GenerationIntent.ref_fingerprint == ref
+        intents = list(db.scalars(select(GenerationIntent).where(GenerationIntent.user_id == user_id, same_ref)))
+        old_ids = {row.session_id for row in intents if row.session_id is not None}
+        same_session_ref = or_(GenerationSession.ref_fingerprint == ref, GenerationSession.ref_fingerprint.is_(None)) if not ref else GenerationSession.ref_fingerprint == ref
+        sessions = list(db.scalars(select(GenerationSession).where(or_(
+            (GenerationSession.user_id == user_id) & same_session_ref, GenerationSession.id.in_(old_ids)))))
+        _reconcile_generation_sessions(db, intents, sessions, full=False)
+        return db.get(GenerationSession, intent.session_id)
 
 
 def recompute_all_generation_sessions(db: Session) -> dict[str, int]:
-    """Rebuild sessions from scratch using time-gap clustering."""
-    intents = db.scalars(
-        select(GenerationIntent).order_by(GenerationIntent.user_id.asc(), GenerationIntent.submitted_at.asc())
-    ).all()
-    for intent in intents:
-        intent.session_id = None
-    db.flush()
-
-    db.execute(delete(GenerationSession))
-    db.flush()
-
-    sessions_created = 0
-    current_session: GenerationSession | None = None
-    current_key: tuple[int, str] | None = None
-    last_submitted_at: datetime | None = None
-
-    for intent in intents:
-        submitted_at = _utc(intent.submitted_at) or datetime.now(timezone.utc)
-        key = (intent.user_id, intent.ref_fingerprint or "")
-        gap_exceeded = (
-            current_session is not None
-            and last_submitted_at is not None
-            and submitted_at - last_submitted_at > SESSION_GAP
-        )
-        if current_session is None or current_key != key or gap_exceeded:
-            current_session = GenerationSession(
-                user_id=intent.user_id,
-                project_id=intent.project_id,
-                ref_fingerprint=intent.ref_fingerprint or "",
-                session_started_at=submitted_at,
-                session_ended_at=submitted_at,
-            )
-            db.add(current_session)
-            db.flush()
-            sessions_created += 1
-            current_key = key
-
-        intent.session_id = current_session.id
-        last_submitted_at = submitted_at
-        current_session.session_ended_at = submitted_at
-
-    db.flush()
-    session_ids = db.scalars(select(GenerationSession.id)).all()
-    for session_id in session_ids:
-        recompute_session_metrics(db, session_id)
-
-    return {
-        "intents_processed": len(intents),
-        "sessions_created": sessions_created,
-    }
+    """Reconcile canonical components while reusing surviving session identities."""
+    with _session_update(db):
+        intents = list(db.scalars(select(GenerationIntent)))
+        sessions = list(db.scalars(select(GenerationSession)))
+        return _reconcile_generation_sessions(db, intents, sessions, full=True)

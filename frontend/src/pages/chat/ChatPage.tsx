@@ -26,6 +26,8 @@ import type { ChatTaskProposal, ChatThinkingStep, ChatToolCall } from "../../lib
 import { chatAgentModeDefaultFor } from "../../lib/featureFlags";
 import { useChatAgentUiEnabled } from "../../lib/useChatAgentUiEnabled";
 import { useChatAttachments } from "../../lib/chat/useChatAttachments";
+import { chatAttachmentMessageUrl, releaseChatAttachmentPreviews } from "../../lib/chat/chatAttachmentUtils";
+import { ChatSendLifecycle, chatSendScopeKey, createChatClientMessageId, type ChatSendScope, type ChatSendEntry, type ChatSendFinish } from "../../lib/chat/chatSendLifecycle";
 import ChatAgentCapabilitiesDrawer from "./ChatAgentCapabilitiesDrawer";
 import ChatAgentMemoryDrawer from "./ChatAgentMemoryDrawer";
 import ChatAgentThinkingPanel, { mergeThinkingSteps } from "./ChatAgentThinkingPanel";
@@ -81,6 +83,35 @@ export default function ChatPage() {
     return saved ? parseInt(saved, 10) : null;
   });
   const [chatInput, setChatInput] = useState("");
+  const chatInputRef = useRef(chatInput);
+  chatInputRef.current = chatInput;
+  function replaceChatInput(value: string) { chatInputRef.current = value; setChatInput(value); }
+  const owner = String(currentUser?.id ?? "guest");
+  const selection = useRef<ChatSendScope>({ owner, conversationId: activeChatId, generation: 0 });
+  if (selection.current.owner !== owner || selection.current.conversationId !== activeChatId) selection.current = { owner, conversationId: activeChatId, generation: selection.current.generation + 1 };
+  const historySequence = useRef(0);
+  const viewRevision = useRef(0);
+  const listSequence = useRef(0);
+  const modelSequence = useRef(0);
+  const createSequence = useRef(0);
+  const deleteSequence = useRef(new Map<number, number>());
+  const exportSequence = useRef(0);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [pendingHistory, setPendingHistory] = useState<{ scope: ChatSendScope; sequence: number; revision: number; messages: UIMessage[] } | null>(null);
+  const appliedHistory = useRef(0);
+  const sendScope = selection.current;
+  const sdkChatId = activeChatId ? `${owner}:${activeChatId}:${sendScope.generation}` : `chat-disabled:${owner}`;
+  const lifecycle = useRef<ChatSendLifecycle | null>(null);
+  if (!lifecycle.current) lifecycle.current = new ChatSendLifecycle(releaseChatAttachmentPreviews);
+  const attachmentRef = useRef<ReturnType<typeof useChatAttachments> | null>(null);
+  const latestSend = useRef(new Map<string, string>());
+  const mounted = useRef(true);
+  const [, bumpRecovery] = useState(0);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; lifecycle.current?.dispose(); };
+  }, []);
+  useEffect(() => { setReplyPending(false); }, [owner, activeChatId]);
   const [chatModels, setChatModels] = useState<ChatModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<number | null>(() => {
     const saved = localStorage.getItem("qmdh_chat_model");
@@ -121,8 +152,11 @@ export default function ChatPage() {
   const transport = useMemo(
     () =>
       new QmdhChatTransport({
-        getConversationId: () => activeChatIdRef.current,
+        getConversationId: () => sendScope.conversationId,
         getAgentMode: () => agentModeRef.current,
+        isMounted: () => ownsScope(sendScope),
+        isCurrentSubmission: id => latestSend.current.get(currentTurnKey(sendScope)) === id && lifecycle.current?.get(id)?.settled === false,
+        onSubmissionState: receipt => lifecycle.current?.receipt(receipt),
         onMeta: (meta) => {
           if (meta.label) {
             setStreamStatusLabel(meta.label);
@@ -137,9 +171,10 @@ export default function ChatPage() {
             setContextWindowTokens(meta.context.window_tokens);
           }
           if (meta.context?.compressed) {
-            setConversations((current) =>
+            listSequence.current += 1;
+            setConversations((current) => !ownsScope(sendScope) ? current :
               current.map((conversation) =>
-                conversation.id === activeChatIdRef.current
+                conversation.id === sendScope.conversationId
                   ? {
                       ...conversation,
                       has_context_summary: true,
@@ -163,13 +198,13 @@ export default function ChatPage() {
         },
         onThinkingStep: (step) => {
           setAgentThinking(true);
-          setActiveThinkingSteps((current) => mergeThinkingSteps(current, step));
+          setActiveThinkingSteps((current) => ownsScope(sendScope) ? mergeThinkingSteps(current, step) : current);
         },
         onPolicyVersion: (policyVersion) => setActivePolicyVersion(policyVersion),
         onAgentThinking: () => setAgentThinking(true),
         onAgentProgress: () => setAgentThinking(false),
       }),
-    [],
+    [sdkChatId],
   );
 
   const {
@@ -179,54 +214,119 @@ export default function ChatPage() {
     setMessages: setChatMessages,
     error: streamError,
   } = useChat({
-    id: activeChatId ? String(activeChatId) : "chat-disabled",
+    id: sdkChatId,
     transport,
     experimental_throttle: 50,
-    onFinish: () => {
-      setStreamStatusLabel("");
-      resetChatStreamStatusTelemetry();
-      setAgentThinking(false);
-      setActiveThinkingSteps([]);
-      setActiveTaskProposals([]);
-      setActiveToolCalls([]);
-      void syncChatMessagesFromServer();
-      void flushChatTelemetry();
-    },
-    onError: (error) => {
-      setStreamStatusLabel("");
-      resetChatStreamStatusTelemetry();
-      setAgentThinking(false);
-      setActiveThinkingSteps([]);
-      setActiveTaskProposals([]);
-      setActiveToolCalls([]);
-      const message = error instanceof Error ? error.message : String(error);
-      const friendly = mapClientStreamErrorMessage(message);
-      reportChatTelemetry({
-        event: "chat.stream.client_error",
-        detail: message.slice(0, 500),
-        conversation_id: activeChatIdRef.current,
-      });
-      setChatError(friendly);
-      void syncChatMessagesFromServer();
-      void flushChatTelemetry();
-    },
+    onFinish: result => finishSend(sendScope, result),
+    onError: error => recordSendError(sendScope, error),
   });
 
-  async function syncChatMessagesFromServer() {
-    const conversationId = activeChatIdRef.current;
-    if (conversationId == null) {
-      setReplyPending(false);
-      return;
+  function ownsScope(scope: ChatSendScope): boolean {
+    return mounted.current && chatSendScopeKey(selection.current) === chatSendScopeKey(scope);
+  }
+  function ownsOwner(scope: ChatSendScope): boolean { return mounted.current && selection.current.owner === scope.owner; }
+  function selectConversation(conversationId: number | null): ChatSendScope {
+    const current = selection.current;
+    const next = current.conversationId === conversationId ? current : { ...current, conversationId, generation: current.generation + 1 };
+    selection.current = next; activeChatIdRef.current = conversationId;
+    historySequence.current += 1; viewRevision.current += 1;
+    setActiveChatId(conversationId);
+    setHistoryLoading(false); setPendingHistory(null); setReplyPending(false); setExportingMessageId(null);
+    setChatError(""); setStreamStatusLabel(""); resetChatStreamStatusTelemetry();
+    setActiveToolCalls([]); setActiveTaskProposals([]); setProposalDecisions({}); setActiveThinkingSteps([]); setActivePolicyVersion(null); setAgentThinking(false);
+    setContextUsagePercent(null); setContextTokens(null); setContextWindowTokens(null);
+    return next;
+  }
+  useEffect(() => {
+    if (!pendingHistory || !ownsScope(pendingHistory.scope) || pendingHistory.sequence !== historySequence.current || pendingHistory.revision !== viewRevision.current || appliedHistory.current === pendingHistory.sequence) return;
+    // useChat's setter follows the current ref. Apply only after this render selected the source SDK id.
+    if (chatSendScopeKey(sendScope) !== chatSendScopeKey(pendingHistory.scope)) return;
+    appliedHistory.current = pendingHistory.sequence;
+    setChatMessages(pendingHistory.messages); setPendingHistory(null);
+  }, [pendingHistory, sdkChatId]);
+  function currentTurnKey(scope: ChatSendScope): string { return JSON.stringify([scope.owner, scope.conversationId]); }
+  function refreshRecovery() { if (mounted.current) bumpRecovery(current => current + 1); }
+  function markClientMessage(entry: ChatSendEntry, submissionState: string, remove = false) {
+    if (!ownsScope(entry.scope)) return;
+    setChatMessages(current => remove ? current.filter(message => message.id !== entry.id) : current.map(message => message.id === entry.id ? {
+      ...message, metadata: { ...(message.metadata ?? {}), submission_state: submissionState },
+    } : message));
+  }
+  function canRestoreDraft(entry: ChatSendEntry): boolean {
+    const composer = attachmentRef.current;
+    return entry.phase === "rejected" && selection.current.owner === entry.scope.owner && selection.current.conversationId === entry.conversationId &&
+      chatInputRef.current === "" && composer !== null && !composer.uploading && composer.getAttachments().length === 0;
+  }
+  function restoreRejectedDraft(id: string) {
+    const entry = lifecycle.current?.get(id), composer = attachmentRef.current;
+    if (!entry || !composer || !canRestoreDraft(entry) || !composer.restoreAttachments(entry.held)) return;
+    const draft = lifecycle.current?.takeRejected(id);
+    if (draft) replaceChatInput(draft.rawText);
+    refreshRecovery();
+  }
+  function recordSendError(scope: ChatSendScope, error: unknown) {
+    lifecycle.current?.error(scope, error);
+    const message = error instanceof Error ? error.message : String(error);
+    reportChatTelemetry({ event: "chat.stream.client_error", detail: message.slice(0, 500), conversation_id: scope.conversationId });
+    if (ownsScope(scope)) setChatError(mapClientStreamErrorMessage(message));
+  }
+  function finishSend(scope: ChatSendScope, result: ChatSendFinish) {
+    const pending = lifecycle.current?.forScope(scope);
+    if (!pending) return;
+    const entry = lifecycle.current?.finish(pending.id, result);
+    if (!entry) return;
+    if (ownsScope(scope)) {
+      setReplyPending(false); setStreamStatusLabel(""); resetChatStreamStatusTelemetry(); setAgentThinking(false);
     }
+    if (entry.phase === "rejected") {
+      markClientMessage(entry, "rejected", true);
+      if (ownsScope(scope) && canRestoreDraft(entry)) restoreRejectedDraft(entry.id);
+      if (ownsScope(scope)) setChatError(entry.error ? mapClientStreamErrorMessage(entry.error) : "本次消息未被接收，草稿已保留，可核对后手动重试。");
+    } else if (entry.phase === "unknown") {
+      markClientMessage(entry, "unknown");
+      if (ownsScope(scope)) setChatError("是否接收这条消息尚未确认。原文和附件已保留，请先核对服务器记录，不要直接重发。");
+    } else {
+      markClientMessage(entry, entry.failed ? "accepted_failed" : "accepted");
+      if (entry.failed) {
+        if (ownsScope(scope)) setChatError("消息已被接收，但回复未完成；已保留收到的正文和产物，请勿重复发送这条消息。");
+      } else void syncChatMessagesFromServer(entry);
+    }
+    refreshRecovery();
+    void flushChatTelemetry();
+  }
+  async function syncChatMessagesFromServer(entry: ChatSendEntry) {
+    const revision = viewRevision.current, listRequest = ++listSequence.current;
     try {
-      await refreshConversations(conversationId);
-      const nextMessages = await api.getChatMessages(conversationId);
+      const [nextConversations, nextMessages] = await Promise.all([api.getChatConversations(), api.getChatMessages(entry.conversationId)]);
+      if (!ownsScope(entry.scope) || revision !== viewRevision.current || latestSend.current.get(currentTurnKey(entry.scope)) !== entry.id) return;
+      if (entry.userMessageId == null || !nextMessages.some(message => message.id === entry.userMessageId && message.role === "user")) return;
+      if (listRequest === listSequence.current) setConversations(nextConversations);
       setChatMessages(toUiMessages(nextMessages));
+      setActiveThinkingSteps([]); setActiveTaskProposals([]); setActiveToolCalls([]);
     } catch {
-      // Keep the streamed transcript if sync fails.
-    } finally {
-      setReplyPending(false);
+      // Keep the streamed transcript, durable attachments and known artifacts.
     }
+  }
+  async function inspectUnknownSend(id: string) {
+    const entry = lifecycle.current?.get(id);
+    if (!entry || entry.phase !== "unknown" || entry.checking || entry.scope.owner !== selection.current.owner || entry.conversationId !== selection.current.conversationId) return;
+    const inspectionScope = selection.current;
+    entry.checking = true; entry.checked = false; refreshRecovery();
+    try {
+      const records = await api.getChatMessages(entry.conversationId);
+      if (!ownsScope(inspectionScope) || lifecycle.current?.get(id) !== entry) return;
+      entry.inspectedMessages = records; entry.checked = true;
+    } catch (error) {
+      if (ownsScope(inspectionScope)) setChatError(`未完成服务器记录核对，仍不能直接重发。${error instanceof Error ? error.message : "请稍后重试"}`);
+    } finally {
+      entry.checking = false; refreshRecovery();
+    }
+  }
+  function dismissRecovery(id: string, acknowledged: boolean) {
+    const entry = lifecycle.current?.get(id);
+    if (!entry || entry.checking || entry.scope.owner !== selection.current.owner || entry.conversationId !== selection.current.conversationId || (acknowledged && !entry.checked)) return;
+    markClientMessage(entry, acknowledged ? "accepted_by_user" : "unknown_abandoned");
+    lifecycle.current?.discard(id); refreshRecovery();
   }
 
   const streaming = status === "streaming" || status === "submitted";
@@ -240,6 +340,9 @@ export default function ChatPage() {
     disabled: isGuest || busyReply || activeChatId == null,
     conversationId: activeChatId,
   });
+  attachmentRef.current = attachmentState;
+  const sendRecoveries = lifecycle.current?.recoveries(owner, activeChatId) ?? [];
+  const sendBlocked = lifecycle.current?.blocking(owner, activeChatId) ?? false;
 
   useEffect(() => {
     if (!busyReply || !streamStatusLabel.trim()) {
@@ -270,54 +373,39 @@ export default function ChatPage() {
     element.style.height = `${Math.min(element.scrollHeight, 160)}px`;
   }
 
-  async function refreshConversations(preferredConversationId?: number | null) {
+  async function refreshConversations(scope: ChatSendScope) {
+    const request = ++listSequence.current;
     const nextConversations = await api.getChatConversations();
-    setConversations(nextConversations);
-
-    const pinnedConversationId = preferredConversationId ?? activeChatId;
-    if (pinnedConversationId == null) {
-      return nextConversations;
-    }
-    if (!nextConversations.some((conversation) => conversation.id === pinnedConversationId)) {
-      setActiveChatId(null);
-      setChatMessages([]);
-      localStorage.removeItem(ACTIVE_CHAT_STORAGE_KEY);
-    }
+    if (ownsOwner(scope) && request === listSequence.current) setConversations(nextConversations);
+    // This owner-level list read never chooses a view or clears a mutable SDK ref.
     return nextConversations;
   }
 
-  async function loadConversation(conversationId: number) {
-    const previousConversationId = activeChatIdRef.current;
+  async function loadConversation(conversationId: number, listedConversation?: ChatConversation) {
+    if (!ownsOwner(sendScope)) return;
+    const previousConversationId = selection.current.conversationId;
+    if (previousConversationId === conversationId && lifecycle.current?.blocking(owner, conversationId)) return;
     if (busyReplyRef.current && previousConversationId != null && previousConversationId !== conversationId) {
-      reportChatTelemetry({
-        event: "chat.conversation.switch",
-        detail: `from=${previousConversationId} to=${conversationId}`,
-        conversation_id: previousConversationId,
-      });
+      reportChatTelemetry({ event: "chat.conversation.switch", detail: `from=${previousConversationId} to=${conversationId}`, conversation_id: previousConversationId });
       void flushChatTelemetry();
     }
-    setChatError("");
-    setStreamStatusLabel("");
-    resetChatStreamStatusTelemetry();
-    setActiveChatId(conversationId);
-    pendingInitialScrollRef.current = true;
-    previousMessageCountRef.current = 0;
-    const listed = conversations.find((item) => item.id === conversationId);
-    if (listed) {
-      setContextUsagePercent(listed.context_usage_percent ?? 0);
-      setContextTokens(listed.context_tokens ?? 0);
-      setContextWindowTokens(listed.context_window_tokens ?? 0);
-      if (listed.model_provider_id != null) {
-        setSelectedModel(listed.model_provider_id);
-        localStorage.setItem("qmdh_chat_model", String(listed.model_provider_id));
-      }
-    }
+    const scope = selectConversation(conversationId), sequence = historySequence.current, revision = viewRevision.current;
+    setHistoryLoading(true);
+    pendingInitialScrollRef.current = true; previousMessageCountRef.current = 0;
+    const listed = listedConversation ?? conversations.find(item => item.id === conversationId);
+    setContextUsagePercent(listed?.context_usage_percent ?? 0);
+    setContextTokens(listed?.context_tokens ?? 0);
+    setContextWindowTokens(listed?.context_window_tokens ?? 0);
+    setSelectedModel(listed?.model_provider_id ?? null);
+    if (listed?.model_provider_id != null) localStorage.setItem("qmdh_chat_model", String(listed.model_provider_id));
+    const current = () => ownsScope(scope) && sequence === historySequence.current && revision === viewRevision.current;
     try {
       const nextMessages = await api.getChatMessages(conversationId);
-      setChatMessages(toUiMessages(nextMessages));
+      if (current()) setPendingHistory({ scope, sequence, revision, messages: toUiMessages(nextMessages) });
     } catch (error) {
-      setChatMessages([]);
-      setChatError(error instanceof Error ? error.message : "加载会话消息失败");
+      if (current()) setChatError(error instanceof Error ? error.message : "加载会话消息失败");
+    } finally {
+      if (current()) setHistoryLoading(false);
     }
   }
 
@@ -368,27 +456,25 @@ export default function ChatPage() {
   }, [effectiveAgentMode]);
 
   useEffect(() => {
+    let cancelled = false;
+    const scope = selection.current, initialSequence = historySequence.current;
     async function bootstrap() {
       try {
-        const [models, nextConversations] = await Promise.all([api.getChatModels(), refreshConversations(null)]);
+        const [models, nextConversations] = await Promise.all([api.getChatModels(), refreshConversations(scope)]);
+        if (cancelled || !ownsOwner(scope)) return;
         setChatModels(models);
+        if (!ownsScope(scope) || initialSequence !== historySequence.current) return;
         setChatError("");
-
-        const initialConversationId = nextConversations[0]?.id ?? null;
-
-        if (initialConversationId !== null) {
-          await loadConversation(initialConversationId);
-        } else {
-          setActiveChatId(null);
-          setChatMessages([]);
-        }
+        const initialConversationId = nextConversations.some(item => item.id === scope.conversationId) ? scope.conversationId : nextConversations[0]?.id ?? null;
+        if (initialConversationId !== null) await loadConversation(initialConversationId, nextConversations.find(item => item.id === initialConversationId));
+        else selectConversation(null);
       } catch (error) {
-        setChatError(error instanceof Error ? error.message : "加载 Chat 页面失败");
+        if (!cancelled && ownsScope(scope) && initialSequence === historySequence.current) setChatError(error instanceof Error ? error.message : "加载 Chat 页面失败");
       }
     }
-
     void bootstrap();
-  }, []);
+    return () => { cancelled = true; };
+  }, [owner, isGuest]);
 
   useEffect(() => {
     if (activeChatId == null) {
@@ -409,12 +495,12 @@ export default function ChatPage() {
   }, [chatInput]);
 
   useEffect(() => {
-    if (!streamError) {
+    if (!streamError || lifecycle.current?.blocking(owner, activeChatId)) {
       return;
     }
     const friendly = mapClientStreamErrorMessage(streamError.message);
     setChatError((current) => (current === friendly ? current : friendly));
-  }, [streamError]);
+  }, [streamError, owner, activeChatId]);
 
   const lastMessage = chatMessages[chatMessages.length - 1];
   const lastMessageContent = lastMessage ? getUiMessageText(lastMessage) : "";
@@ -439,82 +525,77 @@ export default function ChatPage() {
   }, [activeChatId, chatMessages.length, lastMessageContent]);
 
   async function handleModelChange(nextProviderId: number) {
-    setSelectedModel(nextProviderId);
-    localStorage.setItem("qmdh_chat_model", String(nextProviderId));
-    if (activeChatId == null) {
-      return;
-    }
+    const scope = sendScope, navigation = historySequence.current;
+    if (!(ownsScope(scope) && navigation === historySequence.current)) return;
+    const request = ++modelSequence.current;
+    listSequence.current += 1;
+    setSelectedModel(nextProviderId); localStorage.setItem("qmdh_chat_model", String(nextProviderId));
+    if (scope.conversationId == null) return;
     try {
-      const updated = await api.updateChatConversation(activeChatId, { model_provider_id: nextProviderId });
-      setConversations((current) =>
-        current.map((conversation) =>
-          conversation.id === activeChatId
-            ? {
-                ...conversation,
-                model_provider_id: updated.model_provider_id,
-                has_context_summary: updated.has_context_summary ?? conversation.has_context_summary,
-                context_usage_percent: updated.context_usage_percent ?? conversation.context_usage_percent,
-                context_tokens: updated.context_tokens ?? conversation.context_tokens,
-                context_window_tokens: updated.context_window_tokens ?? conversation.context_window_tokens,
-                updated_at: updated.updated_at,
-              }
-            : conversation,
-        ),
-      );
+      const updated = await api.updateChatConversation(scope.conversationId, { model_provider_id: nextProviderId });
+      if (!(ownsScope(scope) && navigation === historySequence.current) || request !== modelSequence.current) return;
+      listSequence.current += 1;
+      setConversations(current => !(ownsScope(scope) && navigation === historySequence.current) || request !== modelSequence.current ? current : current.map(conversation => conversation.id === scope.conversationId ? {
+        ...conversation, model_provider_id: updated.model_provider_id,
+        has_context_summary: updated.has_context_summary ?? conversation.has_context_summary,
+        context_usage_percent: updated.context_usage_percent ?? conversation.context_usage_percent,
+        context_tokens: updated.context_tokens ?? conversation.context_tokens,
+        context_window_tokens: updated.context_window_tokens ?? conversation.context_window_tokens,
+        updated_at: updated.updated_at,
+      } : conversation));
       setContextUsagePercent(updated.context_usage_percent ?? null);
-      setContextTokens(updated.context_tokens ?? null);
-      setContextWindowTokens(updated.context_window_tokens ?? null);
-      setChatError("");
+      setContextTokens(updated.context_tokens ?? null); setContextWindowTokens(updated.context_window_tokens ?? null); setChatError("");
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : "切换模型失败");
+      if ((ownsScope(scope) && navigation === historySequence.current) && request === modelSequence.current) setChatError(error instanceof Error ? error.message : "切换模型失败");
     }
   }
 
   async function handleCreateConversation() {
-    if (isGuest) {
-      setChatError("访客模式无法新建对话，请先登录。");
-      return;
-    }
-    if (!selectedModel) {
-      setChatError("请先选择模型。");
-      return;
-    }
-
+    const scope = sendScope, navigation = historySequence.current;
+    if (!(ownsScope(scope) && navigation === historySequence.current)) return;
+    if (isGuest) { setChatError("访客模式无法新建对话，请先登录。"); return; }
+    if (!selectedModel) { setChatError("请先选择模型。"); return; }
+    const request = ++createSequence.current;
+    listSequence.current += 1;
     try {
       const conversation = await api.createChatConversation(selectedModel);
-      await refreshConversations(conversation.id);
-      await loadConversation(conversation.id);
+      if (!ownsOwner(scope) || request !== createSequence.current) return;
+      listSequence.current += 1;
+      setConversations(current => ownsOwner(scope) ? [conversation, ...current.filter(item => item.id !== conversation.id)] : current);
+      if (!(ownsScope(scope) && navigation === historySequence.current)) return;
+      const nextConversations = await refreshConversations(scope);
+      if ((ownsScope(scope) && navigation === historySequence.current) && request === createSequence.current) await loadConversation(conversation.id, nextConversations.find(item => item.id === conversation.id) ?? conversation);
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : "创建新对话失败");
+      if ((ownsScope(scope) && navigation === historySequence.current) && request === createSequence.current) setChatError(error instanceof Error ? error.message : "创建新对话失败");
     }
   }
 
   async function handleDeleteConversation(conversationId: number) {
-    if (isGuest) {
-      setChatError("访客模式无法删除对话，请先登录。");
-      return;
-    }
+    const scope = sendScope, navigation = historySequence.current;
+    if (!(ownsScope(scope) && navigation === historySequence.current)) return;
+    if (isGuest) { setChatError("访客模式无法删除对话，请先登录。"); return; }
+    const request = (deleteSequence.current.get(conversationId) ?? 0) + 1;
+    deleteSequence.current.set(conversationId, request);
+    listSequence.current += 1;
     try {
       await api.deleteChatConversation(conversationId);
-      const deletingActiveConversation = activeChatId === conversationId;
-      const nextConversations = await refreshConversations(deletingActiveConversation ? null : activeChatId);
-
-      if (deletingActiveConversation) {
-        const fallbackConversationId = nextConversations[0]?.id ?? null;
-        if (fallbackConversationId !== null) {
-          await loadConversation(fallbackConversationId);
-        } else {
-          setActiveChatId(null);
-          setChatMessages([]);
-        }
-      }
+      if (!ownsOwner(scope)) return;
+      listSequence.current += 1;
+      setConversations(current => ownsOwner(scope) ? current.filter(item => item.id !== conversationId) : current);
+      if (!(ownsScope(scope) && navigation === historySequence.current) || request !== deleteSequence.current.get(conversationId) || scope.conversationId !== conversationId) return;
+      const nextConversations = await refreshConversations(scope);
+      if (!(ownsScope(scope) && navigation === historySequence.current) || request !== deleteSequence.current.get(conversationId)) return;
+      const fallback = nextConversations.find(item => item.id !== conversationId);
+      if (fallback) await loadConversation(fallback.id, fallback);
+      else selectConversation(null);
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : "删除会话失败");
+      if ((ownsScope(scope) && navigation === historySequence.current) && request === deleteSequence.current.get(conversationId)) setChatError(error instanceof Error ? error.message : "删除会话失败");
     }
   }
 
   async function handleExportWord(message: UIMessage) {
-    if (!activeChatId) {
+    const scope = sendScope, navigation = historySequence.current, request = ++exportSequence.current;
+    if (!(ownsScope(scope) && navigation === historySequence.current) || !activeChatId) {
       return;
     }
     const text = getUiMessageText(message).trim();
@@ -531,95 +612,52 @@ export default function ChatPage() {
         content: messageId ? undefined : text,
       });
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : "导出 Word 失败");
+      if ((ownsScope(scope) && navigation === historySequence.current) && request === exportSequence.current) setChatError(error instanceof Error ? error.message : "导出 Word 失败");
     } finally {
-      setExportingMessageId(null);
+      if ((ownsScope(scope) && navigation === historySequence.current) && request === exportSequence.current) setExportingMessageId(null);
     }
   }
 
   async function handleSendMessage() {
-    if (isGuest) {
-      setChatError("访客模式无法发送消息，请先登录。");
+    if (!ownsScope(sendScope)) return;
+    if (isGuest) { setChatError("访客模式无法发送消息，请先登录。"); return; }
+    const currentAttachments = attachmentState.getAttachments();
+    const ready = currentAttachments.filter(item => item.status === "ready" && item.storagePath);
+    const rawText = chatInputRef.current;
+    const hasText = Boolean(rawText.trim()), hasAttachments = ready.length > 0;
+    if ((!hasText && !hasAttachments) || !activeChatId || busyReply || attachmentState.uploading || currentAttachments.some(item => item.status === "uploading") || lifecycle.current?.blocking(owner, activeChatId)) {
+      if (busyReply || lifecycle.current?.blocking(owner, activeChatId)) setChatError("本会话仍有发送中或受理未知的消息，请先等待或核对，不要重复发送。");
       return;
     }
-    const hasText = Boolean(chatInput.trim());
-    const hasAttachments = attachmentState.readyCount > 0;
-    if ((!hasText && !hasAttachments) || !activeChatId || busyReply || attachmentState.uploading) {
-      if (busyReply) {
-        setChatError("上一条消息仍在处理中，请稍候，不要重复发送。");
-        reportChatTelemetry({
-          event: "chat.send.blocked_busy",
-          conversation_id: activeChatId,
-        });
-        void flushChatTelemetry();
-      }
-      return;
-    }
-
-    const content = chatInput.trim();
-    const uiAttachments = attachmentState.attachments
-      .filter((item) => item.status === "ready" && item.storagePath)
-      .map((item) => ({
-      file_name: item.fileName,
-      mime_type: item.mimeType,
-      url: item.kind === "image" ? item.previewUrl || item.storagePath : item.storagePath,
-      storage_path: item.storagePath,
-      kind: item.kind,
-    }));
-    const attachments = attachmentState.toSendPayload();
-    setChatInput("");
-    setChatError("");
-    setReplyPending(true);
-    setStreamStatusLabel("准备处理您的消息…");
-    reportChatTelemetry({
-      event: "chat.send.clicked",
-      detail: hasAttachments ? `attachments=${attachmentState.readyCount}` : "",
-      conversation_id: activeChatId,
-    });
-    attachmentState.setError("");
-    shouldAutoScrollRef.current = true;
-    setActiveToolCalls([]);
-    setActiveTaskProposals([]);
-    setActiveThinkingSteps([]);
-    setActivePolicyVersion(null);
-    if (effectiveAgentMode) {
-      setAgentThinking(true);
-    }
-
+    let uiAttachments;
     try {
-      void sendMessage({ text: content }, { body: { attachments, agent_mode: effectiveAgentMode } })
-        .then(() => {
-          setChatMessages((current) => {
-            const next = [...current];
-            for (let index = next.length - 1; index >= 0; index -= 1) {
-              if (next[index]?.role === "user") {
-                next[index] = {
-                  ...next[index],
-                  metadata: {
-                    ...(next[index].metadata ?? {}),
-                    attachments: uiAttachments,
-                  },
-                };
-                break;
-              }
-            }
-            return next;
-          });
-          attachmentState.clearAttachments();
-        })
-        .catch((error: unknown) => {
-          setAgentThinking(false);
-          setReplyPending(false);
-          const message = error instanceof Error ? error.message : "未知错误";
-          setChatError(message);
-          setStreamStatusLabel("");
-        });
-    } catch (error: unknown) {
-      setAgentThinking(false);
-      setReplyPending(false);
-      const message = error instanceof Error ? error.message : "未知错误";
-      setChatError(message);
-      setStreamStatusLabel("");
+      uiAttachments = ready.map(item => ({ file_name: item.fileName, mime_type: item.mimeType,
+        url: chatAttachmentMessageUrl(item.storagePath), storage_path: item.storagePath, kind: item.kind }));
+    } catch (error) { setChatError(error instanceof Error ? error.message : "附件地址未就绪，草稿已保留。"); return; }
+    const attachments = attachmentState.toSendPayload();
+    const detached = attachmentState.takeAttachments(ready.map(item => item.localId));
+    const id = createChatClientMessageId();
+    let entry: ChatSendEntry;
+    try { entry = lifecycle.current!.begin(id, sendScope, rawText, detached); }
+    catch (error) { attachmentState.restoreAttachments(detached); setChatError(error instanceof Error ? error.message : "无法开始发送，草稿已保留。"); return; }
+    viewRevision.current += 1; setHistoryLoading(false);
+    latestSend.current.set(currentTurnKey(sendScope), id);
+    replaceChatInput(""); setChatError(""); setReplyPending(true); setStreamStatusLabel("准备处理您的消息…");
+    reportChatTelemetry({ event: "chat.send.clicked", detail: hasAttachments ? `attachments=${ready.length}` : "", conversation_id: activeChatId });
+    attachmentState.setError(""); shouldAutoScrollRef.current = true;
+    setActiveToolCalls([]); setActiveTaskProposals([]); setActiveThinkingSteps([]); setActivePolicyVersion(null);
+    if (effectiveAgentMode) setAgentThinking(true);
+    try {
+      void sendMessage({ id, role: "user", parts: [{ type: "text", text: rawText.trim() }], metadata: { attachments: uiAttachments, submission_state: "pending" } }, {
+        body: { attachments, agent_mode: effectiveAgentMode, conversation_id: activeChatId, client_message_id: id, sdk_chat_id: sdkChatId },
+      }).then(() => {
+        // Fulfillment is not success. The installed SDK reports failures through callbacks.
+        if (lifecycle.current?.get(id) && !entry.settled) finishSend(entry.scope, { isError: true, isAbort: false, isDisconnect: false });
+      }).catch((error: unknown) => {
+        if (!entry.settled) { recordSendError(entry.scope, error); finishSend(entry.scope, { isError: true, isAbort: false, isDisconnect: false }); }
+      });
+    } catch (error) {
+      recordSendError(entry.scope, error); finishSend(entry.scope, { isError: true, isAbort: false, isDisconnect: false });
     }
   }
 
@@ -627,6 +665,7 @@ export default function ChatPage() {
     !isGuest &&
     Boolean(activeChatId) &&
     !busyReply &&
+    !sendBlocked &&
     !attachmentState.uploading &&
     (Boolean(chatInput.trim()) || attachmentState.readyCount > 0);
 
@@ -834,7 +873,7 @@ export default function ChatPage() {
                         policyVersion={activePolicyVersion ?? agentPolicy?.policy_version}
                         decision={proposalDecisions[proposal.proposal_id]}
                         onDecisionChange={(proposalId, decision) =>
-                          setProposalDecisions((current) => ({ ...current, [proposalId]: decision }))
+                          ownsScope(sendScope) && setProposalDecisions((current) => ownsScope(sendScope) ? { ...current, [proposalId]: decision } : current)
                         }
                       />
                     ))}
@@ -855,6 +894,8 @@ export default function ChatPage() {
                       className={`chat-msg ${message.role}`}
                     >
                       {message.role === "assistant" ? <div className="chat-msg-avatar">AI</div> : null}
+                      {message.role === "user" && ["unknown", "unknown_abandoned", "accepted_failed"].includes(String((message.metadata as { submission_state?: string } | undefined)?.submission_state)) ?
+                        <p role="status">{(message.metadata as { submission_state?: string }).submission_state === "accepted_failed" ? "消息已接收，回复未完成；请勿重复发送本条。" : "本条受理尚未确认；不要直接重复发送。"}</p> : null}
                       <div className="chat-msg-bubble">
                         {getUiMessageAttachments(message).length > 0 ? (
                           <div className="chat-msg-attachments">
@@ -916,7 +957,7 @@ export default function ChatPage() {
                                 policyVersion={messagePolicyVersion}
                                 decision={proposalDecisions[proposal.proposal_id]}
                                 onDecisionChange={(proposalId, decision) =>
-                                  setProposalDecisions((current) => ({ ...current, [proposalId]: decision }))
+                                  ownsScope(sendScope) && setProposalDecisions((current) => ownsScope(sendScope) ? { ...current, [proposalId]: decision } : current)
                                 }
                               />
                             ))}
@@ -984,6 +1025,27 @@ export default function ChatPage() {
             </div>
 
             <div className="chat-input-area">
+              {historyLoading ? <p role="status">正在加载本会话记录…</p> : null}
+              {sendBlocked && !busyReply && sendRecoveries.length === 0 ? <p role="status">本会话已有消息正在处理，原文和附件已保留；请等待结束后再发送。</p> : null}
+              {sendRecoveries.map(entry => <section key={entry.id} role="status" aria-label="消息草稿恢复">
+                <p>{entry.phase === "rejected" ? "这次消息未被接收，原文和附件仍保留。" : "这次消息是否被接收尚未确认，核对前后都不会自动重发。"}</p>
+                <pre>{entry.rawText}</pre>
+                <p>{entry.attachments.map(item => item.fileName).join("、")}</p>
+                {entry.phase === "rejected" ? <>
+                  <button type="button" disabled={!canRestoreDraft(entry)} onClick={() => restoreRejectedDraft(entry.id)}>恢复这次未发送的草稿</button>
+                  {!canRestoreDraft(entry) ? <p>当前输入或附件仍在，请先保留当前草稿；恢复不会覆盖新输入。</p> : null}
+                </> : <>
+                  <button type="button" disabled={entry.checking} onClick={() => void inspectUnknownSend(entry.id)}>{entry.checking ? "核对中" : "核对服务器记录"}</button>
+                  {entry.checked ? <>
+                    <p>以下是服务器最近记录。未找到相同文字也不能证明原请求未接收。</p>
+                    {entry.inspectedMessages.slice(-6).map((message, index) => <p key={message.id ?? index}>{message.role === "user" ? "我" : "助手"}：{message.content}</p>)}
+                    <button type="button" onClick={() => dismissRecovery(entry.id, true)}>我已核对服务器收下，不再重发</button>
+                  </> : null}
+                </>}
+                <button type="button" disabled={entry.checking} onClick={() => dismissRecovery(entry.id, false)}>放弃本次重发并清除恢复草稿</button>
+                <p>放弃只处理本地恢复，不代表撤回请求或确认服务器未接收。</p>
+              </section>)}
+
               {busyReply ? (
                 <p className="chat-streaming-hint" role="status" aria-live="polite">
                   {streamStatusLabel || "正在处理中…"} 大附件可能需要数十秒，请勿重复点击发送。
@@ -1070,7 +1132,7 @@ export default function ChatPage() {
                   ref={textareaRef}
                   className="chat-textarea"
                   value={chatInput}
-                  onChange={(event) => setChatInput(event.target.value)}
+                  onChange={(event) => replaceChatInput(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();

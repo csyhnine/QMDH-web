@@ -1,0 +1,77 @@
+bb9ea5d2bf0bd8c32419c8537ce30ce05fdab293f2126a269ba4e79e9bad5c1b
+
+83d7638ee99c45ad8e024f972cb829bc75835d22a91ad36f8aa806cbb88ab6bb
+
+bbf659b025fa1f5d69afb903d2b5f7bc033ca106f0bccc426db7d7cb52deb8b9
+
+3c3d94cf01c608a31b42a76b8afca7831c1b97985c27535f7fb5463d627e55cb
+
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> cd888e40cb37, initial schema
+INFO  [alembic.runtime.migration] Running upgrade cd888e40cb37 -> d2348a1e3427, add conversations and chat_messages tables
+INFO  [alembic.runtime.migration] Running upgrade d2348a1e3427 -> a1b2c3d4e5f6, add task deleted_at
+INFO  [alembic.runtime.migration] Running upgrade a1b2c3d4e5f6 -> b2c3d4e5f6a7, add project archived_at
+INFO  [alembic.runtime.migration] Running upgrade b2c3d4e5f6a7 -> c3d4e5f6a7b8, add task archives
+INFO  [alembic.runtime.migration] Running upgrade c3d4e5f6a7b8 -> e4f5a6b7c8d9, add usage ledgers
+INFO  [alembic.runtime.migration] Running upgrade e4f5a6b7c8d9 -> f6a7b8c9d0e1, add chat token columns to usage ledgers
+INFO  [alembic.runtime.migration] Running upgrade f6a7b8c9d0e1 -> a7b8c9d0e1f2, add agent capability layer
+INFO  [alembic.runtime.migration] Running upgrade a7b8c9d0e1f2 -> b8c9d0e1f2a3, add agent skill releases
+INFO  [alembic.runtime.migration] Running upgrade b8c9d0e1f2a3 -> c1d2e3f4a5b6, add user_feedbacks table
+INFO  [alembic.runtime.migration] Running upgrade c1d2e3f4a5b6 -> d4e5f6a7b8c9, add attachment_paths to user_feedbacks
+INFO  [alembic.runtime.migration] Running upgrade d4e5f6a7b8c9 -> e5f6a7b8c9d0, add prompt template scope
+INFO  [alembic.runtime.migration] Running upgrade e5f6a7b8c9d0 -> f7a8b9c0d1e2, add prompt template taxonomy and source image
+INFO  [alembic.runtime.migration] Running upgrade f7a8b9c0d1e2 -> a2b3c4d5e6f7, add billing pricing rules and template events
+INFO  [alembic.runtime.migration] Running upgrade a2b3c4d5e6f7 -> 0f1a2b3c4d5e, add inspiration source image path
+INFO  [alembic.runtime.migration] Running upgrade 0f1a2b3c4d5e -> 1a2b3c4d5e6f, add provider profile strategies
+INFO  [alembic.runtime.migration] Running upgrade 1a2b3c4d5e6f -> 2b3c4d5e6f7a, add provider profile display name
+INFO  [alembic.runtime.migration] Running upgrade 2b3c4d5e6f7a -> 3c4d5e6f7a8b, add user group name
+INFO  [alembic.runtime.migration] Running upgrade 3c4d5e6f7a8b -> 4d5e6f7a8b9c, add provider profile secret config
+INFO  [alembic.runtime.migration] Running upgrade 4d5e6f7a8b9c -> 5e6f7a8b9c0d, add inspiration media type
+INFO  [alembic.runtime.migration] Running upgrade 5e6f7a8b9c0d -> 6f7a8b9c0d1e, add attachments_json to chat_messages
+INFO  [alembic.runtime.migration] Running upgrade 6f7a8b9c0d1e -> g8h9i0j1k2l3, add user_feedback_messages table
+INFO  [alembic.runtime.migration] Running upgrade g8h9i0j1k2l3 -> h9i0j1k2l3m4, add canvas_templates table
+INFO  [alembic.runtime.migration] Running upgrade h9i0j1k2l3m4 -> i0j1k2l3m4n5, add conversation context summary fields
+INFO  [alembic.runtime.migration] Running upgrade i0j1k2l3m4n5 -> k2l3m4n5o6p7, add agent chat policy fields to skill releases
+INFO  [alembic.runtime.migration] Running upgrade k2l3m4n5o6p7 -> l3m4n5o6p7q8, add agent policy overrides for group/user
+INFO  [alembic.runtime.migration] Running upgrade l3m4n5o6p7q8 -> m4n5o6p7q8r9, add agent memory entries for durable cross-chat memory
+INFO  [alembic.runtime.migration] Running upgrade m4n5o6p7q8r9 -> n5o6p7q8r9s0, add admin-managed agent skill catalog
+INFO  [alembic.runtime.migration] Running upgrade n5o6p7q8r9s0 -> o6p7q8r9s0t1, add skill bundle columns to agent_skill_catalog
+INFO  [alembic.runtime.migration] Running upgrade o6p7q8r9s0t1 -> p7q8r9s0t1u2, set agent_memory conversation_id ondelete set null
+INFO  [alembic.runtime.migration] Running upgrade p7q8r9s0t1u2 -> q8r9s0t1u2v3, add site_announcements table
+INFO  [alembic.runtime.migration] Running upgrade q8r9s0t1u2v3 -> r9s0t1u2v3w4, add ai_tools table
+INFO  [alembic.runtime.migration] Running upgrade r9s0t1u2v3w4 -> s0t1u2v3w4x5, add platform_settings singleton
+INFO  [alembic.runtime.migration] Running upgrade s0t1u2v3w4x5 -> t1u2v3w4x5y6, add prompt polish platform settings
+INFO  [alembic.runtime.migration] Running upgrade t1u2v3w4x5y6 -> u2v3w4x5y6z7, add generation intents and sessions for behavior analytics
+INFO  [alembic.runtime.migration] Running upgrade u2v3w4x5y6z7 -> a8b9c0d1e2f3, add conversation context stats and message estimated_input_tokens
+INFO  [alembic.runtime.migration] Running upgrade a8b9c0d1e2f3 -> v3w4x5y6z7a8, Add per-mode prompt polish system prompts.
+INFO  [alembic.runtime.migration] Running upgrade v3w4x5y6z7a8 -> w4x5y6z7a8b9, Add editable prompt polish mode limits JSON.
+INFO  [alembic.runtime.migration] Running upgrade w4x5y6z7a8b9 -> x9y0z1a2b3c4, Add chat turn telemetry table for UX funnel metrics.
+INFO  [alembic.runtime.migration] Running upgrade x9y0z1a2b3c4 -> y0z1a2b3c4d5, Add chat telemetry alert records for P3 monitoring.
+INFO  [alembic.runtime.migration] Running upgrade y0z1a2b3c4d5 -> z1a2b3c4d5e6, Add cad_extracts for DWG/DXF structured extracts.
+INFO  [alembic.runtime.migration] Running upgrade z1a2b3c4d5e6 -> b3c4d5e6f7g8, Skill task/event intake and aggregated improvement issues.
+INFO  [alembic.runtime.migration] Running upgrade b3c4d5e6f7g8 -> c4d5e6f7g8h9, Feedback-only credentials and quarantined external problems.
+INFO  [alembic.runtime.migration] Running upgrade c4d5e6f7g8h9 -> d5e6f7g8h9i0, Opt-in public feedback sessions, never business credentials.
+INFO  [alembic.runtime.migration] Running upgrade d5e6f7g8h9i0 -> e6f7g8h9i0j1, Separate image and video prompt templates; preserve existing templates.
+INFO  [alembic.runtime.migration] Running upgrade e6f7g8h9i0j1 -> f7g8h9i0j1k2, Persist account-owned GIF compression history.
+INFO  [alembic.runtime.migration] Running upgrade f7g8h9i0j1k2 -> a16c9e74b821, Separate company management permissions and planning documents.
+INFO  [alembic.runtime.migration] Running upgrade a16c9e74b821 -> b27d0f85c932, Durable dispatch and user-scoped idempotency; additive, no history rewrite.
+INFO  [alembic.runtime.migration] Running upgrade b27d0f85c932 -> c39d8e71a624, Complete schema previously supplied only by application bootstrap.
+INFO  [alembic.runtime.migration] Running upgrade c39d8e71a624 -> d40e9f82b735, Correct SQLite Agent timestamp defaults without changing historical rows.
+INFO  [alembic.runtime.migration] Running upgrade d40e9f82b735 -> e51fa962c846, Add durable per-domain search indexing state and coalesced entity intents.
+{"timestamp": "2026-10-25T16:00:07.231Z", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts", "correlation_id": ""}
+{"timestamp": "2026-10-25T16:00:07.232Z", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts", "correlation_id": ""}
+{"timestamp": "2026-10-25T16:00:07.232Z", "level": "INFO", "logger": "apscheduler.scheduler", "message": "Adding job tentatively -- it will be properly scheduled when the scheduler starts", "correlation_id": ""}
+{"timestamp": "2026-10-25T16:00:07.234Z", "level": "INFO", "logger": "qmdh.access", "message": "request GET /api/v1/health", "method": "GET", "path": "/api/v1/health", "client_ip": "testclient", "correlation_id": "769ca015-47f9-470b-8973-2bd15b2c8adf"}
+{"timestamp": "2026-10-25T16:00:07.243Z", "level": "INFO", "logger": "qmdh.access", "message": "response 200 8ms", "status_code": 200, "latency_ms": 8, "correlation_id": "769ca015-47f9-470b-8973-2bd15b2c8adf"}
+{"timestamp": "2026-10-25T16:00:07.244Z", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/api/v1/health \"HTTP/1.1 200 OK\"", "correlation_id": ""}
+{"timestamp": "2026-10-25T16:00:07.296Z", "level": "INFO", "logger": "qmdh.access", "message": "request GET /openapi.json", "method": "GET", "path": "/openapi.json", "client_ip": "testclient", "correlation_id": "c615ed5d-31cf-4e6f-8a6e-a557e670224f"}
+/usr/local/lib/python3.12/site-packages/fastapi/openapi/utils.py:246: UserWarning: Duplicate Operation ID seedance_real_avatar_callback_api_v1_seedance_real_avatar_callback_post for function seedance_real_avatar_callback at /app/app/routers/seedance_avatar.py
+  warnings.warn(message, stacklevel=1)
+{"timestamp": "2026-10-25T16:00:08.304Z", "level": "INFO", "logger": "qmdh.access", "message": "response 200 1007ms", "status_code": 200, "latency_ms": 1007, "correlation_id": "c615ed5d-31cf-4e6f-8a6e-a557e670224f"}
+{"timestamp": "2026-10-25T16:00:08.305Z", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/openapi.json \"HTTP/1.1 200 OK\"", "correlation_id": ""}
+APPLICATION_LIFESPAN_AND_ROUTER_WIRING_PASS
+SEED_BOUNDARY_AND_RANDOM_BATCH_WIRING_PASS
+MODEL_SCHEMA_COLUMNS_PASS
+
+OWNED_TEST_CONTAINERS_AND_NETWORK_REMOVED

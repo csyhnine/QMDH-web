@@ -19,6 +19,7 @@ from app.schemas import GenerationOutcomeIn, GenerationOutcomeOut, TaskCreate, T
 from app.services.generation_outcome_service import record_generation_outcome
 from app.services.task_archive import ensure_task_archive
 from app.services.media_storage import resolve_storage_payload
+from app.services.task_reference_metadata import reference_image_storage_paths, project_reference_history
 from app.services.billing import enforce_user_quota
 from app.services.model_registry import get_provider_definition, get_provider_map
 from app.services.generation_intent_service import record_generation_intent_for_task
@@ -69,19 +70,28 @@ def recover_comfyui_task(task_id: int, action: str = Body(embed=True), note: str
                 status_info = response.json().get(prompt_id, {}).get("status", {})
                 if status_info.get("completed") and status_info.get("status_str") != "error":
                     raise HTTPException(409, "原任务已生成成功，请恢复获取结果，不能将其关闭。")
-        redis = Redis.from_url(settings.redis_url, decode_responses=True, socket_timeout=5)
-        try:
-            redis.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", 1, GPU_LOCK, str(task_id))
-        finally:
-            redis.close()
-        task.status, job.state = TaskStatus.failed, "done"
-        task.result = {**task.result, "queued_stage": "failed", "error": "管理员核对后关闭了未完成的本机任务。", "recovery_note": note}
-    else:
-        job.state = "queued"
-        task.status = TaskStatus.pending
-    db.add(AuditLog(event_type="comfyui.recovery", actor_name=auth_user.name,
-                    details={"task_id": task_id, "action": action, "note": note}))
-    db.commit()
+    from app.services.comfy_partial_finalization import ComfyPartialOutputsInvalid, finalize_closed_comfy_task
+    try:
+        if action == "close":
+            finalize_closed_comfy_task(db, task, note=note)
+            redis = Redis.from_url(settings.redis_url, decode_responses=True, socket_timeout=5)
+            try:
+                redis.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", 1, GPU_LOCK, str(task_id))
+            finally:
+                redis.close()
+            job.state = "done"
+        else:
+            job.state = "queued"
+            task.status = TaskStatus.pending
+        db.add(AuditLog(event_type="comfyui.recovery", actor_name=auth_user.name,
+                        details={"task_id": task_id, "action": action, "note": note}))
+        db.commit()
+    except ComfyPartialOutputsInvalid as exc:
+        db.rollback()
+        raise HTTPException(409, str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
     return {"task_id": task_id, "state": job.state}
 
 
@@ -104,34 +114,11 @@ def _is_task_visible_to_user(auth_user: AuthUserProfile, task: Task) -> bool:
 
 
 def _reference_image_count(payload: dict) -> int:
-    for key in ("reference_images", "source_images"):
-        raw_value = payload.get(key)
-        if isinstance(raw_value, list):
-            values = [str(item or "").strip() for item in raw_value]
-            cleaned = [value for value in values if value]
-            if cleaned:
-                return min(4, len(cleaned))
-
-    for key in ("reference_image", "source_image"):
-        if str(payload.get(key) or "").strip():
-            return 1
-    return 0
+    return len(reference_image_storage_paths(payload))
 
 
 def _reference_image_storage_paths(payload: dict) -> list[str]:
-    for key in ("reference_images", "source_images"):
-        raw_value = payload.get(key)
-        if isinstance(raw_value, list):
-            values = [str(item or "").strip() for item in raw_value]
-            cleaned = [value for value in values if value]
-            if cleaned:
-                return cleaned[:4]
-
-    for key in ("reference_image", "source_image", "image"):
-        value = str(payload.get(key) or "").strip()
-        if value:
-            return [value]
-    return []
+    return reference_image_storage_paths(payload)
 
 
 def _task_payload_result_fields(payload: dict) -> dict:
@@ -160,7 +147,7 @@ def _get_or_create_user(db: Session, auth_user: AuthUserProfile) -> User:
 
 
 def _to_task_out(task: Task) -> TaskOut:
-    result = dict(task.result or {})
+    result = project_reference_history(task.payload, task.result or {})
     from sqlalchemy.orm import object_session
     from sqlalchemy import func
     db = object_session(task)

@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 
 import type { Provider } from "../../api";
-import type { ComposerMenuKey, LoadState, StudioFormState, SubmissionTracker } from "./studioTypes";
+import type { ComposerMenuKey, LoadState, ReferenceUploadItem, StudioFormState, SubmissionTracker } from "./studioTypes";
 import type { useStudioTemplates } from "./useStudioTemplates";
 
 type MutableRef<T> = {
@@ -9,6 +9,13 @@ type MutableRef<T> = {
 };
 
 type StudioTemplatesApi = ReturnType<typeof useStudioTemplates>;
+
+export type StudioTaskSubmissionInput = {
+  form: StudioFormState;
+  referenceUploads: ReferenceUploadItem[];
+  uploadingReference: boolean;
+  updateComposer: boolean;
+};
 
 export type UseStudioTaskSubmissionOptions = {
   hasAutoPositionedRef: MutableRef<boolean>;
@@ -21,10 +28,4 @@ export type UseStudioTaskSubmissionOptions = {
   setSubmitting: Dispatch<SetStateAction<boolean>>;
   studioTemplates: StudioTemplatesApi;
   submissionInFlightRef: MutableRef<boolean>;
-  uploadingReference: boolean;
-  referenceUploads?: Array<{
-    avatarStatus?: "idle" | "registering" | "processing" | "verifying" | "active" | "failed";
-    avatarError?: string;
-    storagePath: string;
-  }>;
 };

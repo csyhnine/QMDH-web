@@ -178,13 +178,29 @@ test('v1.1 single-image contract updates hints, validation and submit without br
   }
 });
 
-test('local waiting and recovery render truthful states without invented percent', () => {
+test('all task channels use estimated percent with queue and recovery context', () => {
   const Empty = load('features/studio/StudioFeedEmptyState.tsx').default;
-  for (const [stage, label] of [['queued', '前方 2 项任务'], ['recovering', '请勿重复提交'], ['running', '本机正在生成']]) {
+  for (const [stage, label] of [['queued', '前方 2 项任务'], ['recovering', '请勿重复提交'], ['running', '生成中'], [undefined, '生成中']]) {
     const html = renderToStaticMarkup(require('react').createElement(Empty,
-      {isRunning: true, status: 'pending', virtualProgress: 78, localStage: stage, queuePosition: 2}));
-    assert.ok(html.includes(label)); assert.doesNotMatch(html, /78%/);
-    assert.match(html, /role="progressbar"/);
-    assert.doesNotMatch(html, /aria-valuenow/);
+      {isRunning: true, status: 'running', virtualProgress: 78, localStage: stage, queuePosition: 2}));
+    assert.ok(html.includes(label)); assert.match(html, /78%/); assert.match(html, /预估进度/);
+    assert.match(html, /role="progressbar"/); assert.match(html, /aria-valuenow="78"/);
+    assert.match(html, /width:78%/);
   }
+});
+
+test('only completed tasks reach 100; invalid estimates and failed tasks never imply completion', () => {
+  const Progress = load('features/studio/StudioTaskProgress.tsx').default;
+  const Empty = load('features/studio/StudioFeedEmptyState.tsx').default;
+  const render = props => renderToStaticMarkup(require('react').createElement(Progress, props));
+  for (const percent of [95, 100, 400]) {
+    const html = render({percent, status:'running'});
+    assert.match(html, /aria-valuenow="95"/); assert.match(html, /仍在处理/);
+    assert.doesNotMatch(html, /width:100%/);
+  }
+  for (const percent of [NaN, Infinity, -5]) assert.match(render({percent,status:'running'}), /aria-valuenow="0"/);
+  assert.match(render({percent:2,status:'completed'}), /aria-valuenow="100"/);
+  assert.match(render({percent:50,status:'running',localStage:'saving'}), /正在保存结果/);
+  const failed = renderToStaticMarkup(require('react').createElement(Empty, {isRunning:false,status:'failed',virtualProgress:96}));
+  assert.doesNotMatch(failed, /role="progressbar"|已完成/);
 });

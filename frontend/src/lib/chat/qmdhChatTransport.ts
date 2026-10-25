@@ -2,6 +2,7 @@ import { HttpChatTransport, type ChatTransport, type UIMessage, type UIMessageCh
 
 import { buildApiUrl, getAuthHeaders } from "../../api";
 import type { ChatSendAttachment } from "./chatAttachmentUtils";
+import type { ChatSendReceipt } from "./chatSendLifecycle";
 import {
   parseQmdhSseLine,
   type ChatTaskProposal,
@@ -29,6 +30,9 @@ export type ChatStreamMeta = {
 export type QmdhChatTransportOptions = {
   getConversationId: () => number | null;
   getAgentMode?: () => boolean;
+  isMounted?: () => boolean;
+  isCurrentSubmission?: (clientMessageId: string) => boolean;
+  onSubmissionState?: (receipt: ChatSendReceipt) => void;
   onMeta?: (meta: ChatStreamMeta) => void;
   onToolCalls?: (toolCalls: ChatToolCall[]) => void;
   onTaskProposals?: (proposals: ChatTaskProposal[]) => void;
@@ -58,15 +62,26 @@ function sleep(ms: number): Promise<void> {
 function parseQmdhSseStream(
   stream: ReadableStream<Uint8Array>,
   callbacks?: QmdhChatTransportOptions,
+  onComplete?: (complete: boolean) => void,
+  isCurrentSubmission?: () => boolean,
 ): ReadableStream<UIMessageChunk> {
+  const getCallbacks = () => callbacks?.isMounted?.() === false || isCurrentSubmission?.() === false ? undefined : callbacks;
   const reader = stream.getReader();
+  let readerReleased = false;
   const decoder = new TextDecoder();
+  let completionReported = false;
+  function reportCompletion(complete: boolean) {
+    if (completionReported) return;
+    completionReported = true;
+    onComplete?.(complete);
+  }
 
   return new ReadableStream<UIMessageChunk>({
     async start(controller) {
       let buffer = "";
       let started = false;
       let finished = false;
+      let protocolComplete = false;
       let pendingDelta = "";
       let lastFlushAt = 0;
 
@@ -108,6 +123,7 @@ function parseQmdhSseStream(
           controller.enqueue({ type: "finish-step" });
           controller.enqueue({ type: "finish" });
         }
+        reportCompletion(protocolComplete);
         controller.close();
       };
 
@@ -117,6 +133,7 @@ function parseQmdhSseStream(
           return;
         }
         if (parsed === "done") {
+          protocolComplete = true;
           await emitFinish();
           return;
         }
@@ -126,7 +143,7 @@ function parseQmdhSseStream(
         }
 
         if (parsed.status || parsed.context || parsed.label || parsed.policy_version || parsed.release_display_name) {
-          callbacks?.onMeta?.({
+          getCallbacks()?.onMeta?.({
             status: parsed.status,
             label: parsed.label,
             context: parsed.context,
@@ -146,27 +163,27 @@ function parseQmdhSseStream(
 
         if (parsed.tool_calls?.length) {
           await ensureStarted();
-          callbacks?.onToolCalls?.(parsed.tool_calls);
+          getCallbacks()?.onToolCalls?.(parsed.tool_calls);
         }
         if (parsed.task_proposals?.length) {
           await ensureStarted();
-          callbacks?.onTaskProposals?.(parsed.task_proposals);
+          getCallbacks()?.onTaskProposals?.(parsed.task_proposals);
         }
         if (parsed.thinking_step) {
           await ensureStarted();
-          callbacks?.onAgentThinking?.();
-          callbacks?.onThinkingStep?.(parsed.thinking_step);
+          getCallbacks()?.onAgentThinking?.();
+          getCallbacks()?.onThinkingStep?.(parsed.thinking_step);
         }
         if (parsed.policy_version) {
-          callbacks?.onPolicyVersion?.(parsed.policy_version);
+          getCallbacks()?.onPolicyVersion?.(parsed.policy_version);
         }
         if (parsed.status === "thinking") {
           await ensureStarted();
-          callbacks?.onAgentThinking?.();
+          getCallbacks()?.onAgentThinking?.();
         }
 
         if (parsed.delta) {
-          callbacks?.onAgentProgress?.();
+          getCallbacks()?.onAgentProgress?.();
           pendingDelta += parsed.delta;
           const now = Date.now();
           if (now - lastFlushAt >= DELTA_FLUSH_MS || pendingDelta.length >= 24) {
@@ -216,17 +233,20 @@ function parseQmdhSseStream(
           }
         }
       } catch (error) {
+        reportCompletion(false);
         try {
           controller.error(error);
         } catch {
           // Stream may already be closed.
         }
       } finally {
+        readerReleased = true;
         reader.releaseLock();
       }
     },
     cancel(reason) {
-      void reader.cancel(reason);
+      reportCompletion(false);
+      if (!readerReleased) return reader.cancel(reason);
     },
   });
 }
@@ -256,19 +276,34 @@ export class QmdhChatTransport extends HttpChatTransport<UIMessage> {
   }
 
   async sendMessages(options: SendMessagesOptions): Promise<ReadableStream<UIMessageChunk>> {
-    const conversationId = this.options.getConversationId();
-    if (conversationId == null) {
-      throw new Error("请先选择或创建会话");
+    const requestBody = options.body as { attachments?: ChatSendAttachment[]; agent_mode?: boolean;
+      conversation_id?: number; client_message_id?: string; sdk_chat_id?: string } | undefined;
+    const conversationId = requestBody?.conversation_id ?? this.options.getConversationId();
+    const userMessage = [...options.messages].reverse().find(message => message.role === "user");
+    const clientMessageId = userMessage?.id ?? "";
+    const receipt = (kind: ChatSendReceipt["kind"], extra: Partial<ChatSendReceipt> = {}) => {
+      if (conversationId != null && clientMessageId) this.options.onSubmissionState?.({ clientMessageId, conversationId, kind, ...extra });
+    };
+    const expectedChatId = requestBody?.sdk_chat_id ?? String(conversationId);
+    const sdkParts = options.chatId.split(":");
+    const sdkConversationId = Number(sdkParts.length >= 3 ? sdkParts[sdkParts.length - 2] : options.chatId);
+    if (sdkConversationId !== conversationId || conversationId == null || !Number.isSafeInteger(conversationId) || conversationId <= 0 || options.chatId !== expectedChatId || (requestBody?.client_message_id && requestBody.client_message_id !== clientMessageId)) {
+      receipt("not-sent");
+      throw new Error("会话或发送身份已变化，本次尚未发送，请核对当前会话。");
     }
-
     const content = extractUserMessageContent(options.messages);
-    const requestBody = options.body as { attachments?: ChatSendAttachment[]; agent_mode?: boolean } | undefined;
     const attachments = requestBody?.attachments ?? [];
     const agentMode = requestBody?.agent_mode ?? this.options.getAgentMode?.() ?? false;
     if (!content.trim() && attachments.length === 0) {
+      receipt("not-sent");
       throw new Error("消息内容不能为空");
     }
 
+    if (options.abortSignal?.aborted || (typeof navigator !== "undefined" && navigator.onLine === false)) {
+      receipt("not-sent");
+      throw new Error("当前离线或发送已取消，本次尚未发送。");
+    }
+    receipt("dispatch");
     const response = await fetch(buildApiUrl(`/chat/conversations/${conversationId}/messages`), {
       method: "POST",
       headers: {
@@ -284,14 +319,20 @@ export class QmdhChatTransport extends HttpChatTransport<UIMessage> {
     });
 
     if (!response.ok) {
+      receipt("http-error", { status: response.status });
       throw new Error((await response.text()) || "Failed to fetch the chat response.");
     }
+    function positiveId(value: string | null): number | null {
+      const id = Number(value);
+      return Number.isSafeInteger(id) && id > 0 ? id : null;
+    }
+    receipt("accepted", { userMessageId: positiveId(response.headers.get("X-QMDH-Chat-User-Message-ID")), turnId: positiveId(response.headers.get("X-QMDH-Chat-Turn-ID")) });
     rememberChatCorrelationId(response.headers.get("X-Request-ID"));
     if (!response.body) {
       throw new Error("The response body is empty.");
     }
 
-    return this.processResponseStream(response.body);
+    return parseQmdhSseStream(response.body, this.options, complete => receipt(complete ? "complete" : "incomplete"), () => this.options.isCurrentSubmission?.(clientMessageId) !== false);
   }
 
   protected processResponseStream(stream: ReadableStream<Uint8Array>): ReadableStream<UIMessageChunk> {

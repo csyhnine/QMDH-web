@@ -37,6 +37,7 @@ export function useCustomStudioTemplates({
     clearFeedback,
     clearTemplateEditState,
     completeTemplateSave,
+    templateEditGeneration, captureTemplateSave, matchesTemplateSave,
     editingTemplateId,
     editCustomTemplate,
     setTemplateDraftLabel,
@@ -50,14 +51,11 @@ export function useCustomStudioTemplates({
   const { deleteCustomTemplate, saveCustomTemplate } = useCustomStudioTemplateMutations({
     clearTemplateEditState,
     completeTemplateSave,
-    editingTemplateId,
+    templateEditGeneration, captureTemplateSave, matchesTemplateSave,
     onClearError,
     onError,
     setCustomTemplates,
     setTemplateFeedback,
-    studioForm,
-    templateDraftLabel,
-    templateDraftTitle,
     workspaceName,
   });
 

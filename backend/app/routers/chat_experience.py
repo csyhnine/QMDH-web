@@ -26,14 +26,24 @@ class ChatExperienceOverviewOut(BaseModel):
     window_started_at: datetime
     turn_count: int
     success_rate: float
-    upstream_call_rate: float
+    upstream_call_rate: float | None
+    upstream_metrics_version: int
+    upstream_known_turn_count: int
+    upstream_unknown_turn_count: int
+    upstream_called_turn_count: int
+    ttft_sample_count: int
+    first_response_sample_count: int
+    avg_first_response_ms: int | None
+    p95_first_response_ms: int | None
+    model_call_count_total: int | None
+    model_call_count_sample_count: int
     attachment_turn_count: int
     attachment_turn_share: float
     agent_mode_share: float
     avg_pack_duration_ms: int
     p95_pack_duration_ms: int
-    avg_ttft_ms: int
-    p95_ttft_ms: int
+    avg_ttft_ms: int | None
+    p95_ttft_ms: int | None
     avg_total_duration_ms: int
     outcome_totals: dict[str, int]
     client_event_totals: dict[str, int]
@@ -54,8 +64,14 @@ class ChatExperienceTurnRowOut(BaseModel):
     attachment_count: int
     attachment_total_bytes: int
     pack_duration_ms: int
-    upstream_called: bool
-    ttft_ms: int
+    upstream_called: bool | None
+    ttft_ms: int | None
+    upstream_observation: str
+    model_call_count: int | None
+    model_call_count_complete: bool
+    model_run_id: str | None
+    upstream_duration_ms: int | None
+    first_response_ms: int | None
     total_duration_ms: int
     client_event_count: int
     started_at: datetime

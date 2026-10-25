@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from app.core.logging import setup_logging
 from app.database import SessionLocal
@@ -48,10 +49,12 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Path to the zip bundle produced by build_seed_inspiration_bundle",
     )
-    subparsers.add_parser(
+    sync_parser = subparsers.add_parser(
         "sync_haodeya_pricing",
         help="Apply upstream Haodeya/qmdh pricing to provider profiles and chat pricing rules",
     )
+    sync_parser.add_argument("--dry-run", action="store_true", help="Preview confirmed pricing changes without writing")
+    sync_parser.add_argument("--contract-plan", help="Confirmed supplier/catalog/endpoint and profile fingerprints JSON")
     backfill_parser = subparsers.add_parser(
         "backfill_task_costs",
         help="Recalculate historical image/Grok task costs and sync usage ledgers",
@@ -61,7 +64,33 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Report changes without writing to the database",
     )
+    backfill_parser.add_argument("--contract-plan", help="Confirmed historical supplier/SKU/currency/period and task fingerprints JSON")
     return parser
+
+
+def _run_pricing_sync_cli(args) -> int:
+    path = getattr(args, "contract_plan", None)
+    if not args.dry_run and not path:
+        raise ValueError("pricing apply requires --contract-plan with confirmed profile scope")
+    plan = json.loads(Path(path).read_text(encoding="utf-8")) if path else None
+    with SessionLocal() as db:
+        result = sync_haodeya_pricing(db, confirmed_plan=plan, dry_run=bool(args.dry_run))
+    print(json.dumps({"updated_profiles": result.updated_profiles, "updated_rules": result.updated_rules,
+                      "deactivated_rules": result.deactivated_rules, "skipped_profiles": result.skipped_profiles,
+                      "dry_run": result.dry_run, "samples": result.samples}, ensure_ascii=False))
+    return 0
+
+
+def _run_task_cost_backfill_cli(args) -> int:
+    path = getattr(args, "contract_plan", None)
+    if not args.dry_run and not path:
+        raise ValueError("backfill apply requires --contract-plan with confirmed historical evidence")
+    plan = json.loads(Path(path).read_text(encoding="utf-8")) if path else None
+    with SessionLocal() as db:
+        result = backfill_task_costs(db, dry_run=bool(args.dry_run), confirmed_plan=plan)
+    print(json.dumps({"scanned": result.scanned, "updated": result.updated, "unchanged": result.unchanged,
+                      "skipped": result.skipped, "dry_run": result.dry_run, "samples": result.samples}, ensure_ascii=False))
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -114,6 +143,8 @@ def main(argv: list[str] | None = None) -> int:
                     "total": result.total,
                     "restored": result.restored,
                     "placeholders": result.placeholders,
+                    "cleanup_warnings": result.cleanup_warnings,
+                    "retained_paths": result.retained_paths,
                 }
             )
         )
@@ -135,38 +166,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "sync_haodeya_pricing":
-        with SessionLocal() as db:
-            result = sync_haodeya_pricing(db)
-        print(
-            json.dumps(
-                {
-                    "updated_profiles": result.updated_profiles,
-                    "updated_rules": result.updated_rules,
-                    "deactivated_rules": result.deactivated_rules,
-                    "skipped_profiles": result.skipped_profiles,
-                },
-                ensure_ascii=False,
-            )
-        )
-        return 0
+        return _run_pricing_sync_cli(args)
 
     if args.command == "backfill_task_costs":
-        with SessionLocal() as db:
-            result = backfill_task_costs(db, dry_run=bool(args.dry_run))
-        print(
-            json.dumps(
-                {
-                    "scanned": result.scanned,
-                    "updated": result.updated,
-                    "unchanged": result.unchanged,
-                    "skipped": result.skipped,
-                    "dry_run": result.dry_run,
-                    "samples": result.samples,
-                },
-                ensure_ascii=False,
-            )
-        )
-        return 0
+        return _run_task_cost_backfill_cli(args)
 
     parser.error(f"Unknown command: {args.command}")
     return 2

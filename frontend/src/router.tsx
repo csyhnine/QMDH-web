@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 
 import {
@@ -9,7 +9,6 @@ import {
   type AgentSkillReleaseRecord,
   type DashboardStats,
   type FeedbackRecord,
-  type InspirationPost,
   type ManagedUser,
   type PromptTemplateRecord,
   type CanvasTemplateRecord,
@@ -24,6 +23,8 @@ import {
   type UserGroupSummary,
 } from "./api";
 import { AppShell, AuthGuard, LoadingFallback } from "./components/shared";
+import { buildBusinessDateWindow } from "./lib/businessDateWindow";
+import { useWindowQuery } from "./pages/admin/useWindowQuery";
 import { useAuth } from "./context/AuthContext";
 import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from "./features/access/roleAccess";
 import AdminSectionTabs, { INSIGHT_TABS, TEMPLATE_TABS } from "./features/admin/AdminSectionTabs";
@@ -88,17 +89,9 @@ function CompanyManagementRoute() {
 
 function InspirationRoute() {
   const { currentUser, canManageUsers, canUseOpsViews } = useAuth();
-  const [posts, setPosts] = useState<InspirationPost[]>([]);
-
-  useEffect(() => {
-    api.inspiration().then(setPosts).catch(() => setPosts([]));
-  }, []);
-
   return (
     <AppShell kind="studio" active="inspiration">
       <InspirationPage
-        posts={posts}
-        onPostsChange={setPosts}
         canContribute={Boolean(currentUser)}
         canManageLibrary={canManageUsers || canUseOpsViews}
       />
@@ -107,15 +100,9 @@ function InspirationRoute() {
 }
 
 function AdminInspirationRoute() {
-  const [posts, setPosts] = useState<InspirationPost[]>([]);
-
-  useEffect(() => {
-    api.inspiration().then(setPosts).catch(() => setPosts([]));
-  }, []);
-
   return (
     <AppShell kind="admin" active="inspiration">
-      <InspirationPage posts={posts} onPostsChange={setPosts} canContribute canManageLibrary mode="admin" />
+      <InspirationPage canContribute canManageLibrary mode="admin" />
     </AppShell>
   );
 }
@@ -124,12 +111,12 @@ function StudioFeedbackRoute() {
   const [feedbackItems, setFeedbackItems] = useState<FeedbackRecord[]>([]);
   const [error, setError] = useState("");
 
-  async function refresh() {
+  async function refresh(isErrorCurrent: () => boolean = () => true) {
     try {
       setFeedbackItems(await api.feedback());
-      setError("");
+      setError((current) => isErrorCurrent() ? "" : current);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load feedback");
+      setError((current) => isErrorCurrent() ? (err instanceof Error ? err.message : "Failed to load feedback") : current);
     }
   }
 
@@ -139,63 +126,44 @@ function StudioFeedbackRoute() {
 
   return (
     <AppShell kind="studio" active="feedback">
-      <FeedbackPage feedbackItems={feedbackItems} error={error} onRefresh={() => void refresh()} onSetError={setError} />
+      <FeedbackPage feedbackItems={feedbackItems} error={error} onRefresh={(isErrorCurrent) => void refresh(isErrorCurrent)} onSetError={setError} />
     </AppShell>
   );
 }
 
 function buildDashboardDateWindow(days: number): { startDate: string; endDate: string } {
-  const endDate = new Date();
-  const startDate = new Date(endDate);
-  startDate.setDate(endDate.getDate() - (days - 1));
-  return {
-    startDate: startDate.toISOString().slice(0, 10),
-    endDate: endDate.toISOString().slice(0, 10),
-  };
+  return buildBusinessDateWindow(days);
 }
 
 function DashboardRoute() {
-  const [dashboard, setDashboard] = useState<DashboardStats | null>(null);
-  const [groupSummaries, setGroupSummaries] = useState<UserGroupSummary[]>([]);
-  const [dashboardStatsDays, setDashboardStatsDays] = useState(7);
-  const [groupSummaryRange, setGroupSummaryRange] = useState(() => buildDashboardDateWindow(7));
-  const [groupRangeFollowsDashboard, setGroupRangeFollowsDashboard] = useState(true);
-  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
-
-  async function refresh(
-    days = dashboardStatsDays,
-    groupRange: { startDate: string; endDate: string } = groupSummaryRange,
-  ) {
-    const [nextDashboard, nextGroupSummaries] = await Promise.all([
-      api.dashboardStats(days),
-      api.userGroupSummaries(groupRange.startDate, groupRange.endDate),
+  const query = useWindowQuery(() => {
+    const range = buildDashboardDateWindow(7);
+    return { dashboardStatsDays: 7, dashboardDateRange: range, groupSummaryRange: range, groupRangeFollowsDashboard: true };
+  }, { dashboard: null as DashboardStats | null, groupSummaries: [] as UserGroupSummary[] }, async (params) => {
+    const [dashboard, groupSummaries] = await Promise.all([
+      api.dashboardStats(params.dashboardStatsDays),
+      api.userGroupSummaries(params.groupSummaryRange.startDate, params.groupSummaryRange.endDate),
     ]);
-    setDashboard(nextDashboard);
-    setGroupSummaries(nextGroupSummaries);
-    setLastSyncedAt(new Date().toISOString());
-  }
+    return { dashboard, groupSummaries };
+  }, "加载运营看板失败");
+  const { dashboardStatsDays, dashboardDateRange, groupSummaryRange, groupRangeFollowsDashboard } = query.params;
+  const { dashboard, groupSummaries } = query.data;
+  const lastSyncedAt = query.snapshot?.updatedAt ?? null;
 
   function handleChangeDays(days: number) {
-    setDashboardStatsDays(days);
-    if (groupRangeFollowsDashboard) {
-      setGroupSummaryRange(buildDashboardDateWindow(days));
-    }
+    const range = buildDashboardDateWindow(days);
+    query.setParams(current => ({ ...current, dashboardStatsDays: days, dashboardDateRange: range,
+      groupSummaryRange: current.groupRangeFollowsDashboard ? range : current.groupSummaryRange }));
   }
-
   function handleApplyGroupSummaryRange(range: { startDate: string; endDate: string }) {
-    setGroupRangeFollowsDashboard(false);
-    setGroupSummaryRange(range);
+    query.setParams(current => ({ ...current, groupRangeFollowsDashboard: false, groupSummaryRange: range }));
   }
-
   function handleSyncGroupSummaryRange() {
-    const range = buildDashboardDateWindow(dashboardStatsDays);
-    setGroupRangeFollowsDashboard(true);
-    setGroupSummaryRange(range);
+    query.setParams(current => {
+      const range = buildDashboardDateWindow(current.dashboardStatsDays);
+      return { ...current, dashboardDateRange: range, groupRangeFollowsDashboard: true, groupSummaryRange: range };
+    });
   }
-
-  useEffect(() => {
-    void refresh(dashboardStatsDays, groupSummaryRange);
-  }, [dashboardStatsDays, groupSummaryRange]);
 
   return (
     <AppShell kind="admin" active="dashboard">
@@ -204,13 +172,17 @@ function DashboardRoute() {
         groupSummaries={groupSummaries}
         userCanUseOpsViews={true}
         dashboardStatsDays={dashboardStatsDays}
+        dashboardDateRange={dashboardDateRange}
         groupSummaryRange={groupSummaryRange}
         groupRangeFollowsDashboard={groupRangeFollowsDashboard}
         lastSyncedAt={lastSyncedAt}
+        dataSource={query.snapshot?.params}
+        loading={query.loading}
+        queryError={query.error}
         onChangeDays={handleChangeDays}
         onApplyGroupSummaryRange={handleApplyGroupSummaryRange}
         onSyncGroupSummaryRange={handleSyncGroupSummaryRange}
-        onRefresh={() => void refresh()}
+        onRefresh={() => void query.refresh()}
       />
     </AppShell>
   );
@@ -256,24 +228,28 @@ function ModelsRoute() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [error, setError] = useState("");
 
-  async function refresh() {
+  const refreshSequence = useRef(0);
+  async function refresh(isErrorCurrent: () => boolean = () => true) {
+    const sequence = ++refreshSequence.current;
     try {
       const [nextProviders, nextProfiles, nextPricingRules] = await Promise.all([
         api.providers(),
         api.providerProfiles(),
         api.providerPricingRules(),
       ]);
-      setProviders(nextProviders);
-      setProviderProfiles(nextProfiles);
-      setPricingRules(nextPricingRules);
-      setError("");
+      if (sequence !== refreshSequence.current) return;
+      setProviders(current => sequence === refreshSequence.current ? nextProviders : current);
+      setProviderProfiles(current => sequence === refreshSequence.current ? nextProfiles : current);
+      setPricingRules(current => sequence === refreshSequence.current ? nextPricingRules : current);
+      setError(current => sequence === refreshSequence.current && isErrorCurrent() ? "" : current);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载模型配置失败");
+      if (sequence === refreshSequence.current) setError(current => sequence === refreshSequence.current && isErrorCurrent() ? err instanceof Error ? err.message : "加载模型配置失败" : current);
     }
   }
 
   useEffect(() => {
     void refresh();
+    return () => { refreshSequence.current += 1; };
   }, []);
 
   return (
@@ -283,7 +259,7 @@ function ModelsRoute() {
         pricingRules={pricingRules}
         providers={providers}
         error={error}
-        onRefresh={() => void refresh()}
+        onRefresh={(guard) => refresh(guard)}
         onSetError={setError}
       />
     </AppShell>
@@ -291,26 +267,12 @@ function ModelsRoute() {
 }
 
 function PromptTemplatesRoute() {
-  const [templates, setTemplates] = useState<PromptTemplateRecord[]>([]);
-  const [error, setError] = useState("");
-
-  async function refresh() {
-    try {
-      setTemplates(await api.adminPromptTemplates());
-      setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "加载模板提示词失败");
-    }
-  }
-
-  useEffect(() => {
-    void refresh();
-  }, []);
-
+  const query = useWindowQuery(() => 0, [] as PromptTemplateRecord[],
+    () => api.adminPromptTemplates(), "加载模板提示词失败");
   return (
     <AppShell kind="admin" active="templates">
       <AdminSectionTabs tabs={TEMPLATE_TABS} active="templates" />
-      <PromptTemplatesPage templates={templates} error={error} onRefresh={() => void refresh()} onSetError={setError} />
+      <PromptTemplatesPage templates={query.data} error={query.error} onRefresh={query.refresh} onSetError={() => undefined} />
     </AppShell>
   );
 }
@@ -341,29 +303,15 @@ function CanvasTemplatesRoute() {
 }
 
 function AnnouncementsRoute() {
-  const [announcements, setAnnouncements] = useState<SiteAnnouncementRecord[]>([]);
-  const [error, setError] = useState("");
-
-  async function refresh() {
-    try {
-      setAnnouncements(await api.adminAnnouncements());
-      setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "加载公告失败");
-    }
-  }
-
-  useEffect(() => {
-    void refresh();
-  }, []);
-
+  const query = useWindowQuery(() => 0, [] as SiteAnnouncementRecord[],
+    () => api.adminAnnouncements(), "加载公告失败");
   return (
     <AppShell kind="admin" active="announcements">
       <AnnouncementsPage
-        announcements={announcements}
-        error={error}
-        onRefresh={() => void refresh()}
-        onSetError={setError}
+        announcements={query.data}
+        error={query.error}
+        onRefresh={query.refresh}
+        onSetError={() => undefined}
       />
     </AppShell>
   );
@@ -405,25 +353,11 @@ function AiToolsNavRoute() {
 }
 
 function AiToolsAdminRoute() {
-  const [tools, setTools] = useState<AiToolRecord[]>([]);
-  const [error, setError] = useState("");
-
-  async function refresh() {
-    try {
-      setTools(await api.adminAiTools());
-      setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "加载工具导航失败");
-    }
-  }
-
-  useEffect(() => {
-    void refresh();
-  }, []);
-
+  const query = useWindowQuery(() => 0, [] as AiToolRecord[],
+    () => api.adminAiTools(), "加载工具导航失败");
   return (
     <AppShell kind="admin" active="ai-tools">
-      <AiToolsAdminPage tools={tools} error={error} onRefresh={() => void refresh()} onSetError={setError} />
+      <AiToolsAdminPage tools={query.data} error={query.error} onRefresh={query.refresh} onSetError={() => undefined} />
     </AppShell>
   );
 }
@@ -439,6 +373,7 @@ function CanvasTemplateEditRoute() {
   return (
     <AppShell kind="admin" active="canvas-templates" layout="canvas">
       <CanvasWorkspace
+        key={templateId}
         editTemplateId={templateId}
         onExit={() => navigate("/admin/canvas-templates")}
       />
@@ -447,34 +382,37 @@ function CanvasTemplateEditRoute() {
 }
 
 function AgentsRoute() {
+  const { currentUser, isGuest } = useAuth();
   const [clients, setClients] = useState<AgentClientRecord[]>([]);
   const [skills, setSkills] = useState<AgentOfficialSkill[]>([]);
   const [chatTools, setChatTools] = useState<AgentChatToolRecord[]>([]);
   const [releases, setReleases] = useState<AgentSkillReleaseRecord[]>([]);
   const [error, setError] = useState("");
-
-  async function refresh() {
+  const owner = useMemo(() => ({ active: false, sequence: 0 }), [currentUser?.id, currentUser?.name, isGuest]);
+  useLayoutEffect(() => {
+    owner.active = true; setClients([]); setSkills([]); setChatTools([]); setReleases([]); setError("");
+    return () => { owner.active = false; owner.sequence += 1; };
+  }, [owner]);
+  async function refresh(isErrorCurrent: () => boolean = () => true) {
+    if (!owner.active) return;
+    const sequence = ++owner.sequence, allowed = () => owner.active && sequence === owner.sequence;
     try {
       const [nextClients, nextSkills, nextChatTools, nextReleases] = await Promise.all([
-        api.agentClients(),
-        api.officialSkills(),
-        api.agentChatTools(),
-        api.agentSkillReleases(),
+        api.agentClients(), api.officialSkills(), api.agentChatTools(), api.agentSkillReleases(),
       ]);
-      setClients(nextClients);
-      setSkills(nextSkills);
-      setChatTools(nextChatTools);
-      setReleases(nextReleases);
-      setError("");
+      if (!allowed()) return;
+      setClients(current => allowed() ? nextClients : current);
+      setSkills(current => allowed() ? nextSkills : current);
+      setChatTools(current => allowed() ? nextChatTools : current);
+      setReleases(current => allowed() ? nextReleases : current);
+      setError(current => allowed() && isErrorCurrent() ? "" : current);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load agent operations data");
+      if (!allowed()) return;
+      setError(current => allowed() && isErrorCurrent() ? err instanceof Error ? err.message : "Failed to load agent operations data" : current);
+      throw err;
     }
   }
-
-  useEffect(() => {
-    void refresh();
-  }, []);
-
+  useEffect(() => { void refresh().catch(() => {}); }, [owner]);
   return (
     <AppShell kind="admin" active="agents">
       <AgentOpsPage
@@ -483,7 +421,7 @@ function AgentsRoute() {
         chatTools={chatTools}
         releases={releases}
         error={error}
-        onRefresh={() => void refresh()}
+        onRefresh={refresh}
         onSetError={setError}
       />
     </AppShell>
@@ -491,52 +429,51 @@ function AgentsRoute() {
 }
 
 function AdminFeedbackRoute() {
-  const [feedbackItems, setFeedbackItems] = useState<FeedbackRecord[]>([]);
-  const [error, setError] = useState("");
-
-  async function refresh() {
-    try {
-      setFeedbackItems(await api.adminFeedback());
-      setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load feedback inbox");
-    }
-  }
-
-  useEffect(() => {
-    void refresh();
-  }, []);
-
+  const query = useWindowQuery(() => 0, [] as FeedbackRecord[],
+    () => api.adminFeedback(), "Failed to load feedback inbox");
   return (
     <AppShell kind="admin" active="feedback">
-      <FeedbackOpsPage feedbackItems={feedbackItems} error={error} onRefresh={() => void refresh()} onSetError={setError} />
+      <FeedbackOpsPage feedbackItems={query.data} error={query.error ? `人工反馈刷新失败：${query.error}` : ""}
+        onRefresh={query.refresh} onSetError={() => undefined} />
     </AppShell>
   );
 }
 
 function SettingsRoute() {
-  const { canManageUsers } = useAuth();
+  const { canManageUsers, currentUser, isGuest } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfileRecord[]>([]);
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [platformSettings, setPlatformSettings] = useState<PlatformSettingsRecord | null>(null);
+  const [refreshError, setRefreshError] = useState("");
+  const owner = useMemo(() => ({ active: false, sequence: 0 }), [currentUser?.id, currentUser?.name, isGuest, canManageUsers]);
+  useLayoutEffect(() => {
+    owner.active = true;
+    setTasks([]); setProviderProfiles([]); setUsers([]); setPlatformSettings(null); setRefreshError("");
+    return () => { owner.active = false; owner.sequence += 1; };
+  }, [owner]);
 
   async function refresh() {
-    const [nextTasks, nextProfiles, nextUsers, nextPlatformSettings] = await Promise.all([
-      api.tasks(),
-      api.providerProfiles(),
-      canManageUsers ? api.users() : Promise.resolve([]),
-      api.platformSettings(),
-    ]);
-    setTasks(nextTasks);
-    setProviderProfiles(nextProfiles);
-    setUsers(nextUsers);
-    setPlatformSettings(nextPlatformSettings);
+    if (!owner.active) return;
+    const sequence = ++owner.sequence;
+    const allowed = () => owner.active && sequence === owner.sequence;
+    try {
+      const [nextTasks, nextProfiles, nextUsers, nextPlatformSettings] = await Promise.all([
+        api.tasks(), api.providerProfiles(), canManageUsers ? api.users() : Promise.resolve([]), api.platformSettings(),
+      ]);
+      if (!allowed()) return;
+      setTasks(current => allowed() ? nextTasks : current);
+      setProviderProfiles(current => allowed() ? nextProfiles : current);
+      setUsers(current => allowed() ? nextUsers : current);
+      setPlatformSettings(current => allowed() ? nextPlatformSettings : current);
+      setRefreshError(current => allowed() ? "" : current);
+    } catch (error) {
+      if (!allowed()) return;
+      setRefreshError(current => allowed() ? error instanceof Error ? error.message : "刷新设置失败" : current);
+      throw error;
+    }
   }
-
-  useEffect(() => {
-    void refresh();
-  }, [canManageUsers]);
+  useEffect(() => { void refresh().catch(() => {}); }, [owner]);
 
   return (
     <AppShell kind="admin" active="settings">
@@ -548,6 +485,7 @@ function SettingsRoute() {
         users={users}
         platformSettings={platformSettings}
         onRefresh={refresh}
+        refreshError={refreshError}
       />
     </AppShell>
   );

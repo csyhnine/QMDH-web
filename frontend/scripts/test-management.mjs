@@ -56,8 +56,8 @@ test('both navigation systems expose management only to company managers regardl
     }
   }
 });
-test('editor interactions create project, assign a stage and save; stale edit keeps input visible', async () => {
-  const slots=[];let cursor=0,effects=[],changed=false,tree,fail=false,saved;
+test('quick creation accepts name only, untouched close is silent and conflicts preserve stage edits', async () => {
+  const slots=[];let cursor=0,effects=[],changed=false,tree,fail=false,saved,confirms=0;
   const hooks={
     useState(initial){const i=cursor++;if(!(i in slots))slots[i]=typeof initial==='function'?initial():initial;return[slots[i],v=>{slots[i]=typeof v==='function'?v(slots[i]):v;changed=true;}];},
     useMemo(fn){return fn();},
@@ -69,20 +69,28 @@ test('editor interactions create project, assign a stage and save; stale edit ke
     if(body){if(fail)throw Error('项目已被他人修改'); saved=body;return {...body,id:1};}
     return path==='/staff'?[{id:1,name:'设计师',is_active:true}]:path.startsWith('/reports')?report:[];
   };
-  const Page=load('pages/management/ManagementProjectsPage.tsx',{'react':hooks,'../../api':{managementRequest:request},'../../context/AuthContext':{useAuth:()=>({currentUser:user})},'./planning':planning,'./ManagementOverview':{default:()=>null},'./ProjectLedger':{default:()=>null},'./ProjectPlan':{default:()=>null},'./PeopleSchedule':{default:()=>null}},{structuredClone,crypto:{randomUUID:()=> 'stage-1'},window:{confirm:()=>true},Error}).default;
+  const Page=load('pages/management/ManagementProjectsPage.tsx',{'react':hooks,'../../api':{managementRequest:request},'../../context/AuthContext':{useAuth:()=>({currentUser:user})},'./planning':planning,'./ManagementOverview':{default:()=>null},'./ProjectLedger':{default:()=>null},'./ProjectPlan':{default:()=>null},'./PeopleSchedule':{default:()=>null}},{structuredClone,crypto:{randomUUID:()=> 'stage-1'},window:{confirm:()=>{confirms++;return true;}},Error}).default;
   const render=()=>{do{cursor=0;effects=[];changed=false;tree=Page();effects.forEach(fn=>fn());}while(changed);};
   const nodes=n=>{if(!n||typeof n!=='object')return[];return[n,...[n.props?.children].flat(Infinity).flatMap(nodes)];};
   const text=n=>typeof n==='string'||typeof n==='number'?String(n):n&&typeof n==='object'?[n.props?.children].flat(Infinity).map(text).join(''):'';
   const find=(type,label)=>nodes(tree).find(n=>n.type===type&&text(n)===label);
   const button=label=>find('button',label);
   render();await new Promise(r=>setImmediate(r));render();
+  const editor=()=>nodes(tree).find(n=>n.type==='form'&&n.props['aria-label']==='编辑项目');
+  button('＋ 新建项目').props.onClick();render();
+  button('关闭').props.onClick();render();assert.equal(confirms,0);assert.equal(editor(),undefined);
+  button('＋ 新建项目').props.onClick();render();
+  nodes(find('label','项目名称')).find(n=>n.type==='input').props.onChange({target:{value:'   '}});render();
+  await editor().props.onSubmit({preventDefault(){}});render();assert.equal(saved,undefined);
+  nodes(find('label','项目名称')).find(n=>n.type==='input').props.onChange({target:{value:'只填名称'}});render();
+  await editor().props.onSubmit({preventDefault(){}});render();
+  assert.equal(saved.name,'只填名称');assert.equal(saved.stages.length,0);assert.equal(saved.design_fee,null);assert.equal(saved.deadline,null);assert.equal(saved.team.coordinator.length,0);
   button('＋ 新建项目').props.onClick();render();
   const projectName=nodes(find('label','项目名称')).find(n=>n.type==='input');
   projectName.props.onChange({target:{value:'真实安排'}});render();
   button('＋ 添加阶段').props.onClick();render();
   const stageName=nodes(tree).find(n=>n.type==='section'&&n.props.className==='mp-stage');
   nodes(stageName).find(n=>n.type==='input').props.onChange({target:{value:'方案设计'}});render();
-  const editor=()=>nodes(tree).find(n=>n.type==='form'&&n.props['aria-label']==='编辑项目');
   fail=true;await editor().props.onSubmit({preventDefault(){}});render();
   assert.ok(renderToStaticMarkup(tree).includes('项目已被他人修改'));
   assert.equal(nodes(editor()).find(n=>n.type==='input'&&n.props.value==='真实安排').props.value,'真实安排');

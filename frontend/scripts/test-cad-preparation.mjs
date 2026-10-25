@@ -10,9 +10,11 @@ const require = createRequire(import.meta.url);
 const source = readFileSync(new URL('../src/features/studio/CadPreparationPanel.tsx', import.meta.url), 'utf8');
 const exports = {};
 const circulation = {};
+const preparationDrafts = {};
+vm.runInNewContext(ts.transpile(readFileSync(new URL('../src/features/studio/cadPreparationDrafts.ts', import.meta.url), 'utf8'), { module: ts.ModuleKind.CommonJS }), { exports: preparationDrafts });
 vm.runInNewContext(ts.transpile(readFileSync(new URL('../src/features/studio/cadCirculation.ts', import.meta.url), 'utf8'), { module: ts.ModuleKind.CommonJS }), { exports: circulation });
 vm.runInNewContext(ts.transpile(source, { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS }), {
-  exports, require: name => name === './cadCirculation' ? circulation : name.endsWith('.css') || name === '../../api' ? {} : require(name),
+  exports, require: name => name === './cadPreparationDrafts' ? preparationDrafts : name === './cadCirculation' ? circulation : name.endsWith('.css') || name === '../../api' ? {} : require(name),
 });
 
 test('layout preparation asks for explicit function, real length and reserved routes before saving', () => {
@@ -71,7 +73,7 @@ test('component previews suggestions without replacing manual routes, then suppo
   };
   const module = {};
   vm.runInNewContext(ts.transpile(source, { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS }), {
-    exports: module, require: name => name === 'react' ? hooks : name === '../../api' ? { api } : name === './cadCirculation' ? circulation : name.endsWith('.css') ? {} : require(name),
+    exports: module, require: name => name === 'react' ? hooks : name === '../../api' ? { api } : name === './cadPreparationDrafts' ? preparationDrafts : name === './cadCirculation' ? circulation : name.endsWith('.css') ? {} : require(name),
   });
   const props = { record: { extract_id: 'test' }, floor, busy: false, onUpdated() {}, onPendingChange() {} };
   let tree;

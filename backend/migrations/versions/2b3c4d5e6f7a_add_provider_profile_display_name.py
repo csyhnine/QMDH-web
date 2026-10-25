@@ -21,7 +21,8 @@ def upgrade() -> None:
         sa.Column("display_name", sa.String(length=150), nullable=False, server_default=""),
     )
     op.execute("UPDATE provider_profiles SET display_name = model_name WHERE COALESCE(display_name, '') = ''")
-    op.alter_column("provider_profiles", "display_name", server_default=None)
+    with op.batch_alter_table("provider_profiles") as batch:
+        batch.alter_column("display_name", server_default=None)
 
 
 def downgrade() -> None:

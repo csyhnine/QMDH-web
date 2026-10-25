@@ -35,6 +35,22 @@ jobs:
   backend:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: qmdh_test
+          POSTGRES_PASSWORD: local-ci-only
+          POSTGRES_DB: qmdh_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qmdh_test -d qmdh_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_MIGRATION_POSTGRES_URL: postgresql+psycopg://qmdh_test:local-ci-only@127.0.0.1:5432/qmdh_test
     defaults:
       run:
         working-directory: backend

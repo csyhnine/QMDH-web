@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { api } from "../../api";
@@ -10,6 +10,7 @@ import {
   type AnnotationTool,
 } from "../canvas/annotateTypes";
 import type { ReferenceUploadItem } from "./studioTypes";
+import { referenceItemContent } from "./studioReferenceUploadSession";
 
 type StudioReferenceAnnotateLightboxProps = {
   item: ReferenceUploadItem;
@@ -32,36 +33,25 @@ export default function StudioReferenceAnnotateLightbox({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const mounted = useRef(true), closed = useRef(false), operation = useRef(0), savingRef = useRef(false);
+  const content = referenceItemContent(item), contentRef = useRef(content); contentRef.current = content;
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; operation.current += 1; }; }, []);
+  function close() { if (!mounted.current || closed.current) return; closed.current = true; operation.current += 1; onClose(); }
   async function handleConfirm() {
-    if (strokes.length === 0) {
-      setError("请先在图上绘制选区或标注。");
-      return;
-    }
-    setSaving(true);
-    setError("");
+    if (!mounted.current || closed.current || savingRef.current) return;
+    if (strokes.length === 0) { setError("请先在图上绘制选区或标注。"); return; }
+    const serial = ++operation.current, source = content;
+    const current = () => mounted.current && !closed.current && operation.current === serial && contentRef.current === source;
+    savingRef.current = true; setSaving(true); setError("");
     try {
-      const exported = await exportAnnotatedDataUrl(
-        item.previewUrl.startsWith("asset://")
-          ? item.mediaPath || item.previewUrl
-          : item.previewUrl || item.storagePath,
-        strokes
-      );
-      const uploaded = await api.uploadReferenceImage({
-        file_name: exported.fileName,
-        data_url: exported.dataUrl,
-      });
-      onReplace(index, {
-        fileName: uploaded.file_name || exported.fileName,
-        previewUrl: uploaded.storage_path,
-        storagePath: uploaded.storage_path,
-        mediaPath: uploaded.storage_path,
-      });
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "保存标注失败");
-    } finally {
-      setSaving(false);
-    }
+      const exported = await exportAnnotatedDataUrl(item.previewUrl.startsWith("asset://") ? item.mediaPath || item.previewUrl : item.previewUrl || item.storagePath, strokes);
+      if (!current()) return;
+      const uploaded = await api.uploadReferenceImage({ file_name: exported.fileName, data_url: exported.dataUrl });
+      if (!current()) return;
+      onReplace(index, { localId: item.localId, fileName: uploaded.file_name || exported.fileName, previewUrl: uploaded.storage_path, storagePath: uploaded.storage_path, mediaPath: uploaded.storage_path });
+      if (current()) close();
+    } catch (err) { if (current()) setError(err instanceof Error ? err.message : "保存标注失败"); }
+    finally { if (current()) { savingRef.current = false; setSaving(false); } }
   }
 
   const dialog = (
@@ -70,7 +60,7 @@ export default function StudioReferenceAnnotateLightbox({
       role="dialog"
       aria-modal="true"
       aria-label="参考图标注"
-      onClick={onClose}
+      onClick={close}
     >
       <div
         className="media-lightbox-surface studio-reference-annotate-surface"
@@ -78,7 +68,7 @@ export default function StudioReferenceAnnotateLightbox({
       >
         <header className="media-lightbox-head">
           <span className="media-lightbox-title">标注参考图 · {item.fileName}</span>
-          <button type="button" className="media-lightbox-close" aria-label="关闭" onClick={onClose}>
+          <button type="button" className="media-lightbox-close" aria-label="关闭" onClick={close}>
             ×
           </button>
         </header>
@@ -103,7 +93,7 @@ export default function StudioReferenceAnnotateLightbox({
           {error ? <p className="qmdh-canvas-node-error">{error}</p> : null}
         </div>
         <footer className="media-lightbox-foot">
-          <button type="button" className="ghost-button" disabled={saving} onClick={onClose}>
+          <button type="button" className="ghost-button" disabled={saving} onClick={close}>
             取消
           </button>
           <button type="button" className="submit-button" disabled={saving} onClick={() => void handleConfirm()}>

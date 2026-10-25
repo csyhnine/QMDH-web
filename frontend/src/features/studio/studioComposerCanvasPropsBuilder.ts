@@ -1,3 +1,4 @@
+import { inheritPromptDraft } from "../../lib/promptPolishOwnership";
 import {
   clampResolutionToOptions,
   resolutionOptions,
@@ -78,7 +79,7 @@ export function buildStudioComposerCanvasProps({
 
   const promptTemplates = [...studioTemplates.sharedTemplates, ...studioTemplates.customTemplates];
   const patchStudioForm = (patch: Partial<StudioFormState>) => {
-    setStudioForm((current) => applyTemplateBindingGuard(current, patch, promptTemplates));
+    setStudioForm((current) => inheritPromptDraft(current, applyTemplateBindingGuard(current, patch, promptTemplates)));
   };
 
   const handleImageCountSelect = (count: number) => {
@@ -92,7 +93,7 @@ export function buildStudioComposerCanvasProps({
       const nextOptions = resolveProviderResolutionOptions(provider, {
         creationMode: current.creationMode,
       });
-      return applyTemplateBindingGuard(
+      return inheritPromptDraft(current, applyTemplateBindingGuard(
         current,
         {
           requestedProvider: providerName,
@@ -101,13 +102,13 @@ export function buildStudioComposerCanvasProps({
           grokVideoSku: videoSkuForProviderSelection(provider, current.grokVideoSku),
         },
         promptTemplates
-      );
+      ));
     });
     setActiveComposerMenu(null);
   };
 
   const handleGrokVideoSkuSelect = (sku: StudioVideoSku) => {
-    setStudioForm((current) => ({ ...current, grokVideoSku: sku }));
+    setStudioForm((current) => inheritPromptDraft(current, ({ ...current, grokVideoSku: sku })));
     setActiveComposerMenu(null);
   };
 
@@ -223,7 +224,7 @@ export function buildStudioComposerCanvasProps({
         const nextResolutionOptions = resolveProviderResolutionOptions(provider, {
           creationMode: mode,
         });
-        return applyTemplateBindingGuard(
+        return inheritPromptDraft(current, applyTemplateBindingGuard(
           current,
           {
             creationMode: mode,
@@ -233,12 +234,15 @@ export function buildStudioComposerCanvasProps({
             grokVideoSku: nextGrokSku,
           },
           promptTemplates
-        );
+        ));
       });
     },
     onOpenReferencePicker: referenceUpload.openReferencePicker,
-    onPromptChange: (value) => patchStudioForm({ prompt: value, promptPolished: false }),
-    onPromptPolished: () => setStudioForm((current) => ({ ...current, promptPolished: true })),
+    onPromptChange: (value, application) => setStudioForm((current) => {
+      if (application && (current !== application.expected || !application.isCurrent())) return current;
+      return inheritPromptDraft(current, applyTemplateBindingGuard(current, { prompt: value, promptPolished: application?.polished ?? false }, promptTemplates), Boolean(application));
+    }),
+    onPromptPolished: () => setStudioForm((current) => inheritPromptDraft(current, ({ ...current, promptPolished: true }))),
     onProviderSelect: handleProviderSelect,
     onReferenceDrop: referenceUpload.handleReferenceDrop,
     onReferenceInputChange: referenceUpload.handleReferenceInputChange,

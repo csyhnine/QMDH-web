@@ -17,23 +17,24 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.drop_constraint("agent_memory_entries_conversation_id_fkey", "agent_memory_entries", type_="foreignkey")
-    op.create_foreign_key(
-        "agent_memory_entries_conversation_id_fkey",
-        "agent_memory_entries",
-        "conversations",
-        ["conversation_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    _replace_conversation_foreign_key("SET NULL")
+
+
+def _replace_conversation_foreign_key(ondelete: str | None) -> None:
+    # Name the originally anonymous SQLite FK during reflection so batch mode
+    # can replace it. The name matches PostgreSQL's existing generated name.
+    with op.batch_alter_table("agent_memory_entries", naming_convention={
+        "fk": "%(table_name)s_%(column_0_name)s_fkey",
+    }) as batch:
+        batch.drop_constraint("agent_memory_entries_conversation_id_fkey", type_="foreignkey")
+        batch.create_foreign_key(
+            "agent_memory_entries_conversation_id_fkey",
+            "conversations",
+            ["conversation_id"],
+            ["id"],
+            ondelete=ondelete,
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint("agent_memory_entries_conversation_id_fkey", "agent_memory_entries", type_="foreignkey")
-    op.create_foreign_key(
-        "agent_memory_entries_conversation_id_fkey",
-        "agent_memory_entries",
-        "conversations",
-        ["conversation_id"],
-        ["id"],
-    )
+    _replace_conversation_foreign_key(None)

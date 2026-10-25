@@ -63,6 +63,8 @@ from app.services.agent_skill_registry import list_official_skills
 from app.services.inspiration_media import prepare_inspiration_image
 from app.services.media_storage import resolve_storage_payload, resolve_storage_path, write_uploaded_asset
 from app.services.model_registry import get_provider_definition, get_provider_map
+from app.services.task_dispatch import add_dispatch
+from app.services.submission_idempotency import submit_once
 from app.services.task_executor import enqueue_task, execute_task, mark_task_enqueue_failed
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -173,8 +175,13 @@ def _write_agent_artifact(project: Project, payload: AgentProjectArtifactCreate)
             extension = ".jpeg"
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         safe_name = "".join(char if char.isalnum() else "-" for char in payload.name.lower()).strip("-") or "artifact"
-        relative_path = f"agent-artifacts/{project.code}/{timestamp}-{safe_name[:60]}{extension}"
-        return write_uploaded_asset(relative_path, content)
+        for _ in range(5):
+            relative_path = f"agent-artifacts/{project.code}/{timestamp}-{safe_name[:60]}-{uuid.uuid4().hex}{extension}"
+            try:
+                return write_uploaded_asset(relative_path, content, create_new=True)
+            except FileExistsError:
+                continue
+        raise HTTPException(status_code=409, detail="Artifact identity collision; retry this upload")
     if payload.storage_path:
         return payload.storage_path
     raise HTTPException(status_code=400, detail="Either data_url or storage_path is required")
@@ -319,6 +326,8 @@ def _create_image_task(
     agent_auth: AgentAuthProfile,
     project: Project,
     payload: AgentImageTaskCreate,
+    submission_key: str | None = None,
+    fingerprint: str = "",
 ) -> Task:
     workflow = db.scalar(select(Workflow).where(Workflow.key == payload.workflow_key))
     if not workflow:
@@ -355,7 +364,65 @@ def _create_image_task(
     )
     db.add(task)
     db.flush()
+    add_dispatch(db, task, comfy=provider.adapter_kind == "comfyui", key=submission_key, fingerprint=fingerprint,
+                 state="queued" if settings.task_execution_mode == "redis" else "done")
     return task
+
+
+def _agent_image_submission_key(payload, request, agent_auth):
+    explicit = getattr(payload, "submission_key", None)
+    if explicit:
+        return ["explicit", explicit]
+    headers = getattr(request, "headers", {}) or {}
+    request_id = str(headers.get("X-Request-ID") or "").strip()
+    execution = str(payload.external_execution_id or agent_auth.external_execution_id or "").strip()
+    if request_id and execution:
+        return ["legacy-pair", execution, request_id]
+    return None
+
+
+def _submit_agent_image_task(payload, request, background_tasks, db, agent_auth, job_type):
+    project = _resolve_project(db, agent_auth, payload.project_id)
+    user = _get_or_create_agent_user(db, agent_auth)
+    parameters = {"title": payload.title, "project_id": project.id, "workflow_key": payload.workflow_key,
+                  "requested_provider": payload.requested_provider, "classification": payload.classification.value,
+                  "payload": payload.payload}
+    def create(submission_key, fingerprint):
+        task = _create_image_task(db=db, agent_auth=agent_auth, project=project, payload=payload,
+                                  submission_key=submission_key, fingerprint=fingerprint)
+        request_id = _request_id(request)
+        job = _create_agent_job(db=db, agent_auth=agent_auth, job_type=job_type, request_id=request_id,
+                               payload=payload.model_dump(), project=project, user=db.get(User, task.user_id),
+                               workflow_key=payload.workflow_key, requested_provider=payload.requested_provider,
+                               external_execution_id=payload.external_execution_id, task=task, status_value="accepted",
+                               result={"task_id": task.id, "task_status": task.status.value})
+        write_audit_log(db=db, event_type="agent.image_edit.requested" if job_type == "image.edit" else "agent.image_generate.requested",
+                        actor_name=agent_auth.user_name, actor_id=agent_auth.user_id, target_type="task", target_id=task.id,
+                        target_name=task.title, project_code=project.code, workflow_key=payload.workflow_key,
+                        provider_name=payload.requested_provider, classification=payload.classification,
+                        details={"agent_client_key": agent_auth.key, "device_id": agent_auth.device_id,
+                                 "request_id": request_id, "external_execution_id": job.external_execution_id, "agent_job_id": job.id})
+        return task
+    task, created = submit_once(db, user_id=user.id, scope=["agent", agent_auth.client_id, job_type],
+                                key=_agent_image_submission_key(payload, request, agent_auth), parameters=parameters, create=create)
+    job = db.scalar(select(AgentJob).where(AgentJob.task_id == task.id, AgentJob.client_id == agent_auth.client_id,
+                                         AgentJob.job_type == job_type).order_by(AgentJob.id))
+    if job is None:
+        raise HTTPException(409, "Original Agent job is unavailable; review it before submitting again")
+    if not created:
+        return _to_job_out(db, job)
+    if settings.task_execution_mode == "sync":
+        execute_task(task.id)
+    elif settings.task_execution_mode == "redis":
+        try:
+            enqueue_task(task.id)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Redis wakeup failed for durable task %s: %s", task.id, type(exc).__name__)
+    else:
+        background_tasks.add_task(execute_task, task.id)
+    db.refresh(job)
+    return _to_job_out(db, job)
 
 
 def _mark_agent_job_enqueue_failed(db: Session, job: AgentJob, task: Task, exc: Exception) -> dict[str, object]:
@@ -383,62 +450,7 @@ def create_agent_image_generate(
     db: Session = Depends(get_db),
     agent_auth: AgentAuthProfile = Depends(get_current_agent_auth),
 ) -> AgentJobOut:
-    project = _resolve_project(db, agent_auth, payload.project_id)
-    task = _create_image_task(db=db, agent_auth=agent_auth, project=project, payload=payload)
-    user = db.get(User, task.user_id)
-    request_id = _request_id(request)
-    job = _create_agent_job(
-        db=db,
-        agent_auth=agent_auth,
-        job_type="image.generate",
-        request_id=request_id,
-        payload=payload.model_dump(),
-        project=project,
-        user=user,
-        workflow_key=payload.workflow_key,
-        requested_provider=payload.requested_provider,
-        external_execution_id=payload.external_execution_id,
-        task=task,
-        status_value="accepted",
-        result={"task_id": task.id, "task_status": task.status.value},
-    )
-    write_audit_log(
-        db=db,
-        event_type="agent.image_generate.requested",
-        actor_name=agent_auth.user_name,
-        actor_id=agent_auth.user_id,
-        target_type="task",
-        target_id=task.id,
-        target_name=task.title,
-        project_code=project.code,
-        workflow_key=payload.workflow_key,
-        provider_name=payload.requested_provider,
-        classification=payload.classification,
-        details={
-            "agent_client_key": agent_auth.key,
-            "device_id": agent_auth.device_id,
-            "request_id": request_id,
-            "external_execution_id": job.external_execution_id,
-            "agent_job_id": job.id,
-        },
-    )
-    db.commit()
-    db.refresh(job)
-
-    if settings.task_execution_mode == "sync":
-        execute_task(task.id)
-    elif settings.task_execution_mode == "redis":
-        try:
-            enqueue_task(task.id)
-        except Exception as exc:
-            failure = _mark_agent_job_enqueue_failed(db, job, task, exc)
-            db.commit()
-            raise HTTPException(status_code=503, detail=str(failure["error_summary"])) from exc
-    else:
-        background_tasks.add_task(execute_task, task.id)
-
-    db.refresh(job)
-    return _to_job_out(db, job)
+    return _submit_agent_image_task(payload, request, background_tasks, db, agent_auth, "image.generate")
 
 
 @router.post("/image-edit", response_model=AgentJobOut, status_code=status.HTTP_202_ACCEPTED)
@@ -450,62 +462,7 @@ def create_agent_image_edit(
     agent_auth: AgentAuthProfile = Depends(get_current_agent_auth),
 ) -> AgentJobOut:
     payload.workflow_key = "image-edit"
-    project = _resolve_project(db, agent_auth, payload.project_id)
-    task = _create_image_task(db=db, agent_auth=agent_auth, project=project, payload=payload)
-    user = db.get(User, task.user_id)
-    request_id = _request_id(request)
-    job = _create_agent_job(
-        db=db,
-        agent_auth=agent_auth,
-        job_type="image.edit",
-        request_id=request_id,
-        payload=payload.model_dump(),
-        project=project,
-        user=user,
-        workflow_key=payload.workflow_key,
-        requested_provider=payload.requested_provider,
-        external_execution_id=payload.external_execution_id,
-        task=task,
-        status_value="accepted",
-        result={"task_id": task.id, "task_status": task.status.value},
-    )
-    write_audit_log(
-        db=db,
-        event_type="agent.image_edit.requested",
-        actor_name=agent_auth.user_name,
-        actor_id=agent_auth.user_id,
-        target_type="task",
-        target_id=task.id,
-        target_name=task.title,
-        project_code=project.code,
-        workflow_key=payload.workflow_key,
-        provider_name=payload.requested_provider,
-        classification=payload.classification,
-        details={
-            "agent_client_key": agent_auth.key,
-            "device_id": agent_auth.device_id,
-            "request_id": request_id,
-            "external_execution_id": job.external_execution_id,
-            "agent_job_id": job.id,
-        },
-    )
-    db.commit()
-    db.refresh(job)
-
-    if settings.task_execution_mode == "sync":
-        execute_task(task.id)
-    elif settings.task_execution_mode == "redis":
-        try:
-            enqueue_task(task.id)
-        except Exception as exc:
-            failure = _mark_agent_job_enqueue_failed(db, job, task, exc)
-            db.commit()
-            raise HTTPException(status_code=503, detail=str(failure["error_summary"])) from exc
-    else:
-        background_tasks.add_task(execute_task, task.id)
-
-    db.refresh(job)
-    return _to_job_out(db, job)
+    return _submit_agent_image_task(payload, request, background_tasks, db, agent_auth, "image.edit")
 
 
 @router.post("/inspiration/import", response_model=AgentJobOut, status_code=status.HTTP_201_CREATED)

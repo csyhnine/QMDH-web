@@ -1,0 +1,610 @@
+[
+  {
+    "local_path": "backend/app/cli.py",
+    "container_path": "/app/app/cli.py",
+    "candidate_sha256": "1371998450b7a0ca4adcc991467584576b08b91a4ac668c71fe8a09c2d068195",
+    "expected_live_sha256": "5a1eefcd2535065417cb038dba0c0de141cf3faf3e993440202af1464a7a6a75",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/integrations/search/service.py",
+    "container_path": "/app/app/integrations/search/service.py",
+    "candidate_sha256": "7a6045fa3127d6212f2e7610705f13bb66ff1b590bbe4ee0af4b5d3979d06e69",
+    "expected_live_sha256": "751c8fc30c1692eadcca64bc91249565417288d544a6008cb16bce5c7fdeff84",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/integrations/search/sync.py",
+    "container_path": "/app/app/integrations/search/sync.py",
+    "candidate_sha256": "f03e1fda5bd7ec54f9845dd521f4018a7ce687e05b307721b329f7cf24aa705f",
+    "expected_live_sha256": "3fd1ab3722a56a888322496563a7e1db43c5243c07167d81ef3bbb6f03c851f0",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/integrations/studio_agent/agent.py",
+    "container_path": "/app/app/integrations/studio_agent/agent.py",
+    "candidate_sha256": "c2166cf12fc4cbbb84ab4b8094f580d72776e1da19d8c255e5bf569f5abdbdb9",
+    "expected_live_sha256": "02f6484aba54c0e96d954b7e03be89022b01f9c3b9212fb6a8335139184f0f90",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/models.py",
+    "container_path": "/app/app/models.py",
+    "candidate_sha256": "5467393350a880312cb053c4f2ecb50a002f0c2e377e9dcb844283c739a35adb",
+    "expected_live_sha256": "946eaae28ff7b1e4869cb55204d3feefd4946c222638b5584068231db7772b78",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/routers/agent.py",
+    "container_path": "/app/app/routers/agent.py",
+    "candidate_sha256": "9d3744dcad5201777c7134561c86ffd65cbee157a9f69b1cb6768357bf501123",
+    "expected_live_sha256": "fa8ca3b7539b2460f7be06ad663d99cff4b11fed6e466d5b5b2c4b26f912b1cb",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/routers/cad.py",
+    "container_path": "/app/app/routers/cad.py",
+    "candidate_sha256": "00dca0d59f252dc05615e3726eb64009489cab8b838af9cc1ddb924f9a7137f5",
+    "expected_live_sha256": "a5b81d18555e3790e46145365a9728f6932dca6baef23873f09eec55b52bb06d",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/routers/chat.py",
+    "container_path": "/app/app/routers/chat.py",
+    "candidate_sha256": "b40eda0a3bc788f9f2a8aeec40d790aa41d916bb08480a2dc7f6d07b5d236db8",
+    "expected_live_sha256": "5b0dcea413bfa8ab5d72f8ea5704ba2ccc585e6c3f96c010e59551e485ec4e09",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/routers/chat_experience.py",
+    "container_path": "/app/app/routers/chat_experience.py",
+    "candidate_sha256": "7af8a4b18f68951a2af2f2e73b25dbbbc808be884706affd6646755becaff96d",
+    "expected_live_sha256": "ad50d43a1a566e77f825abc18e501599e09e0bc5cb2fa3128469e6cb26a705bd",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/routers/dashboard.py",
+    "container_path": "/app/app/routers/dashboard.py",
+    "candidate_sha256": "61041a6fcbe9402832a215d369219093e095892c575c0f2638468059cf2b3dc8",
+    "expected_live_sha256": "ddaa8d623e859644f0dccce52d98d2268c200db8fc4dea7d535aca63445ff212",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/routers/inspiration.py",
+    "container_path": "/app/app/routers/inspiration.py",
+    "candidate_sha256": "2c8fbb2cb519c89911fa85ea2e699d605d2950bb36e46c7ef57e55f534d6b7db",
+    "expected_live_sha256": "6c99844b5b4d9ce94c13b4c357e01aa5194e9d94d0266a1b7fe1ade1a6fcaf23",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/routers/prompt_templates.py",
+    "container_path": "/app/app/routers/prompt_templates.py",
+    "candidate_sha256": "713dc4bbf743ce82a6e7b35a6bc9c915db8c367264a160835e4f4b22b46e517c",
+    "expected_live_sha256": "0b8426b0b0fc6d1cedd7d9c81cb805f2b19f31fade1e3e474e4221828d05b4ba",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/routers/providers.py",
+    "container_path": "/app/app/routers/providers.py",
+    "candidate_sha256": "b5b957f0ad21ebba9e8400dd7e75cd68e9d84f8fd66e55fbea862e21efcebbd6",
+    "expected_live_sha256": "306e3bfba397a8e76cbbe5c2382869daad2739cf87c4931b75a0783823448543",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/routers/search.py",
+    "container_path": "/app/app/routers/search.py",
+    "candidate_sha256": "0e956abedacd2f7b978a079393de731dd1db06b05940116319c55dd4940f4dff",
+    "expected_live_sha256": "dd9dd4195e8cffdac63829ab03451db906e756ac2a523862fbd1862c04f490dd",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/routers/skill_feedback.py",
+    "container_path": "/app/app/routers/skill_feedback.py",
+    "candidate_sha256": "c4db1400821a06c46910f3cc388c484c5ba0f55a9abc89bb47e9aadce5182256",
+    "expected_live_sha256": "23af8d821fb86bda1a52b44da968bd51675a657114a3759e14ce0e377047087a",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/routers/tasks.py",
+    "container_path": "/app/app/routers/tasks.py",
+    "candidate_sha256": "0a1ccf3f5cd237c537e13e3a5108b95983cf722271fe98ea3a803e8dce22f3c4",
+    "expected_live_sha256": "96d2d3d4493db135c38da4bfa5fb0c8e9c909985556775bfd210c924d7a13d5d",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/schemas.py",
+    "container_path": "/app/app/schemas.py",
+    "candidate_sha256": "d534150316aadb82008f00ef916adf8a7611d791e8c4e6f0dec4f4939c5eb3bb",
+    "expected_live_sha256": "6be282592e368f054c29c6ce17fd933fcd0e3d025175cc71579410ab262a092a",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/scripts/scrub_agent_memory_legacy.py",
+    "container_path": "/app/app/scripts/scrub_agent_memory_legacy.py",
+    "candidate_sha256": "07cd88a3e8f309938c46684a38ec6b788a8169d0dc46e6b41b94e31d8931e548",
+    "expected_live_sha256": "4c3b8381fb63ab6d287afda66d9eec09a06d49009b602416349d007be757193d",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/agent_harness_service.py",
+    "container_path": "/app/app/services/agent_harness_service.py",
+    "candidate_sha256": "c47c8c891e4a5baf068f4122d50ee33603dd4230dbee236ff9c2117befa97c7c",
+    "expected_live_sha256": "a8bd387d5d3aefcf465f95ab9ca6f26bf0999953ac686f21bf932fed23f47444",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/agent_memory_service.py",
+    "container_path": "/app/app/services/agent_memory_service.py",
+    "candidate_sha256": "7c11f9e3b07e9149cf1a77756863d05d5740a5a7a9cb4a25c66f344532bd6547",
+    "expected_live_sha256": "9eb3cd6cbff62b58924636077b4d606466694d811c701af0ebd2fc4797070b6f",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/billing.py",
+    "container_path": "/app/app/services/billing.py",
+    "candidate_sha256": "f6d513ff915cb806e345793e9324820cd070c887c6c42d053e2787f476fbf260",
+    "expected_live_sha256": "fc8d781cb6bac94cc712d00dd7f24ed3c246cf5a310d9e14fe3d75779185dae0",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/cad/edit_persistence.py",
+    "container_path": "/app/app/services/cad/edit_persistence.py",
+    "candidate_sha256": "6a5c35c865e46023d81bffda6214ef20863186524db529b7ae8f336928fb5158",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/cad/preparation.py",
+    "container_path": "/app/app/services/cad/preparation.py",
+    "candidate_sha256": "aee02476b212278c11e1981979ffbbf2edde22c8c2cd4b2f1c8820099bf29b51",
+    "expected_live_sha256": "d58f9ff1f08f78b046aa687661f815dd03bcbff0eb4e4e93dd1f3a7919f90dcf",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/cad/room_edit.py",
+    "container_path": "/app/app/services/cad/room_edit.py",
+    "candidate_sha256": "d2a8403f874921d9a51ef6d2b01c74d452744da5c81046cadea386b392da9c9c",
+    "expected_live_sha256": "0c41d839158dfc4e138fbcaa499ad1d2c2fd5e29ca1219979d3690946f3a3837",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/cad/space_layout.py",
+    "container_path": "/app/app/services/cad/space_layout.py",
+    "candidate_sha256": "98ff807eb3068cef5582c4b253656b237bd6cb89e29868cfd88b84a348dec22a",
+    "expected_live_sha256": "fd4a1ebe1115166b4d0a88317030bafbe2fbab443df50bbdebded73eed2d3392",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/cad/unit_scale.py",
+    "container_path": "/app/app/services/cad/unit_scale.py",
+    "candidate_sha256": "0fa87b744b99d9f6a4c124bc35ec4faa2863822b0cef206e236ebdc42fbb3177",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/chat_agent_completion_service.py",
+    "container_path": "/app/app/services/chat_agent_completion_service.py",
+    "candidate_sha256": "2bf5b175f74bb0f34e8c8bc307b1b71cb79a0835d2f9b23e24469355748bfad4",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/chat_agent_task_service.py",
+    "container_path": "/app/app/services/chat_agent_task_service.py",
+    "candidate_sha256": "b39c84901db7a7360227ff835108e178a97210ab73d515fe1433e50c76caedfb",
+    "expected_live_sha256": "9d2a78676da996fc43cb67d323eb79fcf1a6f44726700667a42056166772b650",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/chat_compaction_completion_service.py",
+    "container_path": "/app/app/services/chat_compaction_completion_service.py",
+    "candidate_sha256": "1a132a0c9f160758cc79d4677a8891de1719bc3116ca6c08203ff138f7b5d564",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/chat_context.py",
+    "container_path": "/app/app/services/chat_context.py",
+    "candidate_sha256": "2aa024ed92e763d584e9cff05aab8b4680fcfaf4abb4e9bd87b5adfef8c697b5",
+    "expected_live_sha256": "9c40ce59b1d30f59a6ab8f216b5c5556c4980d4ae3edf3a975d0fc00d7b110b1",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/chat_model_observation.py",
+    "container_path": "/app/app/services/chat_model_observation.py",
+    "candidate_sha256": "97d9dabf124d45dd07b32420160a4f0fba5ce053565284d9c2e7483fb9f783b0",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/chat_reply_completion_service.py",
+    "container_path": "/app/app/services/chat_reply_completion_service.py",
+    "candidate_sha256": "b415c15c4a407a4d1123a9aa8bf0d0bf673bd8652a7c582f5a8beb2d7d37c726",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/chat_telemetry_alert_service.py",
+    "container_path": "/app/app/services/chat_telemetry_alert_service.py",
+    "candidate_sha256": "aa32f6cd938cc05da6773f56b1484fd27b34b93d9e4da5a32197e79ba9328714",
+    "expected_live_sha256": "7b3d137fa2c294d6135bfcb2a238fe3f9edc95fb1f17e93f22c921930d4ad16f",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/chat_telemetry_dashboard_service.py",
+    "container_path": "/app/app/services/chat_telemetry_dashboard_service.py",
+    "candidate_sha256": "cbd778d717b069c769ecdee2430c05d3651c4147163b131b5f87d4de1eb5d290",
+    "expected_live_sha256": "37de0c0886bbacc529992bb74eb88347064c35330ae271f939aaeaf59ac5a693",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/chat_telemetry_observation_service.py",
+    "container_path": "/app/app/services/chat_telemetry_observation_service.py",
+    "candidate_sha256": "6e306865366bb9bfb1c4f4289ca06fe386f7359b881796a020041fa3f8eea8e6",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/chat_telemetry_service.py",
+    "container_path": "/app/app/services/chat_telemetry_service.py",
+    "candidate_sha256": "98b0fe7285cecd26f2c6ec704856a8bcc67bb5eea986aa633d851df0716ba4d8",
+    "expected_live_sha256": "cf0ec351cf91ce533c2bbb3c2425b4f4416a3f957decf6821547e4cc8c675ad2",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/chat_usage_recovery_service.py",
+    "container_path": "/app/app/services/chat_usage_recovery_service.py",
+    "candidate_sha256": "b62a0c942f6249f727296d028b927f2df7f9b1ca69dd9cb92884dd192041dfa4",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/comfy_partial_finalization.py",
+    "container_path": "/app/app/services/comfy_partial_finalization.py",
+    "candidate_sha256": "cad02b59572e860662e46d3de6ee4aa15b2ebcb15c1a02c55362905c584a0437",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/generated_media_validation.py",
+    "container_path": "/app/app/services/generated_media_validation.py",
+    "candidate_sha256": "1f89ffcbbf1bead3b877a67c51bb9d6c9743a706c79c869c32223be252500854",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/generation_analytics_dashboard_service.py",
+    "container_path": "/app/app/services/generation_analytics_dashboard_service.py",
+    "candidate_sha256": "e174298ec97358d0c43c364f8d1e1115ac2f9a54d4607712c04eaa0f5825c86c",
+    "expected_live_sha256": "d910a82ca59967d182e1a74ffb6ecfb4e5303814aca0e6bf1a9f2849064a5dc2",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/generation_intent_service.py",
+    "container_path": "/app/app/services/generation_intent_service.py",
+    "candidate_sha256": "4b4af134f9bde24bff0c315831c5d6a1275af1d4ae84e4f50a8130e27a8f80ab",
+    "expected_live_sha256": "acb0a1d45d70824020fcf53a37f01cb32de08b08b9b1e8451f89a41f99693897",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/generation_session_service.py",
+    "container_path": "/app/app/services/generation_session_service.py",
+    "candidate_sha256": "90e3653d057aa1e4a3058dce2ebbdb1dccebb0fe240bc8eeb73206d3377ae193",
+    "expected_live_sha256": "58e7c0c74797bda3f0b1d1bc782df4d393ccd9312f57ad06e530eeb0bfedafb4",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/haodeya_pricing.py",
+    "container_path": "/app/app/services/haodeya_pricing.py",
+    "candidate_sha256": "61d14ae953377a297fc80bb6b6ba4cbdda74b98394b634a6ed8afd772ee19619",
+    "expected_live_sha256": "e018a4dec97bfdeadebb488cc231e1a09a46250ecd1976562b84006cb8819ec4",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/image_aspect_ratio.py",
+    "container_path": "/app/app/services/image_aspect_ratio.py",
+    "candidate_sha256": "a29afab8a9e93afaf4d258d686d58dd354a5ba8012b8dab8165c6f2c5a5365bf",
+    "expected_live_sha256": "1035d79c677e4434c39c252fcc45a8651cfe88c0e77ea27266b6a7877128a6bf",
+    "expected_absent": false,
+    "ownership": "existing committed source differing from live"
+  },
+  {
+    "local_path": "backend/app/services/inspiration_bundle_workspace.py",
+    "container_path": "/app/app/services/inspiration_bundle_workspace.py",
+    "candidate_sha256": "2e5900411aee50f570da45a71f7d27f9227c833d00412ff943f4cb5a401cbaf9",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/inspiration_refresh.py",
+    "container_path": "/app/app/services/inspiration_refresh.py",
+    "candidate_sha256": "5fe72fbf41fc2e73cb70a2eedb0f89a1b7e080ba141c16467bb0fd0928098aa8",
+    "expected_live_sha256": "c1e138a725f9bda51f011928b11ebfdc55f079e24b2bf6657b15aa05c52c3c3d",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/media_storage.py",
+    "container_path": "/app/app/services/media_storage.py",
+    "candidate_sha256": "52f46c6adf9abdb1bea6d60152c5d6ce30a6d75b8079ed5ad5bea58716521230",
+    "expected_live_sha256": "2be20c4a7c4199862475857ddd5d0e3f691d6882a6118ceee254f291992f4354",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/prompt_polish_service.py",
+    "container_path": "/app/app/services/prompt_polish_service.py",
+    "candidate_sha256": "d570588a65cf395565c241d624dff1de2df6cae287522fe239fb85ed961cd4a9",
+    "expected_live_sha256": "a03bd99bc74914ffabf49f7373190ae598f089657a43b517fb9c31a109b8a5ef",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/provider_adapters/async_progress.py",
+    "container_path": "/app/app/services/provider_adapters/async_progress.py",
+    "candidate_sha256": "2dc2cb07daaabd72d1030e62f8fd5ba1175d56d0c376adbaad9878e6e6e5ae94",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/provider_adapters/base.py",
+    "container_path": "/app/app/services/provider_adapters/base.py",
+    "candidate_sha256": "b4fcb8e62e259cd64e3bd423cbc2bb12c660993a6e74b4b94a71a824d661a02d",
+    "expected_live_sha256": "065f2d91a32ab86854a82b494fe1d819be58381a624267da06e63866b8bab89c",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/provider_adapters/bigjpg_upscale.py",
+    "container_path": "/app/app/services/provider_adapters/bigjpg_upscale.py",
+    "candidate_sha256": "f94a24cfca412a6b4fa557c719d46397a647d9a1f2679826361eb3e90d0546e3",
+    "expected_live_sha256": "dd0c5da16e087415f039e1161c417e9141e3f145e4df90205aef98702ed22c34",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/provider_adapters/comfyui.py",
+    "container_path": "/app/app/services/provider_adapters/comfyui.py",
+    "candidate_sha256": "2105e22310ece44865998b237a97b24afbe6e15256682c1105267377e1b6ac5d",
+    "expected_live_sha256": "40d63ff81d7c3834da661fb152791e73ebf6a057792720c4b755f5fefd57df3d",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/provider_adapters/dashscope_video.py",
+    "container_path": "/app/app/services/provider_adapters/dashscope_video.py",
+    "candidate_sha256": "a4f9cdcc1ae76b808734628716bc49cb83cacdcb47d989ab0071060e26eb8e92",
+    "expected_live_sha256": "f97fd3dfaf25f98ad8057baee2a0768b3fd6d61329f4dcbdc97340ded9c7f9e4",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/provider_adapters/haodeya_grok_video.py",
+    "container_path": "/app/app/services/provider_adapters/haodeya_grok_video.py",
+    "candidate_sha256": "89f3b7d4931573bdcc0dcf04f5495444f8a99c8af6dfbfdeec39933cc34faf73",
+    "expected_live_sha256": "7e8ea74c634cad80ddfa4ef660c6dd829345bf5332dbf0a67be244652ef9fbba",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/provider_adapters/video_common.py",
+    "container_path": "/app/app/services/provider_adapters/video_common.py",
+    "candidate_sha256": "005ef767e2f958d41e2e02efd311339734a6d07b23948300f3117eee1e41cc26",
+    "expected_live_sha256": "cec058f01e47df15e89babaaf88818a29ac788d24fe1257b7edb4a990354b079",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/provider_adapters/volcengine_ark_video.py",
+    "container_path": "/app/app/services/provider_adapters/volcengine_ark_video.py",
+    "candidate_sha256": "c9d5ddbe79bc65051e96d4184fbe8f45c6a0974f5be465e79a77697ecdc65bcf",
+    "expected_live_sha256": "5fd428c82ebf53a1fbdeedc76492cff0b4f8f666b36c592d5dded08919b7d2fd",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/provider_adapters/volcengine_jimeng_video.py",
+    "container_path": "/app/app/services/provider_adapters/volcengine_jimeng_video.py",
+    "candidate_sha256": "e215fe817726fe4c63cc536a522780373abc25d2d990ce250c781ddd0ac1e3e4",
+    "expected_live_sha256": "ddc8f49a7f66f9429aea8ac94070cab0202f8852d2d7feb01faea7dd8046dfdb",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/search_index_generation_service.py",
+    "container_path": "/app/app/services/search_index_generation_service.py",
+    "candidate_sha256": "5fdf1b5ec12c9efb478b9b9d184e479ac12357245464ce5a97c501c2fa6b0652",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/search_index_outbox_service.py",
+    "container_path": "/app/app/services/search_index_outbox_service.py",
+    "candidate_sha256": "267bb61b0e6584fbce5503da6967858fbc551b4408eb8bcc343d57e256de1f08",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/submission_idempotency.py",
+    "container_path": "/app/app/services/submission_idempotency.py",
+    "candidate_sha256": "b1eccf9e5a0122d93bc9d3a4031407309ae1f11e675c276bf0b051e3655cee3d",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/task_cost_backfill.py",
+    "container_path": "/app/app/services/task_cost_backfill.py",
+    "candidate_sha256": "f294f270130d82c3edc52e8046cb3195f179957ebd936b43a9b988dec7f80b11",
+    "expected_live_sha256": "6714d9f8b8bfef5f6154a9c784df8ee6c8c621a05def813583023aeac6728475",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/task_dispatch.py",
+    "container_path": "/app/app/services/task_dispatch.py",
+    "candidate_sha256": "a578f2e24864e0c206b2ba67ea397fd51a313a8af2200f9815d33262606eaab8",
+    "expected_live_sha256": "72b37e9056f49607a67f5fb270aad298af8ff7c856d5843e45f4ba97998cd0ca",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/task_executor.py",
+    "container_path": "/app/app/services/task_executor.py",
+    "candidate_sha256": "fc503141b6406c84de59b4a8f8da26c9917cfe2521a96893925db4d2561ae590",
+    "expected_live_sha256": "af34938c389027060ac3306e1dadbeb654eee0dde0fc488e223ab87658e7867d",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/task_reference_metadata.py",
+    "container_path": "/app/app/services/task_reference_metadata.py",
+    "candidate_sha256": "bbaee1dd9ebf3a98039e9b435d0b001716cc77566eba472b74722709ea74f09d",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/app/services/usage_ledger.py",
+    "container_path": "/app/app/services/usage_ledger.py",
+    "candidate_sha256": "78b31a8848cf7f615d50116b3cc883492592d74bc5d3390689455b5c6ff53e22",
+    "expected_live_sha256": "35860a8b9c6fdbeb8d13f09dcf6fae7730228c051bcf87bc8261b2b52d8618bf",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/migrations/env.py",
+    "container_path": "/app/migrations/env.py",
+    "candidate_sha256": "23c2b9f72605bc6049c2a22e3e5c63b882aa59a37631068036832793bc332b43",
+    "expected_live_sha256": "157d4cee577719742a66d618b261e0462cb4042655cebb5c318122af4651ad70",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/migrations/versions/2b3c4d5e6f7a_add_provider_profile_display_name.py",
+    "container_path": "/app/migrations/versions/2b3c4d5e6f7a_add_provider_profile_display_name.py",
+    "candidate_sha256": "26392958369980a8994ecc9e4be518e47813b340fc9fae542ff1233b95b9a6a0",
+    "expected_live_sha256": "10924ee6536df6f9cbbe4b72ecce23369efd90f89d25f38c4b5ca68ca415de60",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/migrations/versions/3c4d5e6f7a8b_add_user_group_name.py",
+    "container_path": "/app/migrations/versions/3c4d5e6f7a8b_add_user_group_name.py",
+    "candidate_sha256": "013bcdd1545a0a97979a33d150d1767cded3458854229b4c5cb1c7359e7cc3f9",
+    "expected_live_sha256": "e47cb3f066a450e1fa0c1d3de293cdee0c53df21ac1260f93a268aeab07014e7",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/migrations/versions/4d5e6f7a8b9c_add_provider_profile_secret_config.py",
+    "container_path": "/app/migrations/versions/4d5e6f7a8b9c_add_provider_profile_secret_config.py",
+    "candidate_sha256": "aece295fbfe3090e42cfac5dd1ef3e96343451effce20763b0238eb26800a156",
+    "expected_live_sha256": "2dab81124a1cba19b2055b2abc9f09d5d38baf4616e611cd70267c173afa03d3",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/migrations/versions/a2b3c4d5e6f7_add_billing_pricing_rules_and_template_events.py",
+    "container_path": "/app/migrations/versions/a2b3c4d5e6f7_add_billing_pricing_rules_and_template_events.py",
+    "candidate_sha256": "52c010655bd9f55509b05a421989a9e0d6d47847c8476620d098232e6238fb9d",
+    "expected_live_sha256": "936996657a0c976f9dfcac254e1cf5a67ff5d8754040d6a01b0c7d9d1319d986",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/migrations/versions/c39d8e71a624_complete_bootstrap_schema.py",
+    "container_path": "/app/migrations/versions/c39d8e71a624_complete_bootstrap_schema.py",
+    "candidate_sha256": "08c26b280709b5efba337a704853d6a538027fcd5305f0b24f341e584a3d1c5d",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/migrations/versions/d2348a1e3427_add_conversations_and_chat_messages_.py",
+    "container_path": "/app/migrations/versions/d2348a1e3427_add_conversations_and_chat_messages_.py",
+    "candidate_sha256": "6011c222162f4084f832afa1ea3f0ebe9a342cca1c65c7f7da4f30cec8466b1d",
+    "expected_live_sha256": "37c0f1ba17b6002334cd93a2f586daab16d5f4b16ddebd5df2b84125d9197cd5",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/migrations/versions/d40e9f82b735_fix_sqlite_agent_time_defaults.py",
+    "container_path": "/app/migrations/versions/d40e9f82b735_fix_sqlite_agent_time_defaults.py",
+    "candidate_sha256": "869b2f1c9c73de1ef7759c37fc01ddd452b7ddb02193d35b917ead629b2e1d47",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/migrations/versions/e51fa962c846_add_search_index_outbox.py",
+    "container_path": "/app/migrations/versions/e51fa962c846_add_search_index_outbox.py",
+    "candidate_sha256": "d0ba50d331add2c7b6d9169b1d7ff786860b1e3a05a2d8ad01dde00ec2daf6d1",
+    "expected_live_sha256": null,
+    "expected_absent": true,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/migrations/versions/f6a7b8c9d0e1_add_chat_token_columns_to_usage_ledgers.py",
+    "container_path": "/app/migrations/versions/f6a7b8c9d0e1_add_chat_token_columns_to_usage_ledgers.py",
+    "candidate_sha256": "fb6772af9f33fd13457aa87821115e115670241c73f7efcd630a6aebc60be9f5",
+    "expected_live_sha256": "df10aba862bada42307d34a1fa7fcb07957710482278898de1e5a3ddbd0753e6",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  },
+  {
+    "local_path": "backend/migrations/versions/p7q8r9s0t1u2_agent_memory_conversation_set_null.py",
+    "container_path": "/app/migrations/versions/p7q8r9s0t1u2_agent_memory_conversation_set_null.py",
+    "candidate_sha256": "a1996e934f349ea2ed68c971e27bf9705c36953d04c8e45b79d4d24103e43e72",
+    "expected_live_sha256": "9ba9ab70660dccfe35a4564268d0237ececae9f942b2e5425bdba76b024bc4d0",
+    "expected_absent": false,
+    "ownership": "preserved working-tree implementation; included in release candidate"
+  }
+]

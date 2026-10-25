@@ -15,7 +15,7 @@ type BuildReferenceUploadTrackerOptions = {
 };
 
 export function buildReferenceUploadsFromPaths(paths: string[]): ReferenceUploadItem[] {
-  return paths.slice(0, 4).map((path, index) => ({
+  return paths.map((path, index) => ({
     fileName: summarizeReferenceImageLabel(path) || `参考图 ${index + 1}`,
     previewUrl: path,
     storagePath: path,

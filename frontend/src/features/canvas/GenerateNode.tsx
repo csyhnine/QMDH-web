@@ -1,5 +1,5 @@
 import { Handle, Position, useUpdateNodeInternals, type Node, type NodeProps } from "@xyflow/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { resolveProviderResolutionOptions } from "../studio/studioConstants";
 import { aspectRatioOptionsFor } from "../studio/studioCanvasLinkage";
@@ -38,6 +38,8 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
     providers,
     disabled,
     patchNode,
+    promptScopeKey,
+    isPromptScopeCurrent,
     generateNode,
     syncNodeTask,
     uploadNodeImage,
@@ -48,6 +50,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
   const updateNodeInternals = useUpdateNodeInternals();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [polishingPrompt, setPolishingPrompt] = useState(false);
+  useLayoutEffect(() => { setPolishingPrompt(false); }, [id, data.nodeKind, promptScopeKey]);
   const upstream = useMemo(() => getUpstreamDeliverables(id), [getUpstreamDeliverables, id]);
   const isUpload = data.nodeKind === "upload";
   const isUpscale = data.nodeKind === "upscale";
@@ -270,6 +273,9 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
             {!isUpscale ? (
               <CanvasPromptPolishField
                 nodeKind={data.nodeKind}
+                nodeId={id}
+                draftIdentity={data}
+                onApplyPrompt={(prompt, polished, isCurrent) => patchNode(id, { prompt, promptPolished: polished }, { expectedData: data, isCurrent: () => isCurrent() && (isPromptScopeCurrent?.() ?? true) })}
                 prompt={data.prompt}
                 referenceImages={data.referenceImages}
                 upstreamImages={upstream.images}
@@ -424,7 +430,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
               type="button"
               className="is-secondary"
               disabled={disabled || busy || !canSubmit}
-              onClick={() => generateNode(id, data)}
+              onClick={() => generateNode(id, data, {regenerate:true})}
             >
               重新生成
             </button>

@@ -103,13 +103,21 @@ def run_claim(task_id, token):
         with SessionLocal() as db:
             job = db.get(TaskDispatch, task_id)
             task = db.get(Task, task_id)
-            if job and job.lease_owner == token:
-                uncertain = job.lane == "comfyui" and task.status == TaskStatus.pending
+            until = job.lease_until if job else None
+            if until and until.tzinfo is None:
+                until = until.replace(tzinfo=timezone.utc)
+            if job and job.state == "leased" and job.lease_owner == token and until and until > utcnow():
+                uncertain = (job.lane == "comfyui" and task.status == TaskStatus.pending) or (
+                    job.lane == "default" and task.result.get("recovery_required") is True
+                )
                 # A failed transport result is not evidence of failed GPU execution.
                 job.state = "review" if task.status != TaskStatus.completed and uncertain else "done"
                 if job.state == "review":
                     task.status = TaskStatus.pending
-                    task.result = {**task.result, "queued_stage": "recovering", "summary": "本机任务等待连接恢复或执行状态核对，请勿重复提交。"}
+                    if job.lane == "comfyui":
+                        task.result = {**task.result, "queued_stage": "recovering", "summary": "本机任务等待连接恢复或执行状态核对，请勿重复提交。"}
+                    else:
+                        task.result = {**task.result, "queued_stage": "review", "summary": "上游任务状态或结果待核对，请勿重复提交。"}
                 job.lease_owner, job.lease_until = None, None
                 db.commit()
     finally:

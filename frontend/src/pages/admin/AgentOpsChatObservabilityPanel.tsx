@@ -1,9 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
+import type { AgentEditSessions } from "./useAgentEditSessions";
 
 import { api, type AdminAgentTraceRecord, type AdminChatConversationRecord } from "../../api";
 
 type AgentOpsChatObservabilityPanelProps = {
-  onSetError: (error: string) => void;
+  owner: AgentEditSessions;
+};
+
+type ObservedMessage = Awaited<ReturnType<typeof api.adminChatConversationMessages>>[number];
+type ConversationView = {
+  conversationId: number;
+  conversation: AdminChatConversationRecord | undefined;
+  messages: ObservedMessage[];
+  traces: AdminAgentTraceRecord[];
+  loading: boolean;
+  error: string;
 };
 
 function formatDate(value: string): string {
@@ -12,53 +23,47 @@ function formatDate(value: string): string {
   return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
-export default function AgentOpsChatObservabilityPanel({ onSetError }: AgentOpsChatObservabilityPanelProps) {
-  const [conversations, setConversations] = useState<AdminChatConversationRecord[]>([]);
-  const [traces, setTraces] = useState<AdminAgentTraceRecord[]>([]);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [messages, setMessages] = useState<
-    Array<{
-      id: number;
-      role: string;
-      content: string;
-      created_at: string;
-      agent_tool_calls?: { name: string; summary: string }[];
-    }>
-  >([]);
-  const [loading, setLoading] = useState(false);
+export default function AgentOpsChatObservabilityPanel({ owner }: AgentOpsChatObservabilityPanelProps) {
+  const ui = useMemo(() => ({
+    conversations: [] as AdminChatConversationRecord[], overviewTraces: [] as AdminAgentTraceRecord[],
+    loading: true, error: "", detail: null as ConversationView | null,
+  }), [owner.scope]);
+  const { conversations, loading } = ui;
+  const selectedId = ui.detail?.conversationId ?? null;
+  const messages = ui.detail?.messages ?? [], traces = ui.detail?.traces ?? [];
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
+    const read = owner.read("chat-observation-overview");
+    ui.loading = true; ui.error = ""; owner.publish();
     void Promise.all([api.adminChatConversations({ limit: 30 }), api.adminAgentTraces({ limit: 20 })])
       .then(([conversationRows, traceRows]) => {
-        if (cancelled) return;
-        setConversations(conversationRows);
-        setTraces(traceRows);
+        if (!read.allowed()) return;
+        ui.conversations = conversationRows; ui.overviewTraces = traceRows; owner.publish();
       })
       .catch((error: unknown) => {
-        if (cancelled) return;
-        onSetError(error instanceof Error ? error.message : "加载 Chat 可观测数据失败");
+        if (!read.allowed()) return;
+        ui.error = error instanceof Error ? error.message : "加载 Chat 可观测数据失败"; owner.publish();
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (read.allowed()) { ui.loading = false; owner.publish(); }
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [onSetError]);
+  }, [owner.scope]);
 
   async function handleSelectConversation(conversationId: number) {
-    setSelectedId(conversationId);
+    if (!owner.isCurrent()) return;
+    const view: ConversationView = { conversationId, conversation: conversations.find((row) => row.id === conversationId), messages: [], traces: [], loading: true, error: "" };
+    ui.detail = view; owner.touch(); owner.publish();
+    const read = owner.read("chat-observation-detail"), allowed = () => read.allowed() && ui.detail === view;
     try {
       const [messageRows, traceRows] = await Promise.all([
         api.adminChatConversationMessages(conversationId),
         api.adminAgentTraces({ conversationId, limit: 20 }),
       ]);
-      setMessages(messageRows);
-      setTraces(traceRows);
+      if (allowed()) { view.messages = messageRows; view.traces = traceRows; owner.publish(); }
     } catch (error: unknown) {
-      onSetError(error instanceof Error ? error.message : "加载会话详情失败");
+      if (allowed()) { view.error = error instanceof Error ? error.message : "加载会话详情失败"; owner.publish(); }
+    } finally {
+      if (allowed()) { view.loading = false; owner.publish(); }
     }
   }
 
@@ -72,6 +77,7 @@ export default function AgentOpsChatObservabilityPanel({ onSetError }: AgentOpsC
         <span>{loading ? "加载中…" : `${conversations.length} 个会话`}</span>
       </div>
 
+      {ui.error ? <div className="floating-error" role="alert">{ui.error}</div> : null}
       <div className="admin-data-table agent-client-table">
         <div className="admin-table-row admin-table-head">
           <span>会话</span>
@@ -108,6 +114,9 @@ export default function AgentOpsChatObservabilityPanel({ onSetError }: AgentOpsC
       {selectedId != null ? (
         <div className="agent-ops-subpanel">
           <h3>会话 #{selectedId} 消息（只读）</h3>
+          {ui.detail?.conversation ? <p className="agent-policy-note">{ui.detail.conversation.title || "未命名"} · {ui.detail.conversation.user_display_name} ({ui.detail.conversation.user_name})</p> : null}
+          {ui.detail?.loading ? <p role="status">正在加载会话 #{selectedId} 的消息与 trace…</p> : null}
+          {ui.detail?.error ? <div className="floating-error" role="alert">{ui.detail.error}</div> : null}
           <div className="agent-ops-message-list">
             {messages.map((message) => (
               <article key={message.id} className={`agent-ops-message is-${message.role}`}>

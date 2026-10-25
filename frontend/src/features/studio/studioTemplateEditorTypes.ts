@@ -19,5 +19,5 @@ export type StudioTemplateEditorFieldsProps = Pick<
 >;
 export type StudioTemplateEditorActionsProps = Pick<
   StudioTemplateEditorProps,
-  "editingTemplateId" | "onCancelTemplateEdit" | "onSaveCustomTemplate"
+  "editingTemplateId" | "templateFeedback" | "onCancelTemplateEdit" | "onSaveCustomTemplate"
 >;

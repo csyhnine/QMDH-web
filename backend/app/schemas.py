@@ -105,7 +105,9 @@ class DashboardDailyPoint(BaseModel):
     total_tasks: int = 0
     successful_tasks: int = 0
     failed_tasks: int = 0
-    total_cost: float = 0.0
+    total_cost: float | None = 0.0
+    cost_currency: str = "CNY"
+    cost_by_currency: list[dict[str, Any]] = Field(default_factory=list)
     image_generate_count: int = 0
     image_edit_count: int = 0
     video_generate_count: int = 0
@@ -156,7 +158,10 @@ class DashboardAccountUsage(BaseModel):
     is_active: bool
     project_codes: list[str] = Field(default_factory=list)
     quota_limit: float | None = None
-    quota_used: float = 0.0
+    quota_used: float | None = 0.0
+    quota_comparable: bool = True
+    quota_month: str = ""
+    quota_cost_by_currency: list[DashboardCurrencySpend] = Field(default_factory=list)
     quota_currency: str = "CNY"
     quota_remaining: float | None = None
     quota_status: str = "ok"
@@ -193,11 +198,11 @@ class DashboardStats(BaseModel):
     successful_tasks: int
     failed_tasks: int = 0
     success_rate: float
-    average_cost: float
+    average_cost: float | None
     average_latency_ms: float
     audit_coverage_rate: float
     outbound_tasks: int
-    total_cost: float = 0.0
+    total_cost: float | None = 0.0
     cost_unit: str = "CNY"
     cost_formula: str = ""
     cost_notes: list[str] = Field(default_factory=list)
@@ -736,6 +741,7 @@ class ProviderDiscoverOut(BaseModel):
 
 class ProviderBulkImportItem(BaseModel):
     model_id: str
+    name_mode: Literal["identity", "explicit"] = "explicit"
     provider_name: str = Field(min_length=2, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$")
     display_name: str = Field(default="", max_length=150)
     capabilities: list[str] = Field(default_factory=lambda: ["image.generate"])
@@ -750,9 +756,18 @@ class ProviderBulkImportIn(BaseModel):
     models: list[ProviderBulkImportItem]
 
 
+class ProviderBulkImportItemOut(BaseModel):
+    model_id: str
+    provider_name: str
+    status: Literal["created", "already_same", "conflict"]
+    resolved_provider_name: str | None = None
+    suggested_provider_name: str | None = None
+
+
 class ProviderBulkImportOut(BaseModel):
     created: list[str]
     skipped: list[str]
+    items: list[ProviderBulkImportItemOut] = Field(default_factory=list)
 
 
 class InspirationPostOut(BaseModel):
@@ -1007,6 +1022,7 @@ class AgentImageTaskCreate(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     workflow_key: str = "image-generate"
     external_execution_id: str = ""
+    submission_key: str | None = Field(default=None, min_length=16, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class AgentInspirationImportIn(BaseModel):

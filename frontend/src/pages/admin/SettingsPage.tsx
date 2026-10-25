@@ -19,6 +19,7 @@ export type SettingsPageProps = {
   users: ManagedUser[];
   platformSettings: PlatformSettingsRecord | null;
   onRefresh: () => Promise<void>;
+  refreshError?: string;
 };
 
 type SettingsTab = "integrations" | "features" | "overview";
@@ -31,6 +32,7 @@ export default function SettingsPage({
   users,
   platformSettings,
   onRefresh,
+  refreshError,
 }: SettingsPageProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("integrations");
   const [activeIntegration, setActiveIntegration] = useState<IntegrationMenuKey>("bigjpg");
@@ -52,11 +54,12 @@ export default function SettingsPage({
           <h1>设置中心</h1>
           <p>管理外部工具接入、查看系统运行摘要。集成配置保存后立即作用于 Studio 与任务执行。</p>
         </div>
-        <button type="button" className="admin-primary-button" onClick={() => void onRefresh()}>
+        <button type="button" className="admin-primary-button" onClick={() => { void onRefresh().catch(() => {}); }}>
           刷新状态
         </button>
       </header>
 
+      {refreshError ? <div className="floating-error">{refreshError}</div> : null}
       {!userCanUseOpsViews ? (
         <div className="floating-error">当前账号没有查看设置中心的权限。</div>
       ) : (

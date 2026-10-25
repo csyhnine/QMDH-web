@@ -206,6 +206,54 @@ class ComfyUIAdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "consumer link"):
             c.prepare_graph(graph, mapping, {"prompt": "new"}, seed=0, prefix="fixture")
 
+    def _use_easy_seed(self):
+        self.graph["486"] = {"class_type": "easy seed", "inputs": {"seed": 0}}
+        self.graph["459:458"]["inputs"]["seed"] = ["486", 0]
+        self.graph["459:471"]["inputs"]["sampling_mode.seed"] = ["486", 0]
+        self.mapping.update(seed=[["486", "seed"]], seed_consumers=[
+            ["459:458", "seed"], ["459:471", "sampling_mode.seed"]])
+        self._write_workflow()
+
+    def test_easy_seed_random_generation_uses_node_inclusive_maximum(self):
+        self._use_easy_seed()
+        with patch.object(c.secrets, "randbelow", side_effect=lambda upper: upper - 1) as random:
+            self.run_adapter(seed=None)
+        random.assert_called_once_with(2**50 + 1)
+        posted = json.loads(next(r.content for r in self.calls if r.method == "POST"))
+        self.assertEqual(posted["prompt"]["486"]["inputs"]["seed"], 2**50)
+        self.assertEqual(posted["prompt"]["459:458"]["inputs"]["seed"], ["486", 0])
+
+    def test_easy_seed_rejects_incident_seed_before_submission(self):
+        self._use_easy_seed()
+        with patch.object(settings, "comfyui_workflow_root", str(self.root)):
+            for seed in (-1, True, 2**50 + 1, 1374080225793968):
+                with self.subTest(seed=seed), self.assertRaisesRegex(ValueError, "seed"):
+                    c.validate_submission(None, 1, self.profile.model_name, {"prompt": "test", "seed": seed})
+        with self.assertRaises(ProviderExecutionError):
+            self.run_adapter(seed=1374080225793968)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.saved, [])
+        self.assertNotIn(c.GPU_LOCK, FakeRedis.values)
+
+    def test_easy_seed_batch_wraps_without_exceeding_node_limit(self):
+        from uuid import uuid4
+        self._use_easy_seed()
+        def handler(request):
+            if request.url.path == "/prompt":
+                self.calls.append(request)
+                return httpx.Response(200, json={"prompt_id": str(uuid4()), "node_errors": {}})
+            if request.url.path.startswith("/history/"):
+                return httpx.Response(200, json={request.url.path.split("/")[-1]: self.history()[PROMPT_ID]})
+            return self.handler(request)
+        self.run_adapter(handler, seed=2**50, image_count=3)
+        seeds = [json.loads(r.content)["prompt"]["486"]["inputs"]["seed"] for r in self.calls if r.method == "POST"]
+        self.assertEqual(seeds, [2**50, 0, 1])
+
+    def test_legacy_literal_seed_range_is_preserved(self):
+        self.assertEqual(c.seed_maximum(self.graph, self.mapping), 2**53 - 1)
+        prepared = c.prepare_graph(self.graph, self.mapping, {"prompt": "test"}, seed=2**53 - 1, prefix="fixture")
+        self.assertEqual(prepared["459:458"]["inputs"]["seed"], 2**53 - 1)
+
     def test_reference_arity_tracks_approved_template_and_provider_contract(self):
         from app.routers.providers import _comfy_reference_count
         from types import SimpleNamespace

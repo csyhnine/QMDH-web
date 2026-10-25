@@ -6,7 +6,7 @@ export default function StudioTemplateEditorFeedback({ templateFeedback }: Studi
   }
 
   return (
-    <p className={templateFeedback.type === "success" ? "template-feedback success" : "template-feedback error"}>
+    <p role="status" className={templateFeedback.type === "success" ? "template-feedback success" : templateFeedback.type === "error" ? "template-feedback error" : "template-feedback"}>
       {templateFeedback.message}
     </p>
   );

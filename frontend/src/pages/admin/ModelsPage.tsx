@@ -1,21 +1,19 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type Dispatch, type FormEvent, type SetStateAction, useEffect, useLayoutEffect, useState } from "react";
 import ComfyOperations from "./ComfyOperations";
+import { useModelAdminState } from "./useModelAdminState";
 import {
   api,
-  type DiscoveredModel,
   type Provider,
   type ProviderBulkImportItem,
   type ProviderPricingRuleCreatePayload,
   type ProviderPricingRuleRecord,
   type ProviderProfileCreatePayload,
-  type ProviderProfileProbeResult,
-  type ProviderProfilePreviewRequestResult,
   type ProviderProfileRecord,
 } from "../../api";
 
 /* ─── Types ─── */
 
-type ProviderProfileDraft = {
+export type ProviderProfileDraft = {
   providerName: string;
   displayName: string;
   apiKey: string;
@@ -49,7 +47,7 @@ type ProviderProfileDraft = {
   referenceCaptionModel: string;
 };
 
-type ProviderPricingRuleDraft = {
+export type ProviderPricingRuleDraft = {
   providerProfileId: string;
   capability: string;
   metric: string;
@@ -59,7 +57,13 @@ type ProviderPricingRuleDraft = {
   isActive: boolean;
 };
 
-type DiscoveredModelAssignment = {
+export type PricingRuleEditor = {
+  draft: ProviderPricingRuleDraft;
+  identity: { ruleId: number; providerProfileId: number } | null;
+};
+
+export type DiscoveredModelAssignment = {
+  providerName?: string;
   generate: boolean;
   edit: boolean;
   chat: boolean;
@@ -678,11 +682,6 @@ function readSupportedResolutionFlags(adapterConfig: Record<string, unknown>): {
 
 function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfileDraft {
   const adapterConfig = profile.adapter_config ?? {};
-  const unitPrice1k =
-    readAdapterConfigPrice(adapterConfig, "unit_price_1k") ||
-    readAdapterConfigPrice(adapterConfig, "unit_price_5s") ||
-    String(profile.unit_price ?? "");
-  const supportedFlags = readSupportedResolutionFlags(adapterConfig);
   return {
     providerName: profile.provider_name,
     displayName: profile.display_name || profile.model_name,
@@ -699,12 +698,23 @@ function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfile
     timeoutSeconds: profile.timeout_seconds ?? 300,
     pricingCurrency: profile.pricing_currency ?? "CNY",
     pricingUnit: profile.pricing_unit ?? "per_image",
-    unitPrice1k,
+    ...readManagedAdapterDraft(adapterConfig, profile.unit_price),
+    enabled: profile.enabled,
+    referenceMode: profile.reference_mode ?? "disabled",
+    referenceCaptionModel: profile.reference_caption_model ?? "",
+  };
+}
+
+function readManagedAdapterDraft(adapterConfig: Record<string, unknown>, baseUnitPrice: number | string | null | undefined = "") {
+  return {
+    unitPrice1k:
+      readAdapterConfigPrice(adapterConfig, "unit_price_1k") ||
+      readAdapterConfigPrice(adapterConfig, "unit_price_5s") || String(baseUnitPrice ?? ""),
     unitPrice2k:
       readAdapterConfigPrice(adapterConfig, "unit_price_2k") ||
       readAdapterConfigPrice(adapterConfig, "unit_price_10s"),
     unitPrice4k: readAdapterConfigPrice(adapterConfig, "unit_price_4k"),
-    ...supportedFlags,
+    ...readSupportedResolutionFlags(adapterConfig),
     upstreamModel1k: readAdapterConfigText(adapterConfig, "upstream_model_1k"),
     upstreamModel2k: readAdapterConfigText(adapterConfig, "upstream_model_2k"),
     upstreamModel4k: readAdapterConfigText(adapterConfig, "upstream_model_4k"),
@@ -712,9 +722,17 @@ function toProviderProfileDraft(profile: ProviderProfileRecord): ProviderProfile
     upstreamSkuI2v10s: readAdapterConfigText(adapterConfig, "upstream_sku_i2v_10s"),
     upstreamSkuRef5s: readAdapterConfigText(adapterConfig, "upstream_sku_ref_5s"),
     upstreamSkuRef10s: readAdapterConfigText(adapterConfig, "upstream_sku_ref_10s"),
-    enabled: profile.enabled,
-    referenceMode: profile.reference_mode ?? "disabled",
-    referenceCaptionModel: profile.reference_caption_model ?? "",
+  };
+}
+
+function normalizeProviderPresetDraft(preset: Partial<ProviderProfileDraft>): ProviderProfileDraft {
+  const defined = Object.fromEntries(Object.entries(preset).filter(([, value]) => value !== undefined)) as Partial<ProviderProfileDraft>;
+  const adapterConfig = parseAdapterConfigObject(defined.adapterConfig ?? "");
+  return {
+    ...defaultProviderProfileDraft,
+    ...readManagedAdapterDraft(adapterConfig),
+    ...defined,
+    adapterConfig: JSON.stringify(stripManagedAdapterConfigKeys(adapterConfig), null, 2),
   };
 }
 
@@ -902,10 +920,16 @@ function formatPricingMetricLabel(metric: string): string {
   return metric;
 }
 
+class ProviderProfileDraftValidationError extends Error {}
+
 function parseAdapterConfigObject(raw: string): Record<string, unknown> {
   const trimmed = raw.trim();
   if (!trimmed) return {};
-  return JSON.parse(trimmed) as Record<string, unknown>;
+  const parsed: unknown = JSON.parse(trimmed);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new ProviderProfileDraftValidationError("Adapter Config 必须是 JSON 对象");
+  }
+  return parsed as Record<string, unknown>;
 }
 
 function readAdapterConfigPrice(config: Record<string, unknown>, key: string): string {
@@ -949,7 +973,11 @@ function assignAdapterConfigPrice(config: Record<string, unknown>, key: string, 
     delete config[key];
     return;
   }
-  config[key] = Number(trimmed);
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new ProviderProfileDraftValidationError("分档单价必须是大于或等于 0 的有限数字");
+  }
+  config[key] = value;
 }
 
 function assignSupportedResolutionsFromDraft(
@@ -1019,8 +1047,8 @@ export type ModelsPageProps = {
   pricingRules: ProviderPricingRuleRecord[];
   providers: Provider[];
   error: string;
-  onRefresh: () => void;
-  onSetError: (error: string) => void;
+  onRefresh: (guard?: () => boolean) => void | Promise<void>;
+  onSetError: Dispatch<SetStateAction<string>>;
 };
 
 /* ─── Component ─── */
@@ -1049,45 +1077,41 @@ function toPricingRulePayload(draft: ProviderPricingRuleDraft): ProviderPricingR
   };
 }
 
-export default function ModelsPage({ providerProfiles, pricingRules, providers, error, onRefresh, onSetError }: ModelsPageProps) {
-  const [providerDraft, setProviderDraft] = useState<ProviderProfileDraft>(defaultProviderProfileDraft);
-  const [editingProviderProfileId, setEditingProviderProfileId] = useState<number | null>(null);
-  const [savingProviderProfile, setSavingProviderProfile] = useState(false);
-  const [pricingRuleDraft, setPricingRuleDraft] = useState<ProviderPricingRuleDraft>(defaultPricingRuleDraft);
-  const [editingPricingRuleId, setEditingPricingRuleId] = useState<number | null>(null);
-  const [savingPricingRule, setSavingPricingRule] = useState(false);
-  const [probingProfileId, setProbingProfileId] = useState<number | null>(null);
-  const [togglingProfileId, setTogglingProfileId] = useState<number | null>(null);
-  const [probeResults, setProbeResults] = useState<Record<number, ProviderProfileProbeResult>>({});
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewResult, setPreviewResult] = useState<ProviderProfilePreviewRequestResult | null>(null);
-  const [previewResolution, setPreviewResolution] = useState("2k");
-  const [previewAspectRatio, setPreviewAspectRatio] = useState("1:1");
-  const [previewHasReference, setPreviewHasReference] = useState(false);
+export default function ModelsPage({ providerProfiles, pricingRules, providers, error, onRefresh: refreshCallback, onSetError: errorCallback }: ModelsPageProps) {
+  const admin = useModelAdminState(defaultProviderProfileDraft, defaultPricingRuleDraft, {
+    onRefresh: refreshCallback, onSetError: errorCallback, profiles: providerProfiles, rules: pricingRules,
+  }, () => { try { return localStorage.getItem("qmdh.discover.baseUrl") ?? ""; } catch { return ""; } });
+  const { scope, profileEditor, ruleEditor, previewOwner, discoveryBatch, isCurrent, publish, touch,
+    report, refreshAfter, refreshRecords, runOperation, profileKey, ruleKey, records,
+    replaceProfile, replaceRule, setProviderDraft, setProviderEnabled, setPricingRuleEditor, selectRuleProfile,
+    providerDraft, editingProviderProfileId, pricingRuleEditor, savingProviderProfile, profileWriteBusy,
+    savingPricingRule, isProfileBusy, isRuleBusy, isTogglingProfile, isProbingProfile, probeResults,
+    previewLoading, previewResult, previewResolution, previewAspectRatio, previewHasReference,
+    setPreviewResolution, setPreviewAspectRatio, setPreviewHasReference,
+    discoverBaseUrl, discoverApiKey, setDiscoverBaseUrl, setDiscoverApiKey, beginDiscovery, discoverLoading,
+    importingModels, discoveredModels, discoveredAssignments, selectedModelIds, discoverBaseUrlForImport,
+    discoverError, importResult, setDiscoveredAssignments, setSelectedModelIds, setDiscoverError, setImportResult,
+    profileNotice, ruleNotice,
+  } = admin;
+  const pricingRuleDraft = pricingRuleEditor.draft;
+  const editingPricingRuleId = pricingRuleEditor.identity?.ruleId ?? null;
+  const onSetError = (message: string) => report(message);
+  function setPricingRuleDraft(change: SetStateAction<ProviderPricingRuleDraft>) {
+    setPricingRuleEditor((current) => ({ ...current, draft: typeof change === "function" ? change(current.draft) : change }));
+  }
+  const selectPricingProfile = selectRuleProfile;
   const [modelFilters, setModelFilters] = useState<ModelFilterState>({ search: "", capability: "all", adapterKind: "all", status: "all" });
   const [discoverPanelOpen, setDiscoverPanelOpen] = useState(false);
-  const [discoverBaseUrl, setDiscoverBaseUrl] = useState(() => {
-    try {
-      return localStorage.getItem("qmdh.discover.baseUrl") ?? "";
-    } catch {
-      return "";
-    }
-  });
-  const [discoverApiKey, setDiscoverApiKey] = useState("");
-  const [discoverLoading, setDiscoverLoading] = useState(false);
-  const [discoverError, setDiscoverError] = useState("");
-  const [discoveredModels, setDiscoveredModels] = useState<DiscoveredModel[]>([]);
-  const [discoveredAssignments, setDiscoveredAssignments] = useState<Record<string, DiscoveredModelAssignment>>({});
-  const [discoverBaseUrlForImport, setDiscoverBaseUrlForImport] = useState("");
-  const [discoverApiKeyForImport, setDiscoverApiKeyForImport] = useState("");
-  const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
-  const [importingModels, setImportingModels] = useState(false);
-  const [importResult, setImportResult] = useState<{ created: string[]; skipped: string[] } | null>(null);
   const [discoverListFilter, setDiscoverListFilter] = useState<"new" | "all" | "exists">("new");
   const [discoverSearch, setDiscoverSearch] = useState("");
-  const [detailPanelTab, setDetailPanelTab] = useState<DetailPanelTab>("model");
+  const [detailPanelTab, setDetailPanelTabValue] = useState<DetailPanelTab>("model");
+  function setDetailPanelTab(tab: DetailPanelTab) { if (isCurrent()) { touch(); setDetailPanelTabValue(tab); } }
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(false);
+  useLayoutEffect(() => {
+    setSelectedPresetId(null); setMoreOptionsOpen(false); setDetailPanelTabValue("model");
+    setDiscoverPanelOpen(false); setDiscoverSearch(""); setDiscoverListFilter("new");
+  }, [scope]);
 
   const enabledProviderProfiles = providerProfiles.filter((p) => p.enabled);
   const disabledProviderProfiles = providerProfiles.filter((p) => !p.enabled);
@@ -1113,10 +1137,10 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
 
   useEffect(() => {
     if (pricingRuleDraft.providerProfileId || chatProviderProfiles.length === 0) return;
-    setPricingRuleDraft((current) => ({
+    setPricingRuleDraft((current) => current.providerProfileId ? current : {
       ...current,
       providerProfileId: String(chatProviderProfiles[0].id),
-    }));
+    });
   }, [pricingRuleDraft.providerProfileId, chatProviderProfiles]);
 
   const draftCapabilities = parseCapabilities(providerDraft.capabilities);
@@ -1209,8 +1233,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
   const activeAdapterOption = getAdapterOption(providerDraft.adapterKind);
 
   function resetProviderProfileDraft() {
-    setEditingProviderProfileId(null);
-    setProviderDraft(defaultProviderProfileDraft);
+    replaceProfile(null, defaultProviderProfileDraft);
     setSelectedPresetId(null);
     setMoreOptionsOpen(false);
     setDetailPanelTab("model");
@@ -1222,184 +1245,184 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
       setSelectedPresetId(null);
       return;
     }
-    setProviderDraft((current) => ({
-      ...defaultProviderProfileDraft,
-      ...preset.draft,
-      apiKey: current.apiKey,
-      apiSecret: current.apiSecret,
-      enabled: current.enabled,
-      unitPrice1k: current.unitPrice1k,
-      unitPrice2k: current.unitPrice2k,
-      unitPrice4k: current.unitPrice4k,
-    }));
+    let normalized: ProviderProfileDraft;
+    try { normalized = normalizeProviderPresetDraft(preset.draft); }
+    catch (err) {
+      onSetError(err instanceof ProviderProfileDraftValidationError ? err.message : "预设 Adapter Config 必须是合法 JSON");
+      return;
+    }
+    if (!isCurrent() || scope.profile !== profileEditor) return;
+    replaceProfile(null, { ...normalized, apiKey: profileEditor.draft.apiKey, apiSecret: profileEditor.draft.apiSecret, enabled: profileEditor.draft.enabled });
     setSelectedPresetId(preset.id);
     setMoreOptionsOpen(false);
     setDetailPanelTab("model");
   }
 
   function resetPricingRuleDraft(profileId?: number | null) {
-    setEditingPricingRuleId(null);
     const defaultProfileId =
       profileId ??
       (editingProviderProfileId !== null && draftCapabilities.includes("chat.completions")
         ? editingProviderProfileId
         : chatProviderProfiles[0]?.id ?? null);
-    setPricingRuleDraft({
-      ...defaultPricingRuleDraft,
-      providerProfileId: defaultProfileId ? String(defaultProfileId) : "",
+    setPricingRuleEditor({
+      draft: { ...defaultPricingRuleDraft, providerProfileId: defaultProfileId ? String(defaultProfileId) : "" },
+      identity: null,
     });
   }
 
 
   function handleEditProviderProfile(profile: ProviderProfileRecord) {
-    setEditingProviderProfileId(profile.id);
-    setProviderDraft(toProviderProfileDraft(profile));
+    replaceProfile(profile.id, toProviderProfileDraft(profile));
     setSelectedPresetId(null);
     setMoreOptionsOpen(false);
-    setPreviewResult(null);
-    setPricingRuleDraft((current) => ({ ...current, providerProfileId: String(profile.id) }));
+    selectPricingProfile(profile.capabilities.includes("chat.completions") ? String(profile.id) : "");
     setDetailPanelTab("model");
   }
 
   function handleEditPricingRule(rule: ProviderPricingRuleRecord) {
-    setEditingPricingRuleId(rule.id);
-    setPricingRuleDraft(toPricingRuleDraft(rule));
+    setPricingRuleEditor({
+      draft: toPricingRuleDraft(rule),
+      identity: { ruleId: rule.id, providerProfileId: rule.provider_profile_id },
+    });
     setDetailPanelTab("chat-billing");
   }
 
-  async function handleSaveProviderProfile(event: FormEvent<HTMLFormElement>) {
+  function finishProfileEditor(editor: typeof profileEditor, version: number, operation: { intent: number }) {
+    if (!isCurrent() || scope.profile !== editor) return;
+    if (editor.revision !== version) { editor.notice = "原操作已完成，当前修改已保留。"; publish(); return; }
+    replaceProfile(null, defaultProviderProfileDraft, false);
+    if (scope.intent === operation.intent) { setSelectedPresetId(null); setMoreOptionsOpen(false); setDetailPanelTabValue("model"); }
+  }
+
+  function handleSaveProviderProfile(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    const editor = profileEditor;
+    if (!isCurrent() || scope.profile !== editor) return Promise.resolve();
+    const profileId = editor.id, version = editor.revision;
+    const pending = scope.operations.get(profileKey(editor)); if (pending) return pending.promise;
+    touch();
     let payload: ProviderProfileCreatePayload;
-    try {
-      payload = toProviderProfilePayload(providerDraft);
-    } catch {
-      onSetError("Strategies / Adapter Config 必须是合法 JSON");
-      return;
-    }
-    if (!payload.provider_name || !payload.base_url || !payload.model_name) { onSetError("请填写 provider 名称、base URL 和模型名称"); return; }
-    if (payload.capabilities.length === 0) { onSetError("请至少填写一个模型能力"); return; }
-    if (editingProviderProfileId === null && !payload.api_key) { onSetError("新增模型配置需要填写 API Key"); return; }
-    setSavingProviderProfile(true);
-    try {
-      if (editingProviderProfileId === null) {
+    try { payload = toProviderProfilePayload(editor.draft); }
+    catch (err) { onSetError(err instanceof ProviderProfileDraftValidationError ? err.message : "Strategies / Adapter Config 必须是合法 JSON"); return Promise.resolve(); }
+    if (!payload.provider_name || !payload.base_url || !payload.model_name) { onSetError("请填写 provider 名称、base URL 和模型名称"); return Promise.resolve(); }
+    if (payload.capabilities.length === 0) { onSetError("请至少填写一个模型能力"); return Promise.resolve(); }
+    if (profileId === null && !payload.api_key) { onSetError("新增模型配置需要填写 API Key"); return Promise.resolve(); }
+    if (profileId !== null && !records().profiles.some((profile) => profile.id === profileId)) { onSetError("原配置已不存在，当前草稿已保留，请重新选择或新增。"); return Promise.resolve(); }
+    return runOperation(profileKey(editor), "profile.save", async (operation) => {
+      report("", operation.intent);
+      try {
+      if (profileId === null) {
         await api.createProviderProfile(payload);
       } else {
-        await api.updateProviderProfile(editingProviderProfileId, { display_name: payload.display_name, base_url: payload.base_url, model_name: payload.model_name, adapter_kind: payload.adapter_kind, capabilities: payload.capabilities, strategies: payload.strategies, adapter_config: payload.adapter_config, quality: payload.quality, output_format: payload.output_format, timeout_seconds: payload.timeout_seconds, pricing_currency: payload.pricing_currency, pricing_unit: payload.pricing_unit, unit_price: payload.unit_price, enabled: payload.enabled, reference_mode: payload.reference_mode, reference_caption_model: payload.reference_caption_model, ...(payload.api_key ? { api_key: payload.api_key } : {}), ...(payload.api_secret ? { api_secret: payload.api_secret } : {}) });
+        await api.updateProviderProfile(profileId, { display_name: payload.display_name, base_url: payload.base_url, model_name: payload.model_name, adapter_kind: payload.adapter_kind, capabilities: payload.capabilities, strategies: payload.strategies, adapter_config: payload.adapter_config, quality: payload.quality, output_format: payload.output_format, timeout_seconds: payload.timeout_seconds, pricing_currency: payload.pricing_currency, pricing_unit: payload.pricing_unit, unit_price: payload.unit_price, enabled: payload.enabled, reference_mode: payload.reference_mode, reference_caption_model: payload.reference_caption_model, ...(payload.api_key ? { api_key: payload.api_key } : {}), ...(payload.api_secret ? { api_secret: payload.api_secret } : {}) });
       }
-      resetProviderProfileDraft();
-      onRefresh();
-      onSetError("");
-    } catch (err) { onSetError(err instanceof Error ? err.message : "保存模型配置失败"); }
-    finally { setSavingProviderProfile(false); }
-  }
-
-  async function handleDeleteProviderProfile(profileId: number) {
-    try {
-      await api.deleteProviderProfile(profileId);
-      if (editingProviderProfileId === profileId) resetProviderProfileDraft();
-      setProbeResults((current) => {
-        if (!(profileId in current)) return current;
-        const next = { ...current };
-        delete next[profileId];
-        return next;
-      });
-      onRefresh();
-      onSetError("");
-    } catch (err) { onSetError(err instanceof Error ? err.message : "删除模型配置失败"); }
-  }
-
-  async function handleToggleProviderProfile(profile: ProviderProfileRecord) {
-    const nextEnabled = !profile.enabled;
-    setTogglingProfileId(profile.id);
-    try {
-      await api.updateProviderProfile(profile.id, { enabled: nextEnabled });
-      if (editingProviderProfileId === profile.id) {
-        setProviderDraft((current) => ({ ...current, enabled: nextEnabled }));
-      }
-      onRefresh();
-      onSetError("");
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : nextEnabled ? "启用模型失败" : "停用模型失败");
-    } finally {
-      setTogglingProfileId(null);
-    }
-  }
-
-  async function handleSavePricingRule(event?: FormEvent<HTMLFormElement>) {
-    event?.preventDefault();
-    const payload = toPricingRulePayload({
-      ...pricingRuleDraft,
-      capability: "chat.completions",
+        finishProfileEditor(editor, version, operation);
+        await refreshAfter(operation);
+      } catch (err) { report(err instanceof Error ? err.message : "保存模型配置失败", operation.intent); }
     });
-    if (!payload.provider_profile_id || !payload.metric) {
-      onSetError("请先选择 Chat 模型并填写 token 指标和单价");
-      return;
+  }
+
+  function handleDeleteProviderProfile(profileId: number) {
+    const editor = scope.profile, version = editor.revision;
+    return runOperation(`profile:${profileId}`, "profile.delete", async (operation) => {
+      report("", operation.intent);
+      try {
+        await api.deleteProviderProfile(profileId);
+        if (!isCurrent()) return;
+        if (editor.id === profileId) finishProfileEditor(editor, version, operation);
+        const { [profileId]: removed, ...remaining } = scope.probeResults;
+        void removed; scope.probeResults = remaining; publish();
+        await refreshAfter(operation);
+      } catch (err) { report(err instanceof Error ? err.message : "删除模型配置失败", operation.intent); }
+    });
+  }
+
+  function handleToggleProviderProfile(profile: ProviderProfileRecord) {
+    const editor = scope.profile, enabledVersion = editor.enabledVersion, nextEnabled = !profile.enabled;
+    return runOperation(`profile:${profile.id}`, "profile.toggle", async (operation) => {
+      report("", operation.intent);
+      try {
+        await api.updateProviderProfile(profile.id, { enabled: nextEnabled });
+        if (!isCurrent()) return;
+        if (scope.profile === editor && editor.id === profile.id && editor.enabledVersion === enabledVersion) {
+          editor.draft = { ...editor.draft, enabled: nextEnabled }; editor.revision += 1;
+          scope.preview = { ...scope.preview, result: null }; publish();
+        }
+        await refreshAfter(operation);
+      } catch (err) { report(err instanceof Error ? err.message : nextEnabled ? "启用模型失败" : "停用模型失败", operation.intent); }
+    });
+  }
+
+  function handleSavePricingRule(event?: FormEvent<HTMLFormElement>): Promise<void> {
+    event?.preventDefault();
+    const editor = ruleEditor;
+    if (!isCurrent() || scope.rule !== editor) return Promise.resolve();
+    const pending = scope.operations.get(ruleKey(editor)); if (pending) return pending.promise;
+    const version = editor.revision, payload = toPricingRulePayload({ ...editor.value.draft, capability: "chat.completions" });
+    touch();
+    if (!payload.provider_profile_id || !payload.metric) { onSetError("请先选择 Chat 模型并填写 token 指标和单价"); return Promise.resolve(); }
+    if (!records().profiles.some((profile) => profile.id === payload.provider_profile_id && profile.capabilities.includes("chat.completions"))) { onSetError("请选择当前有效的 Chat 模型"); return Promise.resolve(); }
+    const editingRule = editor.value.identity;
+    if (editingRule) {
+      const currentRule = records().rules.find((rule) => rule.id === editingRule.ruleId);
+      if (!currentRule || currentRule.provider_profile_id !== editingRule.providerProfileId || payload.provider_profile_id !== editingRule.providerProfileId) { onSetError("规则所属模型已变化，请重新选择规则后保存。"); return Promise.resolve(); }
     }
-    setSavingPricingRule(true);
-    try {
-      if (editingPricingRuleId === null) {
-        await api.createProviderPricingRule(payload);
-      } else {
-        await api.updateProviderPricingRule(editingPricingRuleId, payload);
+    return runOperation(ruleKey(editor), "rule.save", async (operation) => {
+      report("", operation.intent);
+      try {
+        if (editingRule === null) await api.createProviderPricingRule(payload);
+        else await api.updateProviderPricingRule(editingRule.ruleId, payload);
+        if (!isCurrent()) return;
+        if (scope.rule === editor) {
+          if (editor.revision === version) replaceRule({ draft: { ...defaultPricingRuleDraft, providerProfileId: String(payload.provider_profile_id) }, identity: null }, false);
+          else { editor.notice = "原规则已保存，当前修改尚未保存。"; publish(); }
+        }
+        await refreshAfter(operation);
+      } catch (err) { report(err instanceof Error ? err.message : "保存计费规则失败", operation.intent); }
+    });
+  }
+
+  function handleDeletePricingRule(ruleId: number, providerProfileId: number) {
+    const editor = scope.rule, version = editor.revision;
+    return runOperation(`rule:${ruleId}`, "rule.delete", async (operation) => {
+      report("", operation.intent);
+      try {
+        await api.deleteProviderPricingRule(ruleId);
+        if (!isCurrent()) return;
+        if (scope.rule === editor && editor.value.identity?.ruleId === ruleId) {
+          if (editor.revision === version) replaceRule({ draft: { ...defaultPricingRuleDraft, providerProfileId: String(providerProfileId) }, identity: null }, false);
+          else { editor.notice = "原规则已删除，当前修改已保留。"; publish(); }
+        }
+        await refreshAfter(operation);
+      } catch (err) { report(err instanceof Error ? err.message : "删除计费规则失败", operation.intent); }
+    });
+  }
+
+  function handleProbeProviderProfile(profileId: number) {
+    return runOperation(`probe:${profileId}`, "profile.probe", async (operation) => {
+      report("", operation.intent);
+      try {
+        const result = await api.probeProviderProfile(profileId);
+        if (isCurrent()) { scope.probeResults = { ...scope.probeResults, [profileId]: result }; publish(); }
+      } catch (err) { report(err instanceof Error ? err.message : "校验模型连通性失败", operation.intent); }
+    });
+  }
+
+  function handlePreviewProviderRequest() {
+    const editor = profileEditor, preview = previewOwner, version = editor.revision;
+    if (!isCurrent() || scope.profile !== editor || scope.preview !== preview || editor.id === null) return Promise.resolve();
+    const payload = { capability: profileHasImageBilling(parseCapabilities(editor.draft.capabilities)) && parseCapabilities(editor.draft.capabilities).includes("image.edit") && !parseCapabilities(editor.draft.capabilities).includes("image.generate") ? "image.edit" : "image.generate",
+      resolution: preview.resolution, aspect_ratio: preview.aspectRatio, has_reference: preview.hasReference };
+    return runOperation(preview, "preview", async (operation) => {
+      report("", operation.intent);
+      try {
+        const result = await api.previewProviderProfileRequest(editor.id!, payload);
+        if (isCurrent() && scope.profile === editor && editor.revision === version && scope.preview === preview) { preview.result = result; publish(); }
+      } catch (err) {
+        if (isCurrent() && scope.profile === editor && editor.revision === version && scope.preview === preview) { preview.result = null; publish(); }
+        report(err instanceof Error ? err.message : "预览请求体失败", operation.intent, () => scope.profile === editor && editor.revision === version && scope.preview === preview);
       }
-      resetPricingRuleDraft(payload.provider_profile_id);
-      onRefresh();
-      onSetError("");
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "保存计费规则失败");
-    } finally {
-      setSavingPricingRule(false);
-    }
-  }
-
-  async function handleDeletePricingRule(ruleId: number, providerProfileId: number) {
-    try {
-      await api.deleteProviderPricingRule(ruleId);
-      if (editingPricingRuleId === ruleId) {
-        resetPricingRuleDraft(providerProfileId);
-      }
-      onRefresh();
-      onSetError("");
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "删除计费规则失败");
-    }
-  }
-
-  async function handleProbeProviderProfile(profileId: number) {
-    setProbingProfileId(profileId);
-    try {
-      const result = await api.probeProviderProfile(profileId);
-      setProbeResults((current) => ({ ...current, [profileId]: result }));
-      onSetError("");
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "校验模型连通性失败");
-    } finally {
-      setProbingProfileId(null);
-    }
-  }
-
-  async function handlePreviewProviderRequest() {
-    if (editingProviderProfileId === null) return;
-    setPreviewLoading(true);
-    try {
-      const result = await api.previewProviderProfileRequest(editingProviderProfileId, {
-        capability: draftHasImageBilling
-          ? draftCapabilities.includes("image.edit") && !draftCapabilities.includes("image.generate")
-            ? "image.edit"
-            : "image.generate"
-          : "image.generate",
-        resolution: previewResolution,
-        aspect_ratio: previewAspectRatio,
-        has_reference: previewHasReference,
-      });
-      setPreviewResult(result);
-      onSetError("");
-    } catch (err) {
-      setPreviewResult(null);
-      onSetError(err instanceof Error ? err.message : "预览请求体失败");
-    } finally {
-      setPreviewLoading(false);
-    }
+    });
   }
 
   function probeTone(status: string): SupportLevel {
@@ -1408,39 +1431,25 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
     return "planned";
   }
 
-  async function handleDiscoverModels(event: FormEvent<HTMLFormElement>) {
+  function handleDiscoverModels(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setDiscoverError("");
-    setDiscoveredModels([]);
-    setDiscoveredAssignments({});
-    setSelectedModelIds(new Set());
-    setImportResult(null);
-    setDiscoverSearch("");
-    setDiscoverListFilter("new");
-    setDiscoverLoading(true);
-    try {
-      const trimmedUrl = discoverBaseUrl.trim();
-      const result = await api.discoverProviderModels(trimmedUrl, discoverApiKey.trim());
-      setDiscoveredModels(result.models);
-      setDiscoveredAssignments(
-        Object.fromEntries(
-          result.models.map((m) => [m.model_id, guessDiscoveredModelAssignment(m.model_id, m.owned_by, result.base_url)])
-        )
-      );
-      setDiscoverBaseUrlForImport(result.base_url);
-      setDiscoverApiKeyForImport(discoverApiKey.trim());
-      setDiscoverBaseUrl(result.base_url);
+    const batch = beginDiscovery(); if (!batch) return Promise.resolve();
+    setDiscoverSearch(""); setDiscoverListFilter("new");
+    const input = batch.input, url = input.baseUrl.trim(), key = input.apiKey.trim();
+    return runOperation(batch, "discover", async () => {
       try {
-        localStorage.setItem("qmdh.discover.baseUrl", result.base_url);
-      } catch {
-        /* ignore */
-      }
-      setSelectedModelIds(new Set(result.models.filter((m) => !m.already_exists).map((m) => m.model_id)));
-    } catch (err) {
-      setDiscoverError(err instanceof Error ? err.message : "探测失败");
-    } finally {
-      setDiscoverLoading(false);
-    }
+        const result = await api.discoverProviderModels(url, key);
+        if (!isCurrent() || scope.discovery !== batch || scope.inputs !== input) return;
+        batch.models = result.models;
+        batch.assignments = Object.fromEntries(result.models.map((m) => [m.model_id, guessDiscoveredModelAssignment(m.model_id, m.owned_by, result.base_url)]));
+        batch.sourceBaseUrl = result.base_url; batch.sourceKey = key;
+        batch.selected = new Set(result.models.filter((m) => !m.already_exists).map((m) => m.model_id));
+        batch.selectionVersion += 1;
+        scope.inputs = { ...input, baseUrl: result.base_url };
+        try { localStorage.setItem("qmdh.discover.baseUrl", result.base_url); } catch { /* Preserve existing optional URL cache. */ }
+        publish();
+      } catch (err) { if (isCurrent() && scope.discovery === batch && scope.inputs === input) { batch.error = err instanceof Error ? err.message : "探测失败"; publish(); } }
+    });
   }
 
   function toggleModelSelection(modelId: string) {
@@ -1470,7 +1479,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
     setDiscoveredAssignments((current) => {
       const next = { ...current };
       for (const modelId of selectedModelIds) {
-        next[modelId] = { ...assignment };
+        next[modelId] = { ...assignment, providerName: current[modelId]?.providerName };
       }
       return next;
     });
@@ -1478,14 +1487,19 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
 
   function buildProviderName(baseUrl: string, modelId: string): string {
     const slug = modelId.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "").toLowerCase();
-    return baseUrl.includes("modelscope.cn") ? `ms_${slug}` : slug;
+    const hint = baseUrl.includes("modelscope.cn") ? `ms_${slug}` : slug;
+    return (hint.length < 2 ? `model_${hint}` : hint).slice(0, 100);
   }
 
-  async function handleBulkImport() {
-    if (selectedModelIds.size === 0) return;
-    setImportingModels(true);
-    setImportResult(null);
-    try {
+  function handleBulkImport() {
+    const batch = discoveryBatch;
+    if (!isCurrent() || scope.discovery !== batch || batch.selected.size === 0) return Promise.resolve();
+    const selectionVersion = batch.selectionVersion, selectedModelIds = new Set(batch.selected),
+      discoveredModels = batch.models, discoveredAssignments = batch.assignments,
+      discoverBaseUrlForImport = batch.sourceBaseUrl, discoverApiKeyForImport = batch.sourceKey;
+    return runOperation(batch.importKey, "import", async (operation) => {
+      batch.result = null; batch.error = ""; publish();
+      try {
       const items: ProviderBulkImportItem[] = discoveredModels
         .filter((m) => selectedModelIds.has(m.model_id) && !m.already_exists)
         .map((m) => {
@@ -1494,7 +1508,8 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
           const transport = resolveDiscoverImportTransport(m.model_id, discoverBaseUrlForImport, capabilities);
           return {
             model_id: m.model_id,
-            provider_name: buildProviderName(discoverBaseUrlForImport, m.model_id),
+            provider_name: assignment.providerName?.trim() || buildProviderName(discoverBaseUrlForImport, m.model_id),
+            name_mode: assignment.providerName?.trim() ? "explicit" : "identity",
             display_name: m.model_id,
             capabilities,
             adapter_kind: transport.adapter_kind,
@@ -1502,33 +1517,36 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
             strategies: transport.strategies,
           };
         });
-      const unassigned = items.filter((item) => item.capabilities.length === 0).map((item) => item.model_id);
-      if (unassigned.length > 0) {
-        setDiscoverError(`以下模型尚未分配：${unassigned.join(", ")}`);
-        setImportingModels(false);
-        return;
-      }
-      const result = await api.bulkImportProviderProfiles({
-        base_url: discoverBaseUrlForImport,
-        api_key: discoverApiKeyForImport,
-        models: items,
-      });
-      setImportResult(result);
-      const createdSet = new Set(result.created);
-      setDiscoveredModels((current) =>
-        current.map((model) =>
-          createdSet.has(model.model_id) || result.skipped.includes(model.model_id)
-            ? { ...model, already_exists: true }
-            : model
-        )
-      );
-      setSelectedModelIds(new Set());
-      onRefresh();
-    } catch (err) {
-      setDiscoverError(err instanceof Error ? err.message : "批量导入失败");
-    } finally {
-      setImportingModels(false);
-    }
+        const invalidNames = items.filter((item) => !/^[a-zA-Z0-9_.-]{2,100}$/.test(item.provider_name)).map((item) => item.model_id);
+        if (invalidNames.length > 0) { if (isCurrent() && scope.discovery === batch) { batch.error = `导入标识须为2至100位英文字母、数字、下划线、点或连字符：${invalidNames.join(", ")}`; publish(); } return; }
+        const unassigned = items.filter((item) => item.capabilities.length === 0).map((item) => item.model_id);
+        if (unassigned.length > 0) { if (isCurrent() && scope.discovery === batch) { batch.error = `以下模型尚未分配：${unassigned.join(", ")}`; publish(); } return; }
+        const result = await api.bulkImportProviderProfiles({ base_url: discoverBaseUrlForImport, api_key: discoverApiKeyForImport, models: items });
+        if (!isCurrent()) return;
+        if (scope.discovery === batch) {
+          batch.result = result;
+          const confirmed = new Set<string>(), conflicts: string[] = [], unconfirmed: string[] = [];
+          const structured = Array.isArray(result.items) && result.items.length > 0;
+          for (const item of items) {
+            const matches = result.items?.filter((entry) => entry.model_id === item.model_id && entry.provider_name === item.provider_name) ?? [];
+            if (structured && matches.length === 1 && (matches[0].status === "created" || matches[0].status === "already_same")) {
+              confirmed.add(item.model_id);
+            } else if (structured && matches.length === 1 && matches[0].status === "conflict") {
+              conflicts.push(matches[0].suggested_provider_name ? `${item.model_id}（建议标识：${matches[0].suggested_provider_name}）` : item.model_id);
+            } else if (!structured && result.created.includes(item.provider_name) && items.filter((entry) => entry.provider_name === item.provider_name).length === 1) {
+              confirmed.add(item.model_id);
+            } else {
+              unconfirmed.push(item.model_id);
+            }
+          }
+          batch.models = batch.models.map((model) => confirmed.has(model.model_id) ? { ...model, already_exists: true } : model);
+          batch.error = [conflicts.length ? `名称冲突，以下模型未导入：${conflicts.join(", ")}` : "", unconfirmed.length ? `以下模型的导入身份尚未确认，请核对配置：${unconfirmed.join(", ")}` : ""].filter(Boolean).join("；");
+          if (batch.selectionVersion === selectionVersion) batch.selected = new Set([...batch.selected].filter((id) => !confirmed.has(id)));
+          publish();
+        }
+        await refreshAfter(operation);
+      } catch (err) { if (isCurrent() && scope.discovery === batch && batch.selectionVersion === selectionVersion) { batch.error = err instanceof Error ? err.message : "批量导入失败"; publish(); } }
+    });
   }
 
   return (
@@ -1607,6 +1625,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
           </form>
           {discoveredModels.length > 0 ? (
             <div className="discover-results">
+              <small>当前结果来源：{discoverBaseUrlForImport}</small>
               <div className="discover-results-head">
                 <span>
                   共 {discoveredModels.length} · 未导入 {discoveredNewCount} · 已导入 {discoveredExistsCount} · 已选{" "}
@@ -1710,9 +1729,10 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                 <p className="discover-import-result">
                   ✓ 已导入 {importResult.created.length} 个
                   {importResult.created.length > 0 ? `：${importResult.created.slice(0, 8).join(", ")}${importResult.created.length > 8 ? "…" : ""}` : ""}
-                  {importResult.skipped.length > 0 ? `；跳过已存在 ${importResult.skipped.length} 个` : ""}
+                  {importResult.skipped.length > 0 ? `；未新建 ${importResult.skipped.length} 个（已存在或名称冲突，详情见提示）` : ""}
                 </p>
               ) : null}
+              <p className="discover-source">同渠道同模型会复用已有配置；填写导入标识不会重命名已有配置。</p>
               <div className="discover-model-list">
                 {filteredDiscoveredModels.length > 0 ? (
                   filteredDiscoveredModels.map((model) => (
@@ -1738,6 +1758,16 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                       </div>
                       {!model.already_exists ? (
                         <div className="discover-assignment" onClick={(e) => e.stopPropagation()}>
+                          <label className="discover-assignment-option">
+                            <span>导入标识</span>
+                            <input
+                              aria-label={`导入标识 ${model.model_id}`}
+                              maxLength={100}
+                              placeholder="留空自动按渠道和原模型分配"
+                              value={discoveredAssignments[model.model_id]?.providerName ?? ""}
+                              onChange={(e) => updateDiscoveredAssignment(model.model_id, { providerName: e.target.value })}
+                            />
+                          </label>
                           <label className="discover-assignment-option">
                             <input
                               type="checkbox"
@@ -1795,7 +1825,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
               <select aria-label="页面分配" value={modelFilters.capability} onChange={(e) => setModelFilters((c) => ({ ...c, capability: e.target.value }))}><option value="all">全部能力</option>{capabilityDefinitions.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}</select>
               <select aria-label="适配器" value={modelFilters.adapterKind} onChange={(e) => setModelFilters((c) => ({ ...c, adapterKind: e.target.value }))}><option value="all">全部适配器</option>{adapterOptions.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select>
               <select aria-label="状态" value={modelFilters.status} onChange={(e) => setModelFilters((c) => ({ ...c, status: e.target.value as ModelFilterState["status"] }))}><option value="all">全部状态</option><option value="enabled">启用</option><option value="disabled">停用</option></select>
-              <button type="button" onClick={onRefresh}>刷新</button>
+              <button type="button" onClick={() => void refreshRecords()}>刷新</button>
             </div>
           </div>
           <div className="model-table-summary"><span>筛选后 {filteredProviderProfiles.length} 个配置</span></div>
@@ -1820,12 +1850,12 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                     {probe ? <small className={`model-support-badge support-${probeTone(probe.status)}`}>{probe.ok ? "已校验" : probe.status}</small> : null}
                   </span>
                   <span className="admin-row-actions">
-                    <button type="button" onClick={() => void handleProbeProviderProfile(profile.id)} disabled={probingProfileId === profile.id}>{probingProfileId === profile.id ? "校验中..." : "校验"}</button>
-                    <button type="button" onClick={() => void handleToggleProviderProfile(profile)} disabled={togglingProfileId === profile.id}>
-                      {togglingProfileId === profile.id ? "处理中..." : profile.enabled ? "停用" : "启用"}
+                    <button type="button" onClick={() => void handleProbeProviderProfile(profile.id)} disabled={isProbingProfile(profile.id)}>{isProbingProfile(profile.id) ? "校验中..." : "校验"}</button>
+                    <button type="button" onClick={() => void handleToggleProviderProfile(profile)} disabled={isProfileBusy(profile.id)}>
+                      {isTogglingProfile(profile.id) ? "处理中..." : profile.enabled ? "停用" : "启用"}
                     </button>
                     <button type="button" onClick={() => handleEditProviderProfile(profile)}>编辑</button>
-                    <button type="button" onClick={() => handleDeleteProviderProfile(profile.id)}>删除</button>
+                    <button type="button" onClick={() => handleDeleteProviderProfile(profile.id)} disabled={isProfileBusy(profile.id)}>删除</button>
                   </span>
                 </div>
               );
@@ -1861,6 +1891,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                 <h2>{editingProviderProfileId === null ? "新增模型" : "编辑模型"}</h2>
               </div>
 
+              {profileNotice ? <p role="status">{profileNotice}</p> : null}
               <div className="model-form-grid model-form-grid-compact">
                 {showPresets ? (
                   <label className="composer-menu-field composer-menu-field-full">
@@ -2447,12 +2478,12 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                 <input
                   type="checkbox"
                   checked={providerDraft.enabled}
-                  onChange={(e) => setProviderDraft((c) => ({ ...c, enabled: e.target.checked }))}
+                  onChange={(e) => setProviderEnabled(e.target.checked)}
                 />
                 <span>启用</span>
               </label>
               <div className="template-editor-actions">
-                <button type="submit" className="submit-button" disabled={savingProviderProfile}>
+                <button type="submit" className="submit-button" disabled={profileWriteBusy}>
                   {savingProviderProfile ? "保存中..." : editingProviderProfileId === null ? "保存" : "更新"}
                 </button>
                 {editingProviderProfileId !== null ? (
@@ -2468,6 +2499,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                 <h2>Chat Token 计费</h2>
               </div>
               <p className="admin-form-help">只影响对话。生图/视频在「模型配置」填分档价。</p>
+              {ruleNotice ? <p role="status">{ruleNotice}</p> : null}
               {chatProviderProfiles.length === 0 ? (
                 <div className="template-empty">还没有 Chat 模型，先在模型配置勾选 Chat 并保存。</div>
               ) : (
@@ -2489,6 +2521,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                               type="button"
                               className="template-action-button"
                               onClick={() => void handleDeletePricingRule(rule.id, rule.provider_profile_id)}
+                              disabled={isRuleBusy(rule.id)}
                             >
                               删除
                             </button>
@@ -2505,7 +2538,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                       <select
                         value={selectedPricingProfileId}
                         onChange={(e) =>
-                          setPricingRuleDraft((current) => ({ ...current, providerProfileId: e.target.value }))
+                          selectPricingProfile(e.target.value)
                         }
                       >
                         {chatProviderProfiles.map((profile) => (
@@ -2514,6 +2547,7 @@ export default function ModelsPage({ providerProfiles, pricingRules, providers, 
                           </option>
                         ))}
                       </select>
+                      <small>切换 Chat 模型将开始新增规则；原规则不会迁移。</small>
                     </label>
                     <label className="composer-menu-field">
                       <span>指标</span>

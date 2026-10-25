@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 import mimetypes
 from datetime import datetime
 from random import randint
@@ -10,9 +11,11 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from app.core.config import ImageProviderProfile
+from app.services.generated_media_validation import validate_generated_media
 from app.services.media_storage import write_binary_asset
 from app.services.model_registry import ProviderDefinition
 from app.services.provider_adapters.base import ExecutionOutcome, ProviderExecutionError, RequestDiagnostics
+from app.services.provider_adapters.async_progress import AsyncTaskProgress, UpstreamTaskFailed
 from app.services.provider_adapters.video_common import (
     calculate_video_billing,
     resolve_public_media_url,
@@ -32,6 +35,10 @@ class BigjpgUpscaleProviderAdapter:
     def __init__(self, definition: ProviderDefinition, profile: ImageProviderProfile):
         self.definition = definition
         self.profile = profile
+        self.task_id, self.saved_progress, self.save_progress = None, {}, None
+
+    def bind_async_progress(self, task_id, progress, save):
+        self.task_id, self.saved_progress, self.save_progress = task_id, progress, save
 
     def execute(self, capability: str, payload: dict) -> ExecutionOutcome:
         if capability != "image.upscale":
@@ -68,71 +75,40 @@ class BigjpgUpscaleProviderAdapter:
             effective_capability="image.upscale",
         )
 
+        started_at = perf_counter()
+        progress = AsyncTaskProgress(task_id=self.task_id, saved=self.saved_progress, save=self.save_progress,
+                                     definition=self.definition, profile=self.profile, diagnostics=diagnostics,
+                                     billing=calculate_video_billing(profile=self.profile, output_count=1),
+                                     query_context={"style": style, "noise": noise, "x2": x2,
+                                                    "source_identity": sha256(input_url.encode()).hexdigest()},
+                                     result_fields={"upscale_style": style, "upscale_noise": noise, "upscale_x2": x2,
+                                                    "upscale_factor": _x2_to_factor_label(x2), "source_image_url": input_url})
         try:
-            started_at = perf_counter()
-            submit_payload = _submit_bigjpg_task(
-                profile=self.profile,
-                style=style,
-                noise=noise,
-                x2=x2,
-                input_url=input_url,
-            )
-            task_id = _extract_task_id(submit_payload)
-            final_payload = _poll_bigjpg_result(self.profile, task_id)
-            output_url = _extract_output_url(final_payload, task_id)
-            image_bytes, content_type = _download_upscaled_image(
-                output_url,
-                timeout_seconds=float(self.profile.timeout_seconds),
-            )
-            extension = _extension_for_downloaded_image(
-                output_url,
-                content_type,
-                self.profile.output_format,
-                image_bytes,
-            )
-            storage_path = write_binary_asset(
-                _build_storage_path(self.definition.provider_name, extension),
-                image_bytes,
-            )
-            latency_ms = max(1, round((perf_counter() - started_at) * 1000))
-            billing = calculate_video_billing(profile=self.profile, output_count=1)
-            result = {
-                "summary": f"{self.definition.provider_name} completed a live image.upscale run.",
-                "payload_keys": list(payload.keys()),
-                "adapter_mode": "bigjpg_async_upscale",
-                "storage_path": storage_path,
-                "storage_paths": [storage_path],
-                "response_model": self.profile.model_name,
-                "response_models": [self.profile.model_name],
-                "requested_image_count": 1,
-                "output_count": 1,
-                "billing": billing,
-                "upstream_task_id": task_id,
-                "upstream_status": _extract_task_status(final_payload, task_id),
-                "upstream_output_url": output_url,
-                "upscale_style": style,
-                "upscale_noise": noise,
-                "upscale_x2": x2,
-                "upscale_factor": _x2_to_factor_label(x2),
-                "source_image_url": input_url,
-                "remaining_api_calls": submit_payload.get("remaining_api_calls"),
-                "request_strategy": diagnostics.strategy,
-                "request_endpoint": diagnostics.endpoint_path,
-                "request_url": diagnostics.request_url,
-                "request_timeout_seconds": diagnostics.timeout_seconds,
-                "request_adapter_mode": diagnostics.adapter_mode,
-                "effective_capability": diagnostics.effective_capability,
-            }
-            return ExecutionOutcome(
-                model_name=self.profile.model_name,
-                latency_ms=latency_ms,
-                cost=billing["cost"],
-                cost_currency=billing["currency"],
-                outbound=self.definition.outbound,
-                result=result,
-            )
+            task_id = progress.prepare()
+            if task_id is None:
+                submit_payload = _submit_bigjpg_task(profile=self.profile, style=style, noise=noise, x2=x2, input_url=input_url)
+                progress.progress["result_fields"]["remaining_api_calls"] = submit_payload.get("remaining_api_calls")
+                progress.accepted(_extract_task_id(submit_payload))
+            if progress.step["state"] != "completed":
+                if not progress.step.get("output_urls"):
+                    final_payload = _poll_bigjpg_result(self.profile, progress.step["upstream_task_id"])
+                    output_url = _extract_output_url(final_payload, progress.step["upstream_task_id"])
+                    progress.outputs([output_url], status=_extract_task_status(final_payload, progress.step["upstream_task_id"]), usage={})
+                if not progress.step["storage_paths"]:
+                    progress.checkpoint()
+                    output_url = progress.step["output_urls"][0]
+                    image_bytes, content_type = _download_upscaled_image(output_url, timeout_seconds=float(self.profile.timeout_seconds))
+                    extension = _extension_for_downloaded_image(output_url, content_type, self.profile.output_format, image_bytes)
+                    storage_path = write_binary_asset(_build_storage_path(self.definition.provider_name, extension), image_bytes)
+                    progress.saved_output(storage_path)
+                progress.complete()
+            outcome = progress.outcome(max(1, round((perf_counter() - started_at) * 1000)))
+            outcome.result.update(summary=f"{self.definition.provider_name} completed a live image.upscale run.", payload_keys=list(payload.keys()))
+            return outcome
         except Exception as exc:
-            raise ProviderExecutionError(str(exc), diagnostics=diagnostics) from exc
+            progress.failed(exc)
+            raise ProviderExecutionError(str(exc), diagnostics=diagnostics, partial_outcome=progress.outcome()) from exc
+
 
 
 def _build_storage_path(provider_name: str, extension: str) -> str:
@@ -176,23 +152,10 @@ def _extension_for_downloaded_image(
     output_format: str,
     image_bytes: bytes,
 ) -> str:
-    sniffed = _extension_from_image_bytes(image_bytes)
-    if sniffed:
-        return sniffed
-
-    normalized_type = content_type.split(";", 1)[0].strip().lower() if content_type else ""
-    if normalized_type.startswith("image/"):
-        guessed = mimetypes.guess_extension(normalized_type, strict=False)
-        if guessed and (extension := _normalize_image_extension(guessed)):
-            return extension
-
-    parsed = urlparse(image_url)
-    suffix = parsed.path.rsplit(".", 1)[-1] if "." in parsed.path else ""
-    if extension := _normalize_image_extension(suffix):
-        return extension
-
-    normalized = _normalize_image_extension(output_format or "png")
-    return normalized or "png"
+    extension = validate_generated_media(image_bytes, kind="image", content_type=content_type)
+    if extension not in {"png", "jpeg", "webp"}:
+        raise ValueError("Unsupported Bigjpg output image format")
+    return "jpg" if extension == "jpeg" else extension
 
 
 def _resolve_source_image(payload: dict) -> str:
@@ -323,7 +286,7 @@ def _poll_bigjpg_result(profile: ImageProviderProfile, task_id: str) -> dict:
         if normalized in _SUCCEEDED_STATUSES:
             return last_payload
         if normalized in _FAILED_STATUSES:
-            raise ValueError(f"Bigjpg task failed: {last_payload}")
+            raise UpstreamTaskFailed(f"Bigjpg task failed: {last_payload}")
         sleep(3)
 
     raise ValueError(f"Bigjpg task timed out before completion: {last_payload}")

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import JSON, Boolean, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -1096,3 +1096,35 @@ class ManagementRevision(Base):
     actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     snapshot: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SearchIndexDomain(Base):
+    __tablename__ = "search_index_domains"
+
+    domain: Mapped[str] = mapped_column(String(32), primary_key=True)
+    revision: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    active_index: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    active_target_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ready: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    uncertain: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    submission_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    task_uid: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    task_entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    task_revision: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    task_operation: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    task_index: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    task_target_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_code: Mapped[str] = mapped_column(String(80), default="", server_default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class SearchIndexIntent(Base):
+    __tablename__ = "search_index_intents"
+
+    domain: Mapped[str] = mapped_column(String(32), ForeignKey("search_index_domains.domain"), primary_key=True)
+    entity_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    revision: Mapped[int] = mapped_column(BigInteger)
+    operation: Mapped[str] = mapped_column(String(16))
+    applied_revision: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    error_code: Mapped[str] = mapped_column(String(80), default="", server_default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

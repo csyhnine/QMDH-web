@@ -238,18 +238,28 @@ function formatExtents(record: CadExtractRecord): string {
   return values.map((value) => Number(value).toFixed(0)).join(", ");
 }
 
+function cadRoomEditWasRejected(error: unknown): boolean {
+  const status = error && typeof error === "object" && "status" in error ? error.status : undefined;
+  return typeof status === "number" && [400, 404, 409, 413, 422].includes(status);
+}
+
 function CadExtractResult({
   record,
   copied,
   onCopy,
   onDownload,
   onUpdated,
+  draftOwner,
+  onPreparationPending,
+  onEditBusy,
 }: {
   record: CadExtractRecord;
   copied: boolean;
   onCopy: (extractId: string) => void;
   onDownload: (record: CadExtractRecord) => void;
   onUpdated: (record: CadExtractRecord) => void;
+  draftOwner?: string; onPreparationPending?: (pending: boolean) => void;
+  onEditBusy?: (busy: boolean) => void;
 }) {
   const floors = record.data.spaces?.floors ?? [];
   const [floorIndex, setFloorIndex] = useState(0);
@@ -259,6 +269,7 @@ function CadExtractResult({
   const [saving, setSaving] = useState(false);
   const [fitting, setFitting] = useState(false);
   const [preparing, setPreparing] = useState(false);
+  useEffect(() => { onPreparationPending?.(preparing); return () => onPreparationPending?.(false); }, [preparing, onPreparationPending]);
   const [layoutScheme, setLayoutScheme] = useState<string | null>(null);
   const [editError, setEditError] = useState("");
   const planRef = useRef<HTMLImageElement | null>(null);
@@ -266,10 +277,8 @@ function CadExtractResult({
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const polygonRef = useRef(polygon);
   const paintModeRef = useRef(paintMode);
-  const savingRef = useRef(false);
   polygonRef.current = polygon;
   paintModeRef.current = paintMode;
-  savingRef.current = saving;
   const floor = floors[Math.min(floorIndex, Math.max(floors.length - 1, 0))] ?? null;
   const rooms = useMemo(
     () => [...(floor?.rooms ?? [])].sort((left, right) => right.area_ratio - left.area_ratio),
@@ -278,6 +287,42 @@ function CadExtractResult({
   const listedRooms = rooms.filter((room) => room.area_ratio >= 0.005 || room.function_source === "edited");
   const hiddenRoomCount = rooms.length - listedRooms.length;
   const activeRoom = listedRooms.find((room) => room.room_id === roomId) ?? listedRooms[0] ?? null;
+  type EditSnapshot = {
+    token: number; extractId: string; floorIndex: number; roomId: string;
+    action: "rename" | "remove" | "paint" | "create" | "undo"; stamp: string;
+    mode: typeof paintMode; name: string; points: Array<{ x: number; y: number }>;
+  };
+  const mounted = useRef(true);
+  const sequence = useRef(0);
+  const activeEdit = useRef<EditSnapshot | null>(null);
+  const [uncertainEdit, setUncertainEdit] = useState<EditSnapshot | null>(null);
+  const uncertainRef = useRef(uncertainEdit);
+  uncertainRef.current = uncertainEdit;
+  const [checkingEdit, setCheckingEdit] = useState(false);
+  const checkingRef = useRef(false);
+  const [checkedEdit, setCheckedEdit] = useState(false);
+  const latestContext = useRef({ extractId: record.extract_id, floorIndex: floor?.floor_index });
+  latestContext.current = { extractId: record.extract_id, floorIndex: floor?.floor_index };
+  const draftStamp = useRef("");
+  draftStamp.current = JSON.stringify([record.extract_id, floor?.floor_index, paintMode, proposalDraft, polygon]);
+  const editBlocked = saving || uncertainEdit !== null || checkingEdit;
+  const editBlockedRef = useRef(editBlocked);
+  editBlockedRef.current = editBlocked;
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    activeEdit.current = null; uncertainRef.current = null; checkingRef.current = false;
+    setUncertainEdit(null); setCheckingEdit(false); setCheckedEdit(false); setSaving(false); setEditError("");
+    setPolygon([]); setCursor(null); setPaintMode(null);
+  }, [record.extract_id]);
+  useEffect(() => { onEditBusy?.(editBlocked); return () => onEditBusy?.(false); }, [editBlocked, onEditBusy]);
+  useEffect(() => {
+    if ((!editBlocked && polygon.length === 0) || typeof window === "undefined") return;
+    function warn(event: BeforeUnloadEvent) { event.preventDefault(); event.returnValue = ""; }
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [editBlocked, polygon.length]);
+  const liveEdit = useRef({ extractId: record.extract_id, floor, activeRoom, name: proposalDraft });
+  liveEdit.current = { extractId: record.extract_id, floor, activeRoom, name: proposalDraft };
   const floorFitout = (record.data.spaces?.fitout?.floors ?? []).find((item) => item.floor_index === floor?.floor_index) ?? null;
   const layoutVariants = floorFitout?.variants ?? [];
   const activeLayout = layoutVariants.find((item) => item.id === (layoutScheme ?? floorFitout?.scheme)) ?? null;
@@ -289,10 +334,11 @@ function CadExtractResult({
   }, [record.extract_id, floor?.floor_index]);
   const drawRef = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
-    if (paintMode === "create") return;
+    if (paintMode !== null || editBlockedRef.current) return;
     setProposalDraft(activeRoom?.proposal || activeRoom?.function || "");
   }, [activeRoom?.room_id, activeRoom?.proposal, activeRoom?.function, paintMode]);
   useEffect(() => {
+    if (editBlockedRef.current) return;
     setPaintMode(null);
     setPolygon([]);
     setCursor(null);
@@ -309,30 +355,78 @@ function CadExtractResult({
     Boolean(record.data.meta?.model_extents) ||
     (record.data.spaces?.principles?.length ?? 0) > 0;
 
+  function ownsEdit(snapshot: EditSnapshot): boolean {
+    return mounted.current && latestContext.current.extractId === snapshot.extractId && activeEdit.current?.token === snapshot.token;
+  }
+  function clearSubmittedSketch(snapshot: EditSnapshot) {
+    if (latestContext.current.extractId !== snapshot.extractId || latestContext.current.floorIndex !== snapshot.floorIndex || draftStamp.current !== snapshot.stamp) return;
+    setPolygon([]); setCursor(null); setPaintMode(null);
+  }
   async function saveEdit(action: "rename" | "remove" | "paint" | "create" | "undo", strokes?: Array<{ x: number; y: number; erase: boolean }>) {
-    if (!floor || ((action === "rename" || action === "remove" || action === "paint") && !activeRoom)) return;
-    setSaving(true);
-    setEditError("");
-    const knownRooms = new Set((floor.rooms ?? []).map((room) => room.room_id));
+    const context = liveEdit.current;
+    const currentFloor = context.floor, currentRoom = context.activeRoom;
+    if (editBlockedRef.current || activeEdit.current || !currentFloor || ((action === "rename" || action === "remove" || action === "paint") && !currentRoom)) return;
+    const snapshot: EditSnapshot = { token: ++sequence.current, extractId: context.extractId, floorIndex: currentFloor.floor_index,
+      roomId: action === "undo" || action === "create" ? "" : currentRoom?.room_id || "", action,
+      stamp: draftStamp.current, mode: paintModeRef.current, name: context.name, points: polygonRef.current.map(point => ({ ...point })) };
+    activeEdit.current = snapshot; editBlockedRef.current = true;
+    setSaving(true); setEditError("");
+    const knownRooms = new Set((currentFloor.rooms ?? []).map(room => room.room_id));
     try {
-      const updated = await api.editCadRoom(record.extract_id, {
-        floor_index: floor.floor_index,
-        room_id: action === "undo" || action === "create" ? "" : activeRoom?.room_id || "",
-        action,
-        proposal: action === "create" ? proposalDraft.trim() || "新分区" : action === "rename" ? proposalDraft.trim() : undefined,
-        strokes,
+      const updated = await api.editCadRoom(snapshot.extractId, {
+        floor_index: snapshot.floorIndex,
+        room_id: snapshot.roomId,
+        action: snapshot.action,
+        proposal: action === "create" ? snapshot.name.trim() || "新分区" : action === "rename" ? snapshot.name.trim() : undefined,
+        strokes: strokes?.map(point => ({ ...point })),
       });
+      if (!ownsEdit(snapshot)) return;
+      const nextFloor = updated.data?.spaces?.floors?.find(item => item.floor_index === snapshot.floorIndex);
+      if (updated.extract_id !== snapshot.extractId || !nextFloor) throw new Error("返回记录不属于本次编辑或缺少楼层，请核对是否写入。");
       onUpdated(updated);
-      if (action === "create") {
-        const nextFloor = updated.data.spaces?.floors?.find((item) => item.floor_index === floor.floor_index);
-        const created = nextFloor?.rooms?.find((room) => !knownRooms.has(room.room_id));
-        if (created) setRoomId(created.room_id);
+      if ((action === "create" || action === "paint") && draftStamp.current === snapshot.stamp && latestContext.current.floorIndex === snapshot.floorIndex) {
+        clearSubmittedSketch(snapshot);
+        if (action === "create") {
+          const created = nextFloor.rooms?.find(room => !knownRooms.has(room.room_id));
+          if (created) setRoomId(created.room_id);
+        }
       }
     } catch (error) {
-      setEditError(error instanceof Error ? error.message : "没有保存这次修改");
+      if (!ownsEdit(snapshot)) return;
+      const message = error instanceof Error ? error.message : "没有保存这次修改";
+      if (cadRoomEditWasRejected(error)) setEditError(message);
+      else {
+        uncertainRef.current = snapshot; setUncertainEdit(snapshot); setCheckedEdit(false);
+        setEditError(`本次是否写入尚未确认，草稿仍保留，不能直接重发。${message}`);
+      }
     } finally {
-      setSaving(false);
+      if (ownsEdit(snapshot)) { activeEdit.current = null; setSaving(false); }
     }
+  }
+  async function checkUncertainEdit() {
+    const snapshot = uncertainRef.current;
+    if (!snapshot || checkingRef.current) return;
+    checkingRef.current = true; setCheckingEdit(true); setCheckedEdit(false); setEditError("");
+    try {
+      const updated = await api.getCadExtract(snapshot.extractId);
+      if (!mounted.current || latestContext.current.extractId !== snapshot.extractId || uncertainRef.current !== snapshot) return;
+      if (updated.extract_id !== snapshot.extractId || !updated.data?.spaces?.floors?.some(item => item.floor_index === snapshot.floorIndex)) throw new Error("核对返回的图纸或楼层不匹配");
+      onUpdated(updated); setCheckedEdit(true);
+      setEditError("最新记录已刷新。请查看分区和名称，人工核对本次是否写入；不会自动重发。一次读取未变化也不能证明原请求未写入。");
+    } catch (error) {
+      if (mounted.current && latestContext.current.extractId === snapshot.extractId && uncertainRef.current === snapshot) setEditError(`未完成核对，仍不能重发。${error instanceof Error ? error.message : "请稍后再次核对"}`);
+    } finally {
+      if (mounted.current && latestContext.current.extractId === snapshot.extractId && uncertainRef.current === snapshot) {
+        checkingRef.current = false; setCheckingEdit(false);
+      }
+    }
+  }
+  function finishUncertainEdit(acknowledged: boolean) {
+    const snapshot = uncertainRef.current;
+    if (!snapshot || checkingRef.current || (acknowledged && !checkedEdit)) return;
+    clearSubmittedSketch(snapshot);
+    if (latestContext.current.floorIndex === snapshot.floorIndex && draftStamp.current === snapshot.stamp) setProposalDraft(liveEdit.current.activeRoom?.proposal || liveEdit.current.activeRoom?.function || "");
+    uncertainRef.current = null; setUncertainEdit(null); setCheckedEdit(false); setEditError("");
   }
 
   function pointOnPlan(event: PointerEvent<HTMLCanvasElement>) {
@@ -357,13 +451,11 @@ function CadExtractResult({
   }
 
   function commitPolygon() {
+    if (editBlockedRef.current || activeEdit.current) return;
     const mode = paintModeRef.current;
     const points = polygonRef.current;
     if (!mode || points.length < 3) return;
-    const strokes = points.map((point) => ({ ...point, erase: mode === "erase" }));
-    setPolygon([]);
-    setCursor(null);
-    setPaintMode(null);
+    const strokes = points.map(point => ({ ...point, erase: mode === "erase" }));
     void saveEdit(mode === "create" ? "create" : "paint", strokes);
   }
 
@@ -427,7 +519,7 @@ function CadExtractResult({
       if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z" || event.shiftKey) return;
       const target = event.target;
       if (target instanceof HTMLElement && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
-      if (savingRef.current) return;
+      if (editBlockedRef.current) return;
       if (polygonRef.current.length > 0) {
         event.preventDefault();
         setPolygon((current) => current.slice(0, -1));
@@ -445,6 +537,7 @@ function CadExtractResult({
   useEffect(() => {
     if (!paintMode) return;
     const onKey = (event: KeyboardEvent) => {
+      if (editBlockedRef.current) return;
       if (event.key === "Escape") {
         setPaintMode(null);
         setPolygon([]);
@@ -486,6 +579,15 @@ function CadExtractResult({
         </div>
       </div>
 
+      {uncertainEdit ? <div role="alert">
+        <p>第{uncertainEdit.floorIndex}层的“{({ rename: "保存功能", remove: "移除分区", paint: "调整范围", create: "新建分区", undo: "撤销" })[uncertainEdit.action]}”是否写入尚未确认。顶点和名称仍保留；核对前后都不会自动重发。</p>
+        <p>提交名称：{uncertainEdit.name || "无"}；提交顶点：{uncertainEdit.points.length}个。</p>
+        <button type="button" disabled={checkingEdit} onClick={() => void checkUncertainEdit()}>{checkingEdit ? "核对中" : "核对最新记录"}</button>
+        {checkedEdit ? <button type="button" disabled={checkingEdit} onClick={() => finishUncertainEdit(true)}>我已核对写入，结束本次草稿</button> : null}
+        <button type="button" disabled={checkingEdit} onClick={() => finishUncertainEdit(false)}>放弃本次重发并清除草稿</button>
+        <p>放弃只清除本地草稿；原请求仍可能写入，不代表撤回或确认成功。</p>
+        {editError ? <p>{editError}</p> : null}
+      </div> : null}
       {record.error_message ? <div className="floating-error">{errorLabel(record.error_message)}</div> : null}
       {extraWarnings.length > 0 ? (
         <ul className="cad-warning-list">
@@ -511,9 +613,12 @@ function CadExtractResult({
                       key={item.label}
                       type="button"
                       role="tab"
+                      disabled={editBlocked}
                       aria-selected={index === floorIndex}
                       className={index === floorIndex ? "is-active" : undefined}
                       onClick={() => {
+                        if (editBlockedRef.current) return;
+                        if (index !== floorIndex && preparing && !window.confirm("本层草稿将保留在本标签页。保留草稿并切换平面？")) return;
                         setFloorIndex(index);
                         setRoomId(null);
                       }}
@@ -528,7 +633,7 @@ function CadExtractResult({
               )}
 
               {floor ? <CadPreparationPanel key={`${record.extract_id}:${floor.floor_index}`} record={record} floor={floor}
-                busy={fitting || saving} onUpdated={onUpdated} onPendingChange={setPreparing} /> : null}
+                busy={fitting || editBlocked} onUpdated={onUpdated} onPendingChange={setPreparing} draftOwner={draftOwner} /> : null}
               {floorFitout && (!floor?.preparation?.current || floorFitout.preparation_signature !== floor.preparation.signature) ? (
                 <p role="status">当前显示的是此前保存的方案，尚未应用本层最新布置条件。确认并保存条件后，点击“布置这一层”重新生成。</p>
               ) : null}
@@ -594,7 +699,7 @@ function CadExtractResult({
                       ref={drawRef}
                       className="cad-plan-draw"
                       onPointerDown={(event) => {
-                        if (!paintMode || saving) return;
+                        if (!paintMode || editBlockedRef.current) return;
                         event.preventDefault();
                         const point = pointOnPlan(event);
                         if (!point) return;
@@ -605,7 +710,7 @@ function CadExtractResult({
                         setPolygon((current) => [...current, point]);
                       }}
                       onPointerMove={(event) => {
-                        if (!paintMode) return;
+                        if (!paintMode || editBlockedRef.current) return;
                         setCursor(pointOnPlan(event));
                       }}
                     />
@@ -616,7 +721,7 @@ function CadExtractResult({
                           type="button"
                           className={room.room_id === activeRoom?.room_id ? "cad-plan-marker is-active" : "cad-plan-marker"}
                           style={{ left: `${room.marker_x * 100}%`, top: `${room.marker_y * 100}%`, background: room.swatch || "#111" }}
-                          onClick={() => setRoomId(room.room_id)}
+                          disabled={editBlocked} onClick={() => { if (!editBlockedRef.current) setRoomId(room.room_id); }}
                         >
                           {room.marker}
                         </button>
@@ -640,7 +745,7 @@ function CadExtractResult({
                           role="option"
                           aria-selected={room.room_id === activeRoom?.room_id}
                           className={room.room_id === activeRoom?.room_id ? "is-active" : undefined}
-                          onClick={() => setRoomId(room.room_id)}
+                          disabled={editBlocked} onClick={() => { if (!editBlockedRef.current) setRoomId(room.room_id); }}
                         >
                           <strong>
                             <i className="cad-room-swatch" style={{ background: room.swatch || "#111" }} />
@@ -664,7 +769,7 @@ function CadExtractResult({
                     <div className="cad-program-actions">
                       <button
                         type="button"
-                        disabled={fitting || saving || preparing || !floor?.preparation?.current}
+                        disabled={fitting || editBlocked || preparing || !floor?.preparation?.current}
                         onClick={() => {
                           if (!floor) return;
                           setFitting(true);
@@ -681,7 +786,7 @@ function CadExtractResult({
                       {floorFitout ? (
                         <button
                           type="button"
-                          disabled={fitting || saving || preparing || !floor}
+                          disabled={fitting || editBlocked || preparing || !floor}
                           onClick={() => {
                             if (!floor) return;
                             setFitting(true);
@@ -773,7 +878,7 @@ function CadExtractResult({
                   ) : null}
                   <div className="cad-room-edit">
                     <div>
-                      <button type="button" disabled={saving || !(floor?.undo_count)} onClick={() => void saveEdit("undo")}>
+                      <button type="button" disabled={editBlocked || !(floor?.undo_count)} onClick={() => void saveEdit("undo")}>
                         撤销上一步
                       </button>
                     </div>
@@ -782,16 +887,16 @@ function CadExtractResult({
                     <div className="cad-room-edit">
                       <label>
                         功能
-                        <input value={proposalDraft} onChange={(event) => setProposalDraft(event.target.value)} maxLength={40} />
+                        <input value={proposalDraft} disabled={editBlocked} onChange={(event) => { if (!editBlockedRef.current) setProposalDraft(event.target.value); }} maxLength={40} />
                       </label>
                       <div>
-                        <button type="button" disabled={saving || !proposalDraft.trim()} onClick={() => void saveEdit("rename")}>
+                        <button type="button" disabled={editBlocked || !proposalDraft.trim()} onClick={() => void saveEdit("rename")}>
                           保存功能
                         </button>
                         <button
                           type="button"
                           className={paintMode === "add" ? "is-active" : undefined}
-                          disabled={saving}
+                          disabled={editBlocked}
                           onClick={() => setPaintMode((mode) => (mode === "add" ? null : "add"))}
                         >
                           扩大范围
@@ -799,7 +904,7 @@ function CadExtractResult({
                         <button
                           type="button"
                           className={paintMode === "erase" ? "is-active" : undefined}
-                          disabled={saving}
+                          disabled={editBlocked}
                           onClick={() => setPaintMode((mode) => (mode === "erase" ? null : "erase"))}
                         >
                           缩小范围
@@ -807,7 +912,7 @@ function CadExtractResult({
                         <button
                           type="button"
                           className={paintMode === "create" ? "is-active" : undefined}
-                          disabled={saving}
+                          disabled={editBlocked}
                           onClick={() => {
                             if (paintMode === "create") {
                               setPaintMode(null);
@@ -821,15 +926,15 @@ function CadExtractResult({
                         </button>
                         {paintMode ? (
                           <>
-                            <button type="button" disabled={saving || polygon.length < 3} onClick={commitPolygon}>
+                            <button type="button" disabled={editBlocked || polygon.length < 3} onClick={commitPolygon}>
                               完成选区
                             </button>
-                            <button type="button" disabled={saving || polygon.length === 0} onClick={() => setPolygon((current) => current.slice(0, -1))}>
+                            <button type="button" disabled={editBlocked || polygon.length === 0} onClick={() => setPolygon((current) => current.slice(0, -1))}>
                               撤销顶点
                             </button>
                             <button
                               type="button"
-                              disabled={saving}
+                              disabled={editBlocked}
                               onClick={() => {
                                 setPaintMode(null);
                                 setPolygon([]);
@@ -840,7 +945,7 @@ function CadExtractResult({
                             </button>
                           </>
                         ) : null}
-                        <button type="button" disabled={saving} onClick={() => void saveEdit("remove")}>
+                        <button type="button" disabled={editBlocked} onClick={() => void saveEdit("remove")}>
                           移除
                         </button>
                       </div>
@@ -937,7 +1042,7 @@ function CadProgramPanel({
   const floors = record.data.spaces?.floors ?? [];
   const program = useMemo(() => buildCadProgram(floors), [floors]);
   const savedNotes = record.data.spaces?.program_review?.notes ?? {};
-  const savedKey = JSON.stringify(savedNotes);
+  const savedKey = notesVersion(savedNotes);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [rearranging, setRearranging] = useState(false);
@@ -945,16 +1050,52 @@ function CadProgramPanel({
   const [proposal, setProposal] = useState<CadProgramRearrangeResult | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const loadedFor = useRef("");
-
+  const [notesConflict, setNotesConflict] = useState(false);
+  const loadedFor = useRef<{ id: string; key: string } | null>(null);
+  const draftRef = useRef(drafts);
+  draftRef.current = drafts;
+  const revision = useRef(0);
+  const requestSequence = useRef(0);
+  const activeRequest = useRef<number | null>(null);
+  const mounted = useRef(true);
+  const latest = useRef({ id: record.extract_id, key: savedKey });
+  latest.current = { id: record.extract_id, key: savedKey };
+  const expectedAck = useRef<{ id: string; key: string } | null>(null);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
-    const token = `${record.extract_id}:${savedKey}`;
-    if (loadedFor.current === token) return;
-    loadedFor.current = token;
-    setDrafts(JSON.parse(savedKey) as Record<string, string>);
+    const previous = loadedFor.current;
+    if (previous?.id === record.extract_id && previous.key === savedKey) return;
+    const sameRecord = previous?.id === record.extract_id;
+    const localDirty = sameRecord && notesVersion(draftRef.current) !== previous.key;
+    const ownAck = expectedAck.current?.id === record.extract_id && expectedAck.current.key === savedKey;
+    if (!sameRecord) {
+      activeRequest.current = null; expectedAck.current = null; revision.current = 0;
+      setSaving(false); setRearranging(false); setApplying(false); setError("");
+    }
+    if (!localDirty) {
+      setDrafts({ ...savedNotes }); setNotesConflict(false);
+      if (!ownAck) setStatus("");
+    } else if (!ownAck) {
+      setNotesConflict(true); setStatus("图上的意见已变化，本地输入仍保留。请先选择采用哪一版。");
+    }
+    loadedFor.current = { id: record.extract_id, key: savedKey };
+    if (ownAck) expectedAck.current = null;
     setProposal(null);
-    setStatus("");
   }, [record.extract_id, savedKey]);
+  function changeNote(key: string, value: string) {
+    revision.current += 1;
+    setDrafts(current => ({ ...current, [key]: value }));
+    setStatus("");
+  }
+  function beginRequest(): number | null {
+    if (activeRequest.current !== null) return null;
+    const token = ++requestSequence.current;
+    activeRequest.current = token;
+    return token;
+  }
+  function accepts(token: number, id: string): boolean {
+    return mounted.current && activeRequest.current === token && latest.current.id === id;
+  }
 
   const floorItems = program.items.filter((item) => item.floorIndex === activeFloorIndex);
   const floorLabel = floors.find((item) => item.floor_index === activeFloorIndex)?.label ?? `平面 ${activeFloorIndex}`;
@@ -962,47 +1103,71 @@ function CadProgramPanel({
   const otherProposalCount = (proposal?.items.length ?? 0) - floorProposalItems.length;
   if (program.items.length === 0) return null;
 
-  const dirty = JSON.stringify(normalizeNotes(drafts)) !== JSON.stringify(normalizeNotes(savedNotes));
+  const dirty = notesVersion(drafts) !== savedKey;
 
   async function saveNotes() {
-    setSaving(true);
-    setError("");
-    setStatus("");
+    if (!dirty || notesConflict) return;
+    const token = beginRequest();
+    if (token === null) return;
+    const origin = record.extract_id, sentKey = savedKey, sentRevision = revision.current;
+    const submitted = normalizeNotes(drafts);
+    expectedAck.current = { id: origin, key: notesVersion(submitted) };
+    setSaving(true); setError(""); setStatus("");
     try {
-      const updated = await api.saveCadProgramReview(record.extract_id, { notes: normalizeNotes(drafts) });
+      const updated = await api.saveCadProgramReview(origin, { notes: submitted });
+      if (!accepts(token, origin)) return;
+      const notes = updated.data?.spaces?.program_review?.notes;
+      if (updated.extract_id !== origin || !notes || typeof notes !== "object") throw new Error("保存响应不属于当前图纸或缺少意见，请核对记录；本地输入仍保留。");
+      const returnedKey = notesVersion(notes);
+      if (latest.current.key !== sentKey && latest.current.key !== returnedKey) {
+        setNotesConflict(true); setError("保存期间图上的意见又有变化，请核对最新记录；本地输入仍保留。"); return;
+      }
+      expectedAck.current = latest.current.key === returnedKey ? null : { id: origin, key: returnedKey };
+      const unchanged = revision.current === sentRevision;
+      if (unchanged && notesVersion(submitted) === returnedKey) setDrafts({ ...notes });
+      setNotesConflict(false);
       onUpdated(updated);
-      setStatus("审查意见已留在这张图上。房间边界没有改。");
+      setStatus(notesVersion(draftRef.current) === returnedKey ? "审查意见已留在这张图上。房间边界没有改。" : "返回版本的意见已保存；本地还有未保存的输入。");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "没有保存审查意见");
+      if (accepts(token, origin)) { expectedAck.current = null; setError(cause instanceof Error ? cause.message : "没有保存审查意见"); }
     } finally {
-      setSaving(false);
+      if (accepts(token, origin)) { activeRequest.current = null; setSaving(false); }
     }
   }
 
   async function rearrange() {
+    if (dirty || notesConflict) return;
+    const token = beginRequest();
+    if (token === null) return;
+    const origin = record.extract_id, sourceKey = savedKey;
     setRearranging(true);
     setError("");
     setStatus("");
     setProposal(null);
     try {
-      const result = await api.rearrangeCadProgram(record.extract_id);
+      const result = await api.rearrangeCadProgram(origin);
+      if (!accepts(token, origin)) return;
+      if (latest.current.key !== sourceKey) { setError("图上的意见已变化，请按最新意见重新生成建议。"); return; }
       setProposal(result);
       setStatus(result.items.length === 0 ? "这些意见没有要改的名称或动静。" : "看一下方案，确认后才写入。");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "没有完成这次重排");
+      if (accepts(token, origin)) setError(cause instanceof Error ? cause.message : "没有完成这次重排");
     } finally {
-      setRearranging(false);
+      if (accepts(token, origin)) { activeRequest.current = null; setRearranging(false); }
     }
   }
 
   async function applyProposal() {
     const items = writableItems({ items: floorProposalItems, model_name: proposal?.model_name ?? "" });
-    if (items.length === 0) return;
+    if (items.length === 0 || notesConflict) return;
+    const token = beginRequest();
+    if (token === null) return;
+    const origin = record.extract_id, sourceKey = savedKey;
     setApplying(true);
     setError("");
     setStatus("");
     try {
-      const updated = await api.applyCadProgram(record.extract_id, {
+      const updated = await api.applyCadProgram(origin, {
         items: items.map((item) => ({
           floor_index: item.floor_index,
           room_id: item.room_id,
@@ -1011,6 +1176,10 @@ function CadProgramPanel({
           reason: item.reason,
         })),
       });
+      if (!accepts(token, origin)) return;
+      if (updated.extract_id !== origin || (latest.current.key !== sourceKey && latest.current.key !== notesVersion(updated.data.spaces?.program_review?.notes ?? {}))) {
+        setNotesConflict(true); setError("图上的意见已变化，请核对记录；本地输入仍保留。"); return;
+      }
       onUpdated(updated);
       setProposal((current) => {
         if (!current) return null;
@@ -1019,9 +1188,9 @@ function CadProgramPanel({
       });
       setStatus("这一层的名称和动静已写入。房间边界没有改。");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "没有写入这次修改");
+      if (accepts(token, origin)) setError(cause instanceof Error ? cause.message : "没有写入这次修改");
     } finally {
-      setApplying(false);
+      if (accepts(token, origin)) { activeRequest.current = null; setApplying(false); }
     }
   }
 
@@ -1056,7 +1225,7 @@ function CadProgramPanel({
                   maxLength={500}
                   rows={2}
                   placeholder="例如：这间不要做开放办公，改成调解室"
-                  onChange={(event) => setDrafts((current) => ({ ...current, [item.roomId]: event.target.value }))}
+                  onChange={(event) => changeNote(item.roomId, event.target.value)}
                 />
               </label>
             </article>
@@ -1077,7 +1246,7 @@ function CadProgramPanel({
           maxLength={500}
           rows={2}
           placeholder="例如：先把一层卫生间隔出来，二层先不摆家具"
-          onChange={(event) => setDrafts((current) => ({ ...current, general: event.target.value }))}
+          onChange={(event) => changeNote("general", event.target.value)}
         />
       </label>
       {proposal ? (
@@ -1100,24 +1269,33 @@ function CadProgramPanel({
           {otherProposalCount > 0 ? <p>另一层还有 {otherProposalCount} 条建议。换上面的平面后再看、再确认。</p> : null}
         </div>
       ) : null}
+      {notesConflict ? <div role="alert">
+        <p>图上的意见与本地输入不同。本地内容仍在，确认后再保存。</p>
+        <button type="button" disabled={saving || rearranging || applying} onClick={() => {
+          setDrafts({ ...savedNotes }); revision.current += 1; setNotesConflict(false); setStatus("");
+        }}>采用图上意见，放弃本地修改</button>
+        <button type="button" disabled={saving || rearranging || applying} onClick={() => {
+          setNotesConflict(false); setStatus("本地意见仍未保存。再次保存将替换图上的意见。");
+        }}>保留本地意见，确认替换后再保存</button>
+      </div> : null}
       <div className="cad-program-actions">
-        <button type="button" disabled={saving || rearranging || applying || !dirty} onClick={() => void saveNotes()}>
+        <button type="button" disabled={saving || rearranging || applying || notesConflict || !dirty} onClick={() => void saveNotes()}>
           {saving ? "保存中" : "保存审查意见"}
         </button>
         <button
           type="button"
-          disabled={saving || rearranging || applying || dirty || !hasProgramNotes(savedNotes)}
+          disabled={saving || rearranging || applying || notesConflict || dirty || !hasProgramNotes(savedNotes)}
           onClick={() => void rearrange()}
         >
           {rearranging ? "正在重排" : "按意见重排"}
         </button>
         {writableItems({ items: floorProposalItems, model_name: proposal?.model_name ?? "" }).length > 0 ? (
-          <button type="button" disabled={applying || rearranging} onClick={() => void applyProposal()}>
+          <button type="button" disabled={saving || applying || rearranging || notesConflict} onClick={() => void applyProposal()}>
             {applying ? "写入中" : "确认写入"}
           </button>
         ) : null}
         {proposal ? (
-          <button type="button" disabled={applying || rearranging} onClick={() => setProposal(null)}>
+          <button type="button" disabled={saving || applying || rearranging || notesConflict} onClick={() => setProposal(null)}>
             放弃
           </button>
         ) : null}
@@ -1127,6 +1305,10 @@ function CadProgramPanel({
       </div>
     </section>
   );
+}
+
+function notesVersion(notes: Record<string, string>): string {
+  return JSON.stringify(Object.entries(normalizeNotes(notes)).sort(([left], [right]) => left.localeCompare(right)));
 }
 
 function gapsForFloor(gaps: string[], floorIndex: number): string[] {
@@ -1176,7 +1358,7 @@ function ChipList({ title, items }: { title: string; items: string[] }) {
 export default function CadExtractPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { isGuest } = useAuth();
+  const { isGuest, currentUser } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -1185,6 +1367,13 @@ export default function CadExtractPage() {
   const [records, setRecords] = useState<CadExtractRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [preparationPending, setPreparationPending] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
+  const editBusyRef = useRef(editBusy);
+  editBusyRef.current = editBusy;
+  const pendingRef = useRef(false);
+  const selectedRef = useRef(selectedId);
+  pendingRef.current = preparationPending || editBusy; selectedRef.current = selectedId;
 
   const selected = useMemo(
     () => records.find((item) => item.extract_id === selectedId) ?? null,
@@ -1198,9 +1387,11 @@ export default function CadExtractPage() {
       .listCadExtracts()
       .then((items) => {
         if (cancelled) return;
-        setRecords(items);
+        setRecords(current => pendingRef.current && !items.some(item => item.extract_id === selectedRef.current)
+          ? [...current.filter(item => item.extract_id === selectedRef.current), ...items] : items);
         const requested = searchParams.get("extract");
         setSelectedId((current) => {
+          if (pendingRef.current) return current;
           if (requested && items.some((item) => item.extract_id === requested)) return requested;
           return current ?? items[0]?.extract_id ?? null;
         });
@@ -1266,7 +1457,8 @@ export default function CadExtractPage() {
       const dataUrl = toCadDataUrl(rawDataUrl, file.name);
       const created = await api.createCadExtract({ file_name: file.name, data_url: dataUrl });
       setRecords((current) => [created, ...current.filter((item) => item.extract_id !== created.extract_id)]);
-      setSelectedId(created.extract_id);
+      if (!pendingRef.current) setSelectedId(created.extract_id);
+      else setError(editBusyRef.current ? "解析已完成，当前房间编辑仍需等待或核对，暂不切换图纸。" : "解析已完成，当前准备条件草稿仍保留。可从最近解析切换图纸。");
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (err) {
@@ -1369,7 +1561,10 @@ export default function CadExtractPage() {
                   key={item.extract_id}
                   type="button"
                   className={item.extract_id === selectedId ? "cad-history-item is-active" : "cad-history-item"}
+                  disabled={editBusy}
                   onClick={() => {
+                    if (editBusyRef.current) { setError("请先等待房间编辑完成，或核对受理未知的操作。"); return; }
+                    if (item.extract_id !== selectedId && preparationPending && !window.confirm("当前草稿将保留在本标签页。保留草稿并切换图纸？")) return;
                     setSelectedId(item.extract_id);
                     setCopied(false);
                   }}
@@ -1388,7 +1583,10 @@ export default function CadExtractPage() {
 
         {selected ? (
           <CadExtractResult
-            key={selected.extract_id}
+            key={`${currentUser?.id ?? "guest"}:${selected.extract_id}`}
+            draftOwner={currentUser ? String(currentUser.id) : undefined}
+            onPreparationPending={setPreparationPending}
+            onEditBusy={setEditBusy}
             record={selected}
             copied={copied}
             onCopy={(extractId) => void copyExtractId(extractId)}

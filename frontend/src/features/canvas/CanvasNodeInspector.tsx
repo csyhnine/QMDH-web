@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 
 import { resolveProviderResolutionOptions } from "../studio/studioConstants";
 import { aspectRatioOptionsFor } from "../studio/studioCanvasLinkage";
@@ -18,7 +18,7 @@ import type { UpstreamDeliverables } from "./canvasNodeContext";
 import { useCanvasNodeActions } from "./canvasNodeContext";
 import { NODE_KIND_LABEL, type CanvasGenerateNode, type GenerateNodeData } from "./canvasTypes";
 import { resolveCanvasCompareOriginalUrls } from "./canvasGraphUtils";
-import { canSyncCanvasNodeTask } from "./useCanvasNodeGenerate";
+import { canSyncCanvasNodeTask, type CanvasGenerateOptions } from "./useCanvasNodeGenerate";
 
 type CanvasNodeInspectorProps = {
   node: CanvasGenerateNode | null;
@@ -28,7 +28,7 @@ type CanvasNodeInspectorProps = {
   selectionCount?: number;
   selectedRunnableCount?: number;
   onChange: (nodeId: string, patch: Partial<GenerateNodeData>) => void;
-  onGenerate: (nodeId: string, data: GenerateNodeData) => void;
+  onGenerate: (nodeId: string, data: GenerateNodeData, options?: CanvasGenerateOptions) => void;
   onSyncTask?: (nodeId: string, data: GenerateNodeData) => void;
   onUploadImage: (nodeId: string, file: File) => Promise<void>;
   onSaveAnnotation: (nodeId: string) => Promise<void>;
@@ -54,7 +54,9 @@ export default function CanvasNodeInspector({
   onRunSelection,
   onClose,
 }: CanvasNodeInspectorProps) {
-  const { previewMedia } = useCanvasNodeActions();
+  const { previewMedia, patchNode, promptScopeKey, isPromptScopeCurrent } = useCanvasNodeActions();
+  const [polishingPrompt, setPolishingPrompt] = useState(false);
+  useLayoutEffect(() => { setPolishingPrompt(false); }, [node?.id, node?.data.nodeKind, promptScopeKey]);
   if (!node) {
     return (
       <aside className="qmdh-canvas-inspector is-empty">
@@ -96,7 +98,6 @@ export default function CanvasNodeInspector({
   }
 
   const data = node.data;
-  const [polishingPrompt, setPolishingPrompt] = useState(false);
   const taskBusy = data.status === "submitting" || data.status === "pending" || data.status === "running";
   const busy = taskBusy || polishingPrompt;
   const canSync = canSyncCanvasNodeTask(data);
@@ -176,6 +177,9 @@ export default function CanvasNodeInspector({
           {!isUpload && !isUpscale && !isAnnotate ? (
             <CanvasPromptPolishField
               nodeKind={data.nodeKind}
+              nodeId={node.id}
+              draftIdentity={data}
+              onApplyPrompt={(prompt, polished, isCurrent) => patchNode(node.id, { prompt, promptPolished: polished }, { expectedData: data, isCurrent: () => isCurrent() && (isPromptScopeCurrent?.() ?? true) })}
               prompt={data.prompt}
               referenceImages={data.referenceImages}
               upstreamImages={upstream.images}
@@ -324,7 +328,7 @@ export default function CanvasNodeInspector({
                 type="button"
                 className="qmdh-canvas-inspector-generate is-secondary"
                 disabled={disabled || busy || !canSubmit}
-                onClick={() => onGenerate(node.id, data)}
+                onClick={() => onGenerate(node.id, data, {regenerate:true})}
               >
                 重新生成
               </button>

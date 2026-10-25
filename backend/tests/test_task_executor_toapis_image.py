@@ -1,3 +1,4 @@
+from tests.review_media_fixtures import PNG_BYTES
 import json
 import os
 import shutil
@@ -96,7 +97,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
             side_effect=[
                 _FakeResponse(submit_payload),
                 _FakeResponse(poll_payload),
-                _FakeBinaryResponse(b"png-1k"),
+                _FakeBinaryResponse(PNG_BYTES),
             ],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
@@ -143,7 +144,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
             side_effect=[
                 _FakeResponse(submit_payload),
                 _FakeResponse(poll_payload),
-                _FakeBinaryResponse(b"png"),
+                _FakeBinaryResponse(PNG_BYTES),
             ],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
@@ -202,7 +203,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
             side_effect=[
                 _FakeResponse(submit_payload),
                 _FakeResponse(poll_payload),
-                _FakeBinaryResponse(b"png-2k"),
+                _FakeBinaryResponse(PNG_BYTES),
             ],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
@@ -245,7 +246,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
             side_effect=[
                 _FakeResponse(submit_payload),
                 _FakeResponse(poll_payload),
-                _FakeBinaryResponse(b"png-2k"),
+                _FakeBinaryResponse(PNG_BYTES),
             ],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
@@ -280,7 +281,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
             side_effect=[
                 _FakeResponse(submit_payload),
                 _FakeResponse(poll_payload),
-                _FakeBinaryResponse(b"png-4k"),
+                _FakeBinaryResponse(PNG_BYTES),
             ],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
@@ -314,7 +315,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
             side_effect=[
                 _FakeResponse(submit_payload),
                 _FakeResponse(poll_payload),
-                _FakeBinaryResponse(b"png-ref"),
+                _FakeBinaryResponse(PNG_BYTES),
             ],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
@@ -347,7 +348,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
             side_effect=[
                 _FakeResponse(submit_payload),
                 _FakeResponse(poll_payload),
-                _FakeBinaryResponse(b"png-follow"),
+                _FakeBinaryResponse(PNG_BYTES),
             ],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
@@ -380,7 +381,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
             side_effect=[
                 _FakeResponse(submit_payload),
                 _FakeResponse(poll_payload),
-                _FakeBinaryResponse(b"png"),
+                _FakeBinaryResponse(PNG_BYTES),
             ],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
@@ -405,7 +406,7 @@ class ToAPIImageProviderAdapterTests(unittest.TestCase):
         image_url = "https://files.toapis.com/generated/demo.png"
         with patch(
             "app.services.task_executor.urlopen",
-            return_value=_FakeBinaryResponse(b"\x89PNG\r\n\x1a\n", "image/png"),
+            return_value=_FakeBinaryResponse(PNG_BYTES, "image/png"),
         ) as mocked_urlopen:
             payload, content_type = _download_generated_image(image_url, timeout_seconds=30)
 

@@ -2,7 +2,7 @@ import type { Provider } from "../../api";
 import { createContext, useContext } from "react";
 
 import type { GenerateNodeData, NoteNodeData } from "./canvasTypes";
-import type { PatchNodeOptions } from "./useCanvasNodeGenerate";
+import type { PatchNodeOptions, CanvasGenerateOptions } from "./useCanvasNodeGenerate";
 
 export type UpstreamDeliverables = { images: string[]; videos: string[] };
 
@@ -17,6 +17,8 @@ export type CanvasNodeActions = {
   providers: Provider[];
   disabled?: boolean;
   promptPolishEnabled?: boolean | null;
+  promptScopeKey?: unknown;
+  isPromptScopeCurrent?: () => boolean;
   patchNode: (
     nodeId: string,
     patch: Partial<GenerateNodeData>,
@@ -27,7 +29,7 @@ export type CanvasNodeActions = {
     patch: Partial<NoteNodeData>,
     options?: PatchNodeOptions
   ) => void;
-  generateNode: (nodeId: string, data: GenerateNodeData) => void | Promise<void>;
+  generateNode: (nodeId: string, data: GenerateNodeData, options?: CanvasGenerateOptions) => void | Promise<void>;
   syncNodeTask: (nodeId: string, data: GenerateNodeData) => void | Promise<void>;
   uploadNodeImage: (nodeId: string, file: File) => Promise<void>;
   saveAnnotation: (nodeId: string) => Promise<void>;

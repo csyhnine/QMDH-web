@@ -1,3 +1,4 @@
+import type { PromptPolishApplyOptions } from "../../lib/promptPolishOwnership";
 import type { ChangeEvent, DragEvent, FormEvent, RefObject } from "react";
 
 import type { PromptTemplateRecord, Provider } from "../../api";
@@ -32,6 +33,7 @@ export type StudioComposerCanvasProps = {
   hasActiveProject: boolean;
   providerGroups: ProviderGroup[];
   referenceUploads: ReferenceUploadItem[];
+  maxReferenceCount?: number;
   resolutionOptions: ResolutionOption[];
   selectedProvider?: Provider;
   selectedGrokSkuLabel: string | null;
@@ -57,7 +59,7 @@ export type StudioComposerCanvasProps = {
   onImageCountSelect: (count: number) => void;
   onModeChange: (mode: StudioFormState["creationMode"]) => void;
   onOpenReferencePicker: () => void;
-  onPromptChange: (value: string) => void;
+  onPromptChange: (value: string, application?: PromptPolishApplyOptions<StudioFormState>) => void;
   onProviderSelect: (providerName: string) => void;
   onGrokVideoSkuSelect: (sku: import("./studioComposerGrokSkuMenuTypes").StudioVideoSku) => void;
   onReferenceDrop: (event: DragEvent<HTMLElement>) => void;
@@ -66,8 +68,8 @@ export type StudioComposerCanvasProps = {
   onReplaceReferenceUpload: (index: number, item: ReferenceUploadItem) => void;
   enableSeedanceAvatar?: boolean;
   onRegisterSeedancePrivateAvatar?: (index: number) => void;
-  onStartSeedanceRealAvatar?: (index: number) => Promise<{ taskId: string; h5Link: string }>;
-  onCompleteSeedanceRealAvatar?: (index: number, verifyTaskId: string) => Promise<void> | void;
+  onStartSeedanceRealAvatar?: (index: number, signal?: AbortSignal) => Promise<{ taskId: string; h5Link: string }>;
+  onCompleteSeedanceRealAvatar?: (index: number, verifyTaskId: string, signal?: AbortSignal) => Promise<void> | void;
   onResolutionSelect: (resolutionId: string) => void;
   onSaveCustomTemplate: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;

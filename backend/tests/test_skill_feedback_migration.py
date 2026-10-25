@@ -13,7 +13,9 @@ def test_repository_migration_chain_has_single_new_head():
     config = Config()
     config.set_main_option("script_location", str(backend / "migrations"))
     scripts = ScriptDirectory.from_config(config)
-    assert scripts.get_heads() == ["b27d0f85c932"]
+    assert scripts.get_heads() == ["d40e9f82b735"]
+    assert scripts.get_revision("d40e9f82b735").down_revision == "c39d8e71a624"
+    assert scripts.get_revision("c39d8e71a624").down_revision == "b27d0f85c932"
     assert scripts.get_revision("b27d0f85c932").down_revision == "a16c9e74b821"
     assert scripts.get_revision("a16c9e74b821").down_revision == "f7g8h9i0j1k2"
     assert scripts.get_revision("f7g8h9i0j1k2").down_revision == "e6f7g8h9i0j1"

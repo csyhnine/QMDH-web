@@ -54,8 +54,6 @@ export function useStudioTaskActions({
     setSubmitting,
     studioTemplates,
     submissionInFlightRef,
-    uploadingReference: referenceUpload.uploadingReference,
-    referenceUploads: referenceUpload.referenceUploads,
   });
 
   function applyTaskToComposer(task: Task, asset?: Asset): StudioFormState {
@@ -76,6 +74,10 @@ export function useStudioTaskActions({
   }
 
   function copyTaskToComposer(task: Task, asset?: Asset) {
+    if (task.result["reference_image_history_incomplete"] === true) {
+      historyFeedback.pushFeedback(task.id, "copy_to_composer", "error", "该历史任务的参考图记录不完整，请手动重新选择原图后提交。");
+      return;
+    }
     applyTaskToComposer(task, asset);
     const feedback = copyTaskToComposerFeedback();
     historyFeedback.pushFeedback(task.id, "copy_to_composer", feedback.tone, feedback.message);
@@ -90,7 +92,11 @@ export function useStudioTaskActions({
       historyFeedback.pushFeedback(task.id, "reuse", "info", "当前已有任务在提交，请稍候。");
       return;
     }
-    const { nextForm } = buildStudioFormFromTask({
+    if (task.result["reference_image_history_incomplete"] === true) {
+      historyFeedback.pushFeedback(task.id, "reuse", "error", "该历史任务的参考图记录不完整，请手动重新选择原图后提交。");
+      return;
+    }
+    const { nextForm, nextUploads } = buildStudioFormFromTask({
       asset,
       buildUploadsFromPaths: referenceUpload.buildUploadsFromPaths,
       providers,
@@ -100,7 +106,12 @@ export function useStudioTaskActions({
     setRegeneratingTaskId(task.id);
     historyFeedback.setPendingAction(task.id, "reuse");
     try {
-      const submitted = await submitStudioTask(nextForm);
+      const submitted = await submitStudioTask({
+        form: nextForm,
+        referenceUploads: nextUploads,
+        uploadingReference: false,
+        updateComposer: false,
+      });
       const feedback = regenerateTaskFeedback(submitted);
       historyFeedback.pushFeedback(task.id, "reuse", feedback.tone, feedback.message);
       if (submitted) {
@@ -189,7 +200,12 @@ export function useStudioTaskActions({
       pushLoadError("访客模式无法提交生成任务，请先登录。");
       return;
     }
-    await submitStudioTask(studioForm);
+    await submitStudioTask({
+      form: studioForm,
+      referenceUploads: referenceUpload.referenceUploads,
+      uploadingReference: referenceUpload.uploadingReference,
+      updateComposer: true,
+    });
   }
 
   return {

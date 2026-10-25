@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 import logging
 import mimetypes
 import re
 import uuid
 from base64 import b64decode, b64encode
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from random import randint
@@ -22,6 +23,8 @@ from sqlalchemy.orm import Session
 from app.core.config import ImageProviderProfile, settings
 from app.database import SessionLocal
 from app.models import Asset, AssetType, Project, ProviderCall, Task, TaskStatus, Workflow
+from app.services.generated_media_validation import validate_generated_media
+from app.services.task_reference_metadata import reference_image_result_fields
 from app.services.image_aspect_ratio import (
     SMART_RATIO_LABELS,
     SOURCE_ASPECT_RATIO_LABELS,
@@ -47,6 +50,7 @@ from app.services.provider_adapters.base import (
     RequestDiagnostics,
 )
 from app.services.provider_adapters.bigjpg_upscale import BigjpgUpscaleProviderAdapter
+from app.services.provider_adapters.async_progress import UpstreamTaskFailed
 from app.services.provider_adapters.comfyui import ComfyUIProviderAdapter
 from app.services.provider_adapters.dashscope_video import DashScopeVideoProviderAdapter
 from app.services.provider_adapters.haodeya_grok_video import HaodeyaGrokVideoProviderAdapter
@@ -98,6 +102,7 @@ class ImageRequestPlan:
     strategy: str
     # (field_name, filename, content, content_type) — when set, POST as multipart/form-data.
     multipart_files: tuple[tuple[str, str, bytes, str], ...] = ()
+    resolution_plan: dict[str, str] | None = None
 
 
 class SimulatedProviderAdapter(ProviderAdapter):
@@ -157,10 +162,96 @@ class SimulatedProviderAdapter(ProviderAdapter):
         )
 
 
+def _image_progress_outcome(*, progress, definition, profile, plan, diagnostics, capability, payload, latency_ms):
+    steps = progress["steps"]
+    storage_paths = [path for step in steps for path in step.get("storage_paths", [])]
+    usage_records = [step["usage"] for step in steps if isinstance(step.get("usage"), dict)]
+    response_models = list(dict.fromkeys(step["response_model"] for step in steps if step.get("response_model")))
+    unknown = any(step["state"] != "completed" for step in steps)
+    billing = dict(progress["billing_template"])
+    units = len(storage_paths) if billing["pricing_unit"] in {"per_image", "per_video"} else int(bool(storage_paths))
+    billing.update(cost=round(float(billing["unit_price"]) * units, 4), billable_units=units,
+                   additional_cost_unknown=unknown, cost_known=bool(storage_paths) or not unknown,
+                   amount_kind="configured_estimate", scope="logical_task")
+    reference_result = dict(plan.reference_result)
+    if getattr(plan, "resolution_plan", None):
+        for key in ("resolution", "image_model_resolved", "image_size"):
+            reference_result.pop(key, None)
+    reference_result.update(progress.get("resolution_plan") or {})
+    result = {
+        "summary": f"{definition.provider_name} saved {len(storage_paths)} of {progress['requested_image_count']} image outputs.",
+        "payload_keys": list(payload.keys()), "adapter_mode": plan.adapter_mode,
+        "storage_paths": storage_paths, "output_count": len(storage_paths),
+        "response_model": response_models[0] if response_models else profile.model_name,
+        "response_models": response_models, "usage": usage_records[-1] if usage_records else {},
+        "usage_records": usage_records, "requested_image_count": progress["requested_image_count"],
+        "billing": billing, "generation_progress": json.loads(json.dumps(progress)),
+        "partial_outputs": bool(storage_paths) and (unknown or len(storage_paths) < progress["requested_image_count"]),
+        "upstream_request": progress.get("upstream_request", _upstream_request_excerpt(plan.body)),
+        **_request_diagnostics_payload(diagnostics), **reference_result,
+    }
+    if progress.get("kind") == "async_images":
+        receipts = [step.get("query_context", {}) for step in steps]
+        ids = list(dict.fromkeys(row["task_id"] for row in receipts if row.get("task_id")))
+        result["upstream_task_ids"] = ids
+        result["upstream_task_id"] = ids[-1] if ids else ""
+        result["recovery_required"] = bool(progress.get("recovery_required")) or any(step["state"] not in {"completed", "failed"} for step in steps)
+    if storage_paths:
+        result["storage_path"] = storage_paths[0]
+    for step in steps:
+        if step.get("output_dimensions"):
+            result["output_width"], result["output_height"] = step["output_dimensions"]
+            break
+    if unknown:
+        result["billing_note"] = "仅记录已知费用，未确认的上游费用待核对；0不表示免费。"
+    return ExecutionOutcome(model_name=progress.get("request_model", str(plan.body.get("model") or profile.model_name)), latency_ms=latency_ms,
+                            cost=billing["cost"], cost_currency=billing["currency"], outbound=definition.outbound, result=result)
+
+
+def _upsert_image_progress_call(db, task, workflow, project, outcome, failure=None):
+    call = next((row for row in db.scalars(select(ProviderCall).where(ProviderCall.task_id == task.id).order_by(ProviderCall.id))
+                 if isinstance(row.request_summary, dict) and row.request_summary.get("image_progress_version") == 1), None)
+    if call is None:
+        call = ProviderCall(task_id=task.id, provider_name=task.requested_provider,
+                            model_name=outcome.model_name, capability=workflow.provider_capability)
+        db.add(call)
+    call.cost, call.cost_currency = outcome.cost, outcome.cost_currency
+    call.latency_ms, call.outbound = outcome.latency_ms, outcome.outbound
+    call.request_summary = {"image_progress_version": 1, "classification": task.classification.value,
+                            "project_code": project.code, "keys": list(task.payload.keys()), "execution": asdict(outcome),
+                            **({"failure": failure} if failure else {})}
+    db.flush()
+
+
+def _upsert_async_progress_call(db, task, workflow, project, outcome, failure=None):
+    call = next((row for row in db.scalars(select(ProviderCall).where(ProviderCall.task_id == task.id).order_by(ProviderCall.id))
+                 if isinstance(row.request_summary, dict) and row.request_summary.get("async_progress_version") == 1), None)
+    if call is None:
+        call = ProviderCall(task_id=task.id, provider_name=task.requested_provider,
+                            model_name=outcome.model_name, capability=workflow.provider_capability)
+        db.add(call)
+    call.cost, call.cost_currency = outcome.cost, outcome.cost_currency
+    call.latency_ms, call.outbound = outcome.latency_ms, outcome.outbound
+    call.request_summary = {"async_progress_version": 1, "classification": task.classification.value,
+                            "project_code": project.code, "keys": list(task.payload.keys()), "execution": asdict(outcome),
+                            **({"failure": failure} if failure else {})}
+    db.flush()
+
+
 class OpenAIImageProviderAdapter(ProviderAdapter):
     def __init__(self, definition: ProviderDefinition, profile: ImageProviderProfile):
         super().__init__(definition)
         self.profile = profile
+        self.progress = {}
+        self.save_progress = None
+        self.task_id = None
+
+    def bind_task_progress(self, task_id, progress, save):
+        self.task_id = task_id
+        if progress.get("kind") == "async_images" and (progress.get("version") != 1 or progress.get("task_id") != task_id):
+            raise ValueError("Saved async image progress identity/version requires review")
+        self.progress = json.loads(json.dumps(progress)) if progress.get("version") == 1 and progress.get("task_id") == task_id else {}
+        self.save_progress = save
 
     def execute(self, capability: str, payload: dict) -> ExecutionOutcome:
         if capability not in {"image.generate", "image.edit"}:
@@ -179,15 +270,42 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
             prompt=prompt,
         )
         diagnostics = _request_diagnostics_for_plan(self.profile, request_plan)
+        async_mode = None
+        if request_plan.endpoint_path.startswith("/images/"):
+            if request_plan.adapter_mode == "haodeya_async_image":
+                async_mode = "haodeya"
+            elif _uses_modelscope_async_mode(self.profile):
+                async_mode = "modelscope"
+        if async_mode or self.progress.get("kind") == "async_images":
+            return self._execute_async_images(capability, payload, prompt, requested_count, request_plan, diagnostics, async_mode)
 
+        started_at = perf_counter()
+        if not self.progress:
+            self.progress = {"version": 1, "task_id": self.task_id, "requested_image_count": requested_count,
+                             "request_model": str(request_plan.body.get("model") or self.profile.model_name),
+                             "upstream_request": _upstream_request_excerpt(request_plan.body),
+                             "billing_template": _calculate_image_billing(profile=self.profile, output_count=1,
+                                 payload={**payload, "resolution": (getattr(request_plan, "resolution_plan", None) or {}).get("effective_resolution", _normalize_image_resolution(payload))}),
+                             "resolution_plan": getattr(request_plan, "resolution_plan", None), "steps": []}
+        progress = self.progress
+        def outcome():
+            return _image_progress_outcome(progress=progress, definition=self.definition, profile=self.profile,
+                                           plan=request_plan, diagnostics=diagnostics, capability=capability,
+                                           payload=payload, latency_ms=max(1, round((perf_counter() - started_at) * 1000)))
+        def checkpoint():
+            if self.save_progress is not None:
+                self.save_progress(outcome())
         try:
-            started_at = perf_counter()
-            storage_paths: list[str] = []
-            output_dimensions: tuple[int, int] | None = None
-            usage_records: list[dict] = []
-            response_models: list[str] = []
-
-            while len(storage_paths) < requested_count:
+            if getattr(request_plan, "resolution_plan", None) and progress.get("resolution_plan") != request_plan.resolution_plan:
+                raise RuntimeError("Saved image resolution plan is missing or changed; review required before another request")
+            if progress.get("request_model") != str(request_plan.body.get("model") or self.profile.model_name):
+                raise RuntimeError("图像步骤的模型配置已变化，请核对后继续；未自动提交新模型请求。")
+            if any(step["state"] != "completed" for step in progress["steps"]):
+                raise RuntimeError("上次图像步骤状态待核对，不会自动重新提交上游请求。")
+            while sum(len(step.get("storage_paths", [])) for step in progress["steps"]) < requested_count:
+                step = {"number": len(progress["steps"]) + 1, "state": "submitting", "storage_paths": []}
+                progress["steps"].append(step)
+                checkpoint()
                 response_payload = _submit_image_generation_request(
                     base_url=self.profile.base_url,
                     body=request_plan.body,
@@ -196,6 +314,14 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
                     endpoint_path=request_plan.endpoint_path,
                     multipart_files=request_plan.multipart_files,
                 )
+                step["state"] = "responded"
+                step["response_model"] = str(response_payload.get("model") or self.profile.model_name)
+                upstream_id = response_payload.get("task_id") or response_payload.get("id")
+                if isinstance(upstream_id, str):
+                    step["upstream_request_id"] = upstream_id
+                if isinstance(response_payload.get("usage"), dict):
+                    step["usage"] = response_payload["usage"]
+                checkpoint()
 
                 if request_plan.adapter_mode == "haodeya_async_image" and request_plan.endpoint_path.startswith("/images/"):
                     data = _extract_image_data(response_payload)
@@ -214,15 +340,9 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
                         hint = " Check choices[0].message.images when content is empty."
                     raise ValueError(f"Image generation returned no image data.{hint}")
 
-                response_model = str(response_payload.get("model", self.profile.model_name))
-                if response_model not in response_models:
-                    response_models.append(response_model)
-
-                usage_payload = response_payload.get("usage")
-                if isinstance(usage_payload, dict):
-                    usage_records.append(usage_payload)
-
                 for item in data:
+                    step["state"] = "persisting"
+                    checkpoint()
                     storage_path, image_dimensions = _persist_generated_image(
                         provider_name=self.definition.provider_name,
                         image_payload=item,
@@ -230,50 +350,145 @@ class OpenAIImageProviderAdapter(ProviderAdapter):
                         output_format=self.profile.output_format,
                         timeout_seconds=self.profile.timeout_seconds,
                     )
-                    storage_paths.append(storage_path)
-                    if output_dimensions is None and image_dimensions is not None:
-                        output_dimensions = image_dimensions
-                    if len(storage_paths) >= requested_count:
+                    step["storage_paths"].append(storage_path)
+                    if not step.get("output_dimensions") and image_dimensions is not None:
+                        step["output_dimensions"] = list(image_dimensions)
+                    checkpoint()
+                    if sum(len(row["storage_paths"]) for row in progress["steps"]) >= requested_count:
                         break
-
-            latency_ms = max(1, round((perf_counter() - started_at) * 1000))
-            billing = _calculate_image_billing(
-                profile=self.profile,
-                output_count=len(storage_paths),
-                payload=payload,
-            )
-            result = {
-                "summary": f"{self.definition.provider_name} completed a live {capability} run.",
-                "payload_keys": list(payload.keys()),
-                "adapter_mode": request_plan.adapter_mode,
-                "storage_path": storage_paths[0],
-                "storage_paths": storage_paths,
-                "response_model": response_models[0] if response_models else self.profile.model_name,
-                "response_models": response_models,
-                "usage": usage_records[-1] if usage_records else {},
-                "usage_records": usage_records,
-                "requested_image_count": requested_count,
-                "output_count": len(storage_paths),
-                "billing": billing,
-                "upstream_request": _upstream_request_excerpt(request_plan.body),
-                **_request_diagnostics_payload(diagnostics),
-                **request_plan.reference_result,
-            }
-            if output_dimensions is not None:
-                result["output_width"] = output_dimensions[0]
-                result["output_height"] = output_dimensions[1]
-
-            resolved_model = str(request_plan.body.get("model") or self.profile.model_name)
-            return ExecutionOutcome(
-                model_name=resolved_model,
-                latency_ms=latency_ms,
-                cost=billing["cost"],
-                cost_currency=billing["currency"],
-                outbound=self.definition.outbound,
-                result=result,
-            )
+                step["state"] = "completed"
+                checkpoint()
+            return outcome()
         except Exception as exc:
-            raise ProviderExecutionError(str(exc), diagnostics=diagnostics) from exc
+            if progress["steps"] and progress["steps"][-1]["state"] != "completed":
+                progress["steps"][-1]["state"] = "uncertain"
+            raise ProviderExecutionError(str(exc), diagnostics=diagnostics, partial_outcome=outcome()) from exc
+
+    def _execute_async_images(self, capability, payload, prompt, requested_count, plan, diagnostics, mode):
+        started_at = perf_counter()
+        query_settings = {"request_url": diagnostics.request_url, "mode": mode}
+        if mode == "haodeya":
+            query_settings.update(api_root=_haodeya_async_api_root(self.profile),
+                                  poll_path_template=_profile_adapter_config(self.profile).get("poll_path_template"))
+        identity = {"provider_name": self.definition.provider_name, "capability": capability, "mode": mode,
+                    "request_model": str(plan.body.get("model") or self.profile.model_name),
+                    "endpoint_identity": sha256(json.dumps(query_settings, sort_keys=True).encode()).hexdigest()}
+        if not self.progress:
+            self.progress = {"version": 1, "kind": "async_images", "task_id": self.task_id,
+                             "requested_image_count": requested_count, "request_model": identity["request_model"],
+                             "query_identity": identity, "upstream_request": _upstream_request_excerpt(plan.body),
+                             "billing_template": _calculate_image_billing(profile=self.profile, output_count=1,
+                                 payload={**payload, "resolution": (getattr(plan, "resolution_plan", None) or {}).get("effective_resolution", _normalize_image_resolution(payload))}),
+                             "resolution_plan": getattr(plan, "resolution_plan", None), "steps": []}
+        progress = self.progress
+        if progress.get("kind") != "async_images":
+            progress.update(kind="async_images", legacy_context_missing=True)
+        def outcome():
+            return _image_progress_outcome(progress=progress, definition=self.definition, profile=self.profile, plan=plan,
+                                           diagnostics=diagnostics, capability=capability, payload=payload,
+                                           latency_ms=max(1, round((perf_counter()-started_at)*1000)))
+        def checkpoint():
+            if self.save_progress is not None:
+                self.save_progress(outcome())
+        def record_response(response, *, submitted=False):
+            context = step["query_context"]
+            if not context.get("task_id"):
+                context["task_id"] = str(response.get("task_id") or _extract_toapis_task_id(response))
+            if mode == "haodeya":
+                next_url = _extract_toapis_polling_url(response)
+                if next_url:
+                    context["polling_url"] = next_url
+            if isinstance(response.get("usage"), dict):
+                step["usage"] = response["usage"]
+            if response.get("model"):
+                step["response_model"] = str(response["model"])
+            request_id = response.get("request_id") or context.get("task_id")
+            if request_id:
+                step["upstream_request_id"] = str(request_id)
+            status = str(response.get("task_status") or response.get("status") or "").lower()
+            step["upstream_status"] = status
+            if status in {"failed", "error", "failure", "canceled", "cancelled"}:
+                step["state"] = "failed"
+                checkpoint()
+                raise UpstreamTaskFailed("Async image upstream explicitly reported failure")
+            data = (_extract_toapis_poll_image_data(response) if mode == "haodeya" else _extract_image_data(response))
+            if data and (submitted or status in {"completed", "succeed", "succeeded", "success"}):
+                step["output_count_expected"] = len(data)
+                if all(isinstance(item.get("url"), str) and not item["url"].startswith("data:") for item in data):
+                    step["output_references"] = [{"url": item["url"]} for item in data]
+                else:
+                    step.pop("output_references", None)
+            checkpoint()
+            return data
+        try:
+            if any(row["state"] == "failed" for row in progress["steps"]):
+                raise UpstreamTaskFailed("Async image upstream already failed; not resubmitted")
+            if getattr(plan, "resolution_plan", None) and progress.get("resolution_plan") != plan.resolution_plan:
+                raise RuntimeError("Saved image resolution plan is missing or changed; review required before another request")
+            if progress.get("legacy_context_missing") or progress.get("query_identity") != identity or progress["requested_image_count"] != requested_count:
+                raise RuntimeError("Async image query identity or count changed/missing; original receipt requires review")
+            progress.pop("recovery_required", None)
+            while True:
+                step = next((row for row in progress["steps"] if row["state"] != "completed"), None)
+                count = sum(len(row["storage_paths"]) for row in progress["steps"])
+                if step is None and count >= requested_count:
+                    return outcome()
+                data = None
+                if step is None:
+                    step = {"number": len(progress["steps"])+1, "state": "submitting", "storage_paths": [],
+                            "query_context": {"mode": mode, "task_id": "", "polling_url": ""}}
+                    progress["steps"].append(step)
+                    checkpoint()
+                    response = _submit_image_generation_request(base_url=self.profile.base_url, body=plan.body,
+                                headers=plan.headers, timeout_seconds=self.profile.timeout_seconds,
+                                endpoint_path=plan.endpoint_path, multipart_files=plan.multipart_files)
+                    context = step["query_context"]
+                    context["task_id"] = str(response.get("task_id") or _extract_toapis_task_id(response))
+                    if mode == "haodeya" and (context["task_id"] or _extract_toapis_polling_url(response)):
+                        context["polling_url"] = _haodeya_async_poll_url(self.profile, task_id=context["task_id"], submit_payload=response)
+                    elif mode == "modelscope" and context["task_id"]:
+                        context["polling_url"] = f"{self.profile.base_url.rstrip('/')}/tasks/{context['task_id']}"
+                    step["state"] = "accepted"
+                    data = record_response(response, submitted=True)
+                if data is None and step["storage_paths"] and (
+                    count >= requested_count or len(step["storage_paths"]) >= step.get("output_count_expected", float("inf"))
+                ):
+                    step["state"] = "completed"
+                    checkpoint()
+                    continue
+                if not data:
+                    data = step.get("output_references")
+                if not data:
+                    context = step.get("query_context", {})
+                    if not context.get("task_id") and not (mode == "haodeya" and context.get("polling_url")):
+                        raise RuntimeError("Async image receipt is unknown; no automatic generation retry")
+                    checkpoint()
+                    receipt = {"task_id": context.get("task_id", ""), "polling_url": context.get("polling_url", "")}
+                    if mode == "haodeya":
+                        data = _poll_haodeya_async_image_result(self.profile, receipt, save_response=record_response)
+                    else:
+                        data = _poll_modelscope_image_result(self.profile, receipt, save_response=record_response)
+                if not data:
+                    raise ValueError("Async image returned no image outputs")
+                for item in data[len(step["storage_paths"]):]:
+                    if sum(len(row["storage_paths"]) for row in progress["steps"]) >= requested_count:
+                        break
+                    step["state"] = "persisting"
+                    checkpoint()
+                    path, dimensions = _persist_generated_image(provider_name=self.definition.provider_name, image_payload=item,
+                                         prompt=prompt, output_format=self.profile.output_format, timeout_seconds=self.profile.timeout_seconds)
+                    step["storage_paths"].append(path)
+                    if not step.get("output_dimensions") and dimensions is not None:
+                        step["output_dimensions"] = list(dimensions)
+                    checkpoint()
+                step["state"] = "completed"
+                checkpoint()
+        except Exception as exc:
+            confirmed = any(row["state"] == "failed" for row in progress["steps"])
+            progress["recovery_required"] = not confirmed
+            if not confirmed and progress["steps"] and progress["steps"][-1]["state"] != "completed":
+                progress["steps"][-1]["state"] = "uncertain"
+            raise ProviderExecutionError(str(exc), diagnostics=diagnostics, partial_outcome=outcome()) from exc
 
 
 class StrategyProviderAdapter(ProviderAdapter):
@@ -286,6 +501,26 @@ class StrategyProviderAdapter(ProviderAdapter):
         self.ark_video_adapter = VolcengineArkVideoProviderAdapter(definition, profile)
         self.jimeng_video_adapter = VolcengineJimengVideoProviderAdapter(definition, profile)
         self.bigjpg_upscale_adapter = BigjpgUpscaleProviderAdapter(definition, profile)
+
+    def bind_async_progress(self, task_id, progress, save, *, capability="video.generate"):
+        if capability == "image.upscale":
+            self.bigjpg_upscale_adapter.bind_async_progress(task_id, progress, save)
+            return
+        strategy = resolve_strategy_for_capability(
+            capability="video.generate", provider_name=self.profile.provider_name,
+            model_name=self.profile.model_name, base_url=self.profile.base_url, strategies=self.profile.strategies,
+        )
+        if strategy == DASHSCOPE_ASYNC_VIDEO_STRATEGY:
+            target = self.dashscope_video_adapter
+        elif strategy == VOLCENGINE_ARK_VIDEO_TASKS_STRATEGY:
+            target = self.ark_video_adapter
+        elif strategy == VOLCENGINE_CV_JIMENG_VIDEO_STRATEGY:
+            target = self.jimeng_video_adapter
+        elif strategy == HAODEYA_GROK_VIDEO_STRATEGY:
+            target = self.haodeya_grok_video_adapter
+        else:
+            return
+        target.bind_async_progress(task_id, progress, save)
 
     def execute(self, capability: str, payload: dict) -> ExecutionOutcome:
         if capability == "image.upscale":
@@ -383,6 +618,45 @@ def _request_diagnostics_payload(diagnostics: RequestDiagnostics) -> dict[str, o
 
 
 def _build_image_request_plan(
+    *, profile: ImageProviderProfile, definition: ProviderDefinition,
+    capability: str, payload: dict, prompt: str,
+) -> ImageRequestPlan:
+    requested = _normalize_image_resolution(payload)
+    effective_payload = dict(payload)
+    effective = _apply_supported_resolution_clamp(profile, effective_payload)
+    references = _extract_reference_images(effective_payload)
+    if _uses_haodeya_wan_image(profile) and effective == "4k" and (references or not _wan_supports_4k(profile)):
+        effective = "2k"
+    elif _uses_haodeya_seedream_image(profile) and effective == "1k":
+        effective = "2k"
+    elif _uses_haodeya_grok_image(profile) and effective != "2k":
+        effective = "1k"
+    effective_payload["resolution"] = effective
+    plan = _build_image_request_plan_for_payload(
+        profile=profile, definition=definition, capability=capability,
+        payload=effective_payload, prompt=prompt,
+    )
+    if plan.reference_result.get("haodeya_count_edits_multipart"):
+        effective = "1k"
+        effective_payload["resolution"] = effective
+        plan = _build_image_request_plan_for_payload(
+            profile=profile, definition=definition, capability=capability,
+            payload=effective_payload, prompt=prompt,
+        )
+    supported = _supported_resolutions_from_profile(profile)
+    if supported and effective not in supported:
+        raise ValueError("Effective image resolution conflicts with provider supported resolutions")
+    image_config = plan.body.get("image_config")
+    metadata = {
+        "requested_resolution": requested, "effective_resolution": effective,
+        "resolution": effective,
+        "image_model_resolved": str(plan.body.get("model") or profile.model_name),
+        "image_size": str(plan.body.get("size") or (image_config.get("image_size") if isinstance(image_config, dict) else "") or ""),
+    }
+    return replace(plan, resolution_plan=metadata)
+
+
+def _build_image_request_plan_for_payload(
     *,
     profile: ImageProviderProfile,
     definition: ProviderDefinition,
@@ -390,7 +664,6 @@ def _build_image_request_plan(
     payload: dict,
     prompt: str,
 ) -> ImageRequestPlan:
-    _apply_supported_resolution_clamp(profile, payload)
     requested_strategy = resolve_strategy_for_capability(
         capability=capability,
         provider_name=profile.provider_name,
@@ -2106,13 +2379,7 @@ def _extract_reference_image(payload: dict) -> str:
 
 
 def _reference_image_result_fields(payload: dict) -> dict[str, object]:
-    reference_images = _extract_reference_images(payload)
-    return {
-        "reference_image_supplied": bool(reference_images),
-        "reference_image_count": len(reference_images),
-        "reference_image_storage_path": reference_images[0] if reference_images else "",
-        "reference_image_storage_paths": reference_images,
-    }
+    return reference_image_result_fields(payload)
 
 
 def _task_payload_result_fields(payload: dict) -> dict[str, str]:
@@ -2507,7 +2774,7 @@ def _persist_generated_image(
 
     if image_url := image_payload.get("url"):
         image_bytes, content_type = _download_generated_image(str(image_url), timeout_seconds=timeout_seconds)
-        extension = _extension_for_downloaded_image(str(image_url), content_type, output_format)
+        extension = validate_generated_media(image_bytes, kind="image", content_type=content_type)
         relative_path = f"generated/{provider_name}/{timestamp}-{safe_stub}-{randint(1000, 9999)}.{extension}"
         return write_binary_asset(relative_path, image_bytes), read_image_dimensions(image_bytes)
 
@@ -2515,11 +2782,8 @@ def _persist_generated_image(
     if not b64_json:
         raise ValueError("Image generation response did not include url or b64_json")
 
-    extension = output_format.lower().strip() or "png"
-    if extension == "jpg":
-        extension = "jpeg"
-
     image_bytes = b64decode(str(b64_json))
+    extension = validate_generated_media(image_bytes, kind="image")
     relative_path = f"generated/{provider_name}/{timestamp}-{safe_stub}-{randint(1000, 9999)}.{extension}"
     return write_base64_asset(relative_path, str(b64_json)), read_image_dimensions(image_bytes)
 
@@ -2619,7 +2883,7 @@ def _normalize_image_url_value(value: str) -> dict | None:
     return {"url": normalized}
 
 
-def _poll_modelscope_image_result(profile: ImageProviderProfile, submit_payload: dict) -> list[dict]:
+def _poll_modelscope_image_result(profile: ImageProviderProfile, submit_payload: dict, *, save_response=None) -> list[dict]:
     task_id = str(submit_payload.get("task_id") or "").strip()
     if not task_id:
         raise ValueError(f"{profile.provider_name} did not return a task_id for async image generation")
@@ -2646,6 +2910,8 @@ def _poll_modelscope_image_result(profile: ImageProviderProfile, submit_payload:
         except URLError as exc:
             raise ValueError(f"ModelScope async poll request failed: {exc.reason}") from exc
 
+        if save_response is not None:
+            save_response(last_payload)
         task_status = str(last_payload.get("task_status") or "").upper()
         if task_status == "SUCCEED":
             normalized = _extract_image_data(last_payload)
@@ -2654,7 +2920,7 @@ def _poll_modelscope_image_result(profile: ImageProviderProfile, submit_payload:
             raise ValueError(f"ModelScope async task succeeded but returned no image outputs: {last_payload}")
 
         if task_status == "FAILED":
-            raise ValueError(f"ModelScope async task failed: {last_payload}")
+            raise UpstreamTaskFailed(f"ModelScope async task failed: {last_payload}")
 
         sleep(5)
 
@@ -2683,9 +2949,9 @@ def _extract_toapis_poll_image_data(payload: dict) -> list[dict]:
     return []
 
 
-def _poll_haodeya_async_image_result(profile: ImageProviderProfile, submit_payload: dict) -> list[dict]:
+def _poll_haodeya_async_image_result(profile: ImageProviderProfile, submit_payload: dict, *, save_response=None) -> list[dict]:
     task_id = _extract_toapis_task_id(submit_payload)
-    if not task_id:
+    if not task_id and not _extract_toapis_polling_url(submit_payload):
         raise ValueError(f"{profile.provider_name} did not return a task id for Haodeya async image generation")
 
     poll_url = _haodeya_async_poll_url(profile, task_id=task_id, submit_payload=submit_payload)
@@ -2716,6 +2982,8 @@ def _poll_haodeya_async_image_result(profile: ImageProviderProfile, submit_paylo
         if next_polling_url:
             poll_url = next_polling_url
 
+        if save_response is not None:
+            save_response(last_payload)
         task_status = str(last_payload.get("status") or last_payload.get("task_status") or "").lower()
         if task_status in {"completed", "succeed", "succeeded", "success"}:
             normalized = _extract_toapis_poll_image_data(last_payload)
@@ -2729,7 +2997,7 @@ def _poll_haodeya_async_image_result(profile: ImageProviderProfile, submit_paylo
                 message = str(error.get("message") or error).strip()
             else:
                 message = str(error or last_payload).strip()
-            raise ValueError(f"Haodeya async image task failed: {message or last_payload}")
+            raise UpstreamTaskFailed(f"Haodeya async image task failed: {message or last_payload}")
 
         sleep(3)
 
@@ -2915,9 +3183,12 @@ def _materialize_assets(db: Session, task: Task, workflow: Workflow, project: Pr
     if not asset_type:
         return []
 
-    existing = list(db.scalars(select(Asset).where(Asset.source_task_id == task.id).order_by(Asset.id.asc())).all())
-    if existing:
-        return existing
+    existing = list(db.scalars(select(Asset).where(
+        Asset.source_task_id == task.id, Asset.project_id == project.id, Asset.asset_type == asset_type,
+    ).order_by(Asset.id.asc())).all())
+    existing_by_path: dict[str, Asset] = {}
+    for asset in existing:
+        existing_by_path.setdefault(asset.storage_path, asset)
 
     storage_paths_raw = task.result.get("storage_paths")
     if isinstance(storage_paths_raw, list):
@@ -2926,6 +3197,7 @@ def _materialize_assets(db: Session, task: Task, workflow: Workflow, project: Pr
         single_path = task.result.get("storage_path")
         storage_paths = [str(single_path)] if single_path else []
 
+    storage_paths = list(dict.fromkeys(storage_paths))
     if not storage_paths:
         return []
 
@@ -2942,6 +3214,9 @@ def _materialize_assets(db: Session, task: Task, workflow: Workflow, project: Pr
     assets: list[Asset] = []
 
     for index, storage_path in enumerate(storage_paths, start=1):
+        if storage_path in existing_by_path:
+            assets.append(existing_by_path[storage_path])
+            continue
         asset = Asset(
             name=_build_asset_name(task, workflow, index, total),
             asset_type=asset_type,
@@ -2997,7 +3272,7 @@ def execute_task(task_id: int, *, dispatch_token: str | None = None) -> None:
         task.result = {
             **(task.result if isinstance(task.result, dict) else {}),
             "queued_stage": "running",
-            **_task_payload_result_fields(task.payload),
+            **_task_payload_result_fields({**task.payload, "resolution": (task.result if isinstance(task.result, dict) else {}).get("effective_resolution") or task.payload.get("resolution")}),
         }
         db.commit()
 
@@ -3009,6 +3284,49 @@ def execute_task(task_id: int, *, dispatch_token: str | None = None) -> None:
                     task.result = {**task.result, "comfyui": state}
                     db.commit()
                 adapter.bind_task(task.id, task.result.get("comfyui", {}), save_comfy_state)
+            if workflow.provider_capability in {"image.generate", "image.edit"}:
+                image_adapter = adapter.image_adapter if isinstance(adapter, StrategyProviderAdapter) else adapter
+                if isinstance(image_adapter, OpenAIImageProviderAdapter):
+                    def save_image_progress(outcome):
+                        check_dispatch_lease()
+                        try:
+                            task.cost, task.cost_currency, task.latency_ms = outcome.cost, outcome.cost_currency, outcome.latency_ms
+                            task.result = {**task.result, **outcome.result, "queued_stage": "running", "execution_mode": settings.task_execution_mode}
+                            assets = _materialize_assets(db, task, workflow, project)
+                            if assets:
+                                task.result = {**task.result, "asset_id": assets[0].id, "asset_ids": [a.id for a in assets],
+                                               "asset_storage_path": assets[0].storage_path, "asset_storage_paths": [a.storage_path for a in assets]}
+                            _upsert_image_progress_call(db, task, workflow, project, outcome)
+                            ensure_usage_ledger_for_task(db, task, ledger_source="task.image.progress")
+                            check_dispatch_lease()
+                            db.commit()
+                        except Exception:
+                            db.rollback()
+                            raise
+                        check_dispatch_lease()
+                    image_adapter.bind_task_progress(task.id, task.result.get("generation_progress", {}), save_image_progress)
+            if workflow.provider_capability in {"video.generate", "image.upscale"} and callable(getattr(adapter, "bind_async_progress", None)):
+                def save_async_progress(outcome):
+                    check_dispatch_lease()
+                    try:
+                        task.cost, task.cost_currency, task.latency_ms = outcome.cost, outcome.cost_currency, outcome.latency_ms
+                        task.result = {**task.result, **outcome.result, "queued_stage": "running", "execution_mode": settings.task_execution_mode}
+                        assets = _materialize_assets(db, task, workflow, project)
+                        if assets:
+                            task.result = {**task.result, "asset_id": assets[0].id, "asset_ids": [a.id for a in assets],
+                                           "asset_storage_path": assets[0].storage_path, "asset_storage_paths": [a.storage_path for a in assets]}
+                        _upsert_async_progress_call(db, task, workflow, project, outcome)
+                        ensure_usage_ledger_for_task(db, task, ledger_source="task.async.progress")
+                        check_dispatch_lease()
+                        db.commit()
+                    except Exception:
+                        db.rollback()
+                        raise
+                    check_dispatch_lease()
+                if workflow.provider_capability == "image.upscale" and isinstance(adapter, StrategyProviderAdapter):
+                    adapter.bind_async_progress(task.id, task.result.get("generation_progress", {}), save_async_progress, capability="image.upscale")
+                else:
+                    adapter.bind_async_progress(task.id, task.result.get("generation_progress", {}), save_async_progress)
             outcome = adapter.execute(workflow.provider_capability, task.payload)
             check_dispatch_lease()
             task.status = TaskStatus.completed
@@ -3021,11 +3339,18 @@ def execute_task(task_id: int, *, dispatch_token: str | None = None) -> None:
                 "execution_mode": settings.task_execution_mode,
                 "queued_stage": "completed",
                 **_reference_image_result_fields(task.payload),
-                **_task_payload_result_fields(task.payload),
+                **_task_payload_result_fields({**task.payload, "resolution": (task.result if isinstance(task.result, dict) else {}).get("effective_resolution") or task.payload.get("resolution")}),
             }
 
-            db.add(
-                ProviderCall(
+            if workflow.provider_capability == "image.upscale" and task.result.get("generation_progress", {}).get("kind") == "async_task":
+                task.result = {**task.result, **task.result["generation_progress"].get("result_fields", {})}
+
+            if task.result.get("generation_progress", {}).get("kind") == "async_task":
+                _upsert_async_progress_call(db, task, workflow, project, outcome)
+            elif task.result.get("generation_progress"):
+                _upsert_image_progress_call(db, task, workflow, project, outcome)
+            else:
+                db.add(ProviderCall(
                     task_id=task.id,
                     provider_name=task.requested_provider,
                     model_name=outcome.model_name,
@@ -3040,8 +3365,7 @@ def execute_task(task_id: int, *, dispatch_token: str | None = None) -> None:
                         "keys": list(task.payload.keys()),
                         "execution": asdict(outcome),
                     },
-                )
-            )
+                ))
             db.flush()
 
             try:
@@ -3092,7 +3416,25 @@ def execute_task(task_id: int, *, dispatch_token: str | None = None) -> None:
                 capability=workflow.provider_capability,
                 provider_name=task.requested_provider,
             )
+            partial_outcome = exc.partial_outcome if isinstance(exc, ProviderExecutionError) else None
+            saved_progress = task.result.get("generation_progress", {})
+            if partial_outcome is None and isinstance(saved_progress, dict) and saved_progress.get("kind") in {"async_task", "async_images"}:
+                marker = "image_progress_version" if saved_progress["kind"] == "async_images" else "async_progress_version"
+                previous_call = next((row for row in db.scalars(select(ProviderCall).where(ProviderCall.task_id == task.id).order_by(ProviderCall.id))
+                                      if isinstance(row.request_summary, dict) and row.request_summary.get(marker) == 1), None)
+                confirmed_failed = bool(saved_progress.get("steps")) and saved_progress["steps"][-1].get("state") == "failed"
+                partial_outcome = ExecutionOutcome(
+                    model_name=saved_progress["request_model"], latency_ms=task.latency_ms or 0,
+                    cost=float(task.cost or 0), cost_currency=task.cost_currency or "CNY",
+                    outbound=previous_call.outbound if previous_call is not None else True,
+                    result={**task.result, "generation_progress": saved_progress, "recovery_required": not confirmed_failed},
+                )
+            if partial_outcome is not None:
+                task.cost, task.cost_currency, task.latency_ms = partial_outcome.cost, partial_outcome.cost_currency, partial_outcome.latency_ms
+                if partial_outcome.result.get("billing_note"):
+                    failure = {**failure, "error_summary": f"{failure['error_summary']} {partial_outcome.result['billing_note']}"}
             task.result = {
+                **(partial_outcome.result if partial_outcome is not None else {}),
                 **({"comfyui": task.result["comfyui"]} if task.result.get("comfyui") else {}),
                 **failure,
                 **request_diagnostics,
@@ -3102,8 +3444,15 @@ def execute_task(task_id: int, *, dispatch_token: str | None = None) -> None:
                 **task.result,
                 "queued_stage": "failed",
                 **_reference_image_result_fields(task.payload),
-                **_task_payload_result_fields(task.payload),
+                **_task_payload_result_fields({**task.payload, "resolution": (task.result if isinstance(task.result, dict) else {}).get("effective_resolution") or task.payload.get("resolution")}),
             }
+            if partial_outcome is not None and partial_outcome.result.get("generation_progress", {}).get("kind") in {"async_task", "async_images"}:
+                if workflow.provider_capability == "image.upscale":
+                    task.result = {**task.result, **task.result["generation_progress"].get("result_fields", {})}
+                if partial_outcome.result.get("recovery_required"):
+                    task.status = TaskStatus.pending
+                    task.result = {**task.result, "queued_stage": "review",
+                                   "summary": "上游任务状态或结果待核对，未重新提交。"}
             completed_images = task.result.get("comfyui", {}).get("batch_outputs", [])
             if completed_images:
                 task.result = {**task.result, "storage_path": completed_images[0]["storage_path"],
@@ -3112,6 +3461,11 @@ def execute_task(task_id: int, *, dispatch_token: str | None = None) -> None:
                 assets = _materialize_assets(db, task, workflow, project)
                 if assets:
                     task.result = {**task.result, "asset_ids": [a.id for a in assets]}
+            if partial_outcome is not None:
+                assets = _materialize_assets(db, task, workflow, project)
+                if assets:
+                    task.result = {**task.result, "asset_id": assets[0].id, "asset_ids": [a.id for a in assets],
+                                   "asset_storage_path": assets[0].storage_path, "asset_storage_paths": [a.storage_path for a in assets]}
 
             try:
                 provider_definition = get_provider_definition(task.requested_provider, db)
@@ -3121,8 +3475,12 @@ def execute_task(task_id: int, *, dispatch_token: str | None = None) -> None:
                 failed_model_name = task.requested_provider
                 failed_outbound = True
 
-            db.add(
-                ProviderCall(
+            if partial_outcome is not None and partial_outcome.result.get("generation_progress", {}).get("kind") == "async_task":
+                _upsert_async_progress_call(db, task, workflow, project, partial_outcome, failure)
+            elif partial_outcome is not None:
+                _upsert_image_progress_call(db, task, workflow, project, partial_outcome, failure)
+            else:
+                db.add(ProviderCall(
                     task_id=task.id,
                     provider_name=task.requested_provider,
                     model_name=failed_model_name,
@@ -3138,8 +3496,7 @@ def execute_task(task_id: int, *, dispatch_token: str | None = None) -> None:
                         "request_diagnostics": request_diagnostics,
                         "failure": failure,
                     },
-                )
-            )
+                ))
             db.flush()
             logger.error(
                 "task execution failed",

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useSettingsDraft } from "./useSettingsDraft";
 
 import {
   api,
@@ -83,98 +84,73 @@ export default function PromptPolishSettingsPanel({
     [providerProfiles]
   );
 
-  const [enabled, setEnabled] = useState(settings?.prompt_polish_enabled ?? false);
-  const [providerId, setProviderId] = useState<string>(
-    settings?.prompt_polish_provider_id ? String(settings.prompt_polish_provider_id) : ""
-  );
-  const [modePrompts, setModePrompts] = useState<ModePromptState>(() => readModePromptState(settings));
-  const [modeLimits, setModeLimits] = useState<PromptPolishModeLimitsRecord>(() => readModeLimitState(settings));
-  const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const editor = useSettingsDraft({
+    enabled: settings?.prompt_polish_enabled ?? false,
+    providerId: settings?.prompt_polish_provider_id ? String(settings.prompt_polish_provider_id) : "",
+    modePrompts: readModePromptState(settings), modeLimits: readModeLimitState(settings),
+  }, settings, "platform", onRefresh);
+  const { enabled, providerId, modePrompts, modeLimits } = editor.values;
+  const { saving, feedback } = editor;
+  const setEnabled = (value: boolean) => editor.setField(["enabled"], value);
+  const setProviderId = (value: string) => editor.setField(["providerId"], value);
 
   const selectedProvider = chatProviders.find((profile) => String(profile.id) === providerId) ?? null;
   const builtinPrompts = settings?.prompt_polish_builtin_prompts ?? null;
   const defaultLimits = settings?.prompt_polish_default_mode_limits ?? EMPTY_LIMITS;
 
-  useEffect(() => {
-    setEnabled(settings?.prompt_polish_enabled ?? false);
-    setProviderId(settings?.prompt_polish_provider_id ? String(settings.prompt_polish_provider_id) : "");
-    setModePrompts(readModePromptState(settings));
-    setModeLimits(readModeLimitState(settings));
-  }, [settings]);
-
-  async function handleSave() {
-    setSaving(true);
-    setFeedback(null);
-    if (enabled && !providerId) {
-      setFeedback({ tone: "error", message: "启用润色前请先选择 chat 模型。" });
-      setSaving(false);
-      return;
-    }
-    if (enabled && chatProviders.length === 0) {
-      setFeedback({
-        tone: "error",
-        message: "当前没有可用的 chat.completions 模型，请先在「模型管理」接入并启用后再保存。",
-      });
-      setSaving(false);
-      return;
-    }
-    try {
-      await api.updatePlatformSettings({
-        prompt_polish_enabled: enabled,
-        prompt_polish_provider_id: providerId ? Number(providerId) : null,
-        prompt_polish_system_prompts: {
-          generate: modePrompts.generate.trim(),
-          edit: modePrompts.edit.trim(),
-          video: modePrompts.video.trim(),
-        },
-        prompt_polish_mode_limits: modeLimits,
-      });
-      await onRefresh();
-      setFeedback({ tone: "success", message: "提示词润色配置已保存。" });
-    } catch (err) {
-      setFeedback({
-        tone: "error",
-        message: err instanceof Error ? err.message : "保存失败",
-      });
-    } finally {
-      setSaving(false);
-    }
+  function handleSave() {
+    return editor.run(async (operation) => {
+      const { enabled, providerId, modePrompts, modeLimits } = operation.capture.values;
+      if (enabled && !providerId) {
+        editor.report(operation, { tone: "error", message: "启用润色前请先选择 chat 模型。" }); return;
+      }
+      if (enabled && chatProviders.length === 0) {
+        editor.report(operation, { tone: "error", message: "当前没有可用的 chat.completions 模型，请先在「模型管理」接入并启用后再保存。" }); return;
+      }
+      try {
+        const saved = await api.updatePlatformSettings({
+          prompt_polish_enabled: enabled,
+          prompt_polish_provider_id: providerId ? Number(providerId) : null,
+          prompt_polish_system_prompts: {
+            generate: modePrompts.generate.trim(), edit: modePrompts.edit.trim(), video: modePrompts.video.trim(),
+          },
+          prompt_polish_mode_limits: modeLimits,
+        });
+        editor.confirm(operation, {
+          enabled: saved.prompt_polish_enabled,
+          providerId: saved.prompt_polish_provider_id ? String(saved.prompt_polish_provider_id) : "",
+          modePrompts: readModePromptState(saved), modeLimits: readModeLimitState(saved),
+        });
+        try { await editor.refreshAfter(); }
+        catch { editor.report(operation, { tone: "error", message: "润色配置已保存，但状态刷新失败；当前输入已保留，请刷新状态。" }, false); return; }
+        editor.report(operation, { tone: "success", message: "原提交的润色配置已保存；期间继续编辑的字段仍需保存。" }, false);
+      } catch (err) { editor.report(operation, { tone: "error", message: err instanceof Error ? err.message : "保存失败" }); }
+    });
   }
 
-  async function handleResetLimits() {
-    setSaving(true);
-    setFeedback(null);
-    try {
-      await api.updatePlatformSettings({ reset_prompt_polish_mode_limits: true });
-      await onRefresh();
-      setFeedback({ tone: "success", message: "润色长度限制已恢复默认。" });
-    } catch (err) {
-      setFeedback({
-        tone: "error",
-        message: err instanceof Error ? err.message : "恢复默认失败",
-      });
-    } finally {
-      setSaving(false);
-    }
+  function handleResetLimits() {
+    return editor.run(async (operation) => {
+      try {
+        const saved = await api.updatePlatformSettings({ reset_prompt_polish_mode_limits: true });
+        editor.confirm(operation, { ...operation.capture.values, modeLimits: readModeLimitState(saved) }, ["modeLimits"]);
+        try { await editor.refreshAfter(); }
+        catch { editor.report(operation, { tone: "error", message: "长度限制已恢复默认，但状态刷新失败；当前输入已保留，请刷新状态。" }, false); return; }
+        editor.report(operation, { tone: "success", message: "原提交的长度限制已恢复默认；期间继续编辑的字段仍需保存。" }, false);
+      } catch (err) { editor.report(operation, { tone: "error", message: err instanceof Error ? err.message : "恢复默认失败" }); }
+    });
   }
 
   function updateModePrompt(mode: ModeKey, value: string) {
-    setModePrompts((current) => ({ ...current, [mode]: value }));
+    editor.setField(["modePrompts", mode], value);
   }
-
   function updateModeLimit(mode: ModeKey, patch: Partial<PromptPolishModeLimitRecord>) {
-    setModeLimits((current) => ({
-      ...current,
-      [mode]: { ...current[mode], ...patch },
-    }));
+    for (const [key, value] of Object.entries(patch)) editor.setField(["modeLimits", mode, key], value);
   }
-
   function restoreModeLimits(mode: ModeKey) {
-    setModeLimits((current) => ({
-      ...current,
-      [mode]: { ...defaultLimits[mode] },
-    }));
+    const defaults = defaultLimits[mode];
+    for (const key of new Set([...Object.keys(modeLimits[mode]), ...Object.keys(defaults)])) {
+      editor.setField(["modeLimits", mode, key], defaults[key as keyof PromptPolishModeLimitRecord]);
+    }
   }
 
   return (
@@ -349,6 +325,9 @@ export default function PromptPolishSettingsPanel({
         </button>
       </div>
 
+      {editor.hasChanges ? <p className="settings-feature-toggle-meta">有未保存修改，刷新会保留当前输入。</p> : null}
+      {editor.hasConflict ? <div className="floating-error">服务器同字段配置已变化，当前输入已保留。</div> : null}
+      {editor.hasChanges || editor.hasConflict ? <button type="button" className="ghost-button" onClick={editor.loadRemote}>加载服务器配置</button> : null}
       {feedback ? (
         <div className={feedback.tone === "success" ? "floating-success" : "floating-error"}>{feedback.message}</div>
       ) : null}

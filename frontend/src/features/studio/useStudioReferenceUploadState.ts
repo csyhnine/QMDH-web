@@ -1,81 +1,32 @@
 import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
-
-import {
-  buildReferenceUploadsFromPaths,
-  referenceUploadStoragePaths,
-  releaseReferencePreview,
-  releaseReferencePreviews,
-  removeReferenceUploadAt,
-} from "./studioReferenceUtils";
+import { buildReferenceUploadsFromPaths, referenceUploadStoragePaths, releaseReferencePreview } from "./studioReferenceUtils";
+import { ReferenceUploadSession } from "./studioReferenceUploadSession";
 import type { ReferenceUploadItem, StudioFormState } from "./studioTypes";
 
-type UseStudioReferenceUploadStateOptions = {
-  setStudioForm: Dispatch<SetStateAction<StudioFormState>>;
-};
-
-export function useStudioReferenceUploadState({
-  setStudioForm,
-}: UseStudioReferenceUploadStateOptions) {
+type UseStudioReferenceUploadStateOptions = { setStudioForm: Dispatch<SetStateAction<StudioFormState>> };
+export function useStudioReferenceUploadState({ setStudioForm }: UseStudioReferenceUploadStateOptions) {
   const [referenceUploads, setReferenceUploads] = useState<ReferenceUploadItem[]>([]);
-  const referenceUploadsRef = useRef<ReferenceUploadItem[]>([]);
-
-  function setReferenceUploadItems(nextUploads: ReferenceUploadItem[]) {
-    referenceUploadsRef.current = nextUploads;
-    setReferenceUploads(nextUploads);
+  const source = useRef<ReferenceUploadSession | null>(null);
+  if (!source.current) source.current = new ReferenceUploadSession(releaseReferencePreview);
+  const session = source.current;
+  function publish() {
+    if (!session.active) return;
+    setReferenceUploads(session.items);
+    setStudioForm(current => session.active ? { ...current, referenceImages: referenceUploadStoragePaths(session.items) } : current);
   }
-
-  function syncReferenceUploads(nextUploads: ReferenceUploadItem[]) {
-    setReferenceUploadItems(nextUploads);
-    setStudioForm((current) => ({
-      ...current,
-      referenceImages: referenceUploadStoragePaths(nextUploads),
-    }));
-  }
-
-  function clearReferenceUploads() {
-    releaseReferencePreviews(referenceUploadsRef.current);
-    syncReferenceUploads([]);
-  }
-
+  function syncReferenceUploads(items: ReferenceUploadItem[]) { if (!session.active) return; session.reset(items); publish(); }
+  function clearReferenceUploads() { syncReferenceUploads([]); }
   function removeReferenceUpload(index: number) {
-    const { nextUploads, removedUpload } = removeReferenceUploadAt(referenceUploadsRef.current, index);
-    if (!removedUpload) return;
-    releaseReferencePreview(removedUpload.previewUrl);
-    syncReferenceUploads(nextUploads);
+    const id = referenceUploads[index]?.localId;
+    if (id && session.remove(id)) publish();
   }
-
   function replaceReferenceUploadAt(index: number, item: ReferenceUploadItem) {
-    const current = referenceUploadsRef.current;
-    if (index < 0 || index >= current.length) return;
-    const previous = current[index];
-    if (previous) releaseReferencePreview(previous.previewUrl);
-    const nextUploads = current.map((entry, currentIndex) => (currentIndex === index ? item : entry));
-    syncReferenceUploads(nextUploads);
+    const id = item.localId ?? referenceUploads[index]?.localId;
+    if (id && session.update(id, item)) publish(); else session.discard([item]);
   }
-
-  function replaceReferenceUploads(nextUploads: ReferenceUploadItem[]) {
-    releaseReferencePreviews(referenceUploadsRef.current);
-    setReferenceUploadItems(nextUploads);
-  }
-
-  function buildUploadsFromPaths(paths: string[]): ReferenceUploadItem[] {
-    return buildReferenceUploadsFromPaths(paths);
-  }
-
-  useEffect(() => {
-    return () => {
-      releaseReferencePreviews(referenceUploadsRef.current);
-      referenceUploadsRef.current = [];
-    };
-  }, []);
-
-  return {
-    buildUploadsFromPaths,
-    clearReferenceUploads,
-    referenceUploads,
-    removeReferenceUpload,
-    replaceReferenceUploadAt,
-    replaceReferenceUploads,
-    syncReferenceUploads,
-  };
+  function replaceReferenceUploads(items: ReferenceUploadItem[]) { syncReferenceUploads(items); }
+  function buildUploadsFromPaths(paths: string[]) { return buildReferenceUploadsFromPaths(paths); }
+  useEffect(() => { session.active = true; return () => session.dispose(); }, [session]);
+  return { buildUploadsFromPaths, clearReferenceUploads, referenceUploads, removeReferenceUpload, replaceReferenceUploadAt,
+    replaceReferenceUploads, syncReferenceUploads, session, publish };
 }

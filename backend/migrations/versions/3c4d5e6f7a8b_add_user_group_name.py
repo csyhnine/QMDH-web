@@ -20,7 +20,8 @@ def upgrade() -> None:
         "users",
         sa.Column("group_name", sa.String(length=120), nullable=False, server_default=""),
     )
-    op.alter_column("users", "group_name", server_default=None)
+    with op.batch_alter_table("users") as batch:
+        batch.alter_column("group_name", server_default=None)
 
 
 def downgrade() -> None:

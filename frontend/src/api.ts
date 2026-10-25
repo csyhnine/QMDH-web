@@ -173,7 +173,9 @@ export type DashboardDailyPoint = {
   total_tasks: number;
   successful_tasks: number;
   failed_tasks: number;
-  total_cost: number;
+  total_cost: number | null;
+  cost_currency: string;
+  cost_by_currency: DashboardCurrencySpend[];
   image_generate_count: number;
   image_edit_count: number;
   video_generate_count: number;
@@ -224,7 +226,10 @@ export type DashboardAccountUsage = {
   is_active: boolean;
   project_codes: string[];
   quota_limit: number | null;
-  quota_used: number;
+  quota_used: number | null;
+  quota_comparable: boolean;
+  quota_month: string;
+  quota_cost_by_currency: DashboardCurrencySpend[];
   quota_currency: string;
   quota_remaining: number | null;
   quota_status: string;
@@ -261,11 +266,11 @@ export type DashboardStats = {
   successful_tasks: number;
   failed_tasks: number;
   success_rate: number;
-  average_cost: number;
+  average_cost: number | null;
   average_latency_ms: number;
   audit_coverage_rate: number;
   outbound_tasks: number;
-  total_cost: number;
+  total_cost: number | null;
   cost_unit: string;
   cost_formula: string;
   cost_notes: string[];
@@ -527,6 +532,7 @@ export type ProviderDiscoverResult = {
 };
 
 export type ProviderBulkImportItem = {
+  name_mode?: "identity" | "explicit";
   model_id: string;
   provider_name: string;
   display_name?: string;
@@ -545,6 +551,7 @@ export type ProviderBulkImportPayload = {
 export type ProviderBulkImportResult = {
   created: string[];
   skipped: string[];
+  items?: { model_id: string; provider_name: string; status: "created" | "already_same" | "conflict"; resolved_provider_name?: string | null; suggested_provider_name?: string | null }[];
 };
 
 export type Project = {
@@ -725,14 +732,24 @@ export type ChatExperienceOverview = {
   window_started_at: string;
   turn_count: number;
   success_rate: number;
-  upstream_call_rate: number;
+  upstream_call_rate: number | null;
+  upstream_metrics_version: number;
+  upstream_known_turn_count: number;
+  upstream_unknown_turn_count: number;
+  upstream_called_turn_count: number;
+  ttft_sample_count: number;
+  first_response_sample_count: number;
+  avg_first_response_ms: number | null;
+  p95_first_response_ms: number | null;
+  model_call_count_total: number | null;
+  model_call_count_sample_count: number;
   attachment_turn_count: number;
   attachment_turn_share: number;
   agent_mode_share: number;
   avg_pack_duration_ms: number;
   p95_pack_duration_ms: number;
-  avg_ttft_ms: number;
-  p95_ttft_ms: number;
+  avg_ttft_ms: number | null;
+  p95_ttft_ms: number | null;
   avg_total_duration_ms: number;
   outcome_totals: Record<string, number>;
   client_event_totals: Record<string, number>;
@@ -753,8 +770,14 @@ export type ChatExperienceTurnRow = {
   attachment_count: number;
   attachment_total_bytes: number;
   pack_duration_ms: number;
-  upstream_called: boolean;
-  ttft_ms: number;
+  upstream_called: boolean | null;
+  ttft_ms: number | null;
+  upstream_observation: string;
+  model_call_count: number | null;
+  model_call_count_complete: boolean;
+  model_run_id: string | null;
+  upstream_duration_ms: number | null;
+  first_response_ms: number | null;
   total_duration_ms: number;
   client_event_count: number;
   started_at: string;
@@ -1375,6 +1398,24 @@ export type CadRouteSuggestions = {
   status: "ok" | "partial" | "unavailable";
 };
 
+export type CadUnitInfo = {
+  version: number;
+  scope: "drawing_initial" | "floor";
+  source: "declared" | "span_estimate" | "door_gap_estimate" | "user_calibration";
+  header_insunits: number | null;
+  declared_meters_per_unit: number | null;
+  meters_per_unit: number;
+  span_drawing_units?: number;
+  decimeter_hint?: boolean;
+  conflicts: string[];
+  requires_calibration: boolean;
+  calibration_confirmed: boolean;
+  note: string;
+  initial_source?: string;
+  initial_meters_per_unit?: number | null;
+  initial_note?: string | null;
+};
+
 export type CadExtractData = {
   meta?: {
     units?: string;
@@ -1402,6 +1443,7 @@ export type CadExtractData = {
   spaces?: {
     note?: string;
     unit_note?: string;
+    unit_info?: CadUnitInfo;
     relations_zh?: string;
     principles?: string[];
     program_review?: {
@@ -1453,6 +1495,7 @@ export type CadExtractData = {
       scheme_zh?: string;
       square_meters_per_pixel?: number;
       scale_note?: string;
+      unit_info?: CadUnitInfo;
       preparation?: CadPreparationInputs & { signature: string; current?: boolean; confirmed_proposals?: Record<string, string>; image_width: number; image_height: number };
       geometry?: {
         min_x: number;
@@ -1568,18 +1611,18 @@ async function buildError(response: Response): Promise<Error> {
   }
 
   if (detail) {
-    return new Error(`请求失败（${response.status}）：${detail}`);
+    return Object.assign(new Error(`请求失败（${response.status}）：${detail}`), { status: response.status });
   }
 
   if (response.status === 413) {
-    return new Error(`上传图片过大，请将单张图片压缩到 ${formatUploadSize(MAX_REFERENCE_UPLOAD_BYTES)} 以内后重试。`);
+    return Object.assign(new Error(`上传图片过大，请将单张图片压缩到 ${formatUploadSize(MAX_REFERENCE_UPLOAD_BYTES)} 以内后重试。`), { status: response.status });
   }
 
   if (response.status >= 500) {
-    return new Error(`请求失败（${response.status}）：后端服务暂时不可用，请确认本地 API 已启动。`);
+    return Object.assign(new Error(`请求失败（${response.status}）：后端服务暂时不可用，请确认本地 API 已启动。`), { status: response.status });
   }
 
-  return new Error(`请求失败（${response.status}）：${response.statusText || "未知错误"}`);
+  return Object.assign(new Error(`请求失败（${response.status}）：${response.statusText || "未知错误"}`), { status: response.status });
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

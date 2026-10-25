@@ -363,7 +363,7 @@ def resolve_prompt_polish_provider(db: Session, settings: PlatformSettings) -> P
 
 
 
-    provider = db.scalars(
+    for provider in db.scalars(
 
         select(ProviderProfile)
 
@@ -371,13 +371,13 @@ def resolve_prompt_polish_provider(db: Session, settings: PlatformSettings) -> P
 
         .order_by(ProviderProfile.id.asc())
 
-    ).first()
+    ):
 
-    if provider is None or "chat.completions" not in (provider.capabilities or []):
+        if "chat.completions" in (provider.capabilities or []):
 
-        raise PromptPolishUnavailableError("未配置提示词润色模型，请联系管理员。")
+            return provider
 
-    return provider
+    raise PromptPolishUnavailableError("未配置提示词润色模型，请联系管理员。")
 
 
 

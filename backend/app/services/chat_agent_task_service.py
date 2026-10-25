@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from fastapi import BackgroundTasks, HTTPException
@@ -17,6 +17,8 @@ from app.schemas import DataClassification, TaskCreate, TaskOut
 from app.services.agent_policy_service import EffectiveChatPolicy
 from app.services.billing import enforce_user_quota
 from app.services.model_registry import get_provider_definition, get_provider_map
+from app.services.task_dispatch import add_dispatch
+from app.services.submission_idempotency import submit_once
 from app.services.task_executor import enqueue_task, execute_task, mark_task_enqueue_failed
 
 
@@ -72,10 +74,12 @@ def auth_user_from_tool_context(ctx: StudioToolContext) -> AuthUserProfile:
     )
 
 
-def auto_submit_chat_agent_proposal(ctx: StudioToolContext, proposal: ChatAgentTaskProposal) -> dict[str, Any]:
+def auto_submit_chat_agent_proposal(ctx: StudioToolContext, proposal: ChatAgentTaskProposal, *, submission_identity: str | None = None) -> dict[str, Any]:
     """Create the Studio task immediately (no HITL confirm step)."""
     from app.services.agent_policy_service import EffectiveChatPolicy, resolve_effective_chat_policy
 
+    if submission_identity:
+        proposal = replace(proposal, proposal_id=str(uuid.uuid5(uuid.NAMESPACE_URL, "qmdh-auto-tool:" + submission_identity)))
     auth_user = auth_user_from_tool_context(ctx)
     policy = ctx.policy if isinstance(ctx.policy, EffectiveChatPolicy) else None
     if policy is None:
@@ -513,7 +517,6 @@ def submit_confirmed_chat_agent_task(
     )
 
     user = _get_or_create_user(db, auth_user)
-    enforce_user_quota(db, user=user)
     reference_image_storage_paths = _reference_image_storage_paths(proposal.payload)
 
     workflow = db.scalar(select(Workflow).where(Workflow.key == proposal.workflow_key))
@@ -525,30 +528,41 @@ def submit_confirmed_chat_agent_task(
     )
     assert workflow is not None and project is not None
 
-    task = Task(
-        title=proposal.title,
-        status=TaskStatus.pending,
-        workflow_id=workflow.id,
-        project_id=project.id,
-        user_id=user.id,
-        requested_provider=proposal.requested_provider,
-        classification=DataClassification(proposal.classification),
-        payload=proposal.payload,
-        result={
-            "summary": "Task accepted from Chat agent confirmation.",
-            "reference_image_supplied": _reference_image_count(proposal.payload) > 0,
-            "reference_image_count": _reference_image_count(proposal.payload),
-            "reference_image_storage_path": reference_image_storage_paths[0] if reference_image_storage_paths else "",
-            "reference_image_storage_paths": reference_image_storage_paths,
-            "requested_image_count": int(proposal.payload.get("image_count") or 1),
-            "queued_stage": "accepted",
-            "chat_agent_proposal_id": proposal.proposal_id,
-            **_task_payload_result_fields(proposal.payload),
-        },
-    )
-    db.add(task)
-    db.flush()
-    db.commit()
+    parameters = {"workflow_key": proposal.workflow_key, "project_id": project.id, "requested_provider": proposal.requested_provider,
+                  "title": proposal.title, "classification": proposal.classification, "payload": proposal.payload}
+    def create(submission_key, fingerprint):
+        enforce_user_quota(db, user=user)
+        task = Task(
+            title=proposal.title,
+            status=TaskStatus.pending,
+            workflow_id=workflow.id,
+            project_id=project.id,
+            user_id=user.id,
+            requested_provider=proposal.requested_provider,
+            classification=DataClassification(proposal.classification),
+            payload=proposal.payload,
+            result={
+                "summary": "Task accepted from Chat agent confirmation.",
+                "reference_image_supplied": _reference_image_count(proposal.payload) > 0,
+                "reference_image_count": _reference_image_count(proposal.payload),
+                "reference_image_storage_path": reference_image_storage_paths[0] if reference_image_storage_paths else "",
+                "reference_image_storage_paths": reference_image_storage_paths,
+                "requested_image_count": int(proposal.payload.get("image_count") or 1),
+                "queued_stage": "accepted",
+                "chat_agent_proposal_id": proposal.proposal_id,
+                **_task_payload_result_fields(proposal.payload),
+            },
+        )
+        db.add(task)
+        db.flush()
+        provider = get_provider_definition(proposal.requested_provider, db)
+        add_dispatch(db, task, comfy=provider.adapter_kind == "comfyui", key=submission_key, fingerprint=fingerprint,
+                     state="queued" if settings.task_execution_mode == "redis" else "done")
+        return task
+    task, created = submit_once(db, user_id=user.id, scope=["chat.confirmed"],
+                                key=str(proposal.proposal_id).strip() or None, parameters=parameters, create=create)
+    if not created:
+        return _to_task_out(task)
     db.refresh(task)
 
     if settings.task_execution_mode == "sync":
@@ -557,9 +571,9 @@ def submit_confirmed_chat_agent_task(
         try:
             enqueue_task(task.id)
         except Exception as exc:
-            failure = mark_task_enqueue_failed(db, task, exc)
-            db.commit()
-            raise HTTPException(status_code=503, detail=str(failure["error_summary"])) from exc
+            # The committed dispatch survives a lost Redis wakeup.
+            import logging
+            logging.getLogger(__name__).warning("Redis wakeup failed for durable task %s: %s", task.id, type(exc).__name__)
     elif background_tasks is not None:
         background_tasks.add_task(execute_task, task.id)
     else:

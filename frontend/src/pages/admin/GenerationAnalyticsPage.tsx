@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useWindowQuery } from "./useWindowQuery";
 
 import {
   api,
@@ -70,42 +71,20 @@ function templateHint(row: TemplateQualityRow): string {
 }
 
 export default function GenerationAnalyticsPage() {
-  const [days, setDays] = useState(30);
-  const [overview, setOverview] = useState<GenerationAnalyticsOverview | null>(null);
-  const [sessions, setSessions] = useState<GenerationAnalyticsSessionRow[]>([]);
-  const [sessionTotal, setSessionTotal] = useState(0);
-  const [templates, setTemplates] = useState<TemplateQualityRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [jobMessage, setJobMessage] = useState("");
-  const [error, setError] = useState("");
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const [nextOverview, nextSessions, nextTemplates] = await Promise.all([
+  const query = useWindowQuery(() => 30,
+    { overview: null as GenerationAnalyticsOverview | null, sessions: [] as GenerationAnalyticsSessionRow[], sessionTotal: 0, templates: [] as TemplateQualityRow[] },
+    async (days) => {
+      const [overview, sessions, templates] = await Promise.all([
         api.generationAnalyticsOverview(days),
         api.generationAnalyticsSessions(days, 50, 0),
         api.generationAnalyticsTemplateQuality(days, 1),
       ]);
-      setOverview(nextOverview);
-      setSessions(nextSessions.items);
-      setSessionTotal(nextSessions.total);
-      setTemplates(nextTemplates.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "加载生成行为分析失败");
-      setOverview(null);
-      setSessions([]);
-      setSessionTotal(0);
-      setTemplates([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [days]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+      return { overview, sessions: sessions.items, sessionTotal: sessions.total, templates: templates.items };
+    }, "加载生成行为分析失败");
+  const { params: days, setParams: setDays, loading, error, refresh } = query;
+  const { overview, sessions, sessionTotal, templates } = query.data;
+  const dataDays = query.snapshot?.params ?? days;
+  const jobMessage = query.actionMessage;
 
   const outcomeEntries = useMemo(() => {
     if (!overview) return [];
@@ -116,22 +95,13 @@ export default function GenerationAnalyticsPage() {
 
   const playbook = useMemo(() => (overview ? buildPlaybook(overview) : []), [overview]);
 
-  async function runMaintenance(action: "backfill" | "recompute") {
-    setJobMessage("");
-    setError("");
-    try {
-      const result =
-        action === "backfill"
-          ? await api.backfillGenerationIntents(1000)
-          : await api.recomputeGenerationSessions();
-      const summary = Object.entries(result.result)
-        .map(([key, value]) => `${key}: ${value}`)
-        .join(" · ");
-      setJobMessage(summary || "已完成");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "运维任务执行失败");
-    }
+  function runMaintenance(action: "backfill" | "recompute") {
+    return query.runAction(action, async () => {
+      const result = action === "backfill"
+        ? await api.backfillGenerationIntents(1000)
+        : await api.recomputeGenerationSessions();
+      return Object.entries(result.result).map(([key, value]) => `${key}: ${value}`).join(" · ") || "已完成";
+    });
   }
 
   return (
@@ -172,7 +142,12 @@ export default function GenerationAnalyticsPage() {
         </div>
       </header>
 
+      <p className="ops-query-source" role="status">
+        {query.snapshot ? `数据窗口：${dataDays} 天。` : "尚无已加载数据。"}
+        {loading ? `正在加载 ${days} 天窗口。` : dataDays !== days ? `所选 ${days} 天窗口未更新成功。` : ""}
+      </p>
       {error ? <div className="floating-error">{error}</div> : null}
+      {query.actionError ? <div className="floating-error">{`操作失败：${query.actionError}`}</div> : null}
       {jobMessage ? <div className="floating-notice success">{`运维任务完成：${jobMessage}`}</div> : null}
 
       {!overview && !loading ? (
@@ -212,7 +187,7 @@ export default function GenerationAnalyticsPage() {
 
           <section className="ops-panel generation-analytics-playbook">
             <div className="ops-panel-head">
-              <h2>当前窗口建议（{days} 天）</h2>
+              <h2>当前窗口建议（{dataDays} 天）</h2>
               <span>根据 KPI 自动生成的运维/模板动作</span>
             </div>
             <div className="generation-analytics-playbook-list">
@@ -348,10 +323,10 @@ export default function GenerationAnalyticsPage() {
                 <span>历史任务补录与 session 重算</span>
               </div>
               <div className="generation-analytics-maintenance">
-                <button type="button" className="admin-primary-button" onClick={() => void runMaintenance("backfill")}>
+                <button type="button" className="admin-primary-button" onClick={() => void runMaintenance("backfill")} disabled={query.isActionBusy("backfill")}>
                   补录历史 Intent（1000 条）
                 </button>
-                <button type="button" className="ghost-button" onClick={() => void runMaintenance("recompute")}>
+                <button type="button" className="ghost-button" onClick={() => void runMaintenance("recompute")} disabled={query.isActionBusy("recompute")}>
                   重算全部 Session
                 </button>
                 <p>

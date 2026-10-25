@@ -8659,6 +8659,19 @@ textarea:focus-visible {
   .composer-menu-trigger {
     width: 100%;
   }
+
+  .guest-login-banner {
+    align-items: flex-start;
+  }
+
+  .guest-login-banner span {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .guest-login-banner .ghost-button {
+    width: auto;
+  }
 }
 
 /* ─── Member Editor ─── */

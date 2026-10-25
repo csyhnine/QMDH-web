@@ -95,3 +95,10 @@ export function releaseChatAttachmentPreviews(items: ChatPendingAttachment[]) {
     }
   }
 }
+
+/** The upload API returns a browser-facing URL, not a raw storage key. */
+export function chatAttachmentMessageUrl(storagePath: string): string {
+  const path = storagePath.trim();
+  if (/^https?:\/\//i.test(path) || path.startsWith("/")) return path;
+  throw new Error("附件尚无可用于消息的持久地址，请保留草稿并重新核对上传结果。");
+}

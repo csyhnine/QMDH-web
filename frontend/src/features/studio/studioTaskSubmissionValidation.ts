@@ -3,7 +3,6 @@ import { comfyReferenceCount } from "./comfyReferenceContract";
 import type { Dispatch, SetStateAction } from "react";
 
 import type { LoadState, StudioFormState } from "./studioTypes";
-import { clampReferenceImageCount } from "./studioUtils";
 import { getSelectedGrokSkuConfig, grokReferenceUploadError, isGrokHaodeyaProvider } from "./grokVideoUtils";
 import {
   getSelectedHappyHorseSkuConfig,
@@ -22,7 +21,7 @@ type ValidationOptions = {
   setState: Dispatch<SetStateAction<LoadState>>;
   uploadingReference: boolean;
   referenceUploads?: Array<{
-    avatarStatus?: "idle" | "registering" | "processing" | "active" | "failed";
+    avatarStatus?: "idle" | "registering" | "processing" | "verifying" | "active" | "failed";
     avatarError?: string;
     storagePath: string;
   }>;
@@ -77,10 +76,7 @@ export function validateStudioTaskSubmission({
       return { ok: false };
     }
 
-    const referenceImageCount =
-      isHappyHorseProvider(providerForSubmit) || isSeedance2Provider(providerForSubmit)
-        ? form.referenceImages.filter(Boolean).length
-        : clampReferenceImageCount(form.referenceImages.length);
+    const referenceImageCount = form.referenceImages.filter(Boolean).length;
     if (isHappyHorseProvider(providerForSubmit)) {
       const skuConfig = getSelectedHappyHorseSkuConfig(form, providerForSubmit);
       if (!skuConfig) {
@@ -141,6 +137,10 @@ export function validateStudioTaskSubmission({
       }
     }
 
+    if (referenceImageCount > 4 && !isHappyHorseProvider(providerForSubmit) && !isSeedance2Provider(providerForSubmit) && !isGrokHaodeyaProvider(providerForSubmit)) {
+      setState((current) => ({ ...current, error: "参考图最多只能上传 4 张。" }));
+      return { ok: false };
+    }
     return { ok: true, referenceImageCount };
   }
 
@@ -160,7 +160,7 @@ export function validateStudioTaskSubmission({
     return { ok: false };
   }
 
-  const referenceImageCount = clampReferenceImageCount(form.referenceImages.length);
+  const referenceImageCount = form.referenceImages.filter(Boolean).length;
   if (providerForSubmit.adapter_kind === "comfyui" && form.creationMode === "edit" && form.referenceImages.filter(Boolean).length !== comfyReferenceCount(providerForSubmit)) {
     setState((current) => ({ ...current, error: `当前本机 Qwen 编辑需要 ${comfyReferenceCount(providerForSubmit)} 张图片，请按当前工作流上传。` }));
     return { ok: false };

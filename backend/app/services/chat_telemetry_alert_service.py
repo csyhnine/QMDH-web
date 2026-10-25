@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models import ChatTelemetryAlert, ChatTurnTelemetry
+from app.services.chat_telemetry_observation_service import aggregate_model_observations
 from app.services.chat_telemetry_dashboard_service import SUCCESS_OUTCOMES, _merge_client_event_totals, _percentile
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,9 @@ class AlertRule:
     key: str
     severity: str
     title: str
+
+    def is_evaluable(self, metrics: dict[str, object]) -> bool:
+        return True
 
     def message(self, metrics: dict[str, object]) -> str:
         raise NotImplementedError
@@ -45,7 +49,6 @@ def compute_chat_window_metrics(db: Session, *, window_hours: int) -> dict[str, 
 
     turn_count = len(turns)
     success_count = 0
-    upstream_called_count = 0
     interrupted_count = 0
     stream_error_count = 0
     attachment_turn_count = 0
@@ -55,8 +58,6 @@ def compute_chat_window_metrics(db: Session, *, window_hours: int) -> dict[str, 
     for turn in turns:
         if turn.outcome in SUCCESS_OUTCOMES:
             success_count += 1
-        if turn.upstream_called:
-            upstream_called_count += 1
         if turn.outcome == "interrupted":
             interrupted_count += 1
         if turn.outcome == "stream_error":
@@ -76,7 +77,7 @@ def compute_chat_window_metrics(db: Session, *, window_hours: int) -> dict[str, 
         "window_hours": window_hours,
         "turn_count": turn_count,
         "success_rate": rate(success_count),
-        "upstream_call_rate": rate(upstream_called_count),
+        **aggregate_model_observations(turns),
         "interrupted_rate": rate(interrupted_count),
         "stream_error_rate": rate(stream_error_count),
         "attachment_turn_count": attachment_turn_count,
@@ -88,19 +89,30 @@ def compute_chat_window_metrics(db: Session, *, window_hours: int) -> dict[str, 
 
 
 class _UpstreamCallRateLowRule(AlertRule):
+    def is_evaluable(self, metrics: dict[str, object]) -> bool:
+        known = metrics.get("upstream_known_turn_count")
+        called = metrics.get("upstream_called_turn_count")
+        unknown = metrics.get("upstream_unknown_turn_count")
+        total = metrics.get("turn_count")
+        return (type(metrics.get("upstream_metrics_version")) is int and metrics["upstream_metrics_version"] == 1
+                and all(type(value) is int and value >= 0 for value in (known, called, unknown, total))
+                and called <= known and known + unknown == total
+                and known > 0 and known >= settings.get_chat_telemetry_alert_min_turns())
+
     def is_triggered(self, metrics: dict[str, object]) -> bool:
-        turn_count = int(metrics.get("turn_count") or 0)
-        if turn_count < settings.get_chat_telemetry_alert_min_turns():
+        if not self.is_evaluable(metrics):
             return False
-        upstream_call_rate = float(metrics.get("upstream_call_rate") or 0)
-        return upstream_call_rate < settings.get_chat_telemetry_alert_upstream_call_rate_min()
+        # Compare counts, not the dashboard's rounded display rate.
+        return metrics["upstream_called_turn_count"] / metrics["upstream_known_turn_count"] < settings.get_chat_telemetry_alert_upstream_call_rate_min()
 
     def message(self, metrics: dict[str, object]) -> str:
+        known = int(metrics.get("upstream_known_turn_count") or 0)
+        called = int(metrics.get("upstream_called_turn_count") or 0)
+        display = f"{called / known * 100:.1f}%" if known else "未知"
         return (
-            f"近 {metrics['window_hours']} 小时 upstream 调用率 "
-            f"{float(metrics['upstream_call_rate']) * 100:.1f}% "
+            f"近 {metrics['window_hours']} 小时 upstream 调用尝试率 {display} "
             f"（阈值 {settings.get_chat_telemetry_alert_upstream_call_rate_min() * 100:.0f}%），"
-            f"共 {metrics['turn_count']} 轮次。"
+            f"共 {metrics['turn_count']} 轮次，已知 {known}，未知 {int(metrics.get('upstream_unknown_turn_count') or 0)}。"
         )
 
 
@@ -204,6 +216,8 @@ def evaluate_chat_telemetry_alerts(db: Session) -> dict[str, object]:
     resolved = 0
 
     for rule in ALERT_RULES:
+        if not rule.is_evaluable(metrics):
+            continue  # Unknown/insufficient samples cannot confirm recovery.
         triggered = rule.is_triggered(metrics)
         existing = db.scalar(
             select(ChatTelemetryAlert)

@@ -1,0 +1,105 @@
+{
+  "source_commit": "e6add450685d2bf7d2f728025a9b20cb3be5c5cb",
+  "images": {
+    "backend": "sha256:65a9cfbe7969a31110ae37030aa866fa7d0139636fe2eee8fdff0ef46fbbbc94",
+    "worker": "sha256:3783fe13579c4e56f9bdc7b3ef9972fdcc534fce02f41bc7c0fa61adbc031cb9",
+    "frontend": "sha256:df9975fa4bb7b5409c31b4f8e44ddeca728f105f7483a562504b876e0bce393b"
+  },
+  "backend_overlay_sha256": "f5fdfa1c61eaf87f8be80bbb54bf6f461158b3aeb7daadda70a1cfcfbbd75392",
+  "frontend_package_sha256": "ac01bae61df4ca19db147e5d34e2d81a07fc2e42bbc75f41c9b6b70dda5268ff",
+  "compose_files": [
+    "-f",
+    "/www/wwwroot/qmdh-web/docker-compose.yml",
+    "-f",
+    "/opt/qmdh-frp/compose.frp.yml",
+    "-f",
+    "/opt/qmdh-release-candidate-20261025/compose.release.yml"
+  ],
+  "status": "DEPLOYED_VERIFIED",
+  "production_containers": {
+    "backend": [
+      {
+        "id": "500e7e9797927301f02d1328d968326ec037e4e9d583285c4dda4d9ef42cb6a5",
+        "image": "sha256:65a9cfbe7969a31110ae37030aa866fa7d0139636fe2eee8fdff0ef46fbbbc94",
+        "status": "running",
+        "health": "healthy"
+      }
+    ],
+    "worker": [
+      {
+        "id": "caf60cf41c1861e74ed0d2ea4a8cfbab47f1fc6caa30ebf1e03d9a1a9e2015bc",
+        "image": "sha256:3783fe13579c4e56f9bdc7b3ef9972fdcc534fce02f41bc7c0fa61adbc031cb9",
+        "status": "running",
+        "health": null
+      },
+      {
+        "id": "637c478a89d565453a0f80d71219596802aff1b87b60a30d8a9a0d74af3d13ab",
+        "image": "sha256:3783fe13579c4e56f9bdc7b3ef9972fdcc534fce02f41bc7c0fa61adbc031cb9",
+        "status": "running",
+        "health": null
+      },
+      {
+        "id": "4f8601b2b4b711df23db185ded738252a8cc7aedf8884432733f30cc34ff0a15",
+        "image": "sha256:3783fe13579c4e56f9bdc7b3ef9972fdcc534fce02f41bc7c0fa61adbc031cb9",
+        "status": "running",
+        "health": null
+      }
+    ],
+    "frontend": [
+      {
+        "id": "4e1ffa2fe80bc25dd5958c3e835af043b45a0f6eabd46aa48492a1dd7732f6c5",
+        "image": "sha256:df9975fa4bb7b5409c31b4f8e44ddeca728f105f7483a562504b876e0bce393b",
+        "status": "running",
+        "health": null
+      }
+    ]
+  },
+  "database_revision": "e51fa962c846",
+  "public_checks": [
+    {
+      "route": "/",
+      "status": 200
+    },
+    {
+      "route": "/studio/generate",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/health",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/tasks",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/cad/extracts",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts/",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts?limit=1",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts?limit=20",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts/?limit=20",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts/proxy-check",
+      "status": 401
+    }
+  ],
+  "overlay_files_checked_per_backend_worker": 76,
+  "frontend_files_checked": 51,
+  "public_bundle_sha256": "f5f845f6e5579ec9f36d520406458649ff20cac12c2e2de15853bc811f101c47",
+  "env_unchanged": true,
+  "rollback_executed": false
+}

@@ -29,7 +29,16 @@ export default function PlanningDesk({ projects, staff, disabled, onPersist, onD
     if (remove && !window.confirm("删除这项节点或工作？已有暂停和推进记录也会从当前计划移除，历史修订仍保留。")) return;
     lock.current = true; setBusy(true); setError("");
     try {
-      const p = editor.project, s = editor.stage;
+      const p = editor.project;
+      const s = { ...editor.stage };
+      if (!remove && note.trim()) {
+        if (!noteDate) throw Error("请填写推进记录日期");
+        s.updates = [...(s.updates || []), { id:crypto.randomUUID(), date:noteDate, note:note.trim() }];
+      }
+      if (!remove && reason.trim()) {
+        if (!pauseStart || (resume && resume < pauseStart)) throw Error("请检查暂停和恢复日期");
+        s.pauses = [...(s.pauses || []), { id:crypto.randomUUID(), start:pauseStart, until:resume||null, people:person?[person]:[], reason:reason.trim() }];
+      }
       await onPersist({...p, stages: remove ? p.stages.filter(x => x.id !== s.id) : editor.fresh ? [...p.stages,s] : p.stages.map(x => x.id===s.id?s:x)});
       if (alive.current) setEditor(null);
     } catch (e) { if (alive.current) setError(e instanceof Error ? e.message : "保存失败，输入已保留"); }

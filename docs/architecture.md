@@ -1,3 +1,7 @@
+2026-10-26本地Qwen按输入数路由：reference_input_counts描述已核模板集合，任务接收原子保存变体SHA/输入数；worker/恢复固定同一合同。v1.1双图只扩读图节点和图片连接，运行时检查其余参数/绑定不变；未上线，见[接线记录](qwen-reference-routing-2026-10-26.md)。
+
+2026-10-26本地人员排期：PeoplePlanner复用原PeopleSchedule时间轴与项目版本保存，staffPlanning只应用明确人员/分工/日期变更；跨项目负荷用未被筛选的年度项目，调整在内存预览并逐项目确认保存。无API/迁移/权限变更，尚未发布；见[工作台记录](people-planning-2026-10-26.md)。
+
 2026-10-26发布完成：源码e6add45已推送，草稿PR #5未合并；backend健康/3worker运行/frontend新包生效，生产迁移e51、源码/静态包/公网核验通过。23文件私有配对备份SHA一致，24媒体归档恢复链中2个基础包依赖本机。当前第三Compose和有效发布目录必须保留，详见[执行记录](release-execution-2026-10-26.md)。72待验收、25冻结及R98唯一DONE保持。
 
 2026-10-24当前执行：F53 / R62已本地实施，IN_PROGRESS / review=PENDING；[证据](archive/f53-r62-2026-10-24/evidence.md)。截图上传按epoch/稳定slot同步预留4项容量，每个成功项合并当前列表并按选择顺序排列，不复活移除项、不覆盖并发结果。部分成功立即保留，失败释放未完成预留并保留本地上传提示；重置/卸载拒绝旧观察，preview从创建起有暂定owner到commit。新24+R61受影响精确9共33 passed，2目标strict前后0诊断，exit0无skip/stderr空。普通1已验收、50进行中、22 TODO，冻结25未解决，总未解决97；R62不关单，无委派/独立复核/真实上传发送/服务/提交部署。实际Page/helper配VM/伪React/API/FileReader/URL，非真实浏览器/HTTP/媒体验收。下一普通R63先定灵感查询归属卡，冻结停止。

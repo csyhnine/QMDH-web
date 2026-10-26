@@ -449,6 +449,7 @@ class ProviderCapability(BaseModel):
     adapter_kind: str
     supported_resolutions: list[str] = Field(default_factory=list)
     reference_input_count: int | None = None
+    reference_input_counts: list[int] | None = None
 
 
 class ProviderProfileBase(BaseModel):

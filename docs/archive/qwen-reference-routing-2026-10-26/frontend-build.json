@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "dotenv": false,
+  "chatFlags": [
+    false,
+    false
+  ],
+  "note": "Local preview only; includes the separate unpublished people-planning UI. Not a production deployment artifact."
+}

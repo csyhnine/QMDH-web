@@ -273,6 +273,7 @@ def create_task(
             if previous.request_hash != fingerprint:
                 raise HTTPException(409, "同一提交标识的参数发生变化，请创建新提交。")
             return _to_task_out(db.get(Task, previous.task_id))
+    comfy_contract = None
     if provider.adapter_kind == "comfyui":
         from app.services.task_dispatch import _lock
         _lock(db)  # Capacity checks and insertion must be atomic across API workers.
@@ -283,7 +284,7 @@ def create_task(
             raise HTTPException(429, "本机待执行任务已达上限，请等待现有任务完成。")
         from app.services.provider_adapters.comfyui import validate_submission
         try:
-            validate_submission(db, user.id, provider.model_name, payload.payload)
+            comfy_contract = validate_submission(db, user.id, provider.model_name, payload.payload)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
     enforce_user_quota(db, user=user)
@@ -306,6 +307,7 @@ def create_task(
             "reference_image_storage_paths": reference_image_storage_paths,
             "requested_image_count": int(payload.payload.get("image_count") or 1),
             "queued_stage": "accepted",
+            **({"comfyui": comfy_contract} if comfy_contract else {}),
             **_task_payload_result_fields(payload.payload),
         },
     )

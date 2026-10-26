@@ -1,6 +1,6 @@
 # Windows ComfyUI / QMDH 私有接入
 
-2026-10-19：生产任务闭环已上线。入口 `/studio/generate`；文生图选“本机 Z Image Turbo”或“本机 Qwen Image 2.1”，图像编辑选“本机 Qwen Image 2.1 双图编辑”。三个渠道均启用，支持1K/2K/4K、自定义宽高、1～3张逐张生成；计算在Windows，结果保存至QMDH原资产库。
+2026-10-19 最新：按用户命令已切换Qwen v1.1。入口 `/studio/generate`；文生图选“本机 Z Image Turbo”或“本机 Qwen Image 2.1 v1.1”，图像编辑选“本机 Qwen Image 2.1 v1.1 单图编辑”（只需1张输入图）。三个渠道启用状态、1K/2K/4K、自定义宽高、1～3张逐张生成参数保持；计算在Windows，结果保存至原资产库。v1.1已部署但未提交GPU验收任务，耗时/显存/输出仍待明确授权验证。
 
 ## 连接与隔离
 
@@ -17,12 +17,14 @@ frps仅发布7443（容器7000），不开放公网8188/7000、不配Nginx Comfy
 
 ## 平台参数与工作流
 
+- v1.1种子范围修复已上线（qwen-v11-009）：Qwen的easy seed支持0..1125899906842624（含上界）；随机生成/显式提交/批量递增回绕均按此限制，Z与旧图保持原范围。8264曾因旧随机范围过大在执行前被400拒绝；该记录保留，不自动重跑。当前backendf8822343/worker3cc0ece1，模板与前端不变。
+
 - provider id60 `comfyui-qwen-t2i`、61 `comfyui-z-image` 为image.generate；id62 `comfyui-qwen-edit`仅image.edit。前端显式登记comfyui、独立“本机ComfyUI”分组，未知真实adapter报错，不降成模拟图。
-- 批准API图/map在 `/opt/qmdh-frp/workflows`，只读挂载 `/app/integration/comfyui`，按原SHA256校验，每任务深复制。原图/节点合同来自 `D:/ComfyUI-aki-v2/integration/qmdh/API-HANDOFF.md`。
+- 批准API图/map在 `/opt/qmdh-frp/workflows`，只读挂载 `/app/integration/comfyui`，按SHA256校验，每任务深复制。当前Qwen合同来自 `D:/ComfyUI-aki-v2/integration/qmdh/QWEN-v1.1-HANDOFF.md`，优先于旧API-HANDOFF；Z保持原合同。Qwen共享easy seed保留下游链接，50步/GPU缓存，增强false。
 - Qwen有效尺寸节点`459:456`，Z为`57:13`。支持width/height成对、256～4096、8倍数、最多16MP；档位随比例换算，最长边不超过4096。选择分辨率档位会退出自定义尺寸，不会被旧宽高悄悄覆盖。正方形1K/2K/4K分别为1024/2048/4096。
 - 提示词与补充说明、seed（含0）、宽高/比例/档位和张数有效；Qwen同步两处提示词/种子。采样步数、CFG、sampler、scheduler、增强开关等由批准图固定；不假装传入即生效。
 - 每项1～3张顺序执行，graph内batch固定1，每张独立prompt_id/seed/checkpoint/路径，断点续取已完成张；部分成功后终态失败保留已有图片。未配置本机GPU单价，当前账面费用为0。
-- 编辑必须两图：第一张目标图，第二张参考图。仅允许当前用户上传或生成的PNG/JPEG/WebP（单张≤32MB/16MP）；未记录归属的历史上传图须重新上传。先POST /upload/image，再替换两个LoadImage，不沿用示例图、不接受外部URL或服务器本地路径。单图变体不在已批准图范围。
+- v1.1编辑只接收一张目标图（LoadImage470），API的reference_input_count=1驱动上传/提示/提交校验；旧双图输入不再适用于当前模板。仅允许当前用户上传或生成的PNG/JPEG/WebP（单张≤32MB/16MP）；未记录归属的历史上传图须重新上传。先POST /upload/image再绑定该节点，不沿用示例图、不接受外部URL或服务器本地路径。
 - 编辑按首图比例时按所选档位缩放；指定比例/自定义宽高则切换画布分支。提示词可要求保留布局，但模型效果仍需用户判断。
 
 ## 持久队列与恢复
@@ -32,10 +34,10 @@ frps仅发布7443（容器7000），不开放公网8188/7000、不配Nginx Comfy
 - 用户范围submission_key+参数hash防重复；丢响应重用原键，修改参数返回409。客户端仅留摘要/随机键，不留提示词；已成功的“再次生成”是明确的新请求。
 - 提交前持久化seed/workflow SHA/client_id/submitting，收到prompt_id后再保存。断线、worker中断、超时先按原prompt_id查history；丢POST响应按唯一client_id查queue/history，绝不据暂时没找到就重交。Redis GPU owner无盲目TTL；异常由恢复器/管理员核对。
 - 每隔约30秒尝试恢复待核对本机任务；已下载到服务器且SHA正确的结果可直接恢复入库，无需ComfyUI仍保留history。执行中/队列中/恢复中都不走旧15/30分钟“终止并重提”逻辑；其他渠道的过期执行不盲重跑。
-- 页面显示队列位置、生成、离线/恢复状态，提供无百分比动态条，不再显示估算百分比；尚未接入采样节点实时步数。`GET /providers/comfyui/status`及模型管理显示运行状态；管理员可恢复原任务或在确认队列空、无成功结果时备注关闭，操作留审计，按owner释放锁。普通用户不能执行恢复管理操作，不提供全局interrupt/clear。
+- 已部署页面显示队列位置、生成、离线/恢复状态，提供无百分比动态条；2026-10-19用户要求统一百分比，studio-progress-001已在本地恢复统一预估条（运行最高95/完成100、恢复暂停），尚未提交/部署，详见archive/handoff-2026-10-19-task-percent.md。尚未接入采样节点实时步数。`GET /providers/comfyui/status`及模型管理显示运行状态；管理员可恢复原任务或在确认队列空、无成功结果时备注关闭，操作留审计，按owner释放锁。普通用户不能执行恢复管理操作，不提供全局interrupt/clear。
 - 仅从指定保存节点461/9读取exact prompt_id产物；GET /view拒绝跳转、路径越界、超限/非图片。结果先保存服务器，再沿用Task/Asset/ProviderCall/UsageLedger。恢复不重复记调用/账。
 
-## 真实验收
+## 旧模板真实验收（不能视为v1.1验收）
 
 九项任务、十一张图片均经正常公网API、既有admin/USR_ADMIN_TEST项目及真实worker/GPU执行；没有新建假用户/项目或模拟上游。每项终态仅一条ProviderCall，资产归属与服务器/公网下载SHA一致；上游实际prompt数量等于期望张数，重启/断线未重复提交。
 
@@ -84,6 +86,11 @@ frps仅发布7443（容器7000），不开放公网8188/7000、不配Nginx Comfy
 
 双图编辑入口直接提示必传两张及顺序，缺图时提交按钮说明缺哪张。单图编辑不在当前已验证工作流内；不能仅取消前后端校验或偷偷复制第一张作为第二张。
 
-### Qwen v1.1 仅准备（2026-10-19）
+### Qwen v1.1 已切换（2026-10-19 当前）
 
-新版单图/easy seed/50步与GPU缓存已准备独立目录，**尚未切换线上**；当前双图与旧文生图说明仍是运行事实。文件SHA、适配合同与600秒风险见[qwen-v1.1-preparation.md](qwen-v1.1-preparation.md)。本轮没有v1.1 API GPU执行、耗时或输出证据。
+新版单图/easy seed/50步与GPU缓存已上线，当前map SHA ae4127ee5d20a1239a8ac597f4ae1183b9126a8c5250d4842bafca4e3b511c94；前后端适配成套发布，API单图合同/公网静态资源/健康通过。发布备份qmdh-qwen-v11-release-20261019两端27文件SHA一致；旧镜像标签20261019-qwen-v11可在排空/核对后回退。未运行GPU任务，600秒预算内实际性能和输出仍待验证；完整当前运行/源码/回退事实见[qwen-v1.1-preparation.md](qwen-v1.1-preparation.md)。
+
+
+## 2026-10-26本地输入数量自动选择（未部署）
+
+前后端支持公开reference_input_counts并按1/2张选择不同编辑模板。新双图从v1.1单图复制，只增加475及两处参考图连接；50steps、cache gpu、thinking、共享seed等全部保留，旧v1.0双图不用于本候选。接收即固定具体SHA和输入数，恢复不切图/重提。实际候选与定向验证见[接线记录](qwen-reference-routing-2026-10-26.md)，未做GPU出图或生产切换。

@@ -113,6 +113,7 @@ def get_providers(db: Session = Depends(get_db)) -> list[ProviderCapability]:
             adapter_kind=item.adapter_kind,
             supported_resolutions=list(item.supported_resolutions or ()),
             reference_input_count=_comfy_reference_count(item),
+            reference_input_counts=_comfy_reference_counts(item),
         )
         for item in list_provider_capabilities(db, include_static=False)
     ]
@@ -129,6 +130,17 @@ def _comfy_reference_count(item) -> int | None:
     except (OSError, ValueError, KeyError):
         # An invalid admin template still fails closed in submission validation.
         return None
+
+
+def _comfy_reference_counts(item) -> list[int] | None:
+    if item.adapter_kind != "comfyui" or "image.edit" not in item.capabilities:
+        return None
+    from pathlib import Path
+    from app.services.provider_adapters.comfyui import supported_reference_counts
+    try:
+        return supported_reference_counts(Path(settings.comfyui_workflow_root), item.model_name)
+    except (OSError, ValueError, KeyError, TypeError):
+        return []  # Do not advertise unverified or missing variants.
 
 
 def _mask_api_key(api_key: str) -> str:

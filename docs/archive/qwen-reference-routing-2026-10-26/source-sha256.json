@@ -1,0 +1,19 @@
+{
+  "backend/app/services/provider_adapters/comfyui.py": "dcf3b808d3979b4eb2ee5996a01aa26d005a604d862fc2f621c328b0b9b812c6",
+  "backend/app/routers/tasks.py": "93bed36e2190a0ac056d352ecd28af59953e5ae04eb87d194ea4a46ff81f4ac1",
+  "backend/app/routers/providers.py": "7ba272a9a2fb3c926975a2845a57b759265f98cfc66fbb18b09a8c9516977620",
+  "backend/app/schemas.py": "5415b99d6ce82b58df4c157bd69a8a7946b90321708111a2fe16cf3c27fc7623",
+  "backend/app/scripts/check_comfyui_workflows.py": "019338c622c74a1580c65192d0e065bf4d11dc9f285674548b35ae9696fed290",
+  "backend/app/scripts/prepare_qwen_reference_variants.py": "aca78a98892fdd40d063170a2fca2a3a6136fe171abdfdfaa72083a0bb566c85",
+  "backend/tests/test_qwen_reference_routing.py": "e35a024ba7b4533ebf4a90e01990877506dde8d0fd09a5a346fc738f51bf0409",
+  "frontend/src/api.ts": "8585fa913ddcfbfba0e322a57a57bb772e258e173e9d94a98c623dc0683f2e17",
+  "frontend/src/features/studio/comfyReferenceContract.ts": "dca2c87e6585b9e03698afa3529fa90773ec8cce11896f1d912ea5246fb8a62e",
+  "frontend/src/features/studio/studioTaskSubmissionValidation.ts": "1d23b032a79ee27483253e844c07eac23cab4bbab820258c2bd6a8f5634d8621",
+  "frontend/src/features/studio/studioComposerDockUtils.ts": "c4494bf29e536d6dad937a49a1abc68fff12111276dddd043f09c2f9cb966433",
+  "frontend/src/features/studio/StudioComposerToolbar.tsx": "739f49a97d0be2745bf6917759218ed11bae60e58e37f6793fb42480a3207bc3",
+  "frontend/src/features/studio/StudioComposerSubmitActions.tsx": "40f491e5bcbbad10bb0844decae238b7824ecd31f9cc75a1cfaee0dfa55efb8d",
+  "frontend/src/features/studio/studioControllerReferenceOptions.ts": "70146a8bc7fe1add9f5d1fe84f371b16865c713cad7b4784b8b9ee352ac83709",
+  "frontend/src/features/studio/ComfyRuntimeNotice.tsx": "8aab03b2a0b1a8d776ace28591cd6eadc0c03d02f0aacc13153c64bc07454a14",
+  "frontend/src/features/studio/StudioComposerDisplayMenuPanel.tsx": "c24337ad2342364189046eeb2363b300f2bac9babd5ee949270c5c678962e849",
+  "frontend/scripts/test-comfyui-provider-ui.mjs": "33ed0c6c982ab773849b849d25201d01e284f6f68e17ad2604a2e52cc296991b"
+}

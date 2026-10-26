@@ -4,14 +4,20 @@ from copy import deepcopy
 import json
 from pathlib import Path
 
-from app.services.provider_adapters.comfyui import load_workflow, prepare_graph, reference_input_count
+from app.services.provider_adapters.comfyui import load_workflow, prepare_graph, reference_input_count, verify_v11_dual
 
 
 def check_bundle(root: Path) -> dict:
     report = {}
     mapping = json.loads((root / "workflow-map.json").read_text(encoding="utf-8-sig"))
-    for workflow_id in mapping:
-        graph, contract = load_workflow(root, workflow_id)
+    checks = [(key, None) for key in mapping]
+    for key, value in mapping.items():
+        checks.extend((key, int(count)) for count in value.get("reference_variants", {}))
+    for workflow_id, variant_count in checks:
+        graph, contract = load_workflow(root, workflow_id, reference_count=variant_count)
+        if variant_count is not None:
+            base, primary = load_workflow(root, workflow_id)
+            verify_v11_dual(base, graph, primary, contract)
         original = deepcopy(graph)
         prepared = prepare_graph(graph, contract, {"prompt": "Offline contract validation", "width": 1024,
             "height": 1024}, seed=0, prefix="offline_validation")
@@ -42,9 +48,9 @@ def check_bundle(root: Path) -> dict:
                 raise ValueError("v1.1 cache must retain GPU device")
             if count:
                 loaders = [key for key, node in graph.items() if node["class_type"] == "LoadImage"]
-                if loaders != contract["image_loaders"] or count != 1:
-                    raise ValueError("v1.1 edit must contain exactly the mapped single loader")
-        report[workflow_id] = {"filename": contract["filename"], "sha256": contract["sha256"],
+                if loaders != contract["image_loaders"] or len(loaders) != count:
+                    raise ValueError("v1.1 edit must contain exactly the mapped loaders")
+        report[workflow_id + (f":{variant_count}ref" if variant_count else "")] = {"filename": contract["filename"], "sha256": contract["sha256"],
             "version": contract.get("version", "legacy"), "reference_input_count": count,
             "output_node": contract["output_node"], "offline_contract": "passed", "gpu_tested": False}
     return report

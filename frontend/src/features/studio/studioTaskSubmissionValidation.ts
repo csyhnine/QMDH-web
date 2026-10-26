@@ -1,5 +1,5 @@
 import type { Provider } from "../../api";
-import { comfyReferenceCount } from "./comfyReferenceContract";
+import { comfyReferenceCounts, comfyReferenceChoices } from "./comfyReferenceContract";
 import type { Dispatch, SetStateAction } from "react";
 
 import type { LoadState, StudioFormState } from "./studioTypes";
@@ -161,8 +161,8 @@ export function validateStudioTaskSubmission({
   }
 
   const referenceImageCount = form.referenceImages.filter(Boolean).length;
-  if (providerForSubmit.adapter_kind === "comfyui" && form.creationMode === "edit" && form.referenceImages.filter(Boolean).length !== comfyReferenceCount(providerForSubmit)) {
-    setState((current) => ({ ...current, error: `当前本机 Qwen 编辑需要 ${comfyReferenceCount(providerForSubmit)} 张图片，请按当前工作流上传。` }));
+  if (providerForSubmit.adapter_kind === "comfyui" && form.creationMode === "edit" && !comfyReferenceCounts(providerForSubmit).includes(form.referenceImages.filter(Boolean).length)) {
+    setState((current) => ({ ...current, error: comfyReferenceCounts(providerForSubmit).length ? `当前本机 Qwen 编辑支持 ${comfyReferenceChoices(providerForSubmit)} 张图片，请按支持数量上传。` : "当前本机 Qwen 编辑模板不可用，请联系管理员检查工作流。" }));
     return { ok: false };
   }
   if (form.creationMode === "edit" && referenceImageCount < 1) {

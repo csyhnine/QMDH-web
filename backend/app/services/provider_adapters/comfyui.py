@@ -42,11 +42,26 @@ def _integer(value, name: str, low: int, high: int) -> int:
     return value
 
 
-def load_workflow(root: Path, workflow_id: str) -> tuple[dict, dict]:
+def load_workflow(root: Path, workflow_id: str, *, reference_count: int | None = None) -> tuple[dict, dict]:
     if workflow_id not in WORKFLOWS:
-        raise ValueError("ComfyUI workflow is not enabled; first release supports text-to-image only")
+        raise ValueError("ComfyUI workflow is not enabled")
     root = root.resolve()
     mapping = json.loads((root / "workflow-map.json").read_text(encoding="utf-8-sig"))[workflow_id]
+    primary = mapping
+    if reference_count is not None:
+        _integer(reference_count, "reference count", 1, 4)
+        if mapping["capability"] != "image.edit":
+            raise ValueError("Reference routing requires an image-edit workflow")
+        if reference_count != reference_input_count(mapping):
+            variants = mapping.get("reference_variants", {})
+            if not isinstance(variants, dict):
+                raise ValueError("Invalid ComfyUI reference variants")
+            variant = variants.get(str(reference_count))
+            if not isinstance(variant, dict) or variant.get("reference_variants"):
+                raise ValueError(f"当前 Qwen 编辑没有可用的 {reference_count} 图工作流。")
+            mapping = variant
+        if mapping.get("capability") != "image.edit" or reference_input_count(mapping) != reference_count:
+            raise ValueError("ComfyUI reference variant contract mismatch")
     file = (root / mapping["filename"]).resolve()
     if file.parent != root or file.stat().st_size > 2 * 1024 * 1024:
         raise ValueError("Invalid ComfyUI workflow file")
@@ -56,6 +71,43 @@ def load_workflow(root: Path, workflow_id: str) -> tuple[dict, dict]:
     graph = json.loads(raw.decode("utf-8-sig"))
     if not isinstance(graph, dict) or mapping["capability"] not in ("image.generate", "image.edit"):
         raise ValueError("Invalid ComfyUI API graph")
+    if mapping is not primary and primary.get("version") == "1.1":
+        base, _ = load_workflow(root, workflow_id)
+        verify_v11_dual(base, graph, primary, mapping)
+    return graph, mapping
+
+
+def supported_reference_counts(root: Path, workflow_id: str) -> list[int]:
+    """Advertise only explicitly configured templates whose files and SHA pass verification."""
+    _, mapping = load_workflow(root, workflow_id)
+    if mapping["capability"] != "image.edit":
+        return []
+    primary = reference_input_count(mapping)
+    variants = mapping.get("reference_variants", {})
+    if not isinstance(variants, dict):
+        raise ValueError("Invalid ComfyUI reference variants")
+    counts = {primary}
+    for key in variants:
+        if key not in ("1", "2", "3", "4") or int(key) == primary:
+            raise ValueError("Invalid or duplicate ComfyUI reference count")
+        load_workflow(root, workflow_id, reference_count=int(key))
+        counts.add(int(key))
+    return sorted(counts)
+
+
+def select_workflow(root: Path, workflow_id: str, payload: dict, state: dict | None = None) -> tuple[dict, dict]:
+    count = None
+    if workflow_id == "qwen_image_2_1_image_edit":
+        values = payload.get("reference_images") or payload.get("source_images") or []
+        if not isinstance(values, list) or not all(isinstance(v, str) and v for v in values):
+            raise ValueError("Qwen 编辑图片列表无效。")
+        count = len(values)
+    graph, mapping = load_workflow(root, workflow_id, reference_count=count)
+    if state:
+        if state.get("workflow_id", workflow_id) != workflow_id or state.get("workflow_sha256") != mapping["sha256"]:
+            raise ValueError("Workflow changed; reconcile the original prompt before retry")
+        if "reference_input_count" in state and state["reference_input_count"] != (count or 0):
+            raise ValueError("Saved workflow input count changed; reconcile before retry")
     return graph, mapping
 
 
@@ -67,6 +119,31 @@ def reference_input_count(mapping: dict) -> int:
     if len(loaders) != count or len(set(loaders)) != count:
         raise ValueError("ComfyUI reference input mapping differs from its declared count")
     return count
+
+
+def verify_v11_dual(base: dict, dual: dict, mapping: dict, contract: dict) -> None:
+    """A v1.1 dual variant may change only the reference topology, never model parameters."""
+    loader = mapping["image_loaders"][0]
+    if contract.get("derived_from_sha256") != mapping["sha256"] or contract.get("version") != "1.1":
+        raise ValueError("Dual-image template must derive from the pinned v1.1 single-image graph")
+    if contract["image_loaders"] != [loader, "475"] or reference_input_count(contract) != 2:
+        raise ValueError("Invalid dual-image loader order")
+    expected = deepcopy(base)
+    if "475" in expected or expected["459:474"]["inputs"]["images.image_1"] != [loader, 0] or expected["459:485"]["inputs"]["images.image0"] != [loader, 0]:
+        raise ValueError("Unexpected v1.1 reference topology")
+    expected["475"] = deepcopy(base[loader])
+    expected["475"]["inputs"]["image"] = "qmdh_reference_2.png"
+    expected["459:474"]["inputs"]["images.image_2"] = ["475", 0]
+    expected["459:485"]["inputs"]["images.image1"] = ["475", 0]
+    if expected != dual:
+        raise ValueError("Dual-image graph changes v1.1 parameters outside the reference-input extension")
+    expected_mapping = {**mapping, "filename": contract["filename"], "sha256": contract["sha256"],
+                        "image_loaders": [loader, "475"], "reference_input_count": 2,
+                        "derived_from_sha256": mapping["sha256"]}
+    expected_mapping.pop("reference_variants", None)
+    if expected_mapping != contract:
+        raise ValueError("Dual-image contract changes v1.1 parameter bindings")
+    validate_seed_links(dual, contract)
 
 
 def validate_seed_links(graph: dict, mapping: dict) -> None:
@@ -199,12 +276,14 @@ def owned_references(db, user_id, payload, mapping=None):
 
 
 def validate_submission(db, user_id, workflow_id, payload):
-    graph, mapping = load_workflow(Path(settings.comfyui_workflow_root), workflow_id)
+    graph, mapping = select_workflow(Path(settings.comfyui_workflow_root), workflow_id, payload)
     _integer(payload.get("image_count", 1), "image_count", 1, 3)
     prepare_graph(graph, mapping, {**payload, "image_count": 1},
                   seed=payload["seed"] if payload.get("seed") is not None else 0, prefix="validation")
     if mapping["capability"] == "image.edit":
         owned_references(db, user_id, payload, mapping)
+    return {"workflow_id": workflow_id, "workflow_sha256": mapping["sha256"],
+            "reference_input_count": reference_input_count(mapping) if mapping["capability"] == "image.edit" else 0}
 
 
 def output_reference(history: dict, prompt_id: str, output_node: str) -> dict | None:
@@ -271,7 +350,7 @@ class ComfyUIProviderAdapter:
             # Per-image entries must remain flat: embedding the live checkpoint
             # would point back to this batch list on the second image.
             completed.append({k: v for k, v in outcome.result.items() if k != "comfyui"})
-            graph, mapping = load_workflow(Path(settings.comfyui_workflow_root), self.profile.model_name)
+            graph, mapping = select_workflow(Path(settings.comfyui_workflow_root), self.profile.model_name, payload, self.state)
             seed = (self.state["seed"] + 1) % (seed_maximum(graph, mapping) + 1)
             self._save(stage="between_images", prompt_id=None, client_id=None, seed=seed, batch_outputs=deepcopy(completed))
         last = completed[-1]
@@ -287,7 +366,7 @@ class ComfyUIProviderAdapter:
             raise ValueError("ComfyUI requires the fixed private visitor URL")
         if not self.task_id or self.checkpoint is None:
             raise ValueError("ComfyUI cannot submit without a durable task context")
-        graph, mapping = load_workflow(Path(settings.comfyui_workflow_root), self.profile.model_name)
+        graph, mapping = select_workflow(Path(settings.comfyui_workflow_root), self.profile.model_name, payload, self.state)
         if capability != mapping["capability"]:
             raise ValueError("ComfyUI workflow capability mismatch")
         if self.state and self.state.get("workflow_sha256") != mapping["sha256"]:
@@ -410,6 +489,7 @@ class ComfyUIProviderAdapter:
                     # second GPU run automatically. FRP/ComfyUI has no idempotency guarantee.
                     self._save(stage="submitting", seed=seed, workflow_id=self.profile.model_name,
                                workflow_sha256=mapping["sha256"], client_id=str(uuid4()),
+                               reference_input_count=reference_input_count(mapping) if capability == "image.edit" else 0,
                                execution_context={
                                    "width": graph[mapping["width"][0]]["inputs"][mapping["width"][1]],
                                    "height": graph[mapping["height"][0]]["inputs"][mapping["height"][1]],

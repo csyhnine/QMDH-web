@@ -55,6 +55,7 @@ export type AssetShareResult = {
 
 export type Provider = {
   reference_input_count?: number | null;
+  reference_input_counts?: number[] | null;
   provider_name: string;
   display_name: string;
   model_name: string;

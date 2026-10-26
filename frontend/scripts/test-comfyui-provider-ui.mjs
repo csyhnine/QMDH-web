@@ -17,7 +17,7 @@ function load(relative) {
   const exports = {};
   cache.set(file, exports);
   const code = ts.transpileModule(readFileSync(file, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
   }).outputText;
   vm.runInNewContext(code, { exports, console, URL, URLSearchParams, require(name) {
     if (!name.startsWith('.')) return require(name);
@@ -176,6 +176,30 @@ test('v1.1 single-image contract updates hints, validation and submit without br
       prompt:'fixture', submitting:false, uploadingReference:false, submissionProgress:null}));
     assert.equal(html.includes('disabled=""'), count !== 1);
   }
+});
+
+test('verified Qwen input variants set upload capacity, live hints and submit eligibility by exact count', () => {
+  const provider = {...image,capabilities:['image.edit'],reference_input_count:1,reference_input_counts:[1,2]};
+  const contract = load('features/studio/comfyReferenceContract.ts');
+  const {validateStudioTaskSubmission}=load('features/studio/studioTaskSubmissionValidation.ts');
+  const {composerReferenceHint,composerReferenceZoneLabel}=load('features/studio/studioComposerDockUtils.ts');
+  const {defaultStudioForm}=load('features/studio/studioConstants.ts');
+  const Submit=load('features/studio/StudioComposerSubmitActions.tsx').default;
+  assert.equal(contract.comfyReferenceLimit(provider),2);
+  const {buildStudioReferenceUploadOptions}=load('features/studio/studioControllerReferenceOptions.ts');
+  assert.equal(buildStudioReferenceUploadOptions({controllerState:{studioForm:{...defaultStudioForm,creationMode:'edit'}},selectedProvider:provider}).maxReferenceCount,2);
+  assert.match(composerReferenceZoneLabel('edit',provider),/1 或 2/);
+  for(const count of [0,1,2,3,4]){
+    const state={form:{...defaultStudioForm,creationMode:'edit',prompt:'Synthetic',referenceImages:Array.from({length:count},(_,i)=>`references/${i}.png`)},providerForSubmit:provider,setState(){},uploadingReference:false};
+    assert.equal(validateStudioTaskSubmission(state).ok,count===1||count===2);
+    const html=renderToStaticMarkup(require('react').createElement(Submit,{creationMode:'edit',supportedReferenceCounts:[1,2],referenceUploadCount:count,availableProviderCount:1,hasActiveProject:true,prompt:'Synthetic',submitting:false,uploadingReference:false,submissionProgress:null}));
+    assert.equal(html.includes('disabled=""'),count!==1&&count!==2);
+  }
+  assert.match(composerReferenceHint('edit',1,provider),/单图编辑工作流/);
+  assert.match(composerReferenceHint('edit',2,provider),/2 图编辑工作流/);
+  const disabled={...provider,reference_input_counts:[]};
+  assert.equal(validateStudioTaskSubmission({form:{...defaultStudioForm,creationMode:'edit',prompt:'Synthetic',referenceImages:['a']},providerForSubmit:disabled,setState(){},uploadingReference:false}).ok,false);
+  assert.match(composerReferenceZoneLabel('edit',disabled),/暂不可用/);
 });
 
 test('all task channels use estimated percent with queue and recovery context', () => {

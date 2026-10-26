@@ -17,6 +17,7 @@ type StudioComposerSubmitActionsProps = {
   onPolishPrompt?: () => void;
   requiresTwoImages?: boolean;
   requiredReferenceCount?: number;
+  supportedReferenceCounts?: number[];
 };
 
 export default function StudioComposerSubmitActions({
@@ -33,16 +34,19 @@ export default function StudioComposerSubmitActions({
   onPolishPrompt,
   requiresTwoImages = false,
   requiredReferenceCount,
+  supportedReferenceCounts,
 }: StudioComposerSubmitActionsProps) {
   const { isGuest } = useAuth();
-  const requiredCount = requiredReferenceCount ?? (requiresTwoImages ? 2 : undefined);
-  const editNeedsReference = creationMode === "edit" && (requiredCount ? referenceUploadCount !== requiredCount : referenceUploadCount === 0);
+  const requiredCount = supportedReferenceCounts?.length === 1 ? supportedReferenceCounts[0] : requiredReferenceCount ?? (requiresTwoImages ? 2 : undefined);
+  const editNeedsReference = creationMode === "edit" && (supportedReferenceCounts ? !supportedReferenceCounts.includes(referenceUploadCount) : requiredCount ? referenceUploadCount !== requiredCount : referenceUploadCount === 0);
   const submitLabel = isGuest
     ? "登录后生成"
     : submitting
       ? "正在创建..."
       : !hasActiveProject
         ? "请先新建项目"
+        : supportedReferenceCounts && !supportedReferenceCounts.length && creationMode === "edit" ? "编辑模板暂不可用"
+        : supportedReferenceCounts && supportedReferenceCounts.length > 1 && editNeedsReference ? `请上传 ${supportedReferenceCounts.join(" 或 ")} 张图片`
         : requiredCount === 1 && editNeedsReference ? "请仅上传一张原图"
         : requiredCount === 2 && editNeedsReference
           ? referenceUploadCount === 0 ? "请上传两张图片" : referenceUploadCount === 1 ? "请补充第 2 张图" : "请仅保留两张图"

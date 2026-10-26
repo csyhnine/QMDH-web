@@ -20,7 +20,7 @@ import {
 import ManagementOverview from "./ManagementOverview";
 import ProjectLedger from "./ProjectLedger";
 import ProjectPlan from "./ProjectPlan";
-import PeopleSchedule from "./PeopleSchedule";
+import PeoplePlanner from "./PeoplePlanner";
 import { matchesStatus, type ProjectStatusFilter } from "./planning";
 import "./management.css";
 
@@ -590,6 +590,7 @@ export default function ManagementProjectsPage() {
                 ) : (
                   <select
                     aria-label="人员排期跨度"
+                    disabled={planDirty || planSaving}
                     value={peopleDays}
                     onChange={(e) => setPeopleDays(Number(e.target.value))}
                   >
@@ -613,12 +614,19 @@ export default function ManagementProjectsPage() {
                 onBusy={setPlanSaving}
               />
             ) : (
-              <PeopleSchedule
+              <PeoplePlanner
+                key={`${year}-${archive}-${search}-${person}-${statusFilter}-${refresh}`}
                 projects={filtered}
-                staff={staff.filter((s) => !person || s.id === person)}
+                workloadProjects={projects}
+                staff={staff}
+                personFilter={person}
                 start={start}
                 days={peopleDays}
+                archived={archive}
                 onEdit={editProject}
+                onPersist={persistSchedule}
+                onDirty={setPlanDirty}
+                onBusy={setPlanSaving}
               />
             )}
             <p className="mp-help">

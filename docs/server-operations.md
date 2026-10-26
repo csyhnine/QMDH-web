@@ -1,4 +1,12 @@
-## 2026-10-26修复发布（当前）
+## 2026-10-26 人员工作台与 Qwen 双图发布（当前）
+
+2026-10-26双功能已部署：运行源码d96d508已推送，人员跨项目甘特/拖拽分工与Qwen v1.1单/双图自动路由上线。公开输入数[1,2]、隔离PG保存/409与接收/幂等、公网新包通过；backend健康/3worker/frontend运行，生产迁移仍e51，无GPU出图。26文件配对备份SHA一致，25媒体归档链仍需本机两份基础包。当前第三Compose改为/opt/qmdh-frp/releases/people-qwen-20261026/compose.release.yml，工作流绑定同目录/workflows，禁止旧Git重建。详见[发布记录](release-people-qwen-2026-10-26.md)。草稿PR #5未合并，72待验收/25冻结/R98状态保持。
+
+当前镜像 backend `5d437ea00900`、worker `42ae70742308`（3副本）、frontend `5310a91ceac0`；三份 Compose 为主文件 + `/opt/qmdh-frp/compose.frp.yml` + `/opt/qmdh-frp/releases/people-qwen-20261026/compose.release.yml`，使用 `--no-build --pull never --scale worker=3`。发布目录现为生效运行材料，不得按临时候选清理；backend/worker只读工作流挂载从旧根改到该目录 `workflows`（8文件），旧根原样保留。
+
+配对备份 `/www/backup/qmdh-release-20261026-people-qwen` ↔ `E:/backups/QMDH-web/release-20261026-people-qwen`。回退先暂停/排空并核上游，用当前目录 `compose.rollback.yml` 和旧镜像标签 `20261026-people-qwen`，同时恢复旧模板绑定和审计恢复旧展示名，不降迁移/覆盖业务数据。所有此前段落只反映对应历史时点，当前完整操作以本段和发布记录为准。
+
+## 2026-10-26修复发布（此前）
 
 2026-10-26发布完成：源码e6add45已推送，草稿PR #5未合并；backend健康/3worker运行/frontend新包生效，生产迁移e51、源码/静态包/公网核验通过。23文件私有配对备份SHA一致，24媒体归档恢复链中2个基础包依赖本机。当前第三Compose和有效发布目录必须保留，详见[执行记录](release-execution-2026-10-26.md)。72待验收、25冻结及R98唯一DONE保持。
 
@@ -6,7 +14,7 @@
 
 配对备份 /www/backup/qmdh-release-20261026 ↔ E:/backups/QMDH-web/release-20261026，23文件SHA一致；媒体5843文件/15增量66179868字节。resolved-media-chain.json按24归档恢复，完整基础包及一段早期增量仅本机持有，必须结合本机基础包。旧缺链已在新清单中解析，旧归档未改。回滚先暂停入口/排空与核上游，使用compose.rollback.yml和qmdh-release-backup-{backend,worker,frontend}:20261026；只退镜像、不降迁移/覆盖新业务数据。无真实生成/GPU/历史补账或清理。
 
-## 2026-10-19 Qwen v1.1 运行切换（当前）
+## 2026-10-19 Qwen v1.1 运行切换（此前）
 
 - 后续种子热修qwen-v11-009已发布，当前backendf8822343/worker3cc0ece1（三副本），frontend仍d5dfe72b。只更新comfyui适配器，修复easy seed 2^50含上界的随机/显式/批量范围；任务8264被拒绝的失败记录不重跑。固定源码与镜像见/opt/qmdh-frp/releases/qwen-v1.1-seed-fix-20261019，主RELEASE.json已记录热修SHA；旧Git HEAD不能用于覆盖当前镜像。
 - 热修备份/www/backup/qmdh-qwen-v11-seed-fix-20261019 ↔ E:/backups/QMDH-web/frp-20261019/qwen-v11-seed-fix，21文件SHA一致，DB/env/5828媒体清单/0增量，恢复链接上一v1.1发布备份；回退镜像标签20261019-qwen-v11-seed-fix仅回到种子未修版本，不能作为继续使用的稳定方案。模板/前端/原容器/env/挂载/网络/迁移保持。Windows/Linux专项27+12sub、实际object_info范围/公开健康/六CAD通过，无GPU生成验证。下方首次切换镜像为此前状态。

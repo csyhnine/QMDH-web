@@ -1,6 +1,8 @@
-2026-10-26本地Qwen按输入数路由：reference_input_counts描述已核模板集合，任务接收原子保存变体SHA/输入数；worker/恢复固定同一合同。v1.1双图只扩读图节点和图片连接，运行时检查其余参数/绑定不变；未上线，见[接线记录](qwen-reference-routing-2026-10-26.md)。
+2026-10-26双功能已部署：运行源码d96d508已推送，人员跨项目甘特/拖拽分工与Qwen v1.1单/双图自动路由上线。公开输入数[1,2]、隔离PG保存/409与接收/幂等、公网新包通过；backend健康/3worker/frontend运行，生产迁移仍e51，无GPU出图。26文件配对备份SHA一致，25媒体归档链仍需本机两份基础包。当前第三Compose改为/opt/qmdh-frp/releases/people-qwen-20261026/compose.release.yml，工作流绑定同目录/workflows，禁止旧Git重建。详见[发布记录](release-people-qwen-2026-10-26.md)。草稿PR #5未合并，72待验收/25冻结/R98状态保持。
 
-2026-10-26本地人员排期：PeoplePlanner复用原PeopleSchedule时间轴与项目版本保存，staffPlanning只应用明确人员/分工/日期变更；跨项目负荷用未被筛选的年度项目，调整在内存预览并逐项目确认保存。无API/迁移/权限变更，尚未发布；见[工作台记录](people-planning-2026-10-26.md)。
+2026-10-26本地Qwen按输入数路由：reference_input_counts描述已核模板集合，任务接收原子保存变体SHA/输入数；worker/恢复固定同一合同。v1.1双图只扩读图节点和图片连接，运行时检查其余参数/绑定不变；已随d96d508部署，见[接线记录](qwen-reference-routing-2026-10-26.md)。
+
+2026-10-26本地人员排期：PeoplePlanner复用原PeopleSchedule时间轴与项目版本保存，staffPlanning只应用明确人员/分工/日期变更；跨项目负荷用未被筛选的年度项目，调整在内存预览并逐项目确认保存。无API/迁移/权限变更，已随d96d508部署；见[工作台记录](people-planning-2026-10-26.md)。
 
 2026-10-26发布完成：源码e6add45已推送，草稿PR #5未合并；backend健康/3worker运行/frontend新包生效，生产迁移e51、源码/静态包/公网核验通过。23文件私有配对备份SHA一致，24媒体归档恢复链中2个基础包依赖本机。当前第三Compose和有效发布目录必须保留，详见[执行记录](release-execution-2026-10-26.md)。72待验收、25冻结及R98唯一DONE保持。
 

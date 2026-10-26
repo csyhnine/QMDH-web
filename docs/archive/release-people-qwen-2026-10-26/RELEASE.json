@@ -1,0 +1,201 @@
+{
+  "source_commit": "d96d508a6da92d553d0337428ffb38ed1ab8e6ce",
+  "status": "DEPLOYED_VERIFIED",
+  "overlay": [
+    {
+      "local_path": "backend/app/routers/providers.py",
+      "container_path": "/app/app/routers/providers.py",
+      "candidate_sha256": "3fdfa89cddead9ba51bdb1da5329f35fdb79a4bfbc745edc0d12d68253088279",
+      "expected_absent": false,
+      "expected_live_lf_sha256": "61a21a387a31900b7143bdcaa74410c9915ce2f817f9e065572617f9c70b273a"
+    },
+    {
+      "local_path": "backend/app/routers/tasks.py",
+      "container_path": "/app/app/routers/tasks.py",
+      "candidate_sha256": "eac202460aa81fb7a5622f934661ceb7b284e0b125a6098269b9a043dd6fe1ed",
+      "expected_absent": false,
+      "expected_live_lf_sha256": "4505528bac60ca75aa46c4b409059af2098643920e32338b9033c45917e0d736"
+    },
+    {
+      "local_path": "backend/app/schemas.py",
+      "container_path": "/app/app/schemas.py",
+      "candidate_sha256": "0d6dc7185c05400e7b2a8b175bdaa8fc579499bb8ad287d8b03c3f685ef11315",
+      "expected_absent": false,
+      "expected_live_lf_sha256": "ab383c0811c72038d45e95a3d87393a74d2c71d98b725744e6151fde3b421762"
+    },
+    {
+      "local_path": "backend/app/scripts/check_comfyui_workflows.py",
+      "container_path": "/app/app/scripts/check_comfyui_workflows.py",
+      "candidate_sha256": "18e96ade190a7be05f052933ab85013d0d12a47abc34c001191ed2f08f0edbb5",
+      "expected_absent": false,
+      "expected_live_lf_sha256": "a7fdfe1ac1347d7e5279663f8487875575b9f373855930c547b4fc7d08d2e8c6"
+    },
+    {
+      "local_path": "backend/app/scripts/prepare_qwen_reference_variants.py",
+      "container_path": "/app/app/scripts/prepare_qwen_reference_variants.py",
+      "candidate_sha256": "062a2fc162a05ce85944a25e6c53362c9aa0f1369d1c6a34d50cb684051878a8",
+      "expected_absent": true,
+      "expected_live_lf_sha256": null
+    },
+    {
+      "local_path": "backend/app/services/provider_adapters/comfyui.py",
+      "container_path": "/app/app/services/provider_adapters/comfyui.py",
+      "candidate_sha256": "dcf3b808d3979b4eb2ee5996a01aa26d005a604d862fc2f621c328b0b9b812c6",
+      "expected_absent": false,
+      "expected_live_lf_sha256": "2105e22310ece44865998b237a97b24afbe6e15256682c1105267377e1b6ac5d"
+    }
+  ],
+  "packages": {
+    "backend-overlay.tar.gz": "8418d8fdfc073333a498e0b36515cfec5bc6ed8a033c55e161b69ada6c2a8519",
+    "frontend.tar.gz": "e55eca5f4669f546c89010ba9df8f1675dd73867f43c9004b169b0688537d0a6",
+    "workflows.tar.gz": "5791bb89a0fc84a66a97372d5833d3a24d43607c0f9dd6b514ad6a675cc76f8d"
+  },
+  "base_images": {
+    "backend": "sha256:65a9cfbe7969a31110ae37030aa866fa7d0139636fe2eee8fdff0ef46fbbbc94",
+    "worker": "sha256:3783fe13579c4e56f9bdc7b3ef9972fdcc534fce02f41bc7c0fa61adbc031cb9",
+    "frontend": "sha256:df9975fa4bb7b5409c31b4f8e44ddeca728f105f7483a562504b876e0bce393b"
+  },
+  "images": {
+    "backend": "sha256:5d437ea00900c2609b2bfaeda6f5a62d08df6bc06ebad37e429d2e8ade47646f",
+    "worker": "sha256:42ae707423088b0386f485459c5406598a1a48dba902f8f143260e83d8ee8467",
+    "frontend": "sha256:5310a91ceac0c8bccb58391443ac70985aa700909e929986fcd1a24bcd852b62"
+  },
+  "workflow_root": "/opt/qmdh-frp/releases/people-qwen-20261026/workflows",
+  "previous_workflow_root": "/opt/qmdh-frp/workflows",
+  "provider_display_name_after": "本机 Qwen Image 2.1 v1.1 图像编辑",
+  "database_revision": "e51fa962c846",
+  "candidate_checks": [
+    "PG Qwen one/two acceptance and idempotency",
+    "PG personnel role/date save and 409 conflict",
+    "application PG/Redis health and offline v1.1 templates"
+  ],
+  "compose_files": [
+    "/www/wwwroot/qmdh-web/docker-compose.yml",
+    "/opt/qmdh-frp/compose.frp.yml",
+    "/opt/qmdh-frp/releases/people-qwen-20261026/compose.release.yml"
+  ],
+  "public_checks": [
+    {
+      "route": "/",
+      "status": 200
+    },
+    {
+      "route": "/management/projects",
+      "status": 200
+    },
+    {
+      "route": "/studio/generate",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/health",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/management/staff",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts/",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts?limit=3",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts?limit=20",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts/?limit=20",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts/proxy-check",
+      "status": 401
+    }
+  ],
+  "public_qwen_contract": {
+    "provider_name": "comfyui-qwen-edit",
+    "display_name": "本机 Qwen Image 2.1 v1.1 图像编辑",
+    "model_name": "qwen_image_2_1_image_edit",
+    "capabilities": [
+      "image.edit"
+    ],
+    "configurable": true,
+    "outbound": true,
+    "adapter_kind": "comfyui",
+    "supported_resolutions": [
+      "1k",
+      "2k",
+      "4k"
+    ],
+    "reference_input_count": 1,
+    "reference_input_counts": [
+      1,
+      2
+    ]
+  },
+  "public_feature_assets": [
+    {
+      "file": "ManagementProjectsPage-Dte6ljCC.js",
+      "sha256": "557b93af71c8ba1a76ee02ff50dc5be60e4fd01cc6f4f35ff222edee350912d2"
+    },
+    {
+      "file": "GeneratePage-D6khU1oA.js",
+      "sha256": "fc02bd6a37259062740193eda13d4b7b23183db986d152bc5146a6b117c70263"
+    }
+  ],
+  "public_main_sha256": "65222e916305e2b64a4127fc58560a0110de0960dfbebc5cd94a7e94d67337ab",
+  "frontend_files_checked": 51,
+  "workflow_files": 8,
+  "preservation": [
+    {
+      "service": "backend",
+      "restart_count": 0,
+      "env_networks_preserved": true,
+      "mounts_preserved_except_versioned_workflows": true
+    },
+    {
+      "service": "worker",
+      "restart_count": 0,
+      "env_networks_preserved": true,
+      "mounts_preserved_except_versioned_workflows": true
+    },
+    {
+      "service": "worker",
+      "restart_count": 0,
+      "env_networks_preserved": true,
+      "mounts_preserved_except_versioned_workflows": true
+    },
+    {
+      "service": "worker",
+      "restart_count": 0,
+      "env_networks_preserved": true,
+      "mounts_preserved_except_versioned_workflows": true
+    },
+    {
+      "service": "frontend",
+      "restart_count": 0,
+      "env_networks_preserved": true,
+      "mounts_preserved_except_versioned_workflows": true
+    }
+  ],
+  "migration_executed": false,
+  "rollback_executed": false,
+  "real_generation_executed": false,
+  "disk_free_GiB": 8.602367401123047,
+  "private_backup_verification": {
+    "paired_sha256_matched_files": 26,
+    "media_files": 5843,
+    "new_media_delta_files": 0,
+    "resolved_media_chain_archives": 25,
+    "local_only_foundation_archives": 2,
+    "note": "Two existing foundation archives require the local private backup. No credentials, database dumps, environment, business media or private backup contents included here."
+  }
+}

@@ -1,5 +1,9 @@
 # Windows ComfyUI / QMDH 私有接入
 
+2026-10-26双功能已部署：运行源码d96d508已推送，人员跨项目甘特/拖拽分工与Qwen v1.1单/双图自动路由上线。公开输入数[1,2]、隔离PG保存/409与接收/幂等、公网新包通过；backend健康/3worker/frontend运行，生产迁移仍e51，无GPU出图。26文件配对备份SHA一致，25媒体归档链仍需本机两份基础包。当前第三Compose改为/opt/qmdh-frp/releases/people-qwen-20261026/compose.release.yml，工作流绑定同目录/workflows，禁止旧Git重建。详见[发布记录](release-people-qwen-2026-10-26.md)。草稿PR #5未合并，72待验收/25冻结/R98状态保持。
+
+以下为此前阶段记录；原单图展示名、镜像和未提交状态只对应记录当时。
+
 2026-10-19 最新：按用户命令已切换Qwen v1.1。入口 `/studio/generate`；文生图选“本机 Z Image Turbo”或“本机 Qwen Image 2.1 v1.1”，图像编辑选“本机 Qwen Image 2.1 v1.1 单图编辑”（只需1张输入图）。三个渠道启用状态、1K/2K/4K、自定义宽高、1～3张逐张生成参数保持；计算在Windows，结果保存至原资产库。v1.1已部署但未提交GPU验收任务，耗时/显存/输出仍待明确授权验证。
 
 ## 连接与隔离

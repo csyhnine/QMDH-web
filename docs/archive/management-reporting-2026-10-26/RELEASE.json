@@ -1,0 +1,49 @@
+{
+  "status": "DEPLOYED_VERIFIED",
+  "source_commit": "fabb7b2abb0a6bba9fbcab69745cf5c3f5e28b1e",
+  "images": {
+    "backend": "sha256:2d3dd94d75d7ee305efc604013b943929d8f5d0104fa081fc41c44d437b38899",
+    "worker": "sha256:3d1c993373923b5f98d79075ae2146a04589abc765774d77e952544e2a28a7db",
+    "frontend": "sha256:82f66f14b3ea9f2d7da344f15b145066013aa0e84189205b0bd142870bbe5089"
+  },
+  "database_revision": "b94de295f179",
+  "data_checks": {
+    "groups_merged": true,
+    "annual_projects": 2,
+    "weekly_snapshots": 0,
+    "structured_fields_available": true,
+    "unit_active_staff": [
+      15,
+      26,
+      8
+    ],
+    "second_unit_internal": 19,
+    "second_unit_external": 7,
+    "second_unit_inactive": 1,
+    "departure_account_disabled": true,
+    "migration": "b94de295f179"
+  },
+  "public_asset_count": 10,
+  "frontend_files_checked": 52,
+  "public_routes_checked": 9,
+  "environment_mounts_networks_preserved": true,
+  "existing_business_fingerprints_preserved": true,
+  "qwen_reference_counts": [
+    1,
+    2
+  ],
+  "accounts_created": 0,
+  "compose_files": [
+    "/www/wwwroot/qmdh-web/docker-compose.yml",
+    "/opt/qmdh-frp/compose.frp.yml",
+    "/opt/qmdh-frp/releases/management-reporting-20261026/compose.release.yml"
+  ],
+  "workflow_root": "/opt/qmdh-frp/releases/management-categories-20261026/workflows",
+  "disk_free_GiB": 8.235435485839844,
+  "paired_backup_checksum_files": 26,
+  "targeted_backend_tests": 30,
+  "targeted_frontend_tests": 15,
+  "browser_scenarios": 6,
+  "modified_file_type_errors": 0,
+  "workbook_reader_validation": "openpyxl: 3 sheets, merged role headers, frozen headers, exact text and numeric cells"
+}

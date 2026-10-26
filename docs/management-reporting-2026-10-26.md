@@ -14,4 +14,11 @@
 
 验证：30项定向后端测试；15项前端测试；6个修改文件strict零新增诊断；6个浏览器场景覆盖年度范围、去重/外包排名、历史保持、手工转排期、Excel下载、历史失败不回退及390px布局；XLSX由openpyxl读取并核对表头合并、冻结、文字公式安全及数值。离线Vite构建通过，仅既有大块提示。使用合成夹具，无真实项目测试写入。
 
-发布验证及备份结果待补充。72待验收/25冻结/R98保持，无全套测试、安全专项、GPU/付费生成、历史业务补录或清理。
+源码fabb7b2已推送并部署，生产迁移b94de295f179。后端2d3dd94d75d7、三worker 3d1c99337392、前端82f66f14b3ea；脱敏完整镜像及验证记录见docs/archive/management-reporting-2026-10-26/RELEASE.json。72待验收/25冻结/R98保持，无全套测试、安全专项、GPU/付费生成、历史业务补录或清理。
+
+
+隔离PG完成全链迁移、应用启动、Qwen单/双图接收幂等（未执行生成）、年度数据读取、周报快照保持及跨院404验证，临时容器和网络已移除。生产只做新增空表迁移，不创建周报、不修改既有项目/人员。切换前后项目、人员、修订、台账及账号权限字段的数量与SHA指纹一致。公网健康、10个资源、9个路由和52个前端容器文件核对通过；新增管理接口未登录不可访问。二分院人员仍为内部19/外包7可安排，原离职停用及分组合并保持。
+
+当前三Compose为主文件、/opt/qmdh-frp/compose.frp.yml、/opt/qmdh-frp/releases/management-reporting-20261026/compose.release.yml；工作流继续绑定management-categories-20261026/workflows，env/key、网络、媒体、ODA/FFmpeg/Xvfb依赖挂载保持，未用旧服务器Git重建。回退使用compose.rollback.yml，不降迁移、不覆盖业务库。
+
+配对备份/www/backup/qmdh-release-20261026-management-reporting与E:/backups/QMDH-web/release-20261026-management-reporting最终26文件SHA一致；5845媒体文件、零增量，32归档恢复链仍需本机两基础包，29个既有服务器归档已SHA核对。最终盘余8.235GiB。凭据、真实业务数据、人员名单、业务指纹和私有备份均不入Git。

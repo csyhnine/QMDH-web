@@ -1,3 +1,7 @@
+2026-10-26Studio入口归并已上线：前端7a31b8c/01a2fb29f9df，灵感/反馈/导航归其他，画布归生成，保留原地址和权限；18定向/8目标strict0/浏览器4场景及51文件和公网资源核对通过。仅前端替换，后端/三worker和业务数据保持。当前第三Compose为/opt/qmdh-frp/releases/navigation-merge-20261026/compose.release.yml，模板仍依赖management-categories-20261026/workflows。配对备份23文件SHA一致。见[记录](navigation-merge-2026-10-26.md)，72待验收/25冻结/R98保持。
+
+以下为此前记录，当前前端及Compose以顶部为准。
+
 2026-10-26自动保存已上线：前端3745c5b/镜像a6acf0585e54，已有项目资料和已应用甘特/人员排期停顿约1秒保存，可按账号关闭，失败/冲突保留草稿并停止自动重试；新项目首次仍需创建。7浏览器场景/15定向/7目标strict0通过，51文件及公网包一致。后端/三worker/分院和业务数据保持；当前第三Compose为/opt/qmdh-frp/releases/planning-autosave-20261026/compose.release.yml，模板仍依赖management-categories-20261026/workflows。配对备份23文件SHA一致。见[记录](planning-autosave-2026-10-26.md)，72待验收/25冻结/R98保持。
 
 以下为此前时点记录，当前前端及Compose以顶部为准。

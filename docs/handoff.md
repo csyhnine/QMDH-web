@@ -1,3 +1,7 @@
+2026-10-26甘特直接管理已上线：前端源码7cdfcb1/镜像6a33c791833c，显示全部工作/完整日期、明确添加编辑入口、图旁编辑人员与内容、自定义月历，真实鼠标移动/拉伸及保存/冲突/窄屏通过。仅前端替换，后端/三worker/分院权限和业务数据保持；当前第三Compose为/opt/qmdh-frp/releases/gantt-direct-20261026/compose.release.yml，继续依赖management-categories-20261026/workflows。配对备份23文件SHA一致。见[记录](gantt-direct-2026-10-26.md)，72待验收/25冻结/R98保持。
+
+下方记录为此前时点，当前前端与Compose以顶部为准。
+
 2026-10-26管理导航已发布：前端85c4650/3b65e290098a，固定四页宽度与子菜单吸顶，增加页面用途和分院边界说明；隔离定向22、前端15、浏览器5场景通过。后端/三worker仍8080b23，f62迁移/42名册与项目保持；仅前端替换。当前第三Compose为/opt/qmdh-frp/releases/management-navigation-20261026/compose.release.yml，并继续依赖management-categories-20261026/workflows。23文件配对备份SHA一致。见[记录](management-navigation-2026-10-26.md)，72待验收/25冻结/R98状态保持。
 
 以下为此前记录，当前前端及Compose以顶部为准。

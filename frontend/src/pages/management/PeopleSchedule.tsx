@@ -1,5 +1,5 @@
 import type { DragEvent } from "react";
-import { ganttEntries, staffLoads, addDays, staffAffiliation, type PlanningProject, type Staff, type Stage } from "./planning";
+import { ganttEntries, staffLoads, addDays, staffAffiliation, projectTint, isPaused, type PlanningProject, type Staff, type Stage } from "./planning";
 import { projectColor } from "./staffPlanning";
 export default function PeopleSchedule({
   projects,
@@ -73,6 +73,8 @@ export default function PeopleSchedule({
             .map((person) => {
               const values = staffLoads(workload, person.id, days),
                 items = entries.filter((e) => e.stage.assignees.includes(person.id));
+              const lanes: number[] = [];
+              const placed = items.slice().sort((a,b) => a.left-b.left).map(e => { let lane = lanes.findIndex(end => end <= e.left); if(lane < 0) lane = lanes.length; lanes[lane] = e.left+e.width; return {e,lane}; });
               return (
                 <div
                   className={`mp-person-row${selectedPerson === person.id ? " mp-person-selected" : ""}`}
@@ -116,13 +118,13 @@ export default function PeopleSchedule({
                       ))}
                     </div>
                     {items.length ? (
-                      items.map((e) => (
-                        <div className="mp-capacity-track" key={`${e.project.id}-${e.stage.id}`}>
+                      <div className="mp-packed-tracks" style={{ height: Math.max(1, lanes.length) * 26, position: "relative" }}>{placed.map(({e,lane}) => (
+                        <div className="mp-capacity-track" key={`${e.project.id}-${e.stage.id}`} style={{ position: "absolute", top: lane * 26, left: 0, right: 0 }}>
                           <button
                             style={{
                               left: `calc(${(e.left / days) * 100}% + 3px)`,
                               width: `calc(${(e.width / days) * 100}% - 6px)`,
-                              background: projectColor(e.project.id!),
+                              background: projectTint(e.project),
                             }}
                             disabled={disabled}
                             draggable={Boolean(onStageDrag) && !disabled && !e.project.archived}
@@ -147,11 +149,12 @@ export default function PeopleSchedule({
                             onClick={() => (onSelect ? onSelect(e.project, e.stage) : onEdit(e.project))}
                             title={`${e.project.name} · ${e.stage.name}\n${e.stage.start} — ${e.stage.end} · 分配 ${e.stage.allocation}%`}
                           >
-                            {e.project.name} · {e.stage.name}
+                            {Array.from({length:e.width},(_,i) => isPaused(e.stage,person.id,addDays(start,e.left+i)) ? <span key={i} className="mp-pause-slice" style={{left:`${i/e.width*100}%`,width:`${100/e.width}%`}} title="暂停，不计负荷" /> : null)}
+                            <span className="mp-work-caption">{e.project.name} · {e.stage.name}</span>
                             <small> {e.stage.allocation}%</small>
                           </button>
                         </div>
-                      ))
+                      ))}</div>
                     ) : (
                       <p className="mp-schedule-empty">没有显示的阶段 · 负荷格仍包含隐藏项目</p>
                     )}

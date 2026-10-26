@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { GanttStatic } from "dhtmlx-gantt";
 import { initializePlanningGantt, renderPlanningGantt } from "./ganttBridge";
-import { addDays, dayNumber, today, savePlanQueue, stageFromGantt, staffAffiliation, type Stage, type PlanningProject, type Staff } from "./planning";
+import { addDays, dayNumber, today, savePlanQueue, stageFromGantt, staffAffiliation, projectTint, type Stage, type PlanningProject, type Staff } from "./planning";
 import PlanningDate from "./PlanningDate";
 import usePlanningAutoSave from "./usePlanningAutoSave";
 import "dhtmlx-gantt/codebase/dhtmlxgantt.css";
@@ -168,7 +168,7 @@ export default function ProjectPlan({
         <button onClick={() => setRange(fitRange(effective))}>显示全部工作</button>
         <span>当前显示 {range.start} 至 {addDays(range.start, range.days - 1)}；超出窗口的工作会被截断，实际日期见左侧。</span>
       </div>
-      <div className="mp-project-shortcuts">{effective.map(p => <div key={p.id}><strong>{p.name}</strong><span>{p.stages.length} 项工作 · {p.stages.length ? `${p.stages.map(s => s.start).sort()[0]} — ${p.stages.map(s => s.end).sort().slice(-1)[0]}` : "尚未排期"}</span>
+      <div className="mp-project-shortcuts">{effective.map(p => <div key={p.id}><strong style={{borderLeft:`5px solid ${projectTint(p)}`,paddingLeft:8}}>{p.name}</strong><span>{p.stages.length} 项工作 · {p.stages.length ? `${p.stages.map(s => s.start).sort()[0]} — ${p.stages.map(s => s.end).sort().slice(-1)[0]}` : "尚未排期"}</span>
         <button disabled={saving || archived} onClick={() => openStage(p.id!)}>＋ 添加阶段 / 人员工作</button>
         <button disabled={saving || Boolean(editor) || Object.keys(pending).length > 0} onClick={() => onEdit(p)}>编辑项目资料</button>
       </div>)}</div>
@@ -178,6 +178,7 @@ export default function ProjectPlan({
           <label>阶段 / 工作名称<input aria-label="阶段或工作名称" required maxLength={250} value={editor.stage.name} onChange={e => patch({ name: e.target.value })} /></label>
           <label>开始日期<PlanningDate label="工作开始日期" value={editor.stage.start} required onChange={start => patch({ start, ...(editor.stage.milestone ? { end: start } : {}) })} /></label>
           <label>结束日期<PlanningDate label="工作结束日期" value={editor.stage.end} min={editor.stage.start} required onChange={end => patch({ end, ...(editor.stage.milestone ? { start: end } : {}) })} /></label>
+          <label>交付物<input aria-label="阶段交付物" maxLength={1000} value={editor.stage.deliverable || ""} onChange={e=>patch({deliverable:e.target.value})}/></label>
           <label>工作内容<textarea aria-label="工作内容" maxLength={2000} value={editor.stage.notes} onChange={e => patch({ notes: e.target.value })} /></label>
           <label>每人投入（%）<input aria-label="每人投入" type="number" min={1} max={100} required value={editor.stage.allocation} onChange={e => patch({ allocation: Number(e.target.value) })} /></label>
           <label>进度（%）<input aria-label="工作进度" type="number" min={0} max={100} required value={editor.stage.progress} onChange={e => patch({ progress: Number(e.target.value) })} /></label>

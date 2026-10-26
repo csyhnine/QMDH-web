@@ -16,12 +16,13 @@ import {
   staffCounts,
   scheduledWeek,
   weekRange,
+  projectTint,
   type PlanningProject,
   type Report,
   type Staff,
   type Stage,
 } from "./planning";
-import ManagementOverview from "./ManagementOverview";
+import PlanningDesk from "./PlanningDesk";
 import ProjectLedger from "./ProjectLedger";
 import ProjectPlan from "./ProjectPlan";
 import PeoplePlanner from "./PeoplePlanner";
@@ -103,13 +104,15 @@ export default function ManagementProjectsPage() {
   const [affiliationFilter, setAffiliationFilter] = useState("all");
   const counts = staffCounts(staff);
   const [report, setReport] = useState<Report | null>(null);
-  const [view, setView] = useState<"overview" | "ledger" | "gantt" | "people" | "staff">("overview");
+  const [view, setView] = useState<"ledger" | "gantt" | "people" | "staff">("people");
   const [archive, setArchive] = useState(false);
   const [trash, setTrash] = useState(false);
   const [search, setSearch] = useState("");
   const [person, setPerson] = useState(0);
   const [statusFilter, setStatusFilter] = useState<ProjectStatusFilter>("all");
-  const [planDirty, setPlanDirty] = useState(false);
+  const [chartDirty, setPlanDirty] = useState(false);
+  const [deskDirty, setDeskDirty] = useState(false);
+  const planDirty = chartDirty || deskDirty;
   const [planSaving, setPlanSaving] = useState(false);
   const [start, setStart] = useState(today());
   const [days, setDays] = useState(30);
@@ -200,7 +203,7 @@ export default function ManagementProjectsPage() {
       return;
     }
     if (!planDirty || window.confirm("排期调整尚未保存，确定放弃这些调整？")) {
-      setPlanDirty(false);
+      setPlanDirty(false); setDeskDirty(false);
       action();
     }
   };
@@ -478,10 +481,9 @@ export default function ManagementProjectsPage() {
       <nav className="mp-tabs" aria-label="项目管理视图">
         {(
           [
-            ["overview", "管理总览", "◫"],
-            ["ledger", "项目台账", "▤"],
-            ["gantt", "项目计划", "▥"],
             ["people", "人员排期", "♧"],
+            ["gantt", "项目计划", "▥"],
+            ["ledger", "项目台账", "▤"],
           ] as const
         ).map(([v, l, icon]) => (
           <button
@@ -496,8 +498,7 @@ export default function ManagementProjectsPage() {
         ))}
       </nav>
       <p className="mp-view-purpose">
-        {view === "overview" ? "管理总览：看本周重点、延期风险和团队负荷，发现问题后进入项目或排期处理。"
-          : view === "ledger" ? "项目台账：维护项目资料、责任分工、合同与费用，按分类查询和导出。"
+        {view === "ledger" ? "项目台账：维护项目资料、责任分工、合同与费用，按分类查询和导出。"
           : view === "gantt" ? "项目计划：以项目为主线，安排阶段、里程碑、起止日期与进度。"
           : view === "people" ? "人员排期：以本院人员为主线，查看跨项目占用，拖拽分配工作并处理冲突。"
           : "人员名册：维护本院可安排的员工，名册职务与网站登录权限分别管理。"}
@@ -613,12 +614,11 @@ export default function ManagementProjectsPage() {
               </div>
             </details>
             <span className="mp-toolbar-spacer" />
-            {view === "overview" && !trash && <><button onClick={() => document.getElementById("mp-annual-report")?.scrollIntoView({ block: "start" })}>经营统计 ↓</button><button onClick={() => document.getElementById("mp-weekly-report")?.scrollIntoView({ block: "start" })}>人员周报 ↓</button></>}
-            <button disabled={loading || busy} aria-pressed={trash} onClick={() => safeChange(() => { setTrash(!trash); setArchive(false); })}>{trash ? "返回在管项目" : "回收站"}</button>
+            {view === "ledger" && <><button disabled={loading || busy} aria-pressed={trash} onClick={() => safeChange(() => { setTrash(!trash); setArchive(false); })}>{trash ? "返回在管项目" : "回收站"}</button>
             <button disabled={loading || trash} onClick={download}>
               ↓ CSV 台账
             </button>
-            <button disabled={loading || busy || trash} onClick={downloadExcel}>↓ Excel 一览表</button>
+            <button disabled={loading || busy || trash} onClick={downloadExcel}>↓ Excel 一览表</button></>}
             <button className="mp-primary" disabled={loading || planDirty} onClick={createProject}>
               ＋ 新建项目
             </button>
@@ -645,32 +645,6 @@ export default function ManagementProjectsPage() {
         </button>
       </div>
       <div className="mp-view" key={view} aria-busy={loading}>
-        {!loading && view === "overview" && !projects.length && !archive && !trash && !error ? (
-          <section className="mp-start-guide" aria-label="项目管理入门">
-            <div>
-              <span>从这里开始</span>
-              <h2>先建项目，再安排工作</h2>
-              <p>只填项目名称即可保存。人员、合同和费用都可以稍后补充。</p>
-              <button className="mp-primary" onClick={createProject}>
-                创建第一个项目
-              </button>
-            </div>
-            <ol>
-              <li>
-                <strong>1. 建立项目</strong>
-                <span>名称必填，其他资料选填</span>
-              </li>
-              <li>
-                <strong>2. 安排工作</strong>
-                <span>有计划时再填写阶段、日期和人员</span>
-              </li>
-              <li>
-                <strong>3. 查看进展</strong>
-                <span>在项目计划和人员排期中查看安排</span>
-              </li>
-            </ol>
-          </section>
-        ) : null}
         {loading ? (
           <div className="mp-loading" role="status">
             <span className="mp-loading-label">
@@ -695,18 +669,6 @@ export default function ManagementProjectsPage() {
             {projects.map((p) => <article key={p.id}><strong>{p.name}</strong><span>{p.archived ? "原为已归档项目" : "原为在管项目"}</span><button disabled={busy} onClick={() => changeDeleted(p, false)}>恢复项目</button></article>)}
             {!projects.length && <p>本院本年度没有已删除项目。</p>}
           </section>
-        ) : view === "overview" && !projects.length && !archive && !error ? null : view === "overview" ? (
-          <ManagementOverview
-            projects={filtered}
-            staff={staff}
-            current={today()}
-            onEdit={editProject}
-            onPlan={() => changeView("gantt")}
-            onPeople={() => {
-              setStart(today());
-              changeView("people");
-            }}
-          />
         ) : view === "ledger" ? (
           <ProjectLedger projects={filtered} staff={staff} onEdit={editProject} />
         ) : view === "gantt" || view === "people" ? (
@@ -767,6 +729,7 @@ export default function ManagementProjectsPage() {
                 )}
               </div>
             </div>
+            <PlanningDesk projects={filtered} staff={staff} disabled={planSaving || chartDirty || archive} onPersist={persistSchedule} onDirty={setDeskDirty} />
             {view === "gantt" ? (
               <ProjectPlan
                 key={`${year}-${archive}-${search}-${person}-${statusFilter}-${refresh}`}
@@ -841,12 +804,22 @@ export default function ManagementProjectsPage() {
             </p>
           </div>
         )}
-        {!loading && view === "overview" && !trash && <ManagementReporting key={`${unit}-${year}`} unit={unit} year={year} revision={projects} />}
+        {!loading && view === "ledger" && !trash && <details className="mp-ledger-reports"><summary>年度经营统计与人员周报</summary><ManagementReporting key={`${unit}-${year}`} unit={unit} year={year} revision={projects} /></details>}
       </div>
       <div className="mp-report-meta">
         {year} 年度项目信息一览表 · 表格编制 {report?.compiler || "待填写"} · 数据更新 {report?.data_as_of || "待填写"}
       </div>
-      {draft ? (
+      {draft && !draft.id ? (
+        <div className="mp-modal"><form className="mp-small-editor" role="dialog" aria-modal="true" aria-label="快速立项" onSubmit={saveProject}>
+          <h2>新建项目</h2><p className="mp-help">先建档，再安排工作。只需项目名称，其余可稍后补充。</p>
+          {error&&<p role="alert" className="mp-error">{error}</p>}<fieldset disabled={busy}>
+          {textField("name","项目名称")}
+          <label><span>项目统筹（选填）</span><PeopleSelect value={draft.team.coordinator} staff={staff} onChange={ids=>change("team",{...draft.team,coordinator:ids})}/></label>
+          <label>目标交付日期（选填）<PlanningDate label="立项目标交付日期" value={draft.deadline||""} onChange={date=>change("deadline",date||null)}/></label>
+          <label>项目颜色<input aria-label="项目颜色" type="color" value={projectTint(draft)} onChange={e=>change("color",e.target.value)}/></label>
+          </fieldset><footer><button type="button" disabled={busy} onClick={closeDraft}>取消</button><button type="submit" className="mp-primary" disabled={busy}>创建项目</button></footer>
+        </form></div>
+      ) : draft ? (
         <div className="mp-modal mp-drawer-backdrop">
           <form
             ref={editorForm}
@@ -915,7 +888,7 @@ export default function ManagementProjectsPage() {
             <fieldset id="mp-editor-basic" disabled={busy}>
               <legend>基本信息</legend>
               <div className="mp-fields">
-                {textField("name", "项目名称")}
+                {textField("name", "项目名称")}<label>项目颜色<input aria-label="项目颜色" type="color" value={projectTint(draft)} onChange={e=>change("color",e.target.value)}/></label>
                 <div className="mp-field">
                   <span>项目负责人（选填）</span>
                   <PeopleSelect

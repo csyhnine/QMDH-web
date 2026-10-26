@@ -92,6 +92,26 @@ class Team(StrictModel):
     participants: Ids = Field(default_factory=list)
 
 
+class WorkPause(StrictModel):
+    id: str = Field(default_factory=lambda: uuid4().hex, max_length=64)
+    start: date
+    until: date | None = None
+    people: Ids = Field(default_factory=list)
+    reason: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def dates(self):
+        if self.until is not None and self.until < self.start:
+            raise ValueError("恢复日期不能早于暂停日期")
+        return self
+
+
+class WorkUpdate(StrictModel):
+    id: str = Field(default_factory=lambda: uuid4().hex, max_length=64)
+    date: date
+    note: str = Field(min_length=1, max_length=1000)
+
+
 class Stage(StrictModel):
     id: str = Field(default_factory=lambda: uuid4().hex, min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
     name: str = Field(min_length=1, max_length=250)
@@ -102,6 +122,9 @@ class Stage(StrictModel):
     allocation: int = Field(default=100, ge=1, le=100)
     milestone: bool = False
     notes: str = Field(default="", max_length=2000)
+    deliverable: str = Field(default="", max_length=1000)
+    pauses: list[WorkPause] = Field(default_factory=list, max_length=100)
+    updates: list[WorkUpdate] = Field(default_factory=list, max_length=200)
 
     @model_validator(mode="after")
     def check_dates(self):
@@ -116,6 +139,7 @@ class Stage(StrictModel):
 
 class ProjectInput(StrictModel):
     name: str = Field(min_length=1, max_length=250)
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
     sequence: int = Field(default=1, ge=1, le=100000)
     team: Team = Field(default_factory=Team)
     next_week_work: str = Field(default="", max_length=4000)
@@ -160,6 +184,7 @@ def staff_out(row):
 
 def project_out(row):
     doc = {"contract_status": "unknown", "weekly_plan_mode": "manual", "collaboration_unit": "", **row.document}
+    doc["color"] = doc.get("color") or ("#386bcc", "#16806b", "#9b5ab4", "#b16e22", "#b74f6e", "#527785")[row.id % 6]
     return dict(**doc, id=row.id, year=row.year, unit=canonical_unit(row.unit), version=row.version,
                 archived=row.archived, deleted=row.deleted, updated_at=row.updated_at, updated_by=row.updated_by)
 
@@ -173,7 +198,7 @@ def get_project(db, user, project_id, *, include_deleted=False):
 
 def validate_staff(db, user, payload, old=None):
     def used(doc):
-        return set(doc.get("next_week_staff", [])) | {i for ids in doc.get("team", {}).values() for i in ids} | {i for stage in doc.get("stages", []) for i in stage["assignees"]}
+        return set(doc.get("next_week_staff", [])) | {i for ids in doc.get("team", {}).values() for i in ids} | {i for stage in doc.get("stages", []) for i in stage["assignees"]} | {i for stage in doc.get("stages", []) for pause in stage.get("pauses", []) for i in pause["people"]}
     ids = used(payload.model_dump(mode="json"))
     if not ids:
         return
@@ -341,9 +366,14 @@ def save_project(db, user, payload, row=None, year=None):
     validate_staff(db, user, payload, row.document if row else None)
     doc = payload.model_dump(mode="json", exclude={"version", "archived"})
     if row:
-        for key in ("contract_status", "weekly_plan_mode", "collaboration_unit"):
+        for key in ("contract_status", "weekly_plan_mode", "collaboration_unit", "color"):
             if key not in payload.model_fields_set and key in row.document:
                 doc[key] = row.document[key]
+        old_stages = {s["id"]: s for s in row.document.get("stages", [])}
+        for value, stage in zip(doc["stages"], payload.stages):
+            for key in ("deliverable", "pauses", "updates"):
+                if key not in stage.model_fields_set and key in old_stages.get(stage.id, {}):
+                    value[key] = old_stages[stage.id][key]
         result = db.execute(update(ManagementProject).where(ManagementProject.id == row.id,
             ManagementProject.unit.in_(unit_aliases(user.company_unit)), ManagementProject.deleted.is_(False),
             ManagementProject.version == payload.version).values(document=doc, archived=payload.archived,
@@ -356,6 +386,8 @@ def save_project(db, user, payload, row=None, year=None):
         row = ManagementProject(unit=user.company_unit, year=year, document=doc, archived=payload.archived, updated_by=user.id)
         db.add(row)
         db.flush()
+        doc["color"] = doc.get("color") or ("#386bcc", "#16806b", "#9b5ab4", "#b16e22", "#b74f6e", "#527785")[row.id % 6]
+        row.document = dict(doc)
     db.add(ManagementRevision(project_id=row.id, version=row.version, actor_id=user.id,
                               snapshot=dict(**doc, archived=row.archived)))
     db.commit()

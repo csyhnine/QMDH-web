@@ -1964,3 +1964,52 @@
 
 .mp-reporting .mp-week-group th:last-child, .mp-reporting .mp-week-group td:last-child { position: sticky; right: 0; min-width: 72px; background: #f7f9fe; z-index: 2; }
 .mp-reporting .mp-week-group th:nth-last-child(2), .mp-reporting .mp-week-group td:nth-last-child(2) { position: sticky; right: 72px; min-width: 90px; background: #f7f9fe; z-index: 2; }
+
+.mp-people-layout { grid-template-columns: minmax(0,1fr); }
+.mp-people-layout.has-roster { grid-template-columns: 190px minmax(0,1fr); }
+.mp-people-layout.has-editor { grid-template-columns: minmax(0,1fr) 260px; }
+.mp-people-layout.has-roster.has-editor { grid-template-columns: 190px minmax(0,1fr) 260px; }
+.mp-density-controls,.mp-desk-heading { display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px; }
+.mp-compact .mp-people-label { padding:5px 8px;width:160px;min-width:160px;gap:6px; }
+.mp-compact .mp-people-label .mp-avatar,.mp-compact .mp-people-label small,.mp-compact .mp-people-label .mp-subtle { display:none; }
+.mp-compact .mp-people-label strong { font-size:12px; }
+.mp-compact .mp-people-board { max-height:calc(100vh - 320px);overflow:auto;min-height:260px; }
+.mp-compact .mp-person-row { min-height:48px; }
+.mp-compact .mp-capacity-days { min-height:18px;height:18px; }
+.mp-compact .mp-capacity-days span { padding:0;font-size:10px; }
+.mp-compact .mp-people-head { position:sticky;top:0;z-index:5;background:#fff;min-height:38px; }
+.mp-compact .mp-schedule-empty { display:none; }
+.management-page .mp-capacity-track { height:26px; }
+.management-page .mp-capacity-track button { height:22px;top:1px;line-height:20px;padding:0 5px;overflow:hidden; }
+.mp-pause-slice { position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,#9ca3afdd 0 4px,#f3f4f6dd 4px 8px);pointer-events:none; }
+.mp-work-caption { position:relative;z-index:1;text-shadow:0 1px 2px #253144; }
+.mp-chart-paused .gantt_task_content { background:repeating-linear-gradient(135deg,transparent 0 6px,#ffffff55 6px 10px); }
+.mp-planning-desk { margin:8px 0 16px;border:1px solid #dfe6f2;border-radius:10px;padding:10px;background:#fff; }
+.mp-desk-heading { margin:0;font-size:12px; }
+.mp-desk-cards { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px; }
+.mp-desk-cards article { border:1px solid #e5eaf3;border-radius:8px;padding:12px; }
+.mp-desk-cards h3 { margin:0 0 10px;font-size:13px; }
+.mp-desk-cards article>button { display:block;margin:5px 0;text-align:left; }
+.mp-node-card { width:min(640px,calc(100vw - 32px));max-height:90vh;overflow:auto;background:white;border-radius:14px;padding:24px;box-sizing:border-box; }
+.mp-node-card header,.mp-node-card footer { display:flex;gap:12px;justify-content:space-between;align-items:center; }
+.mp-node-card fieldset { border:0;display:grid;gap:12px;padding:0; }
+.mp-node-card label { display:grid;gap:5px; }.mp-node-card input[type=checkbox] { width:auto; }
+.mp-node-card details { border:1px solid #e1e6f1;border-radius:6px;padding:10px; }.mp-node-card textarea { min-height:60px; }
+.mp-node-card p { font-size:12px;line-height:1.6; }.mp-ledger-reports { margin-top:24px; }
+@media(max-width:1000px) { .mp-people-layout.has-roster.has-editor {grid-template-columns:170px minmax(0,1fr);} .has-roster.has-editor .mp-assignment-panel {grid-column:1/-1;} }
+@media(max-width:720px) { .mp-people-layout.has-roster,.mp-people-layout.has-editor,.mp-people-layout.has-roster.has-editor {grid-template-columns:minmax(0,1fr);} .mp-desk-cards {grid-template-columns:minmax(0,1fr);} }
+
+.management-page:has(.mp-compact) .mp-header { margin-bottom:8px;align-items:center; }
+.management-page:has(.mp-compact) .mp-header h1 { font-size:22px;margin:0; }
+.management-page:has(.mp-compact) .mp-header p,.management-page:has(.mp-compact) .mp-header .mp-unit-boundary,.management-page:has(.mp-compact) .mp-view-purpose { display:none; }
+.management-page:has(.mp-compact) .mp-tabs { margin:10px 0; }
+.management-page:has(.mp-compact) .mp-toolbar { margin:8px 0;gap:8px; }
+.management-page:has(.mp-compact) .mp-toolbar>input { max-width:180px; }
+.management-page:has(.mp-compact) .mp-schedule-toolbar { margin:8px 0; }
+.management-page:has(.mp-compact) .mp-schedule-toolbar h2 { font-size:15px;margin:0; }
+.management-page:has(.mp-compact) .mp-schedule-toolbar p,.mp-compact .mp-people-intro,.mp-compact .mp-people-summary small { display:none; }
+.mp-compact .mp-people-summary { padding:0 0 4px;margin:0; }
+.mp-compact .mp-project-colors { margin:4px 0; }
+.mp-compact .mp-schedule-legend { margin:4px 0; }
+.mp-compact .mp-capacity-timeline { padding-bottom:2px; }
+@media(max-width:720px) { .management-page:has(.mp-compact) .mp-header {gap:6px;} .management-page:has(.mp-compact) .mp-header-actions {gap:5px;} .management-page:has(.mp-compact) .mp-tabs {margin:6px 0;} }

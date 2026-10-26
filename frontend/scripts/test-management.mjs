@@ -117,7 +117,7 @@ test('both navigation systems expose management only to company managers regardl
     }
   }
 });
-test('quick creation accepts name only, untouched close is silent and conflicts preserve stage edits', async () => {
+test('quick creation has minimal fields, untouched cancel is silent and failures preserve input', async () => {
   const slots=[];let cursor=0,effects=[],changed=false,tree,fail=false,saved,confirms=0;
   const hooks={
     useRef(initial){const i=cursor++;if(!(i in slots))slots[i]={current:initial};return slots[i];},
@@ -131,16 +131,16 @@ test('quick creation accepts name only, untouched close is silent and conflicts 
     if(body){if(fail)throw Error('项目已被他人修改'); saved=body;return {...body,id:1};}
     return path==='/staff'?[{id:1,name:'设计师',is_active:true}]:path.startsWith('/reports')?report:[];
   };
-  const Page=load('pages/management/ManagementProjectsPage.tsx',{'react':hooks,'../../api':{managementRequest:request},'../../context/AuthContext':{useAuth:()=>({currentUser:user})},'./planning':planning,'./ManagementOverview':{default:()=>null},'./ManagementReporting':{default:()=>null},'./ProjectLedger':{default:()=>null},'./ProjectPlan':{default:()=>null},'./PeopleSchedule':{default:()=>null},'./PeoplePlanner':{default:()=>null},'./PlanningDate':{default:()=>null},'./usePlanningAutoSave':{default:()=>{}}},{structuredClone,crypto:{randomUUID:()=> 'stage-1'},window:{confirm:()=>{confirms++;return true;}},Error}).default;
+  const Page=load('pages/management/ManagementProjectsPage.tsx',{'react':hooks,'../../api':{managementRequest:request},'../../context/AuthContext':{useAuth:()=>({currentUser:user})},'./planning':planning,'./ManagementOverview':{default:()=>null},'./ManagementReporting':{default:()=>null},'./ProjectLedger':{default:()=>null},'./ProjectPlan':{default:()=>null},'./PeopleSchedule':{default:()=>null},'./PeoplePlanner':{default:()=>null},'./PlanningDate':{default:()=>null},'./PlanningDesk':{default:()=>null},'./usePlanningAutoSave':{default:()=>{}}},{structuredClone,crypto:{randomUUID:()=> 'stage-1'},window:{confirm:()=>{confirms++;return true;}},Error}).default;
   const render=()=>{do{cursor=0;effects=[];changed=false;tree=Page();effects.forEach(fn=>fn());}while(changed);};
   const nodes=n=>{if(!n||typeof n!=='object')return[];return[n,...[n.props?.children].flat(Infinity).flatMap(nodes)];};
   const text=n=>typeof n==='string'||typeof n==='number'?String(n):n&&typeof n==='object'?[n.props?.children].flat(Infinity).map(text).join(''):'';
   const find=(type,label)=>nodes(tree).find(n=>n.type===type&&text(n)===label);
   const button=label=>find('button',label);
   render();await new Promise(r=>setImmediate(r));render();
-  const editor=()=>nodes(tree).find(n=>n.type==='form'&&n.props['aria-label']==='编辑项目');
+  const editor=()=>nodes(tree).find(n=>n.type==='form'&&['编辑项目','快速立项'].includes(n.props['aria-label']));
   button('＋ 新建项目').props.onClick();render();
-  button('关闭').props.onClick();render();assert.equal(confirms,0);assert.equal(editor(),undefined);
+  button('取消').props.onClick();render();assert.equal(confirms,0);assert.equal(editor(),undefined);
   button('＋ 新建项目').props.onClick();render();
   nodes(find('label','项目名称')).find(n=>n.type==='input').props.onChange({target:{value:'   '}});render();
   await editor().props.onSubmit({preventDefault(){}});render();assert.equal(saved,undefined);
@@ -150,14 +150,12 @@ test('quick creation accepts name only, untouched close is silent and conflicts 
   button('＋ 新建项目').props.onClick();render();
   const projectName=nodes(find('label','项目名称')).find(n=>n.type==='input');
   projectName.props.onChange({target:{value:'真实安排'}});render();
-  button('＋ 添加阶段').props.onClick();render();
-  const stageName=nodes(tree).find(n=>n.type==='section'&&n.props.className==='mp-stage');
-  nodes(stageName).find(n=>n.type==='input').props.onChange({target:{value:'方案设计'}});render();
+  assert.equal(button('＋ 添加阶段'),undefined);
   fail=true;await editor().props.onSubmit({preventDefault(){}});render();
   assert.ok(renderToStaticMarkup(tree).includes('项目已被他人修改'));
   assert.equal(nodes(editor()).find(n=>n.type==='input'&&n.props.value==='真实安排').props.value,'真实安排');
   fail=false;await editor().props.onSubmit({preventDefault(){}});render();
-  assert.equal(saved.name,'真实安排'); assert.equal(saved.stages[0].name,'方案设计');assert.equal(saved.stages[0].id,'stage-1');
+  assert.equal(saved.name,'真实安排');assert.equal(saved.stages.length,0);
   assert.equal(editor(),undefined);
 });
 
@@ -202,3 +200,15 @@ test('saving several changed projects acknowledges only committed writes and pre
 });
 
 
+
+test('individual pauses release only selected people and resume dates restore load without shifting deadlines',()=>{
+ const work={...stage('p','2026-10-26','2026-10-30',[1,2]),pauses:[{id:'pause',start:'2026-10-27',until:'2026-10-29',people:[1],reason:'紧急支援'}]};
+ const p=makeProject(1,[work]);const entries=planning.ganttEntries([p],'2026-10-26',5);
+ assert.equal(JSON.stringify(planning.staffLoads(entries,1,5)),JSON.stringify([100,0,0,100,100]));
+ assert.equal(JSON.stringify(planning.staffLoads(entries,2,5)),JSON.stringify([100,100,100,100,100]));
+ assert.equal(work.end,'2026-10-30');
+ const paused={...p,stages:[{...work,pauses:[{start:'2026-10-26',until:null,people:[],reason:'暂停'}]}]};
+ assert.equal(planning.scheduledWeek(paused,'2026-10-26',5).people.length,0);
+ const node={...work,milestone:true,start:'2026-10-26',end:'2026-10-26'};
+ assert.equal(planning.staffLoads(planning.ganttEntries([makeProject(1,[node])],'2026-10-26',1),1,1)[0],0);
+});

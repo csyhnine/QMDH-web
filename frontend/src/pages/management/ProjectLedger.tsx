@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { cell, LEDGER_COLUMNS, type PlanningProject, type Staff } from "./planning";
+import { projectTint, cell, LEDGER_COLUMNS, type PlanningProject, type Staff } from "./planning";
 const INITIAL_COLUMNS = [
   "sequence",
   "name",
@@ -153,7 +153,7 @@ function Group({
             <td key={key} className={key === "name" ? "mp-project-name-cell" : ""}>
               {key === "name" ? (
                 <button className="mp-project-name" onClick={() => onEdit(p)}>
-                  <span className="mp-project-symbol" aria-hidden="true">
+                  <span className="mp-project-symbol" aria-hidden="true" style={{color:projectTint(p)}}>
                     ▤
                   </span>
                   <strong>{p.name}</strong>

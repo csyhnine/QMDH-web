@@ -29,6 +29,9 @@ export type Stage = {
   allocation: number;
   milestone: boolean;
   notes: string;
+  deliverable?: string;
+  pauses?: { id: string; start: string; until: string | null; people: number[]; reason: string }[];
+  updates?: { id: string; date: string; note: string }[];
 };
 export type PlanningProject = {
   id?: number;
@@ -37,6 +40,7 @@ export type PlanningProject = {
   updated_at?: string;
   updated_by?: number;
   name: string;
+  color?: string | null;
   sequence: number;
   team: Record<TeamKey, number[]>;
   next_week_work: string;
@@ -74,6 +78,7 @@ export type Report = {
 export function newProject(sequence: number): PlanningProject {
   return {
     name: "",
+    color: PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)],
     sequence,
     team: {
       coordinator: [],
@@ -122,7 +127,13 @@ export function today() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-export type GanttEntry = { project: PlanningProject; stage: Stage; left: number; width: number };
+export const PROJECT_COLORS = ["#386bcc", "#16806b", "#9b5ab4", "#b16e22", "#b74f6e", "#527785"];
+export const projectTint = (p: PlanningProject) => p.color || PROJECT_COLORS[Math.abs(p.id || 0) % PROJECT_COLORS.length];
+export const isPaused = (stage: Stage, person: number, date: string) => (stage.pauses || []).some(p => p.start <= date && (!p.until || p.until > date) && (!p.people.length || p.people.includes(person)));
+export function stageParticipants(stage: Stage, start: string, days: number) {
+  return stage.assignees.filter(id => Array.from({ length: days }, (_, i) => addDays(start, i)).some(date => date >= stage.start && date <= stage.end && !isPaused(stage, id, date)));
+}
+export type GanttEntry = { project: PlanningProject; stage: Stage; left: number; width: number; windowStart?: string };
 export function ganttEntries(projects: PlanningProject[], start: string, days: number): GanttEntry[] {
   const first = dayNumber(start),
     last = first + days - 1;
@@ -132,18 +143,14 @@ export function ganttEntries(projects: PlanningProject[], start: string, days: n
       .map((stage) => ({
         project,
         stage,
+        windowStart: start,
         left: Math.max(0, dayNumber(stage.start) - first),
         width: Math.min(last, dayNumber(stage.end)) - Math.max(first, dayNumber(stage.start)) + 1,
       })),
   );
 }
 export function overloadedDays(entries: GanttEntry[], staffId: number, days: number) {
-  const load = Array<number>(days).fill(0);
-  entries
-    .filter((e) => e.stage.assignees.includes(staffId))
-    .forEach((e) => {
-      for (let i = e.left; i < e.left + e.width; i++) load[i] += e.stage.allocation;
-    });
+  const load = staffLoads(entries, staffId, days);
   return load.map((v, i) => (v > 100 ? i : -1)).filter((i) => i >= 0);
 }
 export const LEDGER_COLUMNS = [
@@ -185,7 +192,7 @@ export function cell(project: PlanningProject, key: string, staff: Staff[], refe
 export function scheduledWeek(project: PlanningProject, start: string, days: number) {
   const end = addDays(start, days - 1);
   const stages = project.stages.filter(s => s.start <= end && s.end >= start);
-  return { stages, people: [...new Set(stages.flatMap(s => s.assignees))],
+  return { stages, people: [...new Set(stages.flatMap(s => stageParticipants(s, start, days)))],
     work: stages.map(s => `${s.name}（${s.start}—${s.end}）`).join("；") };
 }
 export function ledgerCsv(projects: PlanningProject[], staff: Staff[]) {
@@ -213,7 +220,8 @@ export function projectProgress(project: PlanningProject) {
 export function staffLoads(entries: GanttEntry[], staffId: number, days: number) {
   const load = Array<number>(days).fill(0);
   for (const e of entries.filter((e) => e.stage.assignees.includes(staffId))) {
-    for (let i = e.left; i < e.left + e.width; i++) load[i] += e.stage.allocation;
+    if (e.stage.milestone) continue;
+    for (let i = e.left; i < e.left + e.width; i++) if (!isPaused(e.stage, staffId, addDays(e.windowStart || e.stage.start, i))) load[i] += e.stage.allocation;
   }
   return load;
 }
@@ -293,7 +301,8 @@ export function ganttData(projects: PlanningProject[], staff: Staff[], start: st
       end_date: `${addDays(dates[dates.length - 1] || start, 1)} 00:00`,
       progress: projectProgress(project) / 100,
       projectId: project.id,
-      people: "",
+      people: `${new Set(project.stages.flatMap(s => s.assignees)).size} 人`,
+      color: projectTint(project),
       dates: dates.length ? `${dates[0]} — ${dates[dates.length - 1]}` : "待排期",
       unscheduled: !project.stages.length,
     };
@@ -305,6 +314,9 @@ export function ganttData(projects: PlanningProject[], staff: Staff[], start: st
         projectId: project.id,
         stageId: stage.id,
         text: escapeHtml(stage.name),
+        color: projectTint(project),
+        paused: (stage.pauses || []).some(p => p.start <= today() && (!p.until || p.until > today())),
+        deliverable: escapeHtml(stage.deliverable || ""),
         type: stage.milestone ? "milestone" : "task",
         open: true,
         readonly: project.archived,

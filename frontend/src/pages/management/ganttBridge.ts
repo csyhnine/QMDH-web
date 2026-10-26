@@ -51,7 +51,7 @@ export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, c
     return true;
   });
   gantt.templates.task_class = (_start, _end, task) =>
-    task.unscheduled
+    task.paused ? "mp-chart-paused" : task.unscheduled
       ? "mp-chart-unscheduled"
       : task.type === "project"
         ? "mp-chart-project"

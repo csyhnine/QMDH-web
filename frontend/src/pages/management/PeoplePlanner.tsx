@@ -7,6 +7,8 @@ import {
   savePlanQueue,
   TEAM_ROLES,
   staffAffiliation,
+  projectTint,
+  scheduledWeek,
   type PlanningProject,
   type Staff,
   type Stage,
@@ -55,6 +57,7 @@ export default function PeoplePlanner({
   const [query, setQuery] = useState(""),
     [availability, setAvailability] = useState("all"),
     [selectedPerson, setSelectedPerson] = useState(0);
+  const [showRoster, setShowRoster] = useState(false), [showAssignment, setShowAssignment] = useState(false), [compact, setCompact] = useState(true);
   const [affiliation, setAffiliation] = useState("all");
   const [projectId, setProjectId] = useState(0),
     [stageId, setStageId] = useState("");
@@ -155,6 +158,7 @@ export default function PeoplePlanner({
     if (!blocked && item?.kind === "person") target(item.personId);
   }
   function select(p: PlanningProject, s?: Stage) {
+    setShowAssignment(true);
     setProjectId(p.id!);
     setStageId(s?.id || "");
   }
@@ -163,7 +167,7 @@ export default function PeoplePlanner({
     else onEdit(p);
   }
   return (
-    <div className="mp-people-workspace">
+    <div className={`mp-people-workspace${compact ? " mp-compact" : ""}`}><div className="mp-density-controls"><button aria-pressed={showRoster} onClick={() => setShowRoster(!showRoster)}>选人面板</button><button aria-pressed={showAssignment} onClick={() => setShowAssignment(!showAssignment)}>安排工作</button><label><input type="checkbox" checked={compact} onChange={e => setCompact(e.target.checked)} />紧凑显示</label></div>
       <div className="mp-people-intro">
         <div>
           <strong>看人员，安排多个项目</strong>
@@ -198,8 +202,8 @@ export default function PeoplePlanner({
           {message}
         </p>
       )}
-      <div className="mp-people-layout">
-        <aside className="mp-roster-panel" aria-label="可选员工与管理人员">
+      <div className={`mp-people-layout${showRoster ? " has-roster" : ""}${showAssignment ? " has-editor" : ""}`}>
+        {showRoster && <aside className="mp-roster-panel" aria-label="可选员工与管理人员">
           <h3>可选人员</h3>
           <p>显示职务，管理分工可在右侧安排。</p>
           <input
@@ -249,7 +253,7 @@ export default function PeoplePlanner({
             <p className="mp-empty">{active.length ? "没有匹配人员，请调整搜索或筛选。" : "先在人员名册添加员工。"}</p>
           )}
           <small>有余量指窗口内至少一天低于100%，仍需检查具体日期。</small>
-        </aside>
+        </aside>}
         <div className="mp-people-main">
           <div className="mp-people-summary">
             <span>
@@ -259,8 +263,8 @@ export default function PeoplePlanner({
           </div>
           <div className="mp-project-colors">
             {preview.map((p) => (
-              <button key={p.id} style={{ borderLeftColor: projectColor(p.id!) }} onClick={() => select(p)}>
-                {p.name}
+              <button key={p.id} style={{ borderLeftColor: projectTint(p) }} onClick={() => select(p)}>
+                {p.name} · {scheduledWeek(p, start, days).people.length} 人
               </button>
             ))}
           </div>
@@ -303,7 +307,7 @@ export default function PeoplePlanner({
             拖工作条到目标人员的日期格可改期或转交。多人阶段共享日期，改期会影响该阶段所有人；转交只替换拖动的这一人。也可点击工作条，在右侧调整日期及人员。
           </p>
         </div>
-        <aside className="mp-assignment-panel" aria-label="人员与管理分工安排">
+        {showAssignment && <aside className="mp-assignment-panel" aria-label="人员与管理分工安排">
           <h3>安排到项目</h3>
           <select
             aria-label="选择安排项目"
@@ -317,7 +321,7 @@ export default function PeoplePlanner({
             {!preview.length && <option value="">暂无项目</option>}
             {preview.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name}
+                {p.name} · {scheduledWeek(p, start, days).people.length} 人
               </option>
             ))}
           </select>
@@ -424,7 +428,7 @@ export default function PeoplePlanner({
           ) : (
             <p className="mp-empty">先创建项目，再选择员工安排工作。</p>
           )}
-        </aside>
+        </aside>}
       </div>
       {changed > 0 && (
         <details className="mp-change-list" open>

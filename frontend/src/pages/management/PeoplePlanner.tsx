@@ -6,6 +6,7 @@ import {
   dayNumber,
   savePlanQueue,
   TEAM_ROLES,
+  staffAffiliation,
   type PlanningProject,
   type Staff,
   type Stage,
@@ -54,6 +55,7 @@ export default function PeoplePlanner({
   const [query, setQuery] = useState(""),
     [availability, setAvailability] = useState("all"),
     [selectedPerson, setSelectedPerson] = useState(0);
+  const [affiliation, setAffiliation] = useState("all");
   const [projectId, setProjectId] = useState(0),
     [stageId, setStageId] = useState("");
   const preview = projects.map((p) => pending[p.id!] || p);
@@ -66,7 +68,8 @@ export default function PeoplePlanner({
   const active = staff.filter((s) => s.is_active);
   const roster = active.filter(
     (s) =>
-      `${s.name} ${s.position}`.includes(query.trim()) &&
+      `${s.name} ${s.position} ${staffAffiliation(s)}`.includes(query.trim()) &&
+      (affiliation === "all" || (s.employment_type || "unknown") === affiliation) &&
       (availability === "all" || (availability === "available" ? loads(s.id).some((v) => v < 100) : peak(s.id) > 100)),
   );
   const names = (ids: number[]) =>
@@ -210,6 +213,9 @@ export default function PeoplePlanner({
             <option value="available">有余量的人员</option>
             <option value="over">有超额安排</option>
           </select>
+          <select aria-label="排期人员归属" value={affiliation} onChange={e => setAffiliation(e.target.value)}>
+            <option value="all">内部与外包</option><option value="internal">QMDH 内部</option><option value="external">外包人员</option><option value="unknown">归属待确认</option>
+          </select>
           <div className="mp-roster-list">
             {roster.map((s) => (
               <button
@@ -228,6 +234,7 @@ export default function PeoplePlanner({
                 <span>
                   <strong>{s.name}</strong>
                   <small>{s.position || "项目成员"}</small>
+                  <small className={`mp-affiliation ${s.employment_type || "unknown"}`}>{staffAffiliation(s)}</small>
                   <small className={peak(s.id) > 100 ? "mp-danger-text" : ""}>
                     {peak(s.id)
                       ? `最高 ${peak(s.id)}% · ${new Set(entries.filter((e) => e.stage.assignees.includes(s.id)).map((e) => e.project.id)).size} 个项目`

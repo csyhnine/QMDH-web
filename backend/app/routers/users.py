@@ -52,7 +52,8 @@ def _validate_choice(value: str, allowed: set[str], field_name: str) -> str:
 def _normalize_group_name(value: str | None) -> str:
     if value is None:
         return USER_GROUP_UNASSIGNED
-    return value.strip()
+    name = value.strip()
+    return "城市更新二分院" if name in ("四分院", "城市更新四分院") else name
 
 
 def _group_label(group_name: str) -> str:

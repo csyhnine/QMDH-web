@@ -12,6 +12,8 @@ import {
   projectPayload,
   TEAM_ROLES,
   today,
+  staffAffiliation,
+  staffCounts,
   type PlanningProject,
   type Report,
   type Staff,
@@ -39,7 +41,7 @@ function PeopleSelect({
   onChange: (ids: number[]) => void;
 }) {
   const [query, setQuery] = useState("");
-  const available = staff.filter((s) => (s.is_active || value.includes(s.id)) && s.name.includes(query));
+  const available = staff.filter((s) => (s.is_active || value.includes(s.id)) && `${s.name} ${staffAffiliation(s)}`.includes(query));
   return (
     <details className="mp-people-picker">
       <summary>
@@ -63,6 +65,7 @@ function PeopleSelect({
           >
             <span>{value.includes(s.id) ? "☑" : "□"}</span>
             {s.name}
+            <small className="mp-affiliation">{staffAffiliation(s)}</small>
             {s.is_active ? "" : "（已停用）"}
           </button>
         ))}
@@ -93,6 +96,8 @@ export default function ManagementProjectsPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [projects, setProjects] = useState<PlanningProject[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
+  const [affiliationFilter, setAffiliationFilter] = useState("all");
+  const counts = staffCounts(staff);
   const [report, setReport] = useState<Report | null>(null);
   const [view, setView] = useState<"overview" | "ledger" | "gantt" | "people" | "staff">("overview");
   const [archive, setArchive] = useState(false);
@@ -588,13 +593,16 @@ export default function ManagementProjectsPage() {
           </>
         ) : (
           <>
-            <strong>人员名册 · {staff.length} 人</strong>
+            <strong>可安排 {counts.active} 人 · 内部 {counts.internal} · 外包 {counts.external}{counts.unknown ? ` · 待确认 ${counts.unknown}` : ""}</strong>
+            <select aria-label="名册人员归属" value={affiliationFilter} onChange={e => setAffiliationFilter(e.target.value)}>
+              <option value="all">全部人员（含停用）</option><option value="internal">QMDH 内部</option><option value="external">外包人员</option><option value="unknown">归属待确认</option>
+            </select>
             <span className="mp-toolbar-spacer" />
-            <button disabled={loading || busy} onClick={syncRoster}>从账号分组补齐员工</button>
+            <button disabled={loading || busy} onClick={syncRoster}>从账号分组补齐人员</button>
             <button
               className="mp-primary"
               disabled={loading}
-              onClick={() => setStaffDraft({ id: 0, name: "", position: "", is_active: true, version: 0 })}
+              onClick={() => setStaffDraft({ id: 0, name: "", position: "", employment_type: "unknown", employer: "", is_active: true, version: 0 })}
             >
               ＋ 添加人员
             </button>
@@ -770,17 +778,19 @@ export default function ManagementProjectsPage() {
                   <tr>
                     <th>姓名</th>
                     <th>职务</th>
+                    <th>人员归属 / 所属单位</th>
                     <th>状态</th>
                     <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {staff.map((s) => (
+                  {staff.filter(s => affiliationFilter === "all" || (s.employment_type || "unknown") === affiliationFilter).map((s) => (
                     <tr key={s.id}>
                       <td>
                         <span className="mp-avatar">{s.name.slice(-2)}</span> {s.name}
                       </td>
                       <td>{s.position || "—"}</td>
+                      <td><span className={`mp-affiliation ${s.employment_type || "unknown"}`}>{staffAffiliation(s)}</span></td>
                       <td>
                         <span className={s.is_active ? "mp-badge" : "mp-badge muted"}>
                           {s.is_active ? "在用" : "停用"}
@@ -795,7 +805,7 @@ export default function ManagementProjectsPage() {
               </table>
             </div>
             <p className="mp-panel-note">
-              名册用于安排工作，添加人员不会授予网站权限。可添加尚无账号的员工；同名人员请注明区分。
+              所属分院用于安排工作，人员归属区分内部与外包；外包不计入内部人数。账号同步后归属待确认。添加人员不会开通网站账号或授予权限，停用人员保留历史安排。
             </p>
           </div>
         )}
@@ -1178,6 +1188,16 @@ export default function ManagementProjectsPage() {
                   value={staffDraft.position}
                   onChange={(e) => setStaffDraft({ ...staffDraft, position: e.target.value })}
                 />
+              </label>
+              <label>
+                人员归属
+                <select aria-label="人员归属" value={staffDraft.employment_type || "unknown"} onChange={e => setStaffDraft({ ...staffDraft, employment_type: e.target.value as Staff["employment_type"] })}>
+                  <option value="unknown">待确认</option><option value="internal">QMDH 内部</option><option value="external">外包人员</option>
+                </select>
+              </label>
+              <label>
+                所属单位
+                <input maxLength={150} placeholder={staffDraft.employment_type === "internal" ? "QMDH" : "例如：外包公司名称"} value={staffDraft.employer || ""} onChange={e => setStaffDraft({ ...staffDraft, employer: e.target.value })} />
               </label>
               <label className="mp-inline">
                 <input

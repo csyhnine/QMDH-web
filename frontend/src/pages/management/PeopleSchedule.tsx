@@ -1,5 +1,5 @@
 import type { DragEvent } from "react";
-import { ganttEntries, staffLoads, addDays, type PlanningProject, type Staff, type Stage } from "./planning";
+import { ganttEntries, staffLoads, addDays, staffAffiliation, type PlanningProject, type Staff, type Stage } from "./planning";
 import { projectColor } from "./staffPlanning";
 export default function PeopleSchedule({
   projects,
@@ -86,6 +86,7 @@ export default function PeopleSchedule({
                         {person.is_active ? "" : "（停用）"}
                       </strong>
                       <small>{person.position || "项目成员"}</small>
+                      <small className="mp-affiliation">{staffAffiliation(person)}</small>
                       <span className={values.some((v) => v > 100) ? "mp-danger-text" : "mp-subtle"}>
                         {values.some((v) => v > 100)
                           ? `${values.filter((v) => v > 100).length} 天超额`

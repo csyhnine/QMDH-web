@@ -14,6 +14,12 @@ function load(file, overrides = {}, globals = {}) {
   return exports;
 }
 const planning = load('pages/management/planning.ts');
+test('affiliation counts active internal and external people separately without guessing unknown identities', () => {
+  const staff = [{is_active:true,employment_type:'internal'},{is_active:true,employment_type:'external',employer:'Partner'}, {is_active:true}, {is_active:false,employment_type:'internal'}];
+  assert.equal(JSON.stringify(planning.staffCounts(staff)), JSON.stringify({active:3,internal:1,external:1,unknown:1}));
+  assert.equal(planning.staffAffiliation(staff[1]), '外包 · Partner');
+  assert.equal(planning.staffAffiliation(staff[2]), '归属待确认');
+});
 function makeProject(id, stages) { return { ...planning.newProject(id), id, name: `Project ${id}`, stages }; }
 const stage = (id, start, end, assignees = [1], allocation = 100) => ({ id, name: id, start, end, assignees, allocation, progress: 0 });
 

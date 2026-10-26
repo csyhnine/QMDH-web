@@ -1072,6 +1072,8 @@ class ManagementStaff(Base):
     unit: Mapped[str] = mapped_column(String(120), index=True)
     name: Mapped[str] = mapped_column(String(150))
     position: Mapped[str] = mapped_column(String(120), default="")
+    employment_type: Mapped[str] = mapped_column(String(20), default="unknown", server_default="unknown")
+    employer: Mapped[str] = mapped_column(String(150), default="", server_default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     source_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, unique=True)

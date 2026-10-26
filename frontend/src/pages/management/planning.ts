@@ -1,4 +1,15 @@
-export type Staff = { id: number; name: string; position: string; is_active: boolean; version: number };
+export type Staff = { id: number; name: string; position: string; is_active: boolean; version: number; employment_type?: "internal" | "external" | "unknown"; employer?: string };
+export function staffAffiliation(staff: Staff) {
+  if (staff.employment_type === "internal") return staff.employer || "QMDH 内部";
+  if (staff.employment_type === "external") return `外包${staff.employer ? ` · ${staff.employer}` : ""}`;
+  return "归属待确认";
+}
+export function staffCounts(staff: Staff[]) {
+  const active = staff.filter(s => s.is_active);
+  return { active: active.length, internal: active.filter(s => s.employment_type === "internal").length,
+    external: active.filter(s => s.employment_type === "external").length,
+    unknown: active.filter(s => !s.employment_type || s.employment_type === "unknown").length };
+}
 export const TEAM_ROLES = [
   ["coordinator", "项目统筹"],
   ["design_manager", "设计经理"],

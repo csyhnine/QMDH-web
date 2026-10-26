@@ -1937,3 +1937,8 @@
 .mp-calendar footer { padding:10px 0 0; }
 @media(max-width:760px) { .mp-work-editor fieldset { grid-template-columns:1fr; } .mp-calendar { position:fixed; top:18vh; left:50%; right:auto; transform:translateX(-50%); } }
 .mp-auto-status { margin:10px 16px; color:#526b8d; font-size:13px; line-height:1.7; }
+
+.mp-affiliation { display: inline-block; font-size: 11px; color: var(--mp-muted, #63718b); margin-inline-start: 5px; white-space: normal; }
+.mp-affiliation.external { color: #925400; background: #fff4df; border-radius: 4px; padding: 2px 5px; }
+.mp-affiliation.internal { color: #245c8f; }
+.mp-affiliation.unknown { color: #7e647c; }

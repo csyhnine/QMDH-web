@@ -1,4 +1,4 @@
-import { planningOverview, projectProgress, type PlanningProject, type Staff } from "./planning";
+import { planningOverview, projectProgress, staffAffiliation, type PlanningProject, type Staff } from "./planning";
 export default function ManagementOverview({
   projects,
   staff,
@@ -105,6 +105,7 @@ export default function ManagementOverview({
                 <div>
                   <strong>{x.person.name}</strong>
                   <small>{x.person.position || "项目成员"}</small>
+                  <small className="mp-affiliation">{staffAffiliation(x.person)}</small>
                 </div>
                 <span className={x.daysOver ? "mp-badge danger" : x.peak ? "mp-badge" : "mp-badge muted"}>
                   {x.daysOver ? `${x.daysOver} 天超额` : x.peak ? `峰值 ${x.peak}%` : "待安排"}

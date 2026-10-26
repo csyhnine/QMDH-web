@@ -55,7 +55,7 @@ def list_units(user: User = Depends(manager), db: Session = Depends(get_db)):
     people = db.scalars(select(User)).all()
     return {"current_unit": canonical_unit(user.company_unit), "units": [
         {"name": unit, "label": "二分院（原二、四分院）" if unit == "二分院" else unit,
-         "staff_count": sum(canonical_unit(s.unit) == unit for s in staff),
+         "staff_count": sum(canonical_unit(s.unit) == unit and s.is_active for s in staff),
          "account_count": sum(account_unit(u) == unit for u in people)} for unit in allowed]}
 
 
@@ -66,6 +66,8 @@ class StrictModel(BaseModel):
 class StaffInput(StrictModel):
     name: str = Field(min_length=1, max_length=150)
     position: str = Field(default="", max_length=120)
+    employment_type: Literal["internal", "external", "unknown"] = "unknown"
+    employer: str = Field(default="", max_length=150)
     is_active: bool = True
     version: int = Field(default=0, ge=0)
 
@@ -148,7 +150,8 @@ def year_value(year: int):
 
 
 def staff_out(row):
-    return dict(id=row.id, name=row.name, position=row.position, is_active=row.is_active, version=row.version)
+    return dict(id=row.id, name=row.name, position=row.position, employment_type=row.employment_type,
+                employer=row.employer, is_active=row.is_active, version=row.version)
 
 
 def project_out(row):
@@ -185,7 +188,8 @@ def list_staff(user: PlanningScope = Depends(planning_scope), db: Session = Depe
 @router.post("/staff", status_code=201)
 def create_staff(payload: StaffInput, user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
     # Deliberately permit people without website accounts; staffing and login authorization are independent.
-    row = ManagementStaff(unit=user.company_unit, name=payload.name, position=payload.position, is_active=payload.is_active)
+    row = ManagementStaff(unit=user.company_unit, name=payload.name, position=payload.position,
+                          employment_type=payload.employment_type, employer=payload.employer, is_active=payload.is_active)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -203,9 +207,10 @@ def import_staff(user: PlanningScope = Depends(planning_scope), db: Session = De
 
 @router.put("/staff/{staff_id}")
 def edit_staff(staff_id: int, payload: StaffInput, user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
+    affiliation = {key: getattr(payload, key) for key in ("employment_type", "employer") if key in payload.model_fields_set}
     result = db.execute(update(ManagementStaff).where(ManagementStaff.id == staff_id, ManagementStaff.unit.in_(unit_aliases(user.company_unit)),
         ManagementStaff.version == payload.version).values(name=payload.name, position=payload.position,
-        is_active=payload.is_active, version=payload.version + 1))
+        is_active=payload.is_active, version=payload.version + 1, **affiliation))
     if not result.rowcount:
         raise HTTPException(409, "人员已被修改，请刷新")
     db.commit()

@@ -59,6 +59,7 @@ test('both navigation systems expose management only to company managers regardl
 test('quick creation accepts name only, untouched close is silent and conflicts preserve stage edits', async () => {
   const slots=[];let cursor=0,effects=[],changed=false,tree,fail=false,saved,confirms=0;
   const hooks={
+    useRef(initial){const i=cursor++;if(!(i in slots))slots[i]={current:initial};return slots[i];},
     useState(initial){const i=cursor++;if(!(i in slots))slots[i]=typeof initial==='function'?initial():initial;return[slots[i],v=>{slots[i]=typeof v==='function'?v(slots[i]):v;changed=true;}];},
     useMemo(fn){return fn();},
     useEffect(fn,deps){const i=cursor++;const old=slots[i];if(!old||deps.some((v,j)=>v!==old.deps[j])){slots[i]={deps};effects.push(()=>{old?.cleanup?.();slots[i].cleanup=fn();});}},

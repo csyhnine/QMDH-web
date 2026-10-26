@@ -1,0 +1,21 @@
+{
+  "results": [
+    {
+      "name": "Three real category counts and merged branch label; scoped roster changes",
+      "passed": true
+    },
+    {
+      "name": "Delete keeps saved data, disappears from ledger, trash restores with current version",
+      "passed": true
+    },
+    {
+      "name": "Stale delete preserves editor and shows conflict without losing draft",
+      "passed": true
+    },
+    {
+      "name": "Narrow screen supports category switch without page overflow",
+      "passed": true
+    }
+  ],
+  "errors": []
+}

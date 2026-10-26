@@ -1888,3 +1888,15 @@
     transform: none;
   }
 }
+.management-page .mp-unit-picker { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.management-page .mp-unit-picker select { max-width: 270px; padding: 8px; border: 1px solid #d9e0e9; border-radius: 8px; background: white; }
+.management-page .mp-danger { color: #a52b32; border-color: #e5b5ba; margin-right: auto; }
+.management-page .mp-trash { padding: 24px; background: white; border-radius: 12px; }
+.management-page .mp-trash article { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; padding: 14px 0; border-bottom: 1px solid #e5e9f0; }
+.management-page .mp-trash article span { flex: 1; color: #5d6b7c; }
+@media (max-width: 760px) {
+  .management-page .mp-header { flex-wrap: wrap; gap: 12px; }
+  .management-page .mp-header-actions { max-width: none; width: 100%; justify-content: flex-start; }
+  .management-page .mp-unit-picker { width: 100%; white-space: nowrap; }
+  .management-page .mp-unit-picker select { flex: 1; max-width: none; min-width: 0; }
+}

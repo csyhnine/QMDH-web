@@ -46,6 +46,7 @@ export type PlanningProject = {
   notes: string;
   stages: Stage[];
   archived: boolean;
+  deleted?: boolean;
   version: number;
 };
 export type Report = {
@@ -90,7 +91,7 @@ export function newProject(sequence: number): PlanningProject {
   };
 }
 export function projectPayload(project: PlanningProject) {
-  const { id, year, unit, updated_at, updated_by, ...payload } = project;
+  const { id, year, unit, updated_at, updated_by, deleted, ...payload } = project;
   return payload;
 }
 const DAY = 86400000;

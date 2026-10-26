@@ -47,7 +47,7 @@ def project(http, **fields):
     assert response.status_code == 201, response.text
     return response.json()
 
-def payload(saved): return {k:v for k,v in saved.items() if k not in {"id","unit","year","updated_by","updated_at"}}
+def payload(saved): return {k:v for k,v in saved.items() if k not in {"id","unit","year","updated_by","updated_at","deleted"}}
 
 
 def test_permissions_are_independent_of_site_role_and_revocation_is_immediate(env):

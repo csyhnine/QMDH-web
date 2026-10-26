@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { managementRequest as request } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -23,6 +23,9 @@ import ProjectPlan from "./ProjectPlan";
 import PeoplePlanner from "./PeoplePlanner";
 import { matchesStatus, type ProjectStatusFilter } from "./planning";
 import "./management.css";
+
+type UnitOption = { name: string; label: string; staff_count: number; account_count: number };
+const unitName = (name = "") => ({ "城市更新一分院": "一分院", "城市更新二分院": "二分院", "四分院": "二分院", "城市更新四分院": "二分院", "城市更新三分院": "三分院" }[name] || name);
 
 function PeopleSelect({
   value,
@@ -69,12 +72,19 @@ function PeopleSelect({
 
 export default function ManagementProjectsPage() {
   const { currentUser } = useAuth();
+  const [unit, setUnit] = useState(unitName(currentUser?.company_unit));
+  const [units, setUnits] = useState<UnitOption[]>([]);
+  const scopedPath = (path: string) => unit && unit !== unitName(currentUser?.company_unit)
+    ? `${path}${path.includes("?") ? "&" : "?"}unit=${encodeURIComponent(unit)}` : path;
+  const scopedRequest = <T,>(path: string, body?: unknown, method?: string) => request<T>(scopedPath(path), body, method);
+  const actionLock = useRef(false);
   const [year, setYear] = useState(new Date().getFullYear());
   const [projects, setProjects] = useState<PlanningProject[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [report, setReport] = useState<Report | null>(null);
   const [view, setView] = useState<"overview" | "ledger" | "gantt" | "people" | "staff">("overview");
   const [archive, setArchive] = useState(false);
+  const [trash, setTrash] = useState(false);
   const [search, setSearch] = useState("");
   const [person, setPerson] = useState(0);
   const [statusFilter, setStatusFilter] = useState<ProjectStatusFilter>("all");
@@ -99,17 +109,20 @@ export default function ManagementProjectsPage() {
     setLoading(true);
     setError("");
     setProjects([]);
+    setStaff([]);
     setReport(null);
     Promise.all([
-      request<PlanningProject[]>(`/projects?year=${year}&archived=${archive}`),
-      request<Staff[]>("/staff"),
-      request<Report>(`/reports/${year}`),
+      scopedRequest<PlanningProject[]>(`/projects?year=${year}&archived=${archive}&deleted=${trash}`),
+      scopedRequest<Staff[]>("/staff"),
+      scopedRequest<Report>(`/reports/${year}`),
+      request<{ units: UnitOption[] }>("/units"),
     ])
-      .then(([p, s, r]) => {
+      .then(([p, s, r, categories]) => {
         if (!cancelled) {
           setProjects(p);
           setStaff(s);
           setReport(r);
+          setUnits(categories.units || []);
         }
       })
       .catch((e) => {
@@ -121,7 +134,7 @@ export default function ManagementProjectsPage() {
     return () => {
       cancelled = true;
     };
-  }, [year, archive, refresh]);
+  }, [year, archive, trash, unit, currentUser?.name, refresh]);
   const filtered = useMemo(
     () =>
       projects.filter(
@@ -178,6 +191,7 @@ export default function ManagementProjectsPage() {
   };
   const createProject = () => {
     if (archive) setArchive(false);
+    if (trash) setTrash(false);
     editProject(newProject(Math.max(0, ...projects.map((p) => p.sequence)) + 1));
   };
   const showProjectSection = (id: string) => {
@@ -190,7 +204,7 @@ export default function ManagementProjectsPage() {
     });
   };
   async function persistSchedule(project: PlanningProject) {
-    const saved = await request<PlanningProject>(`/projects/${project.id}`, projectPayload(project));
+    const saved = await scopedRequest<PlanningProject>(`/projects/${project.id}`, projectPayload(project));
     setProjects((current) => current.map((p) => (p.id === saved.id ? saved : p)));
     setNotice(`“${saved.name}”的排期已保存`);
     return saved;
@@ -228,7 +242,7 @@ export default function ManagementProjectsPage() {
     setBusy(true);
     setError("");
     try {
-      const saved = await request<PlanningProject>(
+      const saved = await scopedRequest<PlanningProject>(
         draft.id ? `/projects/${draft.id}` : `/projects?year=${year}`,
         projectPayload(draft),
         draft.id ? "PUT" : "POST",
@@ -250,7 +264,7 @@ export default function ManagementProjectsPage() {
     setError("");
     const { id, ...body } = staffDraft;
     try {
-      await request(id ? `/staff/${id}` : "/staff", body, id ? "PUT" : "POST");
+      await scopedRequest(id ? `/staff/${id}` : "/staff", body, id ? "PUT" : "POST");
       setStaffDraft(null);
       setNotice("人员已保存");
       reload();
@@ -266,7 +280,7 @@ export default function ManagementProjectsPage() {
     setBusy(true);
     setError("");
     try {
-      await request(`/reports/${year}`, {
+      await scopedRequest(`/reports/${year}`, {
         compiler: reportDraft.compiler,
         data_as_of: reportDraft.data_as_of,
         version: reportDraft.version,
@@ -280,11 +294,46 @@ export default function ManagementProjectsPage() {
       setBusy(false);
     }
   }
+  async function changeDeleted(project: PlanningProject, deleted: boolean) {
+    if (!project.id || busy || planSaving || planDirty || actionLock.current) return;
+    if (deleted && !window.confirm(`删除“${project.name}”？项目将移入回收站，可恢复，版本记录会保留。${projectDirty ? "本次未保存修改会丢失。" : ""}`)) return;
+    actionLock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await scopedRequest(`/projects/${project.id}${deleted ? "" : "/restore"}?version=${project.version}`, {}, deleted ? "DELETE" : "POST");
+      setDraft(null);
+      setCreatedProject(null);
+      setNotice(deleted ? "项目已删除，可在回收站恢复。" : `项目已恢复${project.archived ? "到已归档列表" : "到当前项目列表"}。`);
+      reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "操作失败");
+    } finally {
+      actionLock.current = false;
+      setBusy(false);
+    }
+  }
+  async function syncRoster() {
+    if (busy || planSaving || planDirty || actionLock.current) return;
+    actionLock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await scopedRequest<{ added: number; matched: number; conflicts: string[] }>("/staff/sync", {}, "POST");
+      setNotice(`已同步${unit}员工：新增 ${result.added} 人，关联已有 ${result.matched} 人。${result.conflicts.length ? ` ${result.conflicts.length} 位同名或跨院人员需人工核对：${result.conflicts.join("、")}` : ""}`);
+      reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "同步失败");
+    } finally {
+      actionLock.current = false;
+      setBusy(false);
+    }
+  }
   function download() {
     const url = URL.createObjectURL(new Blob([ledgerCsv(filtered, staff)], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${report?.unit ?? "二分院"}-${year}年度项目台账.csv`;
+    a.download = `${report?.unit || unit}-${year}年度项目台账.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -317,6 +366,21 @@ export default function ManagementProjectsPage() {
           <p>掌握项目进展，安排团队下一步工作。</p>
         </div>
         <div className="mp-header-actions">
+          <label className="mp-unit-picker">
+            管理分院
+            <select aria-label="管理分院" value={unit} disabled={loading || busy || planSaving}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (projectDirty && !window.confirm("项目内容尚未保存，确定切换分院并放弃修改？")) return;
+                safeChange(() => {
+                  setUnit(next); setDraft(null); setStaffDraft(null); setReportDraft(null);
+                  setPerson(0); setSearch(""); setCreatedProject(null); setNotice(""); setError("");
+                });
+              }}>
+              {(units.length ? units : [{ name: unit, label: unit, staff_count: staff.length, account_count: 0 }]).map((u) =>
+                <option key={u.name} value={u.name}>{u.label} · {u.staff_count} 人</option>)}
+            </select>
+          </label>
           <span>{currentUser?.company_position}</span>
           <button disabled={loading} onClick={() => changeView("staff")}>
             人员名册
@@ -411,7 +475,7 @@ export default function ManagementProjectsPage() {
               onChange={(e) => safeChange(() => setSearch(e.target.value))}
             />
             <details className="mp-simple-filters">
-              <summary>更多筛选{person || statusFilter !== "all" || archive ? " · 已启用" : ""}</summary>
+              <summary>更多筛选{person || statusFilter !== "all" || archive || trash ? " · 已启用" : ""}</summary>
               <div>
                 <select
                   aria-label="按人员筛选"
@@ -439,17 +503,18 @@ export default function ManagementProjectsPage() {
                   <input
                     type="checkbox"
                     checked={archive}
-                    onChange={(e) => safeChange(() => setArchive(e.target.checked))}
+                    onChange={(e) => safeChange(() => { setArchive(e.target.checked); setTrash(false); })}
                   />
                   已归档
                 </label>
-                {person || statusFilter !== "all" || archive ? (
+                {person || statusFilter !== "all" || archive || trash ? (
                   <button
                     onClick={() =>
                       safeChange(() => {
                         setPerson(0);
                         setStatusFilter("all");
                         setArchive(false);
+                        setTrash(false);
                       })
                     }
                   >
@@ -459,7 +524,8 @@ export default function ManagementProjectsPage() {
               </div>
             </details>
             <span className="mp-toolbar-spacer" />
-            <button disabled={loading} onClick={download}>
+            <button disabled={loading || busy} aria-pressed={trash} onClick={() => safeChange(() => { setTrash(!trash); setArchive(false); })}>{trash ? "返回在管项目" : "回收站"}</button>
+            <button disabled={loading || trash} onClick={download}>
               ↓ 导出台账
             </button>
             <button className="mp-primary" disabled={loading || planDirty} onClick={createProject}>
@@ -470,6 +536,7 @@ export default function ManagementProjectsPage() {
           <>
             <strong>人员名册 · {staff.length} 人</strong>
             <span className="mp-toolbar-spacer" />
+            <button disabled={loading || busy} onClick={syncRoster}>从账号分组补齐员工</button>
             <button
               className="mp-primary"
               disabled={loading}
@@ -484,7 +551,7 @@ export default function ManagementProjectsPage() {
         </button>
       </div>
       <div className="mp-view" key={view} aria-busy={loading}>
-        {!loading && view === "overview" && !projects.length && !archive && !error ? (
+        {!loading && view === "overview" && !projects.length && !archive && !trash && !error ? (
           <section className="mp-start-guide" aria-label="项目管理入门">
             <div>
               <span>从这里开始</span>
@@ -527,6 +594,13 @@ export default function ManagementProjectsPage() {
               <span />
             </div>
           </div>
+        ) : trash && view !== "staff" ? (
+          <section className="mp-trash" aria-label="项目回收站">
+            <h2>项目回收站 · {projects.length} 项</h2>
+            <p>已删除项目不再占用人员排期；恢复后保留原分工、日期、费用和版本记录。</p>
+            {projects.map((p) => <article key={p.id}><strong>{p.name}</strong><span>{p.archived ? "原为已归档项目" : "原为在管项目"}</span><button disabled={busy} onClick={() => changeDeleted(p, false)}>恢复项目</button></article>)}
+            {!projects.length && <p>本院本年度没有已删除项目。</p>}
+          </section>
         ) : view === "overview" && !projects.length && !archive && !error ? null : view === "overview" ? (
           <ManagementOverview
             projects={filtered}
@@ -998,6 +1072,7 @@ export default function ManagementProjectsPage() {
               </button>
             </fieldset>
             <footer>
+              {draft.id && <button type="button" className="mp-danger" disabled={busy || planDirty || planSaving} onClick={() => changeDeleted(draft, true)}>删除项目</button>}
               {draft.id && (
                 <label className="mp-inline">
                   <input

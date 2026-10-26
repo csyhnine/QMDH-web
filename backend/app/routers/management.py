@@ -1,5 +1,6 @@
 """Company planning data: deliberately separate from Studio projects and site roles."""
 from datetime import date
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import uuid4
@@ -13,7 +14,8 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_auth_user
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import ManagementProject, ManagementReport, ManagementRevision, ManagementStaff, User
+from app.models import AuditLog, ManagementProject, ManagementReport, ManagementRevision, ManagementStaff, User
+from app.services.management_units import PLANNING_UNITS, account_unit, canonical_unit, sync_staff, unit_aliases
 
 router = APIRouter(prefix="/management", tags=["company-management"])
 
@@ -28,6 +30,33 @@ def manager(response: Response, authorization: str | None = Header(default=None)
         raise HTTPException(403, "仅公司管理层可访问项目管理")
     response.headers["Cache-Control"] = "no-store"
     return user
+
+
+@dataclass
+class PlanningScope:
+    id: int
+    company_unit: str
+
+
+def planning_scope(unit: str | None = Query(default=None, max_length=120), user: User = Depends(manager)):
+    own = canonical_unit(user.company_unit)
+    selected = canonical_unit(unit) if unit else own
+    # A site role alone never grants access. Only an already authorized company admin can switch.
+    if selected != own and not (user.company_management and user.role == "admin" and selected in PLANNING_UNITS):
+        raise HTTPException(403, "只能管理已授权的分院")
+    return PlanningScope(user.id, selected)
+
+
+@router.get("/units")
+def list_units(user: User = Depends(manager), db: Session = Depends(get_db)):
+    allowed = PLANNING_UNITS if user.role == "admin" else (canonical_unit(user.company_unit),)
+    staff = db.scalars(select(ManagementStaff)).all() if user.role == "admin" else db.scalars(
+        select(ManagementStaff).where(ManagementStaff.unit.in_(unit_aliases(user.company_unit)))).all()
+    people = db.scalars(select(User)).all()
+    return {"current_unit": canonical_unit(user.company_unit), "units": [
+        {"name": unit, "label": "二分院（原二、四分院）" if unit == "二分院" else unit,
+         "staff_count": sum(canonical_unit(s.unit) == unit for s in staff),
+         "account_count": sum(account_unit(u) == unit for u in people)} for unit in allowed]}
 
 
 class StrictModel(BaseModel):
@@ -123,13 +152,13 @@ def staff_out(row):
 
 
 def project_out(row):
-    return dict(**row.document, id=row.id, year=row.year, unit=row.unit, version=row.version,
-                archived=row.archived, updated_at=row.updated_at, updated_by=row.updated_by)
+    return dict(**row.document, id=row.id, year=row.year, unit=canonical_unit(row.unit), version=row.version,
+                archived=row.archived, deleted=row.deleted, updated_at=row.updated_at, updated_by=row.updated_by)
 
 
-def get_project(db, user, project_id):
-    row = db.scalar(select(ManagementProject).where(ManagementProject.id == project_id, ManagementProject.unit == user.company_unit))
-    if not row:
+def get_project(db, user, project_id, *, include_deleted=False):
+    row = db.scalar(select(ManagementProject).where(ManagementProject.id == project_id, ManagementProject.unit.in_(unit_aliases(user.company_unit))))
+    if not row or (row.deleted and not include_deleted):
         raise HTTPException(404, "项目不存在")
     return row
 
@@ -140,7 +169,7 @@ def validate_staff(db, user, payload, old=None):
     ids = used(payload.model_dump(mode="json"))
     if not ids:
         return
-    rows = db.scalars(select(ManagementStaff).where(ManagementStaff.unit == user.company_unit, ManagementStaff.id.in_(ids))).all()
+    rows = db.scalars(select(ManagementStaff).where(ManagementStaff.unit.in_(unit_aliases(user.company_unit)), ManagementStaff.id.in_(ids))).all()
     if ids != {s.id for s in rows}:
         raise HTTPException(422, "人员不属于本单位或已不存在，请刷新人员名单")
     previous = used(old or {})
@@ -149,12 +178,12 @@ def validate_staff(db, user, payload, old=None):
 
 
 @router.get("/staff")
-def list_staff(user: User = Depends(manager), db: Session = Depends(get_db)):
-    return [staff_out(s) for s in db.scalars(select(ManagementStaff).where(ManagementStaff.unit == user.company_unit).order_by(ManagementStaff.id)).all()]
+def list_staff(user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
+    return [staff_out(s) for s in db.scalars(select(ManagementStaff).where(ManagementStaff.unit.in_(unit_aliases(user.company_unit))).order_by(ManagementStaff.id)).all()]
 
 
 @router.post("/staff", status_code=201)
-def create_staff(payload: StaffInput, user: User = Depends(manager), db: Session = Depends(get_db)):
+def create_staff(payload: StaffInput, user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
     # Deliberately permit people without website accounts; staffing and login authorization are independent.
     row = ManagementStaff(unit=user.company_unit, name=payload.name, position=payload.position, is_active=payload.is_active)
     db.add(row)
@@ -163,9 +192,18 @@ def create_staff(payload: StaffInput, user: User = Depends(manager), db: Session
     return staff_out(row)
 
 
+@router.post("/staff/sync")
+def import_staff(user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
+    result = sync_staff(db, user.company_unit)
+    db.add(AuditLog(event_type="management.roster_synced", actor_name="company-manager", actor_id=user.id,
+                    target_type="management_unit", target_name=user.company_unit, details=result))
+    db.commit()
+    return result
+
+
 @router.put("/staff/{staff_id}")
-def edit_staff(staff_id: int, payload: StaffInput, user: User = Depends(manager), db: Session = Depends(get_db)):
-    result = db.execute(update(ManagementStaff).where(ManagementStaff.id == staff_id, ManagementStaff.unit == user.company_unit,
+def edit_staff(staff_id: int, payload: StaffInput, user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
+    result = db.execute(update(ManagementStaff).where(ManagementStaff.id == staff_id, ManagementStaff.unit.in_(unit_aliases(user.company_unit)),
         ManagementStaff.version == payload.version).values(name=payload.name, position=payload.position,
         is_active=payload.is_active, version=payload.version + 1))
     if not result.rowcount:
@@ -175,7 +213,7 @@ def edit_staff(staff_id: int, payload: StaffInput, user: User = Depends(manager)
 
 
 @router.get("/reports/{year}")
-def report(year: int, user: User = Depends(manager), db: Session = Depends(get_db)):
+def report(year: int, user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
     year_value(year)
     row = db.scalar(select(ManagementReport).where(ManagementReport.unit == user.company_unit, ManagementReport.year == year))
     return dict(unit=user.company_unit, year=year, version=row.version if row else 0,
@@ -185,7 +223,7 @@ def report(year: int, user: User = Depends(manager), db: Session = Depends(get_d
 
 
 @router.put("/reports/{year}")
-def edit_report(year: int, payload: ReportInput, user: User = Depends(manager), db: Session = Depends(get_db)):
+def edit_report(year: int, payload: ReportInput, user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
     year_value(year)
     doc = payload.model_dump(mode="json", exclude={"version"})
     if payload.version == 0:
@@ -205,10 +243,11 @@ def edit_report(year: int, payload: ReportInput, user: User = Depends(manager), 
 
 
 @router.get("/projects")
-def projects(year: int = Query(ge=2000, le=2100), archived: bool = False,
-             user: User = Depends(manager), db: Session = Depends(get_db)):
-    rows = db.scalars(select(ManagementProject).where(ManagementProject.unit == user.company_unit,
-        ManagementProject.year == year, ManagementProject.archived == archived).order_by(ManagementProject.id).limit(1001)).all()
+def projects(year: int = Query(ge=2000, le=2100), archived: bool = False, deleted: bool = False,
+             user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
+    rows = db.scalars(select(ManagementProject).where(ManagementProject.unit.in_(unit_aliases(user.company_unit)),
+        ManagementProject.year == year, ManagementProject.deleted == deleted,
+        *([] if deleted else [ManagementProject.archived == archived])).order_by(ManagementProject.id).limit(1001)).all()
     if len(rows) > 1000:
         raise HTTPException(422, "当前年度项目超过 1000 项，请联系维护人员扩展分页")
     return sorted([project_out(r) for r in rows], key=lambda r: (r["sequence"], r["id"]))
@@ -219,6 +258,7 @@ def save_project(db, user, payload, row=None, year=None):
     doc = payload.model_dump(mode="json", exclude={"version", "archived"})
     if row:
         result = db.execute(update(ManagementProject).where(ManagementProject.id == row.id,
+            ManagementProject.unit.in_(unit_aliases(user.company_unit)), ManagementProject.deleted.is_(False),
             ManagementProject.version == payload.version).values(document=doc, archived=payload.archived,
             version=payload.version + 1, updated_by=user.id))
         if not result.rowcount:
@@ -237,18 +277,46 @@ def save_project(db, user, payload, row=None, year=None):
 
 
 @router.post("/projects", status_code=201)
-def create_project(payload: ProjectInput, year: int = Query(ge=2000, le=2100), user: User = Depends(manager), db: Session = Depends(get_db)):
+def create_project(payload: ProjectInput, year: int = Query(ge=2000, le=2100), user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
     return save_project(db, user, payload, year=year)
 
 
 @router.put("/projects/{project_id}")
-def edit_project(project_id: int, payload: ProjectInput, user: User = Depends(manager), db: Session = Depends(get_db)):
+def edit_project(project_id: int, payload: ProjectInput, user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
     return save_project(db, user, payload, row=get_project(db, user, project_id))
 
 
 @router.get("/projects/{project_id}/revisions")
-def revisions(project_id: int, user: User = Depends(manager), db: Session = Depends(get_db)):
-    get_project(db, user, project_id)
+def revisions(project_id: int, user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
+    get_project(db, user, project_id, include_deleted=True)
     return [dict(version=r.version, actor_id=r.actor_id, created_at=r.created_at, snapshot=r.snapshot)
             for r in db.scalars(select(ManagementRevision).where(ManagementRevision.project_id == project_id)
                                 .order_by(ManagementRevision.version.desc()).limit(50)).all()]
+
+
+def set_deleted(db, user, project_id, version, deleted):
+    row = get_project(db, user, project_id, include_deleted=True)
+    result = db.execute(update(ManagementProject).where(ManagementProject.id == row.id,
+        ManagementProject.unit.in_(unit_aliases(user.company_unit)), ManagementProject.version == version,
+        ManagementProject.deleted == (not deleted)).values(deleted=deleted, version=version + 1, updated_by=user.id))
+    if not result.rowcount:
+        raise HTTPException(409, "项目状态已变化，请刷新后再操作")
+    db.flush()
+    db.refresh(row)
+    db.add(ManagementRevision(project_id=row.id, version=row.version, actor_id=user.id,
+        snapshot=dict(**row.document, archived=row.archived, deleted=deleted)))
+    db.commit()
+    db.refresh(row)
+    return project_out(row)
+
+
+@router.delete("/projects/{project_id}")
+def delete_project(project_id: int, version: int = Query(ge=1),
+                   user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
+    return set_deleted(db, user, project_id, version, True)
+
+
+@router.post("/projects/{project_id}/restore")
+def restore_project(project_id: int, version: int = Query(ge=1),
+                    user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
+    return set_deleted(db, user, project_id, version, False)

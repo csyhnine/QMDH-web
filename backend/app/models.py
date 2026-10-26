@@ -1074,6 +1074,7 @@ class ManagementStaff(Base):
     position: Mapped[str] = mapped_column(String(120), default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    source_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, unique=True)
 
 
 class ManagementProject(Base):
@@ -1084,6 +1085,7 @@ class ManagementProject(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     document: Mapped[dict] = mapped_column(JSON, default=dict)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     updated_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

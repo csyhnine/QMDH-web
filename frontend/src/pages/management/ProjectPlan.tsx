@@ -3,6 +3,7 @@ import type { GanttStatic } from "dhtmlx-gantt";
 import { initializePlanningGantt, renderPlanningGantt } from "./ganttBridge";
 import { addDays, dayNumber, today, savePlanQueue, stageFromGantt, type Stage, type PlanningProject, type Staff } from "./planning";
 import PlanningDate from "./PlanningDate";
+import usePlanningAutoSave from "./usePlanningAutoSave";
 import "dhtmlx-gantt/codebase/dhtmlxgantt.css";
 export default function ProjectPlan({
   projects,
@@ -14,6 +15,7 @@ export default function ProjectPlan({
   onPersist,
   onDirty,
   onBusy,
+  autoSave = true,
 }: {
   projects: PlanningProject[];
   staff: Staff[];
@@ -24,6 +26,7 @@ export default function ProjectPlan({
   onPersist: (p: PlanningProject) => Promise<PlanningProject>;
   onDirty: (dirty: boolean) => void;
   onBusy: (busy: boolean) => void;
+  autoSave?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null),
     chart = useRef<GanttStatic | null>(null);
@@ -33,6 +36,7 @@ export default function ProjectPlan({
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
   const saveLock = useRef(false);
+  const [saveStatus, setSaveStatus] = useState("");
   const fitRange = (items: PlanningProject[]) => {
     const dates = items.flatMap(p => p.stages.flatMap(s => [s.start, s.end])).sort();
     return dates.length ? { start: addDays(dates[0], -2), days: Math.max(14, dayNumber(dates.slice(-1)[0]) - dayNumber(dates[0]) + 5) } : { start, days };
@@ -68,6 +72,7 @@ export default function ProjectPlan({
       return { ...previous, [editor.projectId]: { ...p, stages: remove ? p.stages.filter(x => x.id !== s.id) : editor.isNew ? [...p.stages, { ...s, name: s.name.trim() }] : p.stages.map(x => x.id === s.id ? s : x) } };
     });
     setEditor(null); setError("");
+    setSaveStatus(autoSave ? "有调整，等待自动保存…" : "有调整，尚未保存。");
   };
   const latest = useRef({ projects, pending, saving, archived, onEdit, editor });
   latest.current = { projects, pending, saving, archived, onEdit, editor };
@@ -97,7 +102,9 @@ export default function ProjectPlan({
             const p = latest.current.projects.find((p) => p.id === id);
             if (p) latest.current.onEdit(p);
           },
-          onChange: (id, stageId, task) =>
+          onChange: (id, stageId, task) => {
+            setError("");
+            setSaveStatus("有调整，等待保存…");
             setPending((previous) => {
               const source = previous[id] || latest.current.projects.find((p) => p.id === id);
               if (!source) return previous;
@@ -105,7 +112,8 @@ export default function ProjectPlan({
                 ...previous,
                 [id]: { ...source, stages: source.stages.map((s) => (s.id === stageId ? stageFromGantt(s, task) : s)) },
               };
-            }),
+            });
+          },
         });
         setReady(true);
       })
@@ -130,10 +138,11 @@ export default function ProjectPlan({
       );
   }, [ready, projects, staff, range, pending, archived, saving]);
   async function save() {
-    if (saveLock.current || editor) return;
+    if (saveLock.current || editor || archived || !Object.keys(pending).length) return;
     saveLock.current = true;
     setSaving(true);
     setError("");
+    setSaveStatus("正在保存…");
     // Keep failed and unattempted edits; remove only writes acknowledged by the server.
     const failure = await savePlanQueue(Object.values(pending), onPersist, (id) =>
       setPending((previous) => {
@@ -143,15 +152,18 @@ export default function ProjectPlan({
       }),
     );
     if (failure) setError(failure instanceof Error ? failure.message : "排期保存失败，调整仍保留，请重试。");
+    setSaveStatus(failure ? "自动保存未完成，调整已保留，请处理冲突或重试。" : "所有排期调整已保存");
     saveLock.current = false;
     setSaving(false);
   }
+  usePlanningAutoSave(Object.keys(pending).length ? JSON.stringify(pending) : null, autoSave, saving || archived || Boolean(editor) || Boolean(error), save);
   return (
     <div className="mp-project-plan">
       <div className="mp-plan-tip">
         <span>点击工作条编辑人员与内容 · 拖动条身改期 · 拖左右边缘改工期 · 项目总条汇总全部工作</span>
-        <small>{archived ? "已归档项目为只读预览" : "调整后需点击保存 · 不会自动移动其他阶段"}</small>
+        <small>{archived ? "已归档项目为只读预览" : autoSave ? "调整停顿约1秒自动保存 · 工作面板先应用" : "调整后需点击保存 · 不会自动移动其他阶段"}</small>
       </div>
+      {saveStatus && <p className="mp-auto-status" role="status">{saveStatus}</p>}
       <div className="mp-direct-actions">
         <button onClick={() => setRange(fitRange(effective))}>显示全部工作</button>
         <span>当前显示 {range.start} 至 {addDays(range.start, range.days - 1)}；超出窗口的工作会被截断，实际日期见左侧。</span>
@@ -178,7 +190,7 @@ export default function ProjectPlan({
         <div className="mp-pending" role="status">
           <div>
             <strong>{Object.keys(pending).length} 个项目有排期调整</strong>
-            <span>尚未保存到服务器，离开前请保存或撤销。</span>
+            <span>{autoSave ? "等待自动保存；失败时调整会保留，也可立即保存。" : "尚未保存到服务器，离开前请保存或撤销。"}</span>
           </div>
           <button
             disabled={saving}

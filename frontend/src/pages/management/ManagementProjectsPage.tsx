@@ -22,6 +22,7 @@ import ProjectLedger from "./ProjectLedger";
 import ProjectPlan from "./ProjectPlan";
 import PeoplePlanner from "./PeoplePlanner";
 import PlanningDate from "./PlanningDate";
+import usePlanningAutoSave from "./usePlanningAutoSave";
 import { matchesStatus, type ProjectStatusFilter } from "./planning";
 import "./management.css";
 
@@ -79,6 +80,16 @@ export default function ManagementProjectsPage() {
     ? `${path}${path.includes("?") ? "&" : "?"}unit=${encodeURIComponent(unit)}` : path;
   const scopedRequest = <T,>(path: string, body?: unknown, method?: string) => request<T>(scopedPath(path), body, method);
   const actionLock = useRef(false);
+  const editorForm = useRef<HTMLFormElement>(null);
+  const [autoSave, setAutoSave] = useState(() => {
+    try { return window.localStorage?.getItem(`qmdh:planning:auto:${currentUser?.name}`) !== "off"; } catch { return true; }
+  });
+  const [projectAutoFailed, setProjectAutoFailed] = useState(false);
+  const [projectSaveStatus, setProjectSaveStatus] = useState("");
+  const [composing, setComposing] = useState(false);
+  const scopeKey = `${currentUser?.name}:${unit}`;
+  const scopeNow = useRef(scopeKey);
+  scopeNow.current = scopeKey;
   const [year, setYear] = useState(new Date().getFullYear());
   const [projects, setProjects] = useState<PlanningProject[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -186,6 +197,9 @@ export default function ManagementProjectsPage() {
     if (next !== view) safeChange(() => setView(next));
   };
   const editProject = (p: PlanningProject) => {
+    setProjectAutoFailed(false);
+    setProjectSaveStatus("");
+    setError("");
     setDraft(structuredClone(p));
     setDraftBaseline(JSON.stringify(p));
     setCreatedProject(null);
@@ -221,8 +235,10 @@ export default function ManagementProjectsPage() {
     };
   }, [Boolean(draft || staffDraft || reportDraft)]);
   const reload = () => setRefresh((v) => v + 1);
-  const change = <K extends keyof PlanningProject>(key: K, value: PlanningProject[K]) =>
+  const change = <K extends keyof PlanningProject>(key: K, value: PlanningProject[K]) => {
+    setProjectSaveStatus(projectAutoFailed ? "修改尚未保存，请核对后手动重试。" : autoSave ? "有修改，等待自动保存…" : "有修改，尚未保存。");
     setDraft((p) => (p ? { ...p, [key]: value } : p));
+  };
   const editStage = (index: number, patch: Partial<Stage>) => {
     if (draft)
       change(
@@ -233,31 +249,56 @@ export default function ManagementProjectsPage() {
   const closeDraft = () => {
     if (!busy && (!projectDirty || window.confirm("项目内容尚未保存，关闭后将丢失修改。确定关闭？"))) setDraft(null);
   };
-  async function saveProject(e: FormEvent) {
-    e.preventDefault();
-    if (!draft || busy) return;
+  async function saveProject(e?: FormEvent, automatic = false) {
+    e?.preventDefault();
+    if (!draft || busy || actionLock.current) return;
     if (!draft.name.trim()) {
       setError("请填写项目名称，其他资料可以稍后补充。");
       return;
     }
     setBusy(true);
+    actionLock.current = true;
     setError("");
+    setProjectSaveStatus("正在保存…");
+    const submitted = draft, submittedScope = scopeKey;
     try {
       const saved = await scopedRequest<PlanningProject>(
         draft.id ? `/projects/${draft.id}` : `/projects?year=${year}`,
         projectPayload(draft),
         draft.id ? "PUT" : "POST",
       );
-      setCreatedProject(draft.id ? null : saved);
-      setDraft(null);
-      setNotice(draft.id ? "项目已保存" : "项目已创建。可以继续安排工作，其他资料随时补充。");
-      reload();
+      if (scopeNow.current !== submittedScope) return;
+      setProjectAutoFailed(false);
+      setProjectSaveStatus("已保存");
+      setProjects(current => (submitted.id ? current.map(p => p.id === saved.id ? saved : p) : [...current, saved]).filter(p => p.archived === archive));
+      if (automatic) {
+        setDraft(current => {
+          if (!current || current.id !== submitted.id) return current;
+          return JSON.stringify(projectPayload(current)) === JSON.stringify(projectPayload(submitted)) ? saved : { ...current, version: saved.version, updated_at: saved.updated_at, updated_by: saved.updated_by };
+        });
+        setDraftBaseline(JSON.stringify(saved));
+      } else {
+        setCreatedProject(draft.id ? null : saved);
+        setDraft(null);
+        setNotice(draft.id ? "项目已保存" : "项目已创建。可以继续安排工作，其他资料随时补充。");
+        reload();
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "保存失败");
+      if (scopeNow.current === submittedScope) {
+        setError(e instanceof Error ? e.message : "保存失败");
+        setProjectAutoFailed(true);
+        setProjectSaveStatus("保存未完成，本地修改已保留。请核对后手动重试。");
+      }
     } finally {
+      actionLock.current = false;
       setBusy(false);
     }
   }
+  usePlanningAutoSave(draft?.id && projectDirty ? JSON.stringify(draft) : null, autoSave,
+    busy || projectAutoFailed || composing, async () => {
+      if (editorForm.current?.checkValidity()) await saveProject(undefined, true);
+      else setProjectSaveStatus("请补全必填项或修正日期、金额后再保存。");
+    });
   async function saveStaff(e: FormEvent) {
     e.preventDefault();
     if (!staffDraft || busy) return;
@@ -368,6 +409,10 @@ export default function ManagementProjectsPage() {
           <small className="mp-unit-boundary">当前分院独立管理项目、人员和费用；原二、四分院同属新二分院。</small>
         </div>
         <div className="mp-header-actions">
+          <label className="mp-inline" title="适用于已有项目资料、项目计划和人员排期；新项目首次仍需创建，人员名册与台账信息单独保存。"><input type="checkbox" checked={autoSave} onChange={e => {
+            setAutoSave(e.target.checked);
+            try { window.localStorage?.setItem(`qmdh:planning:auto:${currentUser?.name}`, e.target.checked ? "on" : "off"); } catch { /* Preference remains usable without storage. */ }
+          }} />自动保存</label>
           <label className="mp-unit-picker">
             管理分院
             <select aria-label="管理分院" value={unit} disabled={loading || busy || planSaving}
@@ -694,6 +739,7 @@ export default function ManagementProjectsPage() {
                 onPersist={persistSchedule}
                 onDirty={setPlanDirty}
                 onBusy={setPlanSaving}
+                autoSave={autoSave}
               />
             ) : (
               <PeoplePlanner
@@ -709,6 +755,7 @@ export default function ManagementProjectsPage() {
                 onPersist={persistSchedule}
                 onDirty={setPlanDirty}
                 onBusy={setPlanSaving}
+                autoSave={autoSave}
               />
             )}
             <p className="mp-help">
@@ -759,6 +806,9 @@ export default function ManagementProjectsPage() {
       {draft ? (
         <div className="mp-modal mp-drawer-backdrop">
           <form
+            ref={editorForm}
+            onCompositionStart={() => setComposing(true)}
+            onCompositionEnd={() => setComposing(false)}
             className="mp-editor"
             onSubmit={saveProject}
             onKeyDown={(e) => {
@@ -806,6 +856,7 @@ export default function ManagementProjectsPage() {
                 ? `最后修改 ${new Date(draft.updated_at).toLocaleString("zh-CN")}`
                 : "仅项目名称必填，其他资料可以稍后补充。"}
             </p>
+            <p className="mp-auto-status" role="status">{draft.id ? projectSaveStatus || (autoSave ? "内容有效后自动保存，停止输入约1秒触发。" : "自动保存已关闭，请点击保存修改。") : "新项目首次请点击创建项目。"}</p>
             <nav className="mp-editor-nav">
               {[
                 ["basic", "基本信息"],

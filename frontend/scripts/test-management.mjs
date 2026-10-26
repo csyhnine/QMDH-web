@@ -70,7 +70,7 @@ test('quick creation accepts name only, untouched close is silent and conflicts 
     if(body){if(fail)throw Error('项目已被他人修改'); saved=body;return {...body,id:1};}
     return path==='/staff'?[{id:1,name:'设计师',is_active:true}]:path.startsWith('/reports')?report:[];
   };
-  const Page=load('pages/management/ManagementProjectsPage.tsx',{'react':hooks,'../../api':{managementRequest:request},'../../context/AuthContext':{useAuth:()=>({currentUser:user})},'./planning':planning,'./ManagementOverview':{default:()=>null},'./ProjectLedger':{default:()=>null},'./ProjectPlan':{default:()=>null},'./PeopleSchedule':{default:()=>null},'./PeoplePlanner':{default:()=>null},'./PlanningDate':{default:()=>null}},{structuredClone,crypto:{randomUUID:()=> 'stage-1'},window:{confirm:()=>{confirms++;return true;}},Error}).default;
+  const Page=load('pages/management/ManagementProjectsPage.tsx',{'react':hooks,'../../api':{managementRequest:request},'../../context/AuthContext':{useAuth:()=>({currentUser:user})},'./planning':planning,'./ManagementOverview':{default:()=>null},'./ProjectLedger':{default:()=>null},'./ProjectPlan':{default:()=>null},'./PeopleSchedule':{default:()=>null},'./PeoplePlanner':{default:()=>null},'./PlanningDate':{default:()=>null},'./usePlanningAutoSave':{default:()=>{}}},{structuredClone,crypto:{randomUUID:()=> 'stage-1'},window:{confirm:()=>{confirms++;return true;}},Error}).default;
   const render=()=>{do{cursor=0;effects=[];changed=false;tree=Page();effects.forEach(fn=>fn());}while(changed);};
   const nodes=n=>{if(!n||typeof n!=='object')return[];return[n,...[n.props?.children].flat(Infinity).flatMap(nodes)];};
   const text=n=>typeof n==='string'||typeof n==='number'?String(n):n&&typeof n==='object'?[n.props?.children].flat(Infinity).map(text).join(''):'';
@@ -139,4 +139,5 @@ test('saving several changed projects acknowledges only committed writes and pre
   const result=await planning.savePlanQueue(Object.values(queue),async p=>({...p,version:2}),id=>delete queue[id]);
   assert.equal(result,null);assert.deepEqual(Object.keys(queue),[]);
 });
+
 

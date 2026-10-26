@@ -1,0 +1,33 @@
+{
+  "results": [
+    {
+      "name": "Debounces rapid existing-project edits, keeps editor open and acknowledges current version",
+      "passed": true
+    },
+    {
+      "name": "Invalid fields and IME composition do not submit; valid completed input saves",
+      "passed": true
+    },
+    {
+      "name": "Conflict retains draft, stops retries, manual retry works",
+      "passed": true
+    },
+    {
+      "name": "Preference turns autosave off and persists; new project waits for explicit creation",
+      "passed": true
+    },
+    {
+      "name": "Native Gantt move autosaves exactly once, without manual save",
+      "passed": true
+    },
+    {
+      "name": "Leaving before debounce cancels the scheduled write after explicit discard",
+      "passed": true
+    },
+    {
+      "name": "Personnel assignment autosaves and conflict does not loop",
+      "passed": true
+    }
+  ],
+  "errors": []
+}

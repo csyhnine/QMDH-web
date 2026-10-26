@@ -11,6 +11,7 @@ import {
   type Stage,
 } from "./planning";
 import { changePeoplePlan, projectColor, type PeopleChange } from "./staffPlanning";
+import usePlanningAutoSave from "./usePlanningAutoSave";
 
 type DragItem =
   | { kind: "person"; personId: number }
@@ -27,6 +28,7 @@ export default function PeoplePlanner({
   onPersist,
   onDirty,
   onBusy,
+  autoSave = true,
 }: {
   projects: PlanningProject[];
   workloadProjects: PlanningProject[];
@@ -39,8 +41,10 @@ export default function PeoplePlanner({
   onPersist: (p: PlanningProject) => Promise<PlanningProject>;
   onDirty: (v: boolean) => void;
   onBusy: (v: boolean) => void;
+  autoSave?: boolean;
 }) {
   const [pending, setPending] = useState<Record<number, PlanningProject>>({});
+  const [autoFailed, setAutoFailed] = useState(false);
   const edits = useRef(pending),
     lock = useRef(false),
     mounted = useRef(true),
@@ -97,13 +101,14 @@ export default function PeoplePlanner({
       const updated = { ...edits.current, [id]: next };
       if (JSON.stringify(next) === JSON.stringify(projects.find((p) => p.id === id))) delete updated[id];
       write(updated);
-      setMessage("调整已预览，确认后点击“保存人员与排期”。");
+      setAutoFailed(false);
+      setMessage(autoSave ? "调整已预览，稍后自动保存…" : "调整已预览，确认后点击“保存人员与排期”。");
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "调整失败，请重试。");
     }
   }
   async function save() {
-    if (lock.current || !Object.keys(edits.current).length) return;
+    if (lock.current || archived || !Object.keys(edits.current).length) return;
     lock.current = true;
     setSaving(true);
     setMessage("");
@@ -114,6 +119,7 @@ export default function PeoplePlanner({
     });
     lock.current = false;
     if (mounted.current) {
+      setAutoFailed(Boolean(failure));
       setSaving(false);
       setMessage(
         failure
@@ -122,6 +128,7 @@ export default function PeoplePlanner({
       );
     }
   }
+  usePlanningAutoSave(changed ? JSON.stringify(pending) : null, autoSave, saving || archived || autoFailed, save);
   function begin(event: DragEvent, item: DragItem) {
     if (blocked || lock.current) {
       event.preventDefault();
@@ -157,7 +164,7 @@ export default function PeoplePlanner({
       <div className="mp-people-intro">
         <div>
           <strong>看人员，安排多个项目</strong>
-          <p>① 选人员　② 拖到阶段或管理分工　③ 确认保存</p>
+          <p>① 选人员　② 拖到阶段或管理分工　③ {autoSave ? "自动保存" : "确认保存"}</p>
         </div>
         <span>
           {active.length} 位可选人员 · {preview.length} 个显示项目
@@ -167,7 +174,7 @@ export default function PeoplePlanner({
         <div className="mp-pending" role="status">
           <div>
             <strong>{changed} 个项目待保存</strong>
-            <span>甘特条和负荷已按调整预览，尚未写入服务器。</span>
+            <span>{autoSave ? "调整后约1秒自动保存；失败会保留调整，可手动重试。" : "甘特条和负荷已按调整预览，尚未写入服务器。"}</span>
           </div>
           <button
             disabled={saving}

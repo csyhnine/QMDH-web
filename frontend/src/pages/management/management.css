@@ -1,5 +1,6 @@
 /* Company planning workspace. Keep all custom rules inside this module. */
 .management-page {
+  box-sizing: border-box;
   --mp-ink: #202f48;
   --mp-muted: #7b879b;
   --mp-line: #e7ebf2;
@@ -1909,3 +1910,29 @@
   .management-page .mp-unit-picker { width: 100%; white-space: nowrap; }
   .management-page .mp-unit-picker select { flex: 1; max-width: none; min-width: 0; }
 }
+.mp-direct-actions, .mp-project-shortcuts > div, .mp-work-editor header, .mp-work-editor footer { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:12px 16px; }
+.mp-direct-actions span, .mp-project-shortcuts span { color:#607087; font-size:12px; }
+.mp-project-shortcuts { border-bottom:1px solid #dfe5ee; background:#f7faff; }
+.mp-project-shortcuts strong { min-width:120px; }
+.mp-project-shortcuts > div { border-top:1px solid #e5eaf2; }
+.mp-work-editor { background:#fff; border:1px solid #91aae8; border-radius:10px; margin:12px; padding-bottom:12px; }
+.mp-work-editor header { justify-content:space-between; }
+.mp-work-editor fieldset { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; border:0; padding:16px; }
+.mp-work-editor label { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.mp-work-editor label:has(input[type=checkbox]) { flex-direction:row; align-items:center; }
+.mp-work-people, .mp-work-editor footer { grid-column:1/-1; }
+.mp-work-people label { display:inline-flex; margin:6px 18px 6px 0; }
+.mp-work-people p { color:#607087; font-size:12px; }
+.management-page .mp-gantt-action { padding:3px 5px; font-size:11px; color:#3159bb; }
+.mp-date-field { display:inline-flex; align-items:center; gap:4px; min-width:0; position:relative; }
+.mp-date-field > input { width:150px; max-width:100%; }
+.mp-date-field > input::-webkit-calendar-picker-indicator { display:none; }
+.mp-date-field details > summary { padding:7px 10px; border:1px solid #dfe5ee; border-radius:6px; cursor:pointer; list-style:none; background:#fff; }
+.mp-calendar { position:absolute; top:100%; left:0; z-index:45; width:310px; max-width:calc(100vw - 38px); padding:12px; border:1px solid #c5d1e6; border-radius:12px; background:white; box-shadow:0 10px 35px #253c6630; }
+.mp-calendar header, .mp-calendar footer { display:flex; gap:5px; align-items:center; justify-content:space-between; padding:0 0 8px; }
+.mp-calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:3px; text-align:center; }
+.management-page .mp-calendar-grid button { padding:8px 0; border:0; }
+.mp-calendar-grid .muted { color:#9ba7b7; }
+.mp-calendar-grid [aria-pressed=true] { background:#4169df; color:white; }
+.mp-calendar footer { padding:10px 0 0; }
+@media(max-width:760px) { .mp-work-editor fieldset { grid-template-columns:1fr; } .mp-calendar { left:auto; right:0; } }

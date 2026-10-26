@@ -21,6 +21,7 @@ import ManagementOverview from "./ManagementOverview";
 import ProjectLedger from "./ProjectLedger";
 import ProjectPlan from "./ProjectPlan";
 import PeoplePlanner from "./PeoplePlanner";
+import PlanningDate from "./PlanningDate";
 import { matchesStatus, type ProjectStatusFilter } from "./planning";
 import "./management.css";
 
@@ -639,14 +640,13 @@ export default function ManagementProjectsPage() {
                 >
                   ‹
                 </button>
-                <input
-                  aria-label="排期开始日期"
-                  type="date"
+                <PlanningDate
+                  label="排期开始日期"
                   required
                   disabled={planDirty}
                   value={start}
-                  onChange={(e) => {
-                    if (e.target.value) setStart(e.target.value);
+                  onChange={(date) => {
+                    if (date) setStart(date);
                   }}
                 />
                 <button
@@ -835,10 +835,10 @@ export default function ManagementProjectsPage() {
                 </div>
                 <label>
                   <span>完成时间节点</span>
-                  <input
-                    type="date"
+                  <PlanningDate
+                    label="完成时间节点"
                     value={draft.deadline || ""}
-                    onChange={(e) => change("deadline", e.target.value || null)}
+                    onChange={(date) => change("deadline", date || null)}
                   />
                 </label>
                 {textField("stage_work", "当前主要工作（选填）", true)}
@@ -969,24 +969,24 @@ export default function ManagementProjectsPage() {
                     </label>
                     <label>
                       <span>开始日期</span>
-                      <input
+                      <PlanningDate
                         required
-                        type="date"
+                        label={`阶段${i + 1}开始日期`}
                         value={s.start}
-                        onChange={(e) =>
-                          editStage(i, { start: e.target.value, ...(s.milestone ? { end: e.target.value } : {}) })
+                        onChange={(date) =>
+                          editStage(i, { start: date, ...(s.milestone ? { end: date } : {}) })
                         }
                       />
                     </label>
                     <label>
                       <span>完成日期</span>
-                      <input
+                      <PlanningDate
                         required
-                        type="date"
+                        label={`阶段${i + 1}完成日期`}
                         min={s.start}
                         disabled={s.milestone}
                         value={s.end}
-                        onChange={(e) => editStage(i, { end: e.target.value })}
+                        onChange={(date) => editStage(i, { end: date })}
                       />
                     </label>
                     <label>

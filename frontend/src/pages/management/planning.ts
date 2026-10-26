@@ -262,6 +262,7 @@ export function ganttData(projects: PlanningProject[], staff: Staff[], start: st
       progress: projectProgress(project) / 100,
       projectId: project.id,
       people: "",
+      dates: dates.length ? `${dates[0]} — ${dates[dates.length - 1]}` : "待排期",
       unscheduled: !project.stages.length,
     };
     return [
@@ -279,6 +280,7 @@ export function ganttData(projects: PlanningProject[], staff: Staff[], start: st
         end_date: `${addDays(stage.end, 1)} 00:00`,
         progress: stage.progress / 100,
         people: stage.assignees.map((id) => escapeHtml(staff.find((p) => p.id === id)?.name || `#${id}`)).join("、"),
+        dates: `${stage.start} — ${stage.end}`,
         unscheduled: false,
       })),
     ];

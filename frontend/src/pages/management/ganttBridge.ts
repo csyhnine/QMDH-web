@@ -3,6 +3,7 @@ import { addDays, dateInput, ganttData, type PlanningProject, type Staff } from 
 export type ChartCallbacks = {
   canDrag: () => boolean;
   onEdit: (projectId: number) => void;
+  onStage?: (projectId: number, stageId?: string) => void;
   onChange: (projectId: number, stageId: string, task: { start_date: Date; end_date: Date; progress: number }) => void;
 };
 export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, callbacks: ChartCallbacks) {
@@ -15,10 +16,10 @@ export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, c
     row_height: 46,
     bar_height: 26,
     scale_height: 60,
-    grid_width: 440,
+    grid_width: 720,
     min_column_width: 34,
     drag_links: false,
-    drag_progress: true,
+    drag_progress: false,
     drag_move: true,
     drag_resize: true,
     show_links: false,
@@ -29,7 +30,9 @@ export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, c
     fit_tasks: false,
     columns: [
       { name: "text", label: "项目 / 设计阶段", tree: true, width: 245, resize: true },
-      { name: "people", label: "负责人", width: 100, template: (task: any) => task.people || "—" },
+      { name: "people", label: "参与人员", width: 140, template: (task: any) => task.people || "未安排" },
+      { name: "dates", label: "起止日期（含结束日）", width: 170, template: (task: any) => task.dates || "待排期" },
+      { name: "actions", label: "操作", width: 90, template: (task: any) => `<button type="button" class="mp-gantt-action" data-project="${Number(task.projectId)}" data-stage="${task.stageId ? encodeURIComponent(task.stageId) : ""}">${task.stageId ? "编辑工作" : "＋ 添加工作"}</button>` },
       {
         name: "progress",
         label: "进度",
@@ -39,6 +42,14 @@ export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, c
     ],
   });
   gantt.templates.task_text = (_start, _end, task) => task.text;
+  gantt.templates.rightside_text = (_start, _end, task) => task.people || "";
+  gantt.attachEvent("onTaskClick", (id, e) => {
+    const action = (e?.target as HTMLElement | undefined)?.closest(".mp-gantt-action");
+    const task = gantt.getTask(id);
+    if (action) { callbacks.onStage?.(task.projectId, task.stageId); return false; }
+    if (task.stageId) callbacks.onStage?.(task.projectId, task.stageId);
+    return true;
+  });
   gantt.templates.task_class = (_start, _end, task) =>
     task.unscheduled
       ? "mp-chart-unscheduled"
@@ -81,6 +92,7 @@ export function renderPlanningGantt(
     if (task.type === "project") opened.set(String(task.id), task.$open);
   });
   gantt.config.readonly = readonly;
+  gantt.config.min_column_width = days <= 30 ? 20 : 34;
   gantt.config.start_date = new Date(`${start}T00:00:00`);
   gantt.config.end_date = new Date(`${addDays(start, days)}T00:00:00`);
   gantt.config.scales =

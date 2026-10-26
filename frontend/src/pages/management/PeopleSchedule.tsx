@@ -1,173 +1,209 @@
-import type { DragEvent } from "react";
-import { ganttEntries, staffLoads, addDays, staffAffiliation, projectTint, isPaused, type PlanningProject, type Staff, type Stage } from "./planning";
-import { projectColor } from "./staffPlanning";
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import {
+  ganttEntries,
+  staffLoads,
+  addDays,
+  staffAffiliation,
+  projectTint,
+  isPaused,
+  today,
+  type PlanningProject,
+  type Staff,
+  type Stage,
+} from "./planning";
+import type { SchedulePeriod } from "./scheduleCalendar";
+
 export default function PeopleSchedule({
   projects,
   staff,
   start,
   days,
-  onEdit,
+  period,
   workloadProjects = projects,
-  selectedPerson,
   disabled = false,
   onSelect,
+  onAdd,
   onStageDrag,
   onDragEnd,
   onDateDragOver,
   onDateDrop,
-  onStageDragOver,
-  onStageDrop,
 }: {
   projects: PlanningProject[];
   staff: Staff[];
   start: string;
   days: number;
-  onEdit: (p: PlanningProject) => void;
+  period: SchedulePeriod;
   workloadProjects?: PlanningProject[];
-  selectedPerson?: number;
   disabled?: boolean;
-  onSelect?: (p: PlanningProject, s: Stage) => void;
-  onStageDrag?: (e: DragEvent, p: PlanningProject, s: Stage, person: number, anchor: string) => void;
-  onDragEnd?: () => void;
-  onDateDragOver?: (e: DragEvent) => void;
-  onDateDrop?: (e: DragEvent, person: number, date: string) => void;
-  onStageDragOver?: (e: DragEvent) => void;
-  onStageDrop?: (e: DragEvent, p: PlanningProject, s: Stage) => void;
+  onSelect: (p: PlanningProject, s: Stage) => void;
+  onAdd: (person: number, date: string) => void;
+  onStageDrag: (e: DragEvent, p: PlanningProject, s: Stage, person: number, anchor: string) => void;
+  onDragEnd: () => void;
+  onDateDragOver: (e: DragEvent) => void;
+  onDateDrop: (e: DragEvent, person: number, date: string) => void;
 }) {
-  const entries = ganttEntries(projects, start, days);
-  const workload = ganttEntries(workloadProjects, start, days);
+  const entries = useMemo(() => ganttEntries(projects, start, days), [projects, start, days]);
+  const workload = useMemo(() => ganttEntries(workloadProjects, start, days), [workloadProjects, start, days]);
+  const people = useMemo(
+    () =>
+      staff
+        .filter((p) => p.is_active || workload.some((e) => e.stage.assignees.includes(p.id)))
+        .map((person) => ({
+          person,
+          loads: staffLoads(workload, person.id, days),
+          items: entries.filter((e) => e.stage.assignees.includes(person.id)),
+        })),
+    [staff, workload, entries, days],
+  );
+  const dates = Array.from({ length: days }, (_, i) => addDays(start, i)),
+    current = today();
+  const over = people.filter((p) => p.loads.some((v) => v > 100)).length;
+  const board = useRef<HTMLDivElement>(null),
+    [height, setHeight] = useState(600);
+  useLayoutEffect(() => {
+    const resize = () => {
+      if (board.current) setHeight(Math.max(320, window.innerHeight - board.current.getBoundingClientRect().top - 24));
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    const observer = new ResizeObserver(resize),
+      host = board.current?.closest(".management-page");
+    if (host) observer.observe(host);
+    return () => {
+      window.removeEventListener("resize", resize);
+      observer.disconnect();
+    };
+  }, [start, period, people.length]);
   return (
     <>
-      <div className="mp-schedule-legend">
+      <div className="mp-calendar-meta">
         <span>
-          <i className="free" />
-          未排期
+          {start} — {addDays(start, days - 1)} · 每行 1 天 · {people.length} 人
         </span>
         <span>
-          <i className="planned" />
-          已安排 ≤ 100%
+          <i className="mp-over-dot" />
+          {over} 人有超额安排 · 斜纹表示暂停
         </span>
-        <span>
-          <i className="over" />
-          超额 &gt; 100%
-        </span>
-        <small>点击工作条调整 · 拖至负荷日期格改期 / 转交</small>
       </div>
-      <div className="mp-people-board">
-        <div style={{ minWidth: 240 + days * 64 }}>
-          <div className="mp-people-head">
-            <div className="mp-people-label">人员 / 工作安排</div>
-            <div className="mp-capacity-days">
-              {Array.from({ length: days }, (_, i) => (
-                <span key={i}>
-                  {addDays(start, i).slice(5)}
-                  <small>
-                    {["日", "一", "二", "三", "四", "五", "六"][new Date(`${addDays(start, i)}T00:00:00Z`).getUTCDay()]}
-                  </small>
-                </span>
-              ))}
-            </div>
-          </div>
-          {staff
-            .filter((person) => person.is_active || workload.some((entry) => entry.stage.assignees.includes(person.id)))
-            .map((person) => {
-              const values = staffLoads(workload, person.id, days),
-                items = entries.filter((e) => e.stage.assignees.includes(person.id));
-              const lanes: number[] = [];
-              const placed = items.slice().sort((a,b) => a.left-b.left).map(e => { let lane = lanes.findIndex(end => end <= e.left); if(lane < 0) lane = lanes.length; lanes[lane] = e.left+e.width; return {e,lane}; });
-              return (
-                <div
-                  className={`mp-person-row${selectedPerson === person.id ? " mp-person-selected" : ""}`}
+      <div
+        className={`mp-people-board mp-calendar-board mp-period-${period}`}
+        ref={board}
+        style={{ height, "--mp-board-height": `${height}px` } as CSSProperties}
+        key={`${start}-${period}`}
+        tabIndex={0}
+        role="region"
+        aria-label="人员日期排期表"
+      >
+        <table className="mp-person-calendar" style={{ minWidth: 96 + people.length * 96 }}>
+          <thead>
+            <tr>
+              <th scope="col" className="mp-calendar-corner">
+                日期 / 人员
+              </th>
+              {people.map(({ person }) => (
+                <th
+                  scope="col"
                   key={person.id}
+                  title={`${person.name} · ${person.position || "项目成员"} · ${staffAffiliation(person)}`}
                 >
-                  <div className="mp-people-label">
-                    <span className="mp-avatar">{person.name.slice(-2)}</span>
-                    <div>
-                      <strong>
-                        {person.name}
-                        {person.is_active ? "" : "（停用）"}
-                      </strong>
-                      <small>{person.position || "项目成员"}</small>
-                      <small className="mp-affiliation">{staffAffiliation(person)}</small>
-                      <span className={values.some((v) => v > 100) ? "mp-danger-text" : "mp-subtle"}>
-                        {values.some((v) => v > 100)
-                          ? `${values.filter((v) => v > 100).length} 天超额`
-                          : `${items.length} 个阶段`}
-                      </span>
-                    </div>
-                  </div>
-                  <div
-                    className="mp-capacity-timeline"
-                    style={{ flex: 1, minWidth: days * 64, backgroundSize: `${100 / days}% 100%` }}
-                  >
-                    <div className="mp-capacity-days">
-                      {values.map((v, i) => (
-                        <span
-                          key={i}
-                          className={v > 100 ? "over" : v ? "planned" : "free"}
-                          title={`${person.name} ${addDays(start, i)} 全部项目计划分配 ${v}%`}
-                          onDragOver={!disabled && person.is_active ? onDateDragOver : undefined}
-                          onDrop={
-                            !disabled && person.is_active
-                              ? (e) => onDateDrop?.(e, person.id, addDays(start, i))
-                              : undefined
-                          }
-                        >
-                          {v ? `${v}%` : "—"}
-                        </span>
-                      ))}
-                    </div>
-                    {items.length ? (
-                      <div className="mp-packed-tracks" style={{ height: Math.max(1, lanes.length) * 26, position: "relative" }}>{placed.map(({e,lane}) => (
-                        <div className="mp-capacity-track" key={`${e.project.id}-${e.stage.id}`} style={{ position: "absolute", top: lane * 26, left: 0, right: 0 }}>
+                  <strong>
+                    {person.name}
+                    {!person.is_active ? "（停用）" : ""}
+                  </strong>
+                  <small>
+                    {person.employment_type === "external" ? "外包 · " : ""}
+                    {person.position || "项目成员"}
+                  </small>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {dates.map((date, i) => {
+              const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+              return (
+                <tr
+                  key={date}
+                  className={`${weekday === 0 || weekday === 6 ? "mp-calendar-weekend " : ""}${date === current ? "mp-calendar-today" : ""}`}
+                >
+                  <th scope="row">
+                    <strong>{date.slice(5).replace("-", "/")}</strong>
+                    <small>
+                      周{["日", "一", "二", "三", "四", "五", "六"][weekday]}
+                      {date === current ? " · 今天" : ""}
+                    </small>
+                    {date.endsWith("-01") && <small>{date.slice(0, 7)}</small>}
+                  </th>
+                  {people.map(({ person, loads, items }) => {
+                    const work = items.filter((e) => e.left <= i && i < e.left + e.width),
+                      load = loads[i];
+                    return (
+                      <td
+                        key={person.id}
+                        data-person={person.id}
+                        data-date={date}
+                        className={load > 100 ? "mp-cell-over" : ""}
+                        onDragOver={!disabled && person.is_active ? onDateDragOver : undefined}
+                        onDrop={!disabled && person.is_active ? (e) => onDateDrop(e, person.id, date) : undefined}
+                      >
+                        <div className="mp-calendar-cell">
                           <button
-                            style={{
-                              left: `calc(${(e.left / days) * 100}% + 3px)`,
-                              width: `calc(${(e.width / days) * 100}% - 6px)`,
-                              background: projectTint(e.project),
-                            }}
-                            disabled={disabled}
-                            draggable={Boolean(onStageDrag) && !disabled && !e.project.archived}
-                            onDragStart={(event) => {
-                              const rect = event.currentTarget.getBoundingClientRect();
-                              const offset = Math.min(
-                                e.width - 1,
-                                Math.max(
-                                  0,
-                                  Math.floor(((event.clientX - rect.left) / Math.max(1, rect.width)) * e.width),
-                                ),
-                              );
-                              onStageDrag?.(event, e.project, e.stage, person.id, addDays(start, e.left + offset));
-                            }}
-                            onDragEnd={onDragEnd}
-                            onDragOver={!disabled && !e.project.archived ? onStageDragOver : undefined}
-                            onDrop={
-                              !disabled && !e.project.archived
-                                ? (event) => onStageDrop?.(event, e.project, e.stage)
-                                : undefined
-                            }
-                            onClick={() => (onSelect ? onSelect(e.project, e.stage) : onEdit(e.project))}
-                            title={`${e.project.name} · ${e.stage.name}\n${e.stage.start} — ${e.stage.end} · 分配 ${e.stage.allocation}%`}
+                            className={`mp-cell-add${work.length ? " mp-cell-has-work" : ""}`}
+                            aria-label={`${person.name} ${date} 添加工作`}
+                            disabled={disabled || !person.is_active || !projects.some((p) => !p.archived)}
+                            onClick={() => onAdd(person.id, date)}
+                            title={projects.length ? "添加工作，或加入已有工作" : "先新建项目，再添加工作"}
                           >
-                            {Array.from({length:e.width},(_,i) => isPaused(e.stage,person.id,addDays(start,e.left+i)) ? <span key={i} className="mp-pause-slice" style={{left:`${i/e.width*100}%`,width:`${100/e.width}%`}} title="暂停，不计负荷" /> : null)}
-                            <span className="mp-work-caption">{e.project.name} · {e.stage.name}</span>
-                            <small> {e.stage.allocation}%</small>
+                            <span>＋</span>
                           </button>
+                          <small
+                            className={`mp-cell-load${load > 100 ? " mp-danger-text" : ""}`}
+                            title={`${person.name} ${date} 全部项目计划负荷 ${load}%`}
+                          >
+                            {load ? `${load}%` : work.length ? "节点 / 暂停" : ""}
+                          </small>
+                          <div className="mp-cell-work">
+                            {work.map(({ project, stage }) => {
+                              const paused = isPaused(stage, person.id, date);
+                              return (
+                                <button
+                                  key={`${project.id}:${stage.id}`}
+                                  className={`mp-calendar-work${paused ? " mp-work-paused" : ""}${stage.milestone ? " mp-work-milestone" : ""}`}
+                                  style={{ backgroundColor: projectTint(project) }}
+                                  disabled={disabled}
+                                  draggable={!disabled && !project.archived && person.is_active}
+                                  onDragStart={(e) => onStageDrag(e, project, stage, person.id, date)}
+                                  onDragEnd={onDragEnd}
+                                  onClick={() => onSelect(project, stage)}
+                                  aria-label={`${person.name} ${date} ${project.name} · ${stage.name}${paused ? " · 暂停" : ""}`}
+                                  title={`${project.name} · ${stage.name}\n${stage.start} — ${stage.end} · 每人 ${stage.allocation}%${stage.deliverable ? `\n交付：${stage.deliverable}` : ""}${paused ? "\n暂停，不计负荷" : ""}\n点击编辑 · 拖到日期格改期或转交；多人工作共享起止日期`}
+                                >
+                                  <strong>
+                                    {stage.milestone ? "◆ " : ""}
+                                    {project.name}
+                                  </strong>
+                                  <span>
+                                    {paused ? "暂停 · " : ""}
+                                    {stage.name}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                      ))}</div>
-                    ) : (
-                      <p className="mp-schedule-empty">没有显示的阶段 · 负荷格仍包含隐藏项目</p>
-                    )}
-                  </div>
-                </div>
+                      </td>
+                    );
+                  })}
+                </tr>
               );
             })}
-          {!staff.length ? <div className="mp-empty">暂无人员，请先维护人员名册。</div> : null}
-        </div>
+          </tbody>
+        </table>
+        {!people.length && <p className="mp-empty">暂无人员，请先维护人员名册。</p>}
       </div>
       <p className="mp-help">
-        未指定人员的阶段：{entries.filter((e) => !e.stage.assignees.length).length}{" "}
-        个。停用人员的既有安排仍保留。负荷合计覆盖所选年度全部项目，包含被筛选隐藏的安排。
+        负荷包含当前年度被筛选隐藏的项目。拖动多人工作会同步调整该工作的日期，转交只替换拖动的这一人。未安排人员的工作{" "}
+        {entries.filter((e) => !e.stage.assignees.length).length} 项，可从项目计划补充。
       </p>
     </>
   );

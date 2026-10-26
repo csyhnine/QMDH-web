@@ -2013,3 +2013,43 @@
 .mp-compact .mp-schedule-legend { margin:4px 0; }
 .mp-compact .mp-capacity-timeline { padding-bottom:2px; }
 @media(max-width:720px) { .management-page:has(.mp-compact) .mp-header {gap:6px;} .management-page:has(.mp-compact) .mp-header-actions {gap:5px;} .management-page:has(.mp-compact) .mp-tabs {margin:6px 0;} }
+
+/* Personnel calendar: people across columns, real dates down rows. */
+.management-page:has(.mp-calendar-board) { max-width:none; margin:16px 0; padding:0 20px 12px; }
+.mp-calendar-summary { display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin:8px 0 4px; }
+.mp-calendar-summary>small { color:var(--mp-muted); }
+.mp-project-colors>span { border-left:4px solid; padding:2px 8px; background:#fff; border-radius:4px; font-size:12px; }
+.mp-calendar-meta { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; font-size:11px; color:#718198; padding:4px 0 8px; }
+.mp-over-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:#d48972; margin-right:5px; }
+.mp-calendar-board { width:100%; height:calc(100dvh - 275px); min-height:320px; max-height:none; overflow:auto; border:1px solid #dce4ef; border-radius:10px; background:#fff; scrollbar-gutter:stable; isolation:isolate; }
+.management-page .mp-person-calendar { width:100%; border-collapse:separate; border-spacing:0; table-layout:fixed; font-size:12px; }
+.management-page .mp-person-calendar th,.management-page .mp-person-calendar td { padding:0; border:0; border-right:1px solid #e4eaf3; border-bottom:1px solid #e4eaf3; max-width:none; vertical-align:top; }
+.management-page .mp-person-calendar thead th { position:sticky; top:0; z-index:3; background:#f2f6fc; text-align:center; height:52px; padding:9px 4px; box-shadow:0 1px #d5dfee; }
+.mp-person-calendar th strong { display:block; color:#29486c; font-size:12px; font-weight:600; line-height:19px; }
+.mp-person-calendar th small { display:block; font-size:10px; color:#8a99ac; line-height:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.management-page .mp-person-calendar th:first-child { position:sticky; left:0; width:96px; z-index:2; background:#f7f9fd; text-align:center; padding:10px 4px; box-shadow:1px 0 #d5dfee; }
+.management-page .mp-person-calendar thead th:first-child { z-index:4; background:#edf2fa; }
+.mp-calendar-cell { min-height:80px; position:relative; padding:5px 3px 8px; }
+.mp-period-week .mp-calendar-cell { min-height:max(64px,calc((var(--mp-board-height,600px) - 56px) / 7)); }
+.mp-period-month .mp-calendar-cell { min-height:68px; }
+.mp-period-quarter .mp-calendar-cell,.mp-period-year .mp-calendar-cell { min-height:54px; }
+.mp-cell-load { position:relative; z-index:1; display:block; pointer-events:none; height:13px; line-height:13px; font-size:9px; color:#8a9caf; margin-bottom:2px; }
+.management-page .mp-cell-add { position:absolute; inset:0; width:100%; height:100%; border:0; border-radius:0; background:transparent; color:#b4c4da; padding:0; box-shadow:none; }
+.mp-cell-add>span { opacity:.35; font-size:17px; }
+.mp-cell-has-work>span { position:absolute; right:4px; top:0; font-size:13px; }
+.management-page .mp-cell-add:hover { background:#edf4ff; }
+.mp-cell-add:hover>span,.mp-cell-add:focus-visible>span { opacity:1; color:#4169df; }
+.mp-cell-work { position:relative; z-index:1; pointer-events:none; display:grid; gap:3px; }
+.management-page .mp-calendar-work { pointer-events:auto; display:block; width:100%; min-height:36px; padding:3px 5px; border:0; border-radius:4px; box-shadow:none; color:white; text-align:left; cursor:grab; overflow:hidden; }
+.mp-calendar-work strong,.mp-calendar-work>span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; line-height:15px; }
+.mp-calendar-work strong { font-weight:600; }
+.management-page .mp-calendar-work:hover { filter:brightness(1.08); outline:2px solid #ffffffa0; outline-offset:-2px; }
+.management-page .mp-work-paused { background-image:repeating-linear-gradient(135deg,#ffffff80 0 4px,#ffffff15 4px 8px); }
+.mp-work-milestone { box-shadow:inset 0 0 0 2px #ffffff8c!important; }
+.mp-calendar-weekend td { background:#f8fafe; }
+.mp-cell-over { background:#fff1eb!important; }
+.management-page .mp-person-calendar .mp-calendar-today>th { color:#4169df; background:#eaf0ff; border-left:3px solid #4169df; }
+.mp-calendar-today>td { border-top:1px solid #a1b6ed!important; }
+@media(max-width:760px) { .management-page:has(.mp-calendar-board) { margin:10px 0; padding:0 10px 10px; } .mp-calendar-board {height:calc(100dvh - 340px);min-height:350px;} .mp-calendar-summary>small {display:none;} .mp-calendar-meta {font-size:10px;} }
+
+.management-shell .canvas-area:has(.mp-calendar-board) { padding:0; }

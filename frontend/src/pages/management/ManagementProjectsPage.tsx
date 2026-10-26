@@ -16,13 +16,13 @@ import {
   staffCounts,
   scheduledWeek,
   weekRange,
-  projectTint,
   type PlanningProject,
   type Report,
   type Staff,
   type Stage,
 } from "./planning";
-import PlanningDesk from "./PlanningDesk";
+import PlanningDesk, { type WorkRequest } from "./PlanningDesk";
+import { scheduleRange, moveSchedulePeriod, type SchedulePeriod } from "./scheduleCalendar";
 import ProjectLedger from "./ProjectLedger";
 import ProjectPlan from "./ProjectPlan";
 import PeoplePlanner from "./PeoplePlanner";
@@ -116,7 +116,9 @@ export default function ManagementProjectsPage() {
   const [planSaving, setPlanSaving] = useState(false);
   const [start, setStart] = useState(today());
   const [days, setDays] = useState(30);
-  const [peopleDays, setPeopleDays] = useState(7);
+  const [peoplePeriod, setPeoplePeriod] = useState<SchedulePeriod>("week");
+  const peopleRange = scheduleRange(start, peoplePeriod);
+  const [workRequest, setWorkRequest] = useState<WorkRequest | null>(null);
   const [draft, setDraft] = useState<PlanningProject | null>(null);
   const nextWeek = weekRange(addDays(today(), 7)).start;
   const [conversionStart, setConversionStart] = useState(nextWeek), [conversionEnd, setConversionEnd] = useState(addDays(nextWeek, 4));
@@ -683,12 +685,12 @@ export default function ManagementProjectsPage() {
               <div>
                 <button
                   disabled={planDirty}
-                  onClick={() => setStart(addDays(start, -(view === "people" ? peopleDays : days)))}
+                  onClick={() => setStart(view === "people" ? moveSchedulePeriod(start, peoplePeriod, -1) : addDays(start, -days))}
                 >
                   ‹
                 </button>
                 <PlanningDate
-                  label="排期开始日期"
+                  label={view === "people" ? "排期所在日期" : "排期开始日期"}
                   required
                   disabled={planDirty}
                   value={start}
@@ -698,7 +700,7 @@ export default function ManagementProjectsPage() {
                 />
                 <button
                   disabled={planDirty}
-                  onClick={() => setStart(addDays(start, view === "people" ? peopleDays : days))}
+                  onClick={() => setStart(view === "people" ? moveSchedulePeriod(start, peoplePeriod, 1) : addDays(start, days))}
                 >
                   ›
                 </button>
@@ -720,16 +722,18 @@ export default function ManagementProjectsPage() {
                   <select
                     aria-label="人员排期跨度"
                     disabled={planDirty || planSaving}
-                    value={peopleDays}
-                    onChange={(e) => setPeopleDays(Number(e.target.value))}
+                    value={peoplePeriod}
+                    onChange={(e) => setPeoplePeriod(e.target.value as SchedulePeriod)}
                   >
-                    <option value={7}>一周</option>
-                    <option value={14}>两周</option>
+                    <option value="week">按周</option>
+                    <option value="month">按月</option>
+                    <option value="quarter">按季度</option>
+                    <option value="year">按年</option>
                   </select>
                 )}
               </div>
             </div>
-            <PlanningDesk projects={filtered} staff={staff} disabled={planSaving || chartDirty || archive} onPersist={persistSchedule} onDirty={setDeskDirty} />
+            <PlanningDesk request={workRequest} onRequestHandled={() => setWorkRequest(null)} projects={filtered} staff={staff} disabled={planSaving || chartDirty || archive} onPersist={persistSchedule} onDirty={setDeskDirty} />
             {view === "gantt" ? (
               <ProjectPlan
                 key={`${year}-${archive}-${search}-${person}-${statusFilter}-${refresh}`}
@@ -751,10 +755,12 @@ export default function ManagementProjectsPage() {
                 workloadProjects={projects}
                 staff={staff}
                 personFilter={person}
-                start={start}
-                days={peopleDays}
+                start={peopleRange.start}
+                days={peopleRange.days}
+                period={peoplePeriod}
+                disabled={deskDirty}
+                onOpen={setWorkRequest}
                 archived={archive}
-                onEdit={editProject}
                 onPersist={persistSchedule}
                 onDirty={setPlanDirty}
                 onBusy={setPlanSaving}
@@ -816,7 +822,6 @@ export default function ManagementProjectsPage() {
           {textField("name","项目名称")}
           <label><span>项目统筹（选填）</span><PeopleSelect value={draft.team.coordinator} staff={staff} onChange={ids=>change("team",{...draft.team,coordinator:ids})}/></label>
           <label>目标交付日期（选填）<PlanningDate label="立项目标交付日期" value={draft.deadline||""} onChange={date=>change("deadline",date||null)}/></label>
-          <label>项目颜色<input aria-label="项目颜色" type="color" value={projectTint(draft)} onChange={e=>change("color",e.target.value)}/></label>
           </fieldset><footer><button type="button" disabled={busy} onClick={closeDraft}>取消</button><button type="submit" className="mp-primary" disabled={busy}>创建项目</button></footer>
         </form></div>
       ) : draft ? (
@@ -888,7 +893,7 @@ export default function ManagementProjectsPage() {
             <fieldset id="mp-editor-basic" disabled={busy}>
               <legend>基本信息</legend>
               <div className="mp-fields">
-                {textField("name", "项目名称")}<label>项目颜色<input aria-label="项目颜色" type="color" value={projectTint(draft)} onChange={e=>change("color",e.target.value)}/></label>
+                {textField("name", "项目名称")}
                 <div className="mp-field">
                   <span>项目负责人（选填）</span>
                   <PeopleSelect

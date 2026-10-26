@@ -364,6 +364,7 @@ export default function ManagementProjectsPage() {
           <p className="mp-eyebrow">{report?.unit || currentUser?.company_unit} · 管理工作台</p>
           <h1>项目管理</h1>
           <p>掌握项目进展，安排团队下一步工作。</p>
+          <small className="mp-unit-boundary">当前分院独立管理项目、人员和费用；原二、四分院同属新二分院。</small>
         </div>
         <div className="mp-header-actions">
           <label className="mp-unit-picker">
@@ -413,6 +414,13 @@ export default function ManagementProjectsPage() {
           </button>
         ))}
       </nav>
+      <p className="mp-view-purpose">
+        {view === "overview" ? "管理总览：看本周重点、延期风险和团队负荷，发现问题后进入项目或排期处理。"
+          : view === "ledger" ? "项目台账：维护项目资料、责任分工、合同与费用，按分类查询和导出。"
+          : view === "gantt" ? "项目计划：以项目为主线，安排阶段、里程碑、起止日期与进度。"
+          : view === "people" ? "人员排期：以本院人员为主线，查看跨项目占用，拖拽分配工作并处理冲突。"
+          : "人员名册：维护本院可安排的员工，名册职务与网站登录权限分别管理。"}
+      </p>
       {error && !(draft || staffDraft || reportDraft) ? (
         <p className="mp-error" role="alert">
           {error}

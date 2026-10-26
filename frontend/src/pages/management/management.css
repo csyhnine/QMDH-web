@@ -5,6 +5,8 @@
   --mp-line: #e7ebf2;
   --mp-blue: #4169df;
   max-width: 1660px;
+  width: 100%;
+  min-width: 0;
   margin: 28px auto;
   padding: 0 32px 54px;
   color: var(--mp-ink);
@@ -111,11 +113,18 @@
   margin-right: 8px;
 }
 .mp-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  flex-shrink: 0;
+  background: #f6f8fc;
   display: flex;
   gap: 25px;
   border-bottom: 1px solid var(--mp-line);
   margin-bottom: 22px;
 }
+.mp-view-purpose { margin: -6px 0 18px; color: #596a82; line-height: 1.7; font-size: 13px; }
+.mp-unit-boundary { display: block; font-size: 12px; color: #596a82; margin-top: 6px; }
 .mp-tabs button {
   display: flex;
   align-items: center;
@@ -1611,7 +1620,7 @@
   .management-shell .canvas-area {
     min-width: 0;
     width: 100%;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
   .management-shell .management-page {
     min-width: 0;

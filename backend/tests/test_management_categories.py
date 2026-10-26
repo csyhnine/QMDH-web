@@ -38,6 +38,32 @@ def test_categories_require_company_grant_and_only_authorized_admin_switches(env
     assert http.get('/management/staff?unit=一分院', headers=headers(1)).status_code == 403
 
 
+def test_different_institutes_cannot_share_staff_projects_reports_or_trash(env):
+    http, sessions = env
+    authorize_admin(sessions)
+    first = http.post('/management/staff?unit=一分院', headers=headers(1), json={'name':'一院员工'}).json()
+    second = new_staff(http, '二院员工')
+    project_one = http.post('/management/projects?year=2026&unit=一分院', headers=headers(1), json={'name':'一院项目','next_week_staff':[first['id']]}).json()
+    for path, method, body in [
+        ('/management/projects?year=2026', 'post', {'name':'误分配','next_week_staff':[first['id']]}),
+        ('/management/projects?year=2026&unit=一分院', 'post', {'name':'误分配','next_week_staff':[second['id']]}),
+    ]:
+        assert getattr(http, method)(path, headers=headers(1), json=body).status_code == 422
+    for unit,expected in [('一分院',[first['id']]),('二分院',[second['id']]),('三分院',[])]:
+        assert [s['id'] for s in http.get('/management/staff?unit='+unit,headers=headers(1)).json()] == expected
+    assert http.get('/management/projects?year=2026&unit=三分院',headers=headers(1)).json()==[]
+    assert http.get('/management/reports/2026?unit=一分院',headers=headers(1)).json()['version']==0
+    assert http.put('/management/reports/2026?unit=一分院',headers=headers(1),json={'data_as_of':'2026-10-26','compiler':'一院'}).status_code==200
+    assert http.get('/management/reports/2026',headers=headers()).json()['compiler']==''
+    ident=project_one['id']
+    assert http.get(f'/management/projects/{ident}/revisions',headers=headers()).status_code==404
+    assert http.delete(f'/management/projects/{ident}?version=1',headers=headers()).status_code==404
+    assert http.delete(f'/management/projects/{ident}?unit=一分院&version=1',headers=headers(1)).status_code==200
+    assert http.get('/management/projects?year=2026&deleted=true',headers=headers()).json()==[]
+    assert http.post(f'/management/projects/{ident}/restore?version=2',headers=headers()).status_code==404
+    assert len(http.get('/management/projects?year=2026&deleted=true&unit=一分院',headers=headers(1)).json())==1
+
+
 def test_import_merges_two_and_four_preserves_identity_manual_data_and_never_grants(env):
     http, sessions = env
     existing = new_staff(http, '已录领导')

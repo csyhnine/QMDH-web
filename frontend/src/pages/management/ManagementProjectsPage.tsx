@@ -441,64 +441,66 @@ export default function ManagementProjectsPage() {
   );
   return (
     <section className="management-page">
-      <header className="mp-header">
-        <div>
-          <p className="mp-eyebrow">{report?.unit || currentUser?.company_unit} · 管理工作台</p>
-          <h1>项目管理</h1>
-          <p>掌握项目进展，安排团队下一步工作。</p>
-          <small className="mp-unit-boundary">当前分院独立管理项目、人员和费用；原二、四分院同属新二分院。</small>
-        </div>
-        <div className="mp-header-actions">
-          <label className="mp-inline" title="适用于已有项目资料、项目计划和人员排期；新项目首次仍需创建，人员名册与台账信息单独保存。"><input type="checkbox" checked={autoSave} onChange={e => {
-            setAutoSave(e.target.checked);
-            try { window.localStorage?.setItem(`qmdh:planning:auto:${currentUser?.name}`, e.target.checked ? "on" : "off"); } catch { /* Preference remains usable without storage. */ }
-          }} />自动保存</label>
-          <label className="mp-unit-picker">
-            管理分院
-            <select aria-label="管理分院" value={unit} disabled={loading || busy || planSaving}
-              onChange={(e) => {
-                const next = e.target.value;
-                if (projectDirty && !window.confirm("项目内容尚未保存，确定切换分院并放弃修改？")) return;
-                safeChange(() => {
-                  setUnit(next); setDraft(null); setStaffDraft(null); setReportDraft(null);
-                  setPerson(0); setSearch(""); setCreatedProject(null); setNotice(""); setError("");
-                });
-              }}>
-              {(units.length ? units : [{ name: unit, label: unit, staff_count: staff.length, account_count: 0 }]).map((u) =>
-                <option key={u.name} value={u.name}>{u.label} · {u.staff_count} 人</option>)}
-            </select>
-          </label>
-          <span>{currentUser?.company_position}</span>
-          <button disabled={loading} onClick={() => changeView("staff")}>
-            人员名册
-          </button>
-          <button
-            disabled={loading}
-            onClick={() => report && setReportDraft({ ...report, data_as_of: report.data_as_of || today() })}
-          >
-            台账信息
-          </button>
-        </div>
-      </header>
-      <nav className="mp-tabs" aria-label="项目管理视图">
-        {(
-          [
-            ["people", "人员排期", "♧"],
-            ["gantt", "项目计划", "▥"],
-            ["ledger", "项目台账", "▤"],
-          ] as const
-        ).map(([v, l, icon]) => (
-          <button
-            key={v}
-            aria-current={view === v ? "page" : undefined}
-            className={view === v ? "selected" : ""}
-            onClick={() => changeView(v)}
-          >
-            <span aria-hidden="true">{icon}</span>
-            {l}
-          </button>
-        ))}
-      </nav>
+      <div className="mp-workspace-header">
+        <header className="mp-header">
+          <div>
+            <p className="mp-eyebrow">{report?.unit || currentUser?.company_unit} · 管理工作台</p>
+            <h1>项目管理</h1>
+            <p>掌握项目进展，安排团队下一步工作。</p>
+            <small className="mp-unit-boundary">当前分院独立管理项目、人员和费用；原二、四分院同属新二分院。</small>
+          </div>
+          <div className="mp-header-actions">
+            <label className="mp-inline" title="适用于已有项目资料、项目计划和人员排期；新项目首次仍需创建，人员名册与台账信息单独保存。"><input type="checkbox" checked={autoSave} onChange={e => {
+              setAutoSave(e.target.checked);
+              try { window.localStorage?.setItem(`qmdh:planning:auto:${currentUser?.name}`, e.target.checked ? "on" : "off"); } catch { /* Preference remains usable without storage. */ }
+            }} />自动保存</label>
+            <label className="mp-unit-picker">
+              管理分院
+              <select aria-label="管理分院" value={unit} disabled={loading || busy || planSaving}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (projectDirty && !window.confirm("项目内容尚未保存，确定切换分院并放弃修改？")) return;
+                  safeChange(() => {
+                    setUnit(next); setDraft(null); setStaffDraft(null); setReportDraft(null);
+                    setPerson(0); setSearch(""); setCreatedProject(null); setNotice(""); setError("");
+                  });
+                }}>
+                {(units.length ? units : [{ name: unit, label: unit, staff_count: staff.length, account_count: 0 }]).map((u) =>
+                  <option key={u.name} value={u.name}>{u.label} · {u.staff_count} 人</option>)}
+              </select>
+            </label>
+            <span>{currentUser?.company_position}</span>
+            <button disabled={loading} onClick={() => changeView("staff")}>
+              人员名册
+            </button>
+            <button
+              disabled={loading}
+              onClick={() => report && setReportDraft({ ...report, data_as_of: report.data_as_of || today() })}
+            >
+              台账信息
+            </button>
+          </div>
+        </header>
+        <nav className="mp-tabs" aria-label="项目管理视图">
+          {(
+            [
+              ["people", "人员排期", "♧"],
+              ["gantt", "项目计划", "▥"],
+              ["ledger", "项目台账", "▤"],
+            ] as const
+          ).map(([v, l, icon]) => (
+            <button
+              key={v}
+              aria-current={view === v ? "page" : undefined}
+              className={view === v ? "selected" : ""}
+              onClick={() => changeView(v)}
+            >
+              <span aria-hidden="true">{icon}</span>
+              {l}
+            </button>
+          ))}
+        </nav>
+      </div>
       <p className="mp-view-purpose">
         {view === "ledger" ? "项目台账：维护项目资料、责任分工、合同与费用，按分类查询和导出。"
           : view === "gantt" ? "项目计划：以项目为主线，安排阶段、里程碑、起止日期与进度。"

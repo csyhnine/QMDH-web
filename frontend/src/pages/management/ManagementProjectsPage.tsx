@@ -14,6 +14,8 @@ import {
   today,
   staffAffiliation,
   staffCounts,
+  scheduledWeek,
+  weekRange,
   type PlanningProject,
   type Report,
   type Staff,
@@ -25,6 +27,8 @@ import ProjectPlan from "./ProjectPlan";
 import PeoplePlanner from "./PeoplePlanner";
 import PlanningDate from "./PlanningDate";
 import usePlanningAutoSave from "./usePlanningAutoSave";
+import ManagementReporting, { downloadReportingWorkbook } from "./ManagementReporting";
+import type { ReportingData } from "./reporting";
 import { matchesStatus, type ProjectStatusFilter } from "./planning";
 import "./management.css";
 
@@ -111,6 +115,8 @@ export default function ManagementProjectsPage() {
   const [days, setDays] = useState(30);
   const [peopleDays, setPeopleDays] = useState(7);
   const [draft, setDraft] = useState<PlanningProject | null>(null);
+  const nextWeek = weekRange(addDays(today(), 7)).start;
+  const [conversionStart, setConversionStart] = useState(nextWeek), [conversionEnd, setConversionEnd] = useState(addDays(nextWeek, 4));
   const [draftBaseline, setDraftBaseline] = useState("");
   const [createdProject, setCreatedProject] = useState<PlanningProject | null>(null);
   const projectDirty = Boolean(draft && JSON.stringify(draft) !== draftBaseline);
@@ -384,6 +390,30 @@ export default function ManagementProjectsPage() {
     a.click();
     URL.revokeObjectURL(url);
   }
+  async function downloadExcel() {
+    if (actionLock.current) return;
+    actionLock.current = true; setBusy(true); setError("");
+    try {
+      const data = await scopedRequest<ReportingData>(`/report-data?year=${year}`);
+      const week = weekRange(year === new Date().getFullYear() ? today() : `${year}-01-01`).start;
+      await downloadReportingWorkbook(data, week, 5);
+    } catch (e) { setError(e instanceof Error ? e.message : "Excel 导出失败"); }
+    finally { actionLock.current = false; setBusy(false); }
+  }
+  function convertWeeklyPlan() {
+    if (!draft || !draft.next_week_work.trim() || !conversionStart || !conversionEnd || conversionEnd < conversionStart) return;
+    const name = draft.next_week_work.trim();
+    if (name.length > 250) { setError("请将工作标题缩短至250字以内，详细内容可放入阶段备注。"); return; }
+    if (draft.stages.length >= 200) { setError("单个项目最多200个阶段，请先整理已有阶段。"); return; }
+    if (draft.stages.some(s => s.name === name && s.start === conversionStart && s.end === conversionEnd)) {
+      setError("相同工作和日期已经存在，请在阶段排期中调整。"); return;
+    }
+    setProjectAutoFailed(false); setProjectSaveStatus(""); setError("");
+    setDraft({ ...draft, weekly_plan_mode: "schedule", stages: [...draft.stages, {
+      id: crypto.randomUUID().replaceAll("-", ""), name, start: conversionStart, end: conversionEnd,
+      assignees: [...draft.next_week_staff], allocation: 100, progress: 0, milestone: false, notes: "",
+    }] });
+  }
   const textField = (key: keyof PlanningProject, label: string, wide = false) => (
     <label key={key} className={wide ? "mp-wide" : ""}>
       <span>{label}</span>
@@ -583,10 +613,12 @@ export default function ManagementProjectsPage() {
               </div>
             </details>
             <span className="mp-toolbar-spacer" />
+            {view === "overview" && !trash && <><button onClick={() => document.getElementById("mp-annual-report")?.scrollIntoView({ block: "start" })}>经营统计 ↓</button><button onClick={() => document.getElementById("mp-weekly-report")?.scrollIntoView({ block: "start" })}>人员周报 ↓</button></>}
             <button disabled={loading || busy} aria-pressed={trash} onClick={() => safeChange(() => { setTrash(!trash); setArchive(false); })}>{trash ? "返回在管项目" : "回收站"}</button>
             <button disabled={loading || trash} onClick={download}>
-              ↓ 导出台账
+              ↓ CSV 台账
             </button>
+            <button disabled={loading || busy || trash} onClick={downloadExcel}>↓ Excel 一览表</button>
             <button className="mp-primary" disabled={loading || planDirty} onClick={createProject}>
               ＋ 新建项目
             </button>
@@ -809,6 +841,7 @@ export default function ManagementProjectsPage() {
             </p>
           </div>
         )}
+        {!loading && view === "overview" && !trash && <ManagementReporting key={`${unit}-${year}`} unit={unit} year={year} revision={projects} />}
       </div>
       <div className="mp-report-meta">
         {year} 年度项目信息一览表 · 表格编制 {report?.compiler || "待填写"} · 数据更新 {report?.data_as_of || "待填写"}
@@ -931,6 +964,7 @@ export default function ManagementProjectsPage() {
                   {textField("source", "项目来源")}
                   {textField("project_type", "项目类型")}
                   {textField("phase", "项目阶段")}
+                  <label><span>配合其他分院（选填）</span><select aria-label="配合其他分院" value={draft.collaboration_unit || ""} onChange={e => change("collaboration_unit", e.target.value)}><option value="">本院项目</option>{["一分院", "二分院", "三分院", "其他分院"].filter(name => name !== unit).map(name => <option key={name}>{name}</option>)}</select><small className="mp-help">只登记本院承担的配合工作，不共享其他分院的项目或人员数据。</small></label>
                   {textField("notes", "备注", true)}
                 </div>
               </details>
@@ -962,6 +996,8 @@ export default function ManagementProjectsPage() {
               </summary>
               <fieldset disabled={busy}>
                 <legend>下周工作安排</legend>
+                <label><span>周安排来源</span><select aria-label="周安排来源" value={draft.weekly_plan_mode || "manual"} onChange={e => change("weekly_plan_mode", e.target.value as "manual" | "schedule")}><option value="schedule">按阶段排期自动汇总</option><option value="manual">手工填写（保留原文字）</option></select></label>
+                {draft.weekly_plan_mode === "schedule" ? <div className="mp-week-preview"><p>{nextWeek} — {addDays(nextWeek, 4)} · 调整甘特图日期和人员后自动更新。</p><strong>{scheduledWeek(draft, nextWeek, 5).work || "下周尚无阶段排期"}</strong><p>参与人员：{scheduledWeek(draft, nextWeek, 5).people.map(id => staff.find(s => s.id === id)?.name || `#${id}`).join("、") || "未安排"}</p><button type="button" onClick={() => showProjectSection("schedule")}>编辑阶段排期</button></div> : <>
                 <div className="mp-fields">
                   {textField("next_week_work", "下周主要工作内容", true)}
                   <div className="mp-field">
@@ -973,6 +1009,9 @@ export default function ManagementProjectsPage() {
                     />
                   </div>
                 </div>
+                <div className="mp-fields"><PlanningDate label="转排期开始日期" value={conversionStart} onChange={setConversionStart} /><PlanningDate label="转排期结束日期" value={conversionEnd} min={conversionStart} onChange={setConversionEnd} /></div>
+                <button type="button" disabled={!draft.next_week_work.trim() || !conversionStart || !conversionEnd || conversionEnd < conversionStart} onClick={convertWeeklyPlan}>将这段安排加入阶段排期</button><p className="mp-help">确认实际日期后生成一项工作，带入所选人员；保存后进入甘特图和周统计，原文字保留。</p>
+                </>}
               </fieldset>
             </details>
             <details className="mp-editor-section">
@@ -1004,6 +1043,7 @@ export default function ManagementProjectsPage() {
                     </label>
                   ))}
                   {textField("contract", "合同签订情况 / 日期 / 编号")}
+                  <label><span>签约状态（用于统计）</span><select aria-label="签约状态" value={draft.contract_status || "unknown"} onChange={e => change("contract_status", e.target.value as "signed" | "unsigned" | "unknown")}><option value="unknown">待确认</option><option value="signed">已签订</option><option value="unsigned">未签订</option></select></label>
                 </div>
               </fieldset>
             </details>

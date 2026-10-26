@@ -48,6 +48,9 @@ export type PlanningProject = {
   investment: string | null;
   design_fee: string | null;
   contract: string;
+  contract_status?: "signed" | "unsigned" | "unknown";
+  weekly_plan_mode?: "manual" | "schedule";
+  collaboration_unit?: string;
   paid: string | null;
   invoiced_pending: string | null;
   mode: string;
@@ -89,6 +92,9 @@ export function newProject(sequence: number): PlanningProject {
     investment: null,
     design_fee: null,
     contract: "",
+    contract_status: "unknown",
+    weekly_plan_mode: "schedule",
+    collaboration_unit: "",
     paid: null,
     invoiced_pending: null,
     mode: "",
@@ -153,19 +159,34 @@ export const LEDGER_COLUMNS = [
   ["investment", "工程投资（万）"],
   ["design_fee", "设计费用（万）"],
   ["contract", "合同签订"],
+  ["contract_status", "签约状态"],
   ["paid", "设计回款（万）"],
   ["invoiced_pending", "请款中（已开发票，万）"],
   ["mode", "项目模式"],
   ["source", "项目来源"],
   ["project_type", "项目类型"],
   ["phase", "项目阶段"],
+  ["collaboration_unit", "配合分院"],
   ["notes", "备注"],
+  ["archived", "归档状态"],
 ] as const;
-export function cell(project: PlanningProject, key: string, staff: Staff[]) {
+export function cell(project: PlanningProject, key: string, staff: Staff[], referenceDate = today()) {
   const names = (ids: number[]) => ids.map((id) => staff.find((s) => s.id === id)?.name ?? `人员 #${id}`).join("、");
   if (key in project.team) return names(project.team[key as TeamKey]);
+  if (key === "archived") return project.archived ? "已归档" : "在管";
+  if (key === "contract_status") return ({ signed: "已签订", unsigned: "未签订", unknown: "待确认" })[project.contract_status || "unknown"];
+  if (project.weekly_plan_mode === "schedule" && (key === "next_week_work" || key === "next_week_staff")) {
+    const plan = scheduledWeek(project, weekRange(addDays(referenceDate, 7)).start, 5);
+    return key === "next_week_staff" ? names(plan.people) : plan.work;
+  }
   if (key === "next_week_staff") return names(project.next_week_staff);
   return String(project[key as keyof PlanningProject] ?? "");
+}
+export function scheduledWeek(project: PlanningProject, start: string, days: number) {
+  const end = addDays(start, days - 1);
+  const stages = project.stages.filter(s => s.start <= end && s.end >= start);
+  return { stages, people: [...new Set(stages.flatMap(s => s.assignees))],
+    work: stages.map(s => `${s.name}（${s.start}—${s.end}）`).join("；") };
 }
 export function ledgerCsv(projects: PlanningProject[], staff: Staff[]) {
   const safe = (value: string) =>

@@ -1,11 +1,12 @@
 """Company planning data: deliberately separate from Studio projects and site roles."""
-from datetime import date
+from datetime import date, timedelta
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_auth_user
 from app.core.config import AuthUserProfile
 from app.database import get_db
-from app.models import AuditLog, ManagementProject, ManagementReport, ManagementRevision, ManagementStaff, User
+from app.models import AuditLog, ManagementProject, ManagementReport, ManagementRevision, ManagementStaff, ManagementWeeklySnapshot, User
 from app.services.management_units import PLANNING_UNITS, account_unit, canonical_unit, sync_staff, unit_aliases
 
 router = APIRouter(prefix="/management", tags=["company-management"])
@@ -126,6 +127,9 @@ class ProjectInput(StrictModel):
     investment: Money | None = None
     design_fee: Money | None = None
     contract: str = Field(default="", max_length=500)
+    contract_status: Literal["signed", "unsigned", "unknown"] = "unknown"
+    weekly_plan_mode: Literal["manual", "schedule"] = "manual"
+    collaboration_unit: Literal["", "一分院", "二分院", "三分院", "其他分院"] = ""
     paid: Money | None = None
     invoiced_pending: Money | None = None
     mode: str = Field(default="", max_length=250)
@@ -155,7 +159,8 @@ def staff_out(row):
 
 
 def project_out(row):
-    return dict(**row.document, id=row.id, year=row.year, unit=canonical_unit(row.unit), version=row.version,
+    doc = {"contract_status": "unknown", "weekly_plan_mode": "manual", "collaboration_unit": "", **row.document}
+    return dict(**doc, id=row.id, year=row.year, unit=canonical_unit(row.unit), version=row.version,
                 archived=row.archived, deleted=row.deleted, updated_at=row.updated_at, updated_by=row.updated_by)
 
 
@@ -258,10 +263,87 @@ def projects(year: int = Query(ge=2000, le=2100), archived: bool = False, delete
     return sorted([project_out(r) for r in rows], key=lambda r: (r["sequence"], r["id"]))
 
 
+def reporting_data(db, user, year):
+    rows = db.scalars(select(ManagementProject).where(
+        ManagementProject.unit.in_(unit_aliases(user.company_unit)), ManagementProject.year == year,
+        ManagementProject.deleted.is_(False)).order_by(ManagementProject.id).limit(1001)).all()
+    if len(rows) > 1000:
+        raise HTTPException(422, "当前年度项目超过统计容量，请联系维护人员扩展分页")
+    return {"unit": canonical_unit(user.company_unit), "year": year,
+            "projects": sorted([project_out(r) for r in rows], key=lambda r: (r["sequence"], r["id"])),
+            "staff": list_staff(user, db), "report": report(year, user, db)}
+
+
+@router.get("/report-data")
+def get_reporting_data(year: int = Query(ge=2000, le=2100), user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
+    return reporting_data(db, user, year)
+
+
+class WeeklySnapshotInput(StrictModel):
+    week_start: date
+    week_days: Literal[5, 7] = 5
+
+    @model_validator(mode="after")
+    def monday(self):
+        if self.week_start.weekday() != 0:
+            raise ValueError("周报起始日期须为星期一")
+        return self
+
+
+def snapshot_meta(row):
+    return {"id": row.id, "unit": canonical_unit(row.unit), "year": row.year,
+            "week_start": row.week_start, "week_days": row.document["week_days"], "created_at": row.created_at}
+
+
+@router.get("/weekly-snapshots")
+def weekly_snapshots(year: int = Query(ge=2000, le=2100), week_start: date | None = None,
+                     user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
+    rows = db.scalars(select(ManagementWeeklySnapshot).where(
+        ManagementWeeklySnapshot.unit.in_(unit_aliases(user.company_unit)), ManagementWeeklySnapshot.year == year,
+        *([] if week_start is None else [ManagementWeeklySnapshot.week_start == week_start]))
+        .order_by(ManagementWeeklySnapshot.id.desc()).limit(100)).all()
+    return [snapshot_meta(r) for r in rows]
+
+
+@router.post("/weekly-snapshots", status_code=201)
+def save_weekly_snapshot(payload: WeeklySnapshotInput, year: int = Query(ge=2000, le=2100),
+                         user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
+    if payload.week_start > date(year, 12, 31) or payload.week_start + timedelta(days=payload.week_days - 1) < date(year, 1, 1):
+        raise HTTPException(422, "所选周须与项目年度相交")
+    # Capture a coherent set of project versions, names, affiliations and report metadata.
+    # Concurrent project/staff edits acquire the same row locks through their UPDATEs.
+    db.scalars(select(ManagementProject).where(ManagementProject.unit.in_(unit_aliases(user.company_unit)),
+        ManagementProject.year == year).order_by(ManagementProject.id).with_for_update()).all()
+    db.scalars(select(ManagementStaff).where(ManagementStaff.unit.in_(unit_aliases(user.company_unit)))
+        .order_by(ManagementStaff.id).with_for_update()).all()
+    document = jsonable_encoder({**reporting_data(db, user, year), **payload.model_dump(), "calculation_version": 1})
+    row = ManagementWeeklySnapshot(unit=user.company_unit, year=year, week_start=payload.week_start,
+                                   actor_id=user.id, document=document)
+    db.add(row)
+    db.flush()
+    db.add(AuditLog(event_type="management.weekly_snapshot_created", actor_name="company-manager", actor_id=user.id,
+                    target_type="weekly_snapshot", target_id=row.id, target_name=user.company_unit,
+                    details={"year": year, "week_start": payload.week_start.isoformat(), "week_days": payload.week_days}))
+    db.commit()
+    return snapshot_meta(row)
+
+
+@router.get("/weekly-snapshots/{snapshot_id}")
+def weekly_snapshot(snapshot_id: int, user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
+    row = db.scalar(select(ManagementWeeklySnapshot).where(ManagementWeeklySnapshot.id == snapshot_id,
+        ManagementWeeklySnapshot.unit.in_(unit_aliases(user.company_unit))))
+    if not row:
+        raise HTTPException(404, "周报快照不存在")
+    return {**snapshot_meta(row), "document": row.document}
+
+
 def save_project(db, user, payload, row=None, year=None):
     validate_staff(db, user, payload, row.document if row else None)
     doc = payload.model_dump(mode="json", exclude={"version", "archived"})
     if row:
+        for key in ("contract_status", "weekly_plan_mode", "collaboration_unit"):
+            if key not in payload.model_fields_set and key in row.document:
+                doc[key] = row.document[key]
         result = db.execute(update(ManagementProject).where(ManagementProject.id == row.id,
             ManagementProject.unit.in_(unit_aliases(user.company_unit)), ManagementProject.deleted.is_(False),
             ManagementProject.version == payload.version).values(document=doc, archived=payload.archived,

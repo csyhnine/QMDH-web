@@ -53,6 +53,7 @@ export default function ProjectLedger({
               <option value="phase">项目阶段</option>
               <option value="coordinator">项目统筹</option>
               <option value="urgency">紧急程度</option>
+              <option value="grade">项目等级</option><option value="source">项目来源</option><option value="project_type">项目类型</option><option value="mode">项目模式</option><option value="contract_status">签约状态</option>
             </select>
           </label>
           <details className="mp-column-picker">

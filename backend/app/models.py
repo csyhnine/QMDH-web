@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, false, func
+from sqlalchemy import JSON, BigInteger, Boolean, Date, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -1099,6 +1099,17 @@ class ManagementRevision(Base):
     version: Mapped[int] = mapped_column(Integer)
     actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     snapshot: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ManagementWeeklySnapshot(Base):
+    __tablename__ = "management_weekly_snapshots"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unit: Mapped[str] = mapped_column(String(120), index=True)
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    week_start: Mapped[date] = mapped_column(Date)
+    document: Mapped[dict] = mapped_column(JSON)
+    actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

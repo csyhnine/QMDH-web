@@ -22,6 +22,60 @@ test('affiliation counts active internal and external people separately without 
 });
 function makeProject(id, stages) { return { ...planning.newProject(id), id, name: `Project ${id}`, stages }; }
 const stage = (id, start, end, assignees = [1], allocation = 100) => ({ id, name: id, start, end, assignees, allocation, progress: 0 });
+const reporting = load('pages/management/reporting.ts', {'./planning': planning});
+const workbook = load('pages/management/reportWorkbook.ts', {'./planning': planning, './reporting': reporting});
+
+test('annual money retains exact decimals, includes archived, excludes trash and pairs rate denominators', () => {
+  const rows=[{...makeProject(1,[]),design_fee:'0.10',paid:'0.03',contract_status:'signed'},
+    {...makeProject(2,[]),archived:true,design_fee:'0.20',paid:'0.07',contract_status:'unsigned'},
+    {...makeProject(3,[]),design_fee:'999.00',paid:null}, {...makeProject(4,[]),deleted:true,design_fee:'999999',paid:'999999'}];
+  const result=reporting.financialSummary(rows);
+  assert.equal(result.totals.design_fee.amount,'999.30');assert.equal(result.totals.paid.amount,'0.10');
+  assert.equal(result.collectionRate,'33.3%');assert.equal(result.collectionKnown,2);assert.equal(result.collectionMissing,1);
+  assert.equal(result.signingRate,'50.0%');assert.equal(result.contractUnknown,1);assert.equal(result.archived,1);
+  assert.equal(reporting.financialSummary([{...makeProject(1,[]),design_fee:'0',paid:'0'}]).collectionRate,null);
+  const huge=reporting.financialSummary(Array(1000).fill({...makeProject(1,[]),investment:'999999999999.99'}));
+  assert.equal(huge.totals.investment.amount,'999999999999990.00');
+});
+
+test('classification preserves missing and custom grades while normalizing A/B/C/D labels', () => {
+  const rows=['a','A级项目','E级',''].map((grade,i)=>({...makeProject(i,[]),grade}));
+  const groups=reporting.classifiedSummary(rows,'grade');
+  assert.equal(groups.find(g=>g.label==='A级').total,2);assert.equal(groups.find(g=>g.label==='待填写').total,1);
+  assert.equal(groups.reduce((n,g)=>n+g.total,0),4);
+});
+
+test('weekly counts deduplicate stages and people, honor weekdays, cooperation and separate affiliation rankings', () => {
+  const staff=[{id:1,name:'内一',is_active:true,employment_type:'internal'},{id:2,name:'内二',is_active:true,employment_type:'internal'}, {id:3,name:'外包',is_active:true,employment_type:'external'}];
+  const a={...makeProject(1,[stage('a','2026-10-25','2026-10-27',[1,1,3]),stage('b','2026-10-28','2026-10-30',[1,3])]),grade:'A级项目'};
+  a.team.coordinator=[1];a.team.participants=[1];
+  const b={...makeProject(2,[stage('c','2026-10-26','2026-10-26',[2,3])]),grade:'B',collaboration_unit:'一分院'};
+  const weekend={...makeProject(3,[stage('d','2026-10-31','2026-11-01',[2])]),grade:'D'};
+  const data={unit:'二分院',staff,projects:[a,b,weekend,{...a,id:4,archived:true},{...a,id:5,deleted:true}]};
+  const report=reporting.weeklyWorkload(data,'2026-10-26',5), one=report.rows.find(r=>r.person.id===1), two=report.rows.find(r=>r.person.id===2), external=report.rows.find(r=>r.person.id===3);
+  assert.equal(one.projectCount,1);assert.equal(one.roles.participants,1);assert.equal(one.total,2);assert.equal(one.rank,1);
+  assert.equal(two.projectCount,1);assert.equal(two.cooperation,1);assert.equal(two.grades[1],0);assert.equal(two.rank,2);
+  assert.equal(external.projectCount,2);assert.equal(external.rank,1);
+  assert.equal(reporting.weeklyWorkload(data,'2026-10-26',7).rows.find(r=>r.person.id===2).projectCount,2);
+});
+
+test('schedule-derived next week changes with dates while manual narratives are retained', () => {
+  const p={...makeProject(1,[stage('next','2026-11-02','2026-11-04')]),next_week_work:'保留原文'};
+  assert.ok(planning.cell(p,'next_week_work',[],'2026-10-26').includes('next'));
+  assert.equal(planning.cell({...p,weekly_plan_mode:'manual'},'next_week_work',[],'2026-10-26'),'保留原文');
+  assert.equal(planning.cell({...p,stages:[]},'next_week_staff',[{id:1,name:'人员'}],'2026-10-26'),'');
+});
+
+test('XLSX has three real sheets, merged original team headers, frozen reference dates and safe string cells', () => {
+  const p={...makeProject(1,[stage('历史下周工作','2026-11-02','2026-11-03')]),name:'=HYPERLINK("test")<&',design_fee:'12.30'};
+  const data={unit:'二分院',year:2026,projects:[p],staff:[{id:1,name:'甲',is_active:true}],report:{compiler:'编制人',data_as_of:'2026-10-12'}};
+  const bytes=workbook.reportWorkbook(data,'2026-10-26',5),{unzipSync,strFromU8}=require('fflate');
+  const files=unzipSync(bytes),sheet=strFromU8(files['xl/worksheets/sheet1.xml']);
+  assert.ok(strFromU8(files['xl/workbook.xml']).includes('人员周工作量'));assert.ok(sheet.includes('ref="C3:H3"'));assert.ok(sheet.includes('历史下周工作'));
+  assert.ok(sheet.includes('&lt;&amp;'));assert.ok(sheet.includes('=HYPERLINK'));assert.ok(!sheet.includes('<f>'));
+  assert.ok(sheet.includes('<v>12.3</v>'));assert.equal(Object.keys(files).filter(f=>/^xl\/worksheets\/sheet/.test(f)).length,3);
+  if(process.env.REPORTING_XLSX_FIXTURE)require('node:fs').writeFileSync(process.env.REPORTING_XLSX_FIXTURE,bytes);
+});
 
 test('Gantt includes end date and clips cross-month stages and ignores out-of-range work', () => {
   const entries = planning.ganttEntries([makeProject(1, [stage('a','2026-09-29','2026-10-02'),stage('b','2026-10-30','2026-11-04'),stage('c','2026-11-01','2026-11-02')])], '2026-10-01', 31);
@@ -77,7 +131,7 @@ test('quick creation accepts name only, untouched close is silent and conflicts 
     if(body){if(fail)throw Error('项目已被他人修改'); saved=body;return {...body,id:1};}
     return path==='/staff'?[{id:1,name:'设计师',is_active:true}]:path.startsWith('/reports')?report:[];
   };
-  const Page=load('pages/management/ManagementProjectsPage.tsx',{'react':hooks,'../../api':{managementRequest:request},'../../context/AuthContext':{useAuth:()=>({currentUser:user})},'./planning':planning,'./ManagementOverview':{default:()=>null},'./ProjectLedger':{default:()=>null},'./ProjectPlan':{default:()=>null},'./PeopleSchedule':{default:()=>null},'./PeoplePlanner':{default:()=>null},'./PlanningDate':{default:()=>null},'./usePlanningAutoSave':{default:()=>{}}},{structuredClone,crypto:{randomUUID:()=> 'stage-1'},window:{confirm:()=>{confirms++;return true;}},Error}).default;
+  const Page=load('pages/management/ManagementProjectsPage.tsx',{'react':hooks,'../../api':{managementRequest:request},'../../context/AuthContext':{useAuth:()=>({currentUser:user})},'./planning':planning,'./ManagementOverview':{default:()=>null},'./ManagementReporting':{default:()=>null},'./ProjectLedger':{default:()=>null},'./ProjectPlan':{default:()=>null},'./PeopleSchedule':{default:()=>null},'./PeoplePlanner':{default:()=>null},'./PlanningDate':{default:()=>null},'./usePlanningAutoSave':{default:()=>{}}},{structuredClone,crypto:{randomUUID:()=> 'stage-1'},window:{confirm:()=>{confirms++;return true;}},Error}).default;
   const render=()=>{do{cursor=0;effects=[];changed=false;tree=Page();effects.forEach(fn=>fn());}while(changed);};
   const nodes=n=>{if(!n||typeof n!=='object')return[];return[n,...[n.props?.children].flat(Infinity).flatMap(nodes)];};
   const text=n=>typeof n==='string'||typeof n==='number'?String(n):n&&typeof n==='object'?[n.props?.children].flat(Infinity).map(text).join(''):'';

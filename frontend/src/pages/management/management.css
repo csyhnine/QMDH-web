@@ -1935,4 +1935,4 @@
 .mp-calendar-grid .muted { color:#9ba7b7; }
 .mp-calendar-grid [aria-pressed=true] { background:#4169df; color:white; }
 .mp-calendar footer { padding:10px 0 0; }
-@media(max-width:760px) { .mp-work-editor fieldset { grid-template-columns:1fr; } .mp-calendar { left:auto; right:0; } }
+@media(max-width:760px) { .mp-work-editor fieldset { grid-template-columns:1fr; } .mp-calendar { position:fixed; top:18vh; left:50%; right:auto; transform:translateX(-50%); } }

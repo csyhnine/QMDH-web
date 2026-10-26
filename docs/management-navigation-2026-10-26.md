@@ -8,4 +8,11 @@
 
 验证：管理后端22 passed/5既有warning；前端15 passed；4目标TS strict0；Chromium实际5场景（真实外层样式，1920px四页菜单坐标一致、滚动吸顶、三院切换、删除恢复/冲突、390px无横溢）；离线Vite构建通过，既有大块提示保持。首次吸顶夹具未等待平滑滚动，改瞬时滚动后验证通过。浏览器合成人员不是真实业务验收。
 
-本次仅前端发布，backend/3worker/PG/Redis/FRP/模板/迁移保持；72待验收/25冻结/R98状态保持。不跑全套/GPU/付费/历史补账或业务清理。上线结果随后补齐。
+本次仅前端发布，backend/3worker/PG/Redis/FRP/模板/迁移保持；72待验收/25冻结/R98状态保持。不跑全套/GPU/付费/历史补账或业务清理。已上线，结果如下。
+
+
+已部署前端源码85c4650800c55e2b94c8ca26afcdfe8f80dacfb9，镜像3b65e290098a8bb80dc4dd7d89da8361966b37d9382a8cc9603f9fc7ef4b35e5；后端/三worker仍8080b23对应镜像，所有非前端容器ID及启动时间保持。51前端文件与公网首页/主JS/管理JS和CSS逐字节一致，健康200；无迁移/业务数据写入。构建首次直接FROM镜像ID解析失败，正式切换前改为已核本地镜像标签后构建成功，失败未改变线上服务。
+
+当前三Compose：主文件 + /opt/qmdh-frp/compose.frp.yml + **/opt/qmdh-frp/releases/management-navigation-20261026/compose.release.yml**。该文件保留原backend/worker镜像和/opt/qmdh-frp/releases/management-categories-20261026/workflows绑定，两发布目录均须保留；禁止用旧服务器Git重建。仅前端回退使用新目录compose.rollback.yml；不会降迁移或重置业务数据。
+
+配对备份/www/backup/qmdh-release-20261026-management-navigation ↔ E:/backups/QMDH-web/release-20261026-management-navigation，23文件SHA一致；包括已含42人/f62迁移的DB、env、原配置/镜像、源码bundle与媒体链。媒体5843/0增量，27归档链继承前次，本机两份基础包仍必需。原数据库和密钥等私有内容不入Git。最终盘余约8.53GiB。见[脱敏发布证据](archive/management-navigation-2026-10-26/RELEASE.json)。草稿PR #5未合并。

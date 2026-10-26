@@ -1,4 +1,8 @@
-## 2026-10-26 分院人员与项目回收站（当前）
+2026-10-26管理导航已发布：前端85c4650/3b65e290098a，固定四页宽度与子菜单吸顶，增加页面用途和分院边界说明；隔离定向22、前端15、浏览器5场景通过。后端/三worker仍8080b23，f62迁移/42名册与项目保持；仅前端替换。当前第三Compose为/opt/qmdh-frp/releases/management-navigation-20261026/compose.release.yml，并继续依赖management-categories-20261026/workflows。23文件配对备份SHA一致。见[记录](management-navigation-2026-10-26.md)，72待验收/25冻结/R98状态保持。
+
+以下为此前记录，当前前端及Compose以顶部为准。
+
+## 2026-10-26 分院人员与项目回收站（此前）
 
 2026-10-26分院名册/删除已部署：运行源码8080b23，生产迁移f62ab073d957；一院15、合并后二院19、三院8，新增37/关联原5，共42人，原项目/账号分组和授权保持。已授权公司admin切换三院，院管理者仍本院。项目详情可删除到回收站并恢复。27文件配对备份SHA一致；当前第三Compose为/opt/qmdh-frp/releases/management-categories-20261026/compose.release.yml。详见[发布记录](management-categories-2026-10-26.md)。草稿PR #5未合并，72待验收/25冻结/R98保持。
 

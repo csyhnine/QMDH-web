@@ -46,8 +46,9 @@ test('both navigation systems expose management only to company managers regardl
       '../../features/access/roleAccess':{defaultAdminHomePath:()=>'/admin/dashboard',canAccessAdminModule:()=>true},
       '../../lib/useAdminFeedbackPendingCount':{useAdminFeedbackPendingCount:()=>0},
       './Brand':{BrandIcon:()=>null},
-      '../../features/studio/studioNavigation':{OTHER_TOOLS_NAV:{key:'other',label:'其他',path:'/studio/other'}},
-      './studioNavigation':{OTHER_TOOLS_NAV:{label:'其他',path:'/studio/other'}},
+      '../../features/studio/studioNavigation':load('features/studio/studioNavigation.ts'),
+      './studioNavigation':load('features/studio/studioNavigation.ts'),
+      '../../features/studio/StudioSectionTabs':{default:()=>null},
       '../../lib/featureFlags':{isStudioCanvasEnabled:false},
     };
     for(const [file,props] of [['components/shared/AppShell.tsx',{kind:'studio',active:'management'}],['features/studio/StudioGlobalRailNav.tsx',{activeView:'studio',isAdminView:false,currentUser:user}]]) {

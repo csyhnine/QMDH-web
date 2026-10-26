@@ -1,6 +1,5 @@
 import type { RailView, StudioGlobalRailNavProps } from "./studioGlobalRailTypes";
-import { isStudioCanvasEnabled } from "../../lib/featureFlags";
-import { OTHER_TOOLS_NAV } from "./studioNavigation";
+import { STUDIO_PRIMARY_NAV } from "./studioNavigation";
 
 type RailNavItem = {
   label: string;
@@ -16,16 +15,7 @@ const ADMIN_NAV_ITEMS: RailNavItem[] = [
   { label: "\u8bbe\u7f6e\u4e2d\u5fc3", href: "/admin/settings", icon: "\u26ef", view: "settings" },
 ];
 
-const STUDIO_NAV_ITEMS: RailNavItem[] = [
-  { label: "\u7075\u611f", href: "/studio/inspiration" },
-  { label: "\u53cd\u9988", href: "/studio/feedback" },
-  { label: "\u751f\u6210", href: "/studio/generate", view: "studio" },
-  { label: OTHER_TOOLS_NAV.label, href: OTHER_TOOLS_NAV.path },
-  { label: "\u8d44\u4ea7\u5e93", href: "/studio/library" },
-  ...(isStudioCanvasEnabled ? [{ label: "\u65e0\u9650\u753b\u5e03", href: "/studio/canvas" }] : []),
-  { label: "\u5bfc\u822a", href: "/studio/nav" },
-  { label: "\u5bf9\u8bdd", href: "/studio/chat" },
-];
+const STUDIO_NAV_ITEMS: RailNavItem[] = STUDIO_PRIMARY_NAV.map(item => ({ label: item.label, href: item.path, ...(item.key === "generate" ? { view: "studio" as const } : {}) }));
 
 function navigateTo(href: string) {
   window.location.href = href;

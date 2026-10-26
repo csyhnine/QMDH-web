@@ -18,7 +18,7 @@ export default function StudioAuthenticatedShell({
   });
 
   return (
-    <div className="studio-shell">
+    <div className="studio-shell studio-consolidated-shell">
       <StudioGlobalRail {...railProps} />
       <StudioDesignerView {...designerProps} />
       <StudioMediaLightboxes {...lightboxProps} />

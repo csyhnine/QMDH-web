@@ -7,6 +7,18 @@ import ts from 'typescript';
 import { renderToStaticMarkup } from 'react-dom/server';
 const require = createRequire(import.meta.url);
 
+function shared(name) {
+  const exports={};
+  const code=ts.transpileModule(readFileSync(new URL(`../src/features/studio/${name}`,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+  vm.runInNewContext(code,{exports,require(n){
+    if(n.endsWith('/studioNavigation'))return shared('studioNavigation.ts');
+    if(n.endsWith('.css'))return {};
+    if(n.endsWith('/featureFlags'))return {isStudioCanvasEnabled:true};
+    if(n==='react-router-dom')return {Link:({to,children,...props})=>require('react').createElement('a',{...props,href:to},children)};
+    return require(n);
+  }});return exports;
+}
+
 // Static render fixtures retain the old history preset through the actual new Hook.
 function gifDisplayFixture(args, historyPreset) {
   let cursor = 0;
@@ -33,6 +45,8 @@ function load(file, states = []) {
   const source = readFileSync(new URL(`../src/pages/studio/${file}.tsx`, import.meta.url), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   vm.runInNewContext(code, { exports, require(name) {
+    if(name.endsWith('/StudioSectionTabs'))return shared('StudioSectionTabs.tsx');
+    if(name.endsWith('/studioNavigation'))return shared('studioNavigation.ts');
     if (name === 'react') return { lazy: () => { const label = lazyIndex++ === 0 ? 'CAD parser' : 'GIF tool'; return () => label; }, Suspense: ({ children }) => children, useEffect() {}, useLayoutEffect() {}, useRef: () => ({ current: 0 }), useState(initial) { return [states[i++] ?? initial, () => {}]; } };
     if (name === 'react-router-dom') return { useNavigate: () => () => {}, useSearchParams: () => [new URLSearchParams()], Link: ({ to, children }) => require('react').createElement('a', { href: to }, children), NavLink: ({ to, children }) => require('react').createElement('a', { href: to }, children) };
     if (name.endsWith('/components/shared')) return { AppShell: ({ children }) => children };
@@ -77,6 +91,12 @@ test('other module keeps CAD and GIF tabs and mounts only the selected tool', ()
   const gif = renderToStaticMarkup(load('OtherToolsPage').default({ tool: 'gif' }));
   assert.ok(gif.includes('GIF tool'));
   assert.ok(!gif.includes('CAD parser'));
+});
+
+test('Other landing page exposes all five tools without mounting CAD or GIF',()=>{
+  const html=renderToStaticMarkup(load('OtherToolsPage').default({}));
+  for(const route of ['inspiration','feedback','nav','cad','gif'])assert.ok(html.includes(`/studio/${route}`));
+  assert.ok(!html.includes('CAD parser'));assert.ok(!html.includes('GIF tool'));
 });
 
 

@@ -6,7 +6,8 @@ import GuestLoginBanner from "../../features/studio/GuestLoginBanner";
 import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from "../../features/access/roleAccess";
 import { useAdminFeedbackPendingCount } from "../../lib/useAdminFeedbackPendingCount";
 import { BrandIcon } from "./Brand";
-import { OTHER_TOOLS_NAV } from "../../features/studio/studioNavigation";
+import { STUDIO_PRIMARY_NAV, studioRailGroup } from "../../features/studio/studioNavigation";
+import StudioSectionTabs from "../../features/studio/StudioSectionTabs";
 
 type StudioTab = "management" | "generate" | "inspiration" | "feedback" | "chat" | "canvas" | "nav" | "other" | "library";
 type AdminTab = AdminModuleKey;
@@ -24,7 +25,6 @@ type AppShellProps =
       children: ReactNode;
     };
 
-import { isStudioCanvasEnabled } from "../../lib/featureFlags";
 
 const adminNavItems: Array<{ key: AdminTab; label: string; path: string; activeKeys?: AdminTab[] }> = [
   { key: "dashboard", label: "看板", path: "/admin/dashboard" },
@@ -50,18 +50,7 @@ const adminNavItems: Array<{ key: AdminTab; label: string; path: string; activeK
   { key: "settings", label: "设置", path: "/admin/settings" },
 ];
 
-const studioNavItems: Array<{ key: Exclude<StudioTab, "generate"> | "generate"; label: string; path: string }> = [
-  { key: "inspiration", label: "灵感", path: "/studio/inspiration" },
-  { key: "feedback", label: "反馈", path: "/studio/feedback" },
-  { key: "generate", label: "生成", path: "/studio/generate" },
-  OTHER_TOOLS_NAV,
-  { key: "library", label: "资产库", path: "/studio/library" },
-  ...(isStudioCanvasEnabled
-    ? ([{ key: "canvas" as const, label: "无限画布", path: "/studio/canvas" }] as const)
-    : []),
-  { key: "nav", label: "导航", path: "/studio/nav" },
-  { key: "chat", label: "对话", path: "/studio/chat" },
-];
+const studioNavItems = STUDIO_PRIMARY_NAV;
 
 export default function AppShell(props: AppShellProps) {
   const navigate = useNavigate();
@@ -107,7 +96,7 @@ export default function AppShell(props: AppShellProps) {
   return (
     <div className={isGuest && props.kind === "studio" ? "studio-guest-layout" : undefined}>
       {isGuest && props.kind === "studio" ? <GuestLoginBanner /> : null}
-      <div className={className + (props.kind === "studio" && props.active === "management" ? " management-shell" : "")}>
+      <div className={className + (props.kind === "studio" ? " studio-consolidated-shell" : "") + (props.kind === "studio" && props.active === "management" ? " management-shell" : "")}>
       <aside className="global-rail">
         <div className="rail-logo">
           <BrandIcon className="rail-logo-image" />
@@ -153,7 +142,7 @@ export default function AppShell(props: AppShellProps) {
                 <button
                   key={item.key}
                   type="button"
-                  className={props.active === item.key ? "rail-item active" : "rail-item"}
+                  className={studioRailGroup(props.active) === item.key ? "rail-item active" : "rail-item"}
                   onClick={() => navigate(item.path)}
                 >
                   <span>{item.label}</span>
@@ -208,7 +197,11 @@ export default function AppShell(props: AppShellProps) {
         </div>
       </aside>
 
-      <main className={mainClassName}>{props.children}</main>
+      <main className={mainClassName}>
+        {props.kind === "studio" && ["inspiration", "feedback", "nav"].includes(props.active) && <StudioSectionTabs group="other" active={props.active} />}
+        {props.kind === "studio" && props.active === "canvas" && <StudioSectionTabs group="generate" active="canvas" />}
+        {props.children}
+      </main>
       </div>
     </div>
   );

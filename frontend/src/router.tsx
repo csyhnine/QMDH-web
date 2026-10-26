@@ -508,7 +508,7 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
-          <Route path="/studio/other" element={<ProtectedRoute><Navigate to="/studio/cad" replace /></ProtectedRoute>} />
+          <Route path="/studio/other" element={<ProtectedRoute><OtherToolsPage /></ProtectedRoute>} />
           <Route path="/studio/gif" element={<ProtectedRoute><OtherToolsPage tool="gif" /></ProtectedRoute>} />
           <Route
             path="/studio/library"

@@ -8,6 +8,9 @@ import { useAdminFeedbackPendingCount } from "../../lib/useAdminFeedbackPendingC
 import { BrandIcon } from "./Brand";
 import { STUDIO_PRIMARY_NAV, studioRailGroup } from "../../features/studio/studioNavigation";
 import StudioSectionTabs from "../../features/studio/StudioSectionTabs";
+import AdminSectionTabs from "../../features/admin/AdminSectionTabs";
+import { adminNavigation } from "../../features/admin/adminNavigation";
+import "../../features/admin/adminNavigation.css";
 
 type StudioTab = "management" | "generate" | "inspiration" | "feedback" | "chat" | "canvas" | "nav" | "other" | "library";
 type AdminTab = AdminModuleKey;
@@ -26,30 +29,6 @@ type AppShellProps =
     };
 
 
-const adminNavItems: Array<{ key: AdminTab; label: string; path: string; activeKeys?: AdminTab[] }> = [
-  { key: "dashboard", label: "看板", path: "/admin/dashboard" },
-  {
-    key: "generation-analytics",
-    label: "数据",
-    path: "/admin/generation-analytics",
-    activeKeys: ["generation-analytics", "chat-experience", "usage-logs", "cad-usage"],
-  },
-  { key: "inspiration", label: "灵感", path: "/admin/inspiration" },
-  { key: "feedback", label: "反馈", path: "/admin/feedback" },
-  { key: "models", label: "模型", path: "/admin/models" },
-  {
-    key: "templates",
-    label: "模板",
-    path: "/admin/templates",
-    activeKeys: ["templates", "canvas-templates"],
-  },
-  { key: "announcements", label: "公告", path: "/admin/announcements" },
-  { key: "ai-tools", label: "工具导航", path: "/admin/ai-tools" },
-  { key: "agents", label: "助手能力", path: "/admin/agents" },
-  { key: "users", label: "账号", path: "/admin/users" },
-  { key: "settings", label: "设置", path: "/admin/settings" },
-];
-
 const studioNavItems = STUDIO_PRIMARY_NAV;
 
 export default function AppShell(props: AppShellProps) {
@@ -61,6 +40,8 @@ export default function AppShell(props: AppShellProps) {
   const feedbackPendingCount = useAdminFeedbackPendingCount(canSeeFeedbackNav);
   const showFeedbackPendingDot =
     canSeeFeedbackNav && feedbackPendingCount > 0 && props.active !== "feedback";
+  const adminGroups = props.kind === "admin" ? adminNavigation(currentUser?.role) : [];
+  const activeGroup = adminGroups.find(group => group.items.some(item => item.key === props.active));
 
   const className =
     props.kind === "admin"
@@ -103,37 +84,28 @@ export default function AppShell(props: AppShellProps) {
         </div>
         <nav className="rail-nav">
           {props.kind === "admin"
-            ? adminNavItems.map((item) => {
-                const allowed = canAccessAdminModule(currentUser?.role, item.key);
+            ? adminGroups.map((item) => {
                 return (
                   <button
                     key={item.key}
                     type="button"
                     className={[
-                      item.activeKeys?.includes(props.active) || props.active === item.key ? "rail-item active" : "rail-item",
-                      allowed ? "" : "rail-item-locked",
+                      activeGroup?.key === item.key ? "rail-item active" : "rail-item",
                     ]
                       .filter(Boolean)
                       .join(" ")}
-                    disabled={!allowed}
-                    aria-disabled={!allowed}
-                    title={allowed ? item.label : `${item.label}（无权限）`}
+                    title={item.label}
                     onClick={() => {
-                      if (allowed) navigate(item.path);
+                      navigate(item.items[0].path);
                     }}
                   >
                     <span>{item.label}</span>
-                    {item.key === "feedback" && showFeedbackPendingDot ? (
+                    {item.key === "content" && showFeedbackPendingDot ? (
                       <em
                         className="rail-item-dot"
                         aria-label={`${feedbackPendingCount} 条待处理反馈`}
                         title={`${feedbackPendingCount} 条待处理反馈`}
                       />
-                    ) : null}
-                    {!allowed ? (
-                      <em className="rail-item-lock" aria-hidden="true">
-                        🔒
-                      </em>
                     ) : null}
                   </button>
                 );
@@ -198,6 +170,7 @@ export default function AppShell(props: AppShellProps) {
       </aside>
 
       <main className={mainClassName}>
+        {props.kind === "admin" && activeGroup && <AdminSectionTabs active={props.active} tabs={activeGroup.items.map(item => ({ ...item, badge: item.key === "feedback" ? feedbackPendingCount : undefined }))} />}
         {props.kind === "studio" && ["inspiration", "feedback", "nav"].includes(props.active) && <StudioSectionTabs group="other" active={props.active} />}
         {props.kind === "studio" && props.active === "canvas" && <StudioSectionTabs group="generate" active="canvas" />}
         {props.children}

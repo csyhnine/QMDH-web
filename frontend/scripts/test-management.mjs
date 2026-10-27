@@ -111,6 +111,8 @@ test('both navigation systems expose management only to company managers regardl
       '../../features/studio/studioNavigation':load('features/studio/studioNavigation.ts'),
       './studioNavigation':load('features/studio/studioNavigation.ts'),
       '../../features/studio/StudioSectionTabs':{default:()=>null},
+      '../../features/admin/AdminSectionTabs':{default:()=>null},
+      '../../features/admin/adminNavigation':load('features/admin/adminNavigation.ts',{'../access/roleAccess':load('features/access/roleAccess.ts')}),
       '../../lib/featureFlags':{isStudioCanvasEnabled:false},
     };
     for(const [file,props] of [['components/shared/AppShell.tsx',{kind:'studio',active:'management'}],['features/studio/StudioGlobalRailNav.tsx',{activeView:'studio',isAdminView:false,currentUser:user}]]) {

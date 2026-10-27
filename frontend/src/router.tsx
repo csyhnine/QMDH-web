@@ -27,7 +27,6 @@ import { buildBusinessDateWindow } from "./lib/businessDateWindow";
 import { useWindowQuery } from "./pages/admin/useWindowQuery";
 import { useAuth } from "./context/AuthContext";
 import { canAccessAdminModule, defaultAdminHomePath, type AdminModuleKey } from "./features/access/roleAccess";
-import AdminSectionTabs, { INSIGHT_TABS, TEMPLATE_TABS } from "./features/admin/AdminSectionTabs";
 import { isStudioCanvasEnabled } from "./lib/featureFlags";
 
 const ManagementProjectsPage = lazy(() => import("./pages/management/ManagementProjectsPage"));
@@ -271,7 +270,6 @@ function PromptTemplatesRoute() {
     () => api.adminPromptTemplates(), "加载模板提示词失败");
   return (
     <AppShell kind="admin" active="templates">
-      <AdminSectionTabs tabs={TEMPLATE_TABS} active="templates" />
       <PromptTemplatesPage templates={query.data} error={query.error} onRefresh={query.refresh} onSetError={() => undefined} />
     </AppShell>
   );
@@ -296,7 +294,6 @@ function CanvasTemplatesRoute() {
 
   return (
     <AppShell kind="admin" active="canvas-templates">
-      <AdminSectionTabs tabs={TEMPLATE_TABS} active="canvas-templates" />
       <CanvasTemplatesPage templates={templates} error={error} onRefresh={() => void refresh()} onSetError={setError} />
     </AppShell>
   );
@@ -552,7 +549,6 @@ export default function AppRouter() {
               <ProtectedRoute>
                 <AdminOnlyRoute>
                   <AppShell kind="admin" active="generation-analytics">
-                    <AdminSectionTabs tabs={INSIGHT_TABS} active="generation-analytics" />
                     <GenerationAnalyticsPage />
                   </AppShell>
                 </AdminOnlyRoute>
@@ -565,7 +561,6 @@ export default function AppRouter() {
               <ProtectedRoute>
                 <AdminOnlyRoute>
                   <AppShell kind="admin" active="chat-experience">
-                    <AdminSectionTabs tabs={INSIGHT_TABS} active="chat-experience" />
                     <ChatExperiencePage />
                   </AppShell>
                 </AdminOnlyRoute>
@@ -578,7 +573,6 @@ export default function AppRouter() {
               <ProtectedRoute>
                 <AdminOnlyRoute>
                   <AppShell kind="admin" active="usage-logs">
-                    <AdminSectionTabs tabs={INSIGHT_TABS} active="usage-logs" />
                     <UsageLogsPage />
                   </AppShell>
                 </AdminOnlyRoute>
@@ -591,7 +585,6 @@ export default function AppRouter() {
               <ProtectedRoute>
                 <AdminOnlyRoute>
                   <AppShell kind="admin" active="cad-usage">
-                    <AdminSectionTabs tabs={INSIGHT_TABS} active="cad-usage" />
                     <CadUsagePage />
                   </AppShell>
                 </AdminOnlyRoute>

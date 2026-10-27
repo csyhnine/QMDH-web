@@ -3,7 +3,6 @@ import StudioWorkspacePane from "./StudioWorkspacePane";
 import { buildStudioCanvasProps } from "./studioCanvasProps";
 import type { StudioDesignerViewProps } from "./studioDesignerViewTypes";
 import { useAuth } from "../../context/AuthContext";
-import StudioSectionTabs from "./StudioSectionTabs";
 
 export default function StudioDesignerView(props: StudioDesignerViewProps) {
   const { isGuest } = useAuth();
@@ -45,7 +44,6 @@ export default function StudioDesignerView(props: StudioDesignerViewProps) {
       ) : null}
 
       <main className={isStudioDockLayout ? "canvas-area canvas-studio-layout" : "canvas-area"}>
-        {activeViewIsStudio && <StudioSectionTabs group="generate" active="generate" />}
         <StudioCanvasView {...canvasProps} />
       </main>
     </>

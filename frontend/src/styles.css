@@ -8387,7 +8387,7 @@ textarea:focus-visible {
 }
 
 @media (max-width: 1180px) {
-  .studio-shell:not(.canvas-shell):not(.chat-shell):not(.inspiration-shell):not(.admin-shell) {
+  .studio-shell:not(.canvas-shell):not(.chat-shell):not(.inspiration-shell):not(.admin-shell):not(.studio-generation-shell) {
     grid-template-columns: 96px 240px minmax(0, 1fr);
   }
 

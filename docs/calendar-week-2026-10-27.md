@@ -9,3 +9,7 @@
 验证：20 项管理前端定向测试、13 目标文件严格类型诊断零新增；生产 Vite 构建通过，只有原有大块提示。7 个完整 AppShell Chromium 新场景通过：空交付物插入、周范围及跨年翻页/重挂载、周内插入保持范围、快捷卡片日历与上下界/Escape/焦点、闰年月份与受限今天、视窗/立项/台账统一日历及选填清空、390px 日历位置和交互。另在新输出目录运行此前 10 个快捷操作场景，暂停/恢复/改派、真实拖动/拉伸、失败恢复和详细编辑等均通过。合成 API 数据，阻止外部请求，无生产测试写入。
 
 本轮只有前端变更，无后端或迁移；既有未提交文档和未跟踪资料保留。未运行冻结全套、安全专项或真实 GPU/付费生成，发布与自验不替代独立验收。证据在 `docs/archive/calendar-week-2026-10-27/`，私有构建/验证材料在 ignored 的 `local/calendar-week-20261027/`。
+
+已部署前端源码 `a9becdfe10fba23f755304510fc1bb84ec1c90e5`，镜像 `967cdf8608fa`。52 个当前静态文件逐字节、10 个公网资源、9 路由、健康、Qwen 输入能力及未登录管理鉴权核验通过。后端、3 个 worker 与其他容器未重启，env/挂载/网络/工作流保持；迁移仍 `b94de295f179`，无生产测试数据写入。
+
+生效第三 Compose 为 `/opt/qmdh-frp/releases/calendar-week-20261027/compose.release.yml`，工作流仍挂载 `management-categories-20261026/workflows`。服务器 `/www/backup/qmdh-release-20261027-calendar-week` 与本机 `E:/backups/QMDH-web/release-20261027-calendar-week` 的 26 文件 SHA 一致。数据库/媒体硬链接继承 pillars 轮不可变恢复基线，不是新快照；旧镜像与缓存静态资源保留。发布后盘余约 8.223 GiB，草稿 PR #5 不合并。

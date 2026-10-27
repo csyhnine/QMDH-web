@@ -2,10 +2,10 @@
 
 ## 冷启动先读
 
-这是当前接手入口，覆盖旧交接里的版本号、Compose路径、人员数量和页面设计。先读本文件，再按具体新需求读对应代码；不要重审全项目或原样重跑历史部署脚本。当前用户明确提出的安静自动保存、工作条快捷调整和甘特交付节点均已提交、推送并部署，等待后续新需求，不重复部署。
+这是当前接手入口，覆盖旧交接里的版本号、Compose路径、人员数量和页面设计。先读本文件，再按具体新需求读对应代码；不要重审全项目或原样重跑历史部署脚本。当前用户明确提出的交付物选填、项目按周与统一日历（此前快捷调整等保持）均已提交、推送并部署，等待后续新需求，不重复部署。
 
 - 仓库：`E:/projects/QMDH-web`；分支：`bugfix/migration-bootstrap-001`；origin：`https://github.com/csyhnine/QMDH-web.git`。
-- 实际最新前端源码：`daf2fcb4e7b84ada207526173e4a2f3e075a4377`；后端/worker功能源码：`55340d752cbe01058417156014abfa50b40af26c`。交接/发布文档会另提交，文档SHA不等于运行源码。
+- 实际最新前端源码：`a9becdfe10fba23f755304510fc1bb84ec1c90e5`；后端/worker功能源码：`55340d752cbe01058417156014abfa50b40af26c`。交接/发布文档会另提交，文档SHA不等于运行源码。
 - 草稿PR：[#5](https://github.com/csyhnine/QMDH-web/pull/5)，已更新，不合并main。
 - 不创建新分支/新worktree，不委派；不reset/clean/force/stash，不执行`git add .`。提交用明确白名单。后续用户明确提出开发后可沿用已有提交、推送和验证后部署授权，不重复索要同一授权。
 - `docs/checks.md`、`docs/plan.md`、`docs/review.md`是本轮之前已有的未提交内容，本轮未覆盖、未提交。已另存原文、补丁、SHA及status到被忽略的`local/handoff-management-20261027-confirm/`。大量既有未跟踪`docs/archive/*`和`scripts/_tmp_*`也保留，不一起加入Git，不清理。
@@ -15,16 +15,17 @@
 
 1. 项目管理主入口仅：人员排期（默认）、项目计划、项目台账（最右）；详情在台账内。不要恢复管理总览为独立主页面。
 2. 极简立项：名称必填，统筹和目标日期选填；创建时随机保存颜色，不让用户填颜色。
-3. 人员排期横向为人名、纵向为日期，约60px列宽，仅显示姓名。默认自然周，可切换自然月/季度/年；当前仍按每日一行展示，并非把季度/年聚合成月份行。
+3. 项目计划支持按自然周展示七天，前后按整周翻页，跨年/重挂载保持范围；两周/月/季度保留。人员排期横向为人名、纵向为日期，约60px列宽，仅显示姓名。默认自然周，可切换自然月/季度/年；当前仍按每日一行展示，并非把季度/年聚合成月份行。
 4. 不能再恢复“选人面板”“安排工作”两个侧面入口，不在人员图显示职位或100%计划占用比例。
 5. 工作是连续20px细竖柱；点击空白日期格新增，点击柱体或甘特工作条打开就地快捷卡片，可改进度、暂停/恢复或中断并支援其他项目；详细编辑另有按钮。柱顶“↕”拖动整项改期/转交；柱体划选一段日期直接预填快捷区间。
-6. 默认工作卡片只保留项目、工作内容、日期、参与者；更多说明/交付物/推进记录折叠，交付节点在项目计划的项目行或甘特空白日期格快捷插入，保留明确交付物并显示单日菱形。
+6. 默认工作卡片只保留项目、工作内容、日期、参与者；更多说明/交付物/推进记录折叠，交付节点在项目计划的项目行或甘特空白日期格快捷插入，交付物选填并显示单日菱形。
 7. 上周实际推进、下周安排可手写、从已有记录整理、自动保存。整理为本地确定性汇总，不调用AI/付费模型，不把计划推测成实际完成。
 8. 临时抽调在选中区间生成另一项目的工作，同时暂停原工作中该人；无人接替的区间灰白蒙层显示“工作暂停”及警示。不另填复杂暂停表，不自动推迟交付日。
 9. 三个页签（Tabs）切换位置和尺寸必须一致，长台账滚动也不跳位。共同页头/页签吸顶，不能再用只有人员日历存在时才启用的条件布局。
 10. 页面内关闭/删除/切换/覆盖确认都在整个视口正中央，不用`window.confirm`。浏览器关闭/刷新整个标签页的beforeunload系统提示不能由网页定位，已保留并向用户说明。
 11. 人员/甘特排期自动保存开启时，不显示待保存横条/调整清单/保存成功提示；失败或关闭自动保存时仍保留手动保存和调整记录。
-12. 左侧Studio入口已归并：灵感、反馈、导航归其他；无限画布归生成，原URL与鉴权保留。Qwen图像编辑按1/2张输入调用固定v1.1工作流，不退回旧v1.0参数。
+12. 管理页面所有日期统一用PlanningDate自定义日历，快捷卡片也一样；顶层popover避开裁切，Escape先关日历，选填可清空，今天也遵守min/max。
+13. 左侧Studio入口已归并：灵感、反馈、导航归其他；无限画布归生成，原URL与鉴权保留。Qwen图像编辑按1/2张输入调用固定v1.1工作流，不退回旧v1.0参数。
 
 ## 代码导航
 
@@ -42,7 +43,7 @@
 | `confirmPlanning.ts` | `await confirmPlanning(message)`：独立HTML dialog顶层、全视口居中、取消默认焦点、Escape/Enter取消、Tab循环、焦点恢复、安全textContent、顺序队列、单次结算。 |
 | `ProjectPlan.tsx` / `ganttBridge.ts` | DHTMLX项目甘特、真实拖动/拉伸、整项阶段编辑；与人员页共用项目/stages。 |
 | `planning.ts` / `staffPlanning.ts` | 类型、随机/稳定项目色、暂停/日期/参与人数/负荷、旧整项移动与人员转交、保存队列；不可把计划负荷误当完成进度。 |
-| `scheduleCalendar.ts` / `PlanningDate.tsx` | 周/月/季/年真实边界、跨年闰年、日期输入/弹出月历（min/max/caption）。 |
+| `scheduleCalendar.ts` / `PlanningDate.tsx` | 周/月/季/年真实边界、跨年闰年、日期输入/顶层popover自定义月历（min/max/caption），含快捷卡片与台账数据更新日期；不再用details或原生选择器替代。 |
 | `management.css` | 多轮样式在文件后段覆盖。共同frame是`.management-shell > .canvas-area`，共享`.mp-workspace-header`吸顶；确认框`.mp-confirm-dialog`在body顶层。 |
 | `ProjectLedger.tsx` / `ManagementReporting.tsx` / `reporting.ts` / `reportWorkbook.ts` | 详情入口、折叠经营/人员周报、金额精确统计、不可改写快照和三表Excel。 |
 
@@ -71,13 +72,13 @@
 | --- | --- |
 | backend | `sha256:6b971be9ea3b9af79a446226f1c46d03652a5cf6b689f4dfccf045ff9586e7a1` |
 | worker ×3 | `sha256:fa3f8984f8a464343a89628ba937813163a94200b052257cbebdc00ce2f41793` |
-| frontend | `sha256:7e8ddd868f73061702429b3e616228923cc670a40eb9c5654a09b860f65eb1ae` |
+| frontend | `sha256:967cdf8608faf4128632b265fa6f0b842e100087c2142e3c21429217d15a3145` |
 
 生效Compose三件套：
 
 1. `/www/wwwroot/qmdh-web/docker-compose.yml`
 2. `/opt/qmdh-frp/compose.frp.yml`
-3. `/opt/qmdh-frp/releases/quick-actions-20261027/compose.release.yml`
+3. `/opt/qmdh-frp/releases/calendar-week-20261027/compose.release.yml`
 
 **模板挂载源仍是**`/opt/qmdh-frp/releases/management-categories-20261026/workflows` → `/app/integration/comfyui:ro`，8文件，不要因为目录旧而删除。保留env/key、媒体、FRP网络、ODA/FFmpeg/Xvfb等挂载与依赖。
 
@@ -85,14 +86,14 @@
 
 SSH只从被忽略的`local/server-access.md`在内存中读取；不输出凭据，不提交。现成runner固定校验`docs/archive/server-readonly-2026-10-25/server-metadata.json`中SSH指纹。
 
-最新快捷调整轮：52个当前前端文件逐字节、10公网资源、9路由、健康、Qwen输入数[1,2]、未登录管理鉴权通过；只换前端，其余容器未重启，无测试安排写入。旧hash资源保留，静态包不按容器内全部资源数断言。
+最新统一日历/周计划轮：52个当前前端文件逐字节、10公网资源、9路由、健康、Qwen输入数[1,2]、未登录管理鉴权通过；只换前端，其余容器未重启，无测试安排写入。旧hash资源保留，静态包不按容器内全部资源数断言。
 
 ## 备份、容量与发布脚本
 
 最新前端回滚/配置配对备份：
 
-- 服务器`/www/backup/qmdh-release-20261027-quick-actions`
-- 本机`E:/backups/QMDH-web/release-20261027-quick-actions`
+- 服务器`/www/backup/qmdh-release-20261027-calendar-week`
+- 本机`E:/backups/QMDH-web/release-20261027-calendar-week`
 - 26文件SHA一致。**DB/媒体继承pillars轮不可变恢复基线，是硬链接复用，不是新数据库快照。**前端回滚不降级数据库。
 
 最近完整数据基线：
@@ -101,13 +102,14 @@ SSH只从被忽略的`local/server-access.md`在内存中读取；不输出凭�
 - `E:/backups/QMDH-web/release-20261027-pillars`
 - 28个列入checksums文件一致；另留本机`database-before-pause.dump`，其私有SHA已核验。5849媒体、37归档恢复链仍依赖本机两基础包；按`resolved-media-chain.json`和本机基础连续性记录查找，不把服务器小增量误当完整媒体备份。
 
-上次盘余8.244GiB；这是时点值，后续发布前复测8GiB门槛、内存及任务/队列/GPU锁/上游队列。只可处理本任务能证明有镜像/本机原包/配对备份的临时构建副本，不清理业务媒体、正式备份、工作流或回滚镜像。几个旧release的html/verified-html、源码bundle/前端tar临时副本已退役，不能原样重跑依赖它们的旧verify脚本后误判生产坏了。
+上次盘余8.223GiB；这是时点值，后续发布前复测8GiB门槛、内存及任务/队列/GPU锁/上游队列。只可处理本任务能证明有镜像/本机原包/配对备份的临时构建副本，不清理业务媒体、正式备份、工作流或回滚镜像。几个旧release的html/verified-html、源码bundle/前端tar临时副本已退役，不能原样重跑依赖它们的旧verify脚本后误判生产坏了。
 
 本次pillars发布第一次因备份后新增媒体而自动恢复旧服务，补备份后重发成功；以后遇到清单变化也必须补增量后再切换，不能跳过断言。停止服务后最终DB备份没有在服务器再复制一份大dump，初始dump先留本机，避免磁盘门槛溢出。
 
 私有脚本与产物均在被忽略的local：
 
-- `local/quick_runner.py`、`quick_backup.py`、`quick_deploy.py`：最新快捷调整纯前端轮，读取`local/quick-actions-20261027/`，同样只继承数据恢复基线；不能用于后端/迁移发布完整备份。
+- `local/calendar_runner.py`、`calendar_backup.py`、`calendar_deploy.py`：最新日历/周计划纯前端轮，读取`local/calendar-week-20261027/`；数据继承pillars基线，不用于后端/迁移发布完整备份。
+- `local/quick_runner.py`、`quick_backup.py`、`quick_deploy.py`：此前快捷调整纯前端轮，读取`local/quick-actions-20261027/`，同样只继承数据恢复基线；不能用于后端/迁移发布完整备份。
 - `local/confirm_runner.py`、`confirm_backup.py`、`confirm_deploy.py`：此前确认框前端轮，读取`local/center-confirm-20261027/`。本轮backup逻辑是继承数据基线，仅适用于纯前端；不能拿它当后端/迁移发布完整备份。
 - `local/pillar_runner.py`、`pillar_backup.py`、`pillar_prepare_dir.py`、`pillar_build.py`、`pillar_smoke.py`、`pillar_accept.py`、`pillar_prepare.py`、`pillar_switch.py`、`pillar_verify.py`：最近后端+三worker+前端轮，读取`local/pillars-20261027/`。
 - `pillar_media_diff.py` / `pillar_media_backup.py`：该轮补媒体增量；均为一次性路径，不直接重跑。
@@ -130,13 +132,15 @@ node --test scripts/test-management.mjs
 # cwd E:/projects/QMDH-web
 node local/quick-types.mjs
 # 13个目标文件strict诊断零新增；不是整仓typecheck通过
-node local/quick-actions-20261027/browser.mjs
-# 10场景：安静保存/失败恢复、暂停/部分恢复、划选改派、冲突/详细编辑、甘特快捷进度、真实拖动/拉伸、交付节点、空白日期落点、节点重试、手机/键盘
+node local/calendar-week-20261027/browser.mjs
+# 7新场景：空交付物、自然周/跨年/重挂载、周内节点、日历上下界/焦点/Escape、闰年月历/受限今天、视窗/立项/台账日历、手机
+node local/calendar-week-20261027/regression.mjs
+# 10回归场景：安静保存/失败恢复、暂停/部分恢复、划选改派、冲突/详细编辑、甘特快捷进度、真实拖动/拉伸、交付节点、空白日期落点、节点重试、手机/键盘
 node local/pillars-20261027/browser.mjs
 # 8场景：竖柱、极简表单、周文字、划选改派、灰白警示、冲突、整项拖动、手机/周期
 ```
 
-浏览器脚本使用实际AppShell和页面，API为合成数据，拒绝外部请求；不能切成生产API写真实安排。pillar浏览器脚本有些操作仍按旧原生确认自动应答，center-confirm脚本的柱体点击则仍预期直接开完整表单；最新交互以quick-actions脚本为准，复用历史脚本需先适配快捷卡片/详细编辑入口与站内确认。
+浏览器脚本使用实际AppShell和页面，API为合成数据，拒绝外部请求；不能切成生产API写真实安排。pillar浏览器脚本有些操作仍按旧原生确认自动应答，center-confirm脚本的柱体点击则仍预期直接开完整表单；最新交互以calendar-week及其regression脚本为准，复用历史脚本需先适配快捷卡片/详细编辑入口与站内确认。
 
 离线Vite（cwd frontend）：`node node_modules/vite/bin/vite.js build --outDir ../local/新的发布目录/dist --emptyOutDir`。保持此前构建开关/环境，不把`frontend/dist`当源码提交；仅保留既有大块提示，不宣称整套通过。
 
@@ -144,6 +148,7 @@ node local/pillars-20261027/browser.mjs
 
 最新正式证据与说明：
 
+- `docs/calendar-week-2026-10-27.md`、`docs/archive/calendar-week-2026-10-27/`
 - `docs/quick-actions-2026-10-27.md`、`docs/archive/quick-actions-2026-10-27/`
 - `docs/center-confirm-2026-10-27.md`、`docs/archive/center-confirm-2026-10-27/`
 - `docs/planning-pillars-2026-10-27.md`、`docs/archive/planning-pillars-2026-10-27/`

@@ -32,6 +32,7 @@ import usePlanningAutoSave from "./usePlanningAutoSave";
 import ManagementReporting, { downloadReportingWorkbook } from "./ManagementReporting";
 import type { ReportingData } from "./reporting";
 import { matchesStatus, type ProjectStatusFilter } from "./planning";
+import { confirmPlanning } from "./confirmPlanning";
 import "./management.css";
 
 type UnitOption = { name: string; label: string; staff_count: number; account_count: number };
@@ -89,6 +90,7 @@ export default function ManagementProjectsPage() {
     ? `${path}${path.includes("?") ? "&" : "?"}unit=${encodeURIComponent(unit)}` : path;
   const scopedRequest = <T,>(path: string, body?: unknown, method?: string) => request<T>(scopedPath(path), body, method);
   const actionLock = useRef(false);
+  const railReplay = useRef(false);
   const editorForm = useRef<HTMLFormElement>(null);
   const [autoSave, setAutoSave] = useState(() => {
     try { return window.localStorage?.getItem(`qmdh:planning:auto:${currentUser?.name}`) !== "off"; } catch { return true; }
@@ -184,14 +186,15 @@ export default function ManagementProjectsPage() {
       event.returnValue = "";
     };
     const railGuard = (event: MouseEvent) => {
-      if (!(event.target instanceof Element) || !event.target.closest(".global-rail button")) return;
-      if (
-        planSaving ||
-        !window.confirm(projectDirty ? "项目内容尚未保存，确定离开？" : "排期调整尚未保存，确定离开并放弃调整？")
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
+      if (!(event.target instanceof Element)) return;
+      const button = event.target.closest<HTMLButtonElement>(".global-rail button");
+      if (!button || railReplay.current) return;
+      event.preventDefault(); event.stopPropagation();
+      if (planSaving) return;
+      void confirmPlanning(projectDirty ? "项目内容尚未保存，确定离开？" : "排期调整尚未保存，确定离开并放弃调整？").then(answer=>{
+        if (!answer || !button.isConnected) return;
+        railReplay.current = true; try { button.click(); } finally { railReplay.current = false; }
+      });
     };
     window.addEventListener("beforeunload", warn);
     document.addEventListener("click", railGuard, true);
@@ -200,12 +203,12 @@ export default function ManagementProjectsPage() {
       document.removeEventListener("click", railGuard, true);
     };
   }, [planDirty, planSaving, projectDirty]);
-  const safeChange = (action: () => void) => {
+  const safeChange = async (action: () => void) => {
     if (planSaving) {
       setNotice("正在保存排期，请稍候。");
       return;
     }
-    if (!planDirty || window.confirm("排期调整尚未保存，确定放弃这些调整？")) {
+    if (!planDirty || await confirmPlanning("排期调整尚未保存，确定放弃这些调整？")) {
       setPlanDirty(false); setDeskDirty(false);
       action();
     }
@@ -268,8 +271,8 @@ export default function ManagementProjectsPage() {
         draft.stages.map((s, i) => (i === index ? { ...s, ...patch } : s)),
       );
   };
-  const closeDraft = () => {
-    if (!busy && (!projectDirty || window.confirm("项目内容尚未保存，关闭后将丢失修改。确定关闭？"))) setDraft(null);
+  const closeDraft = async () => {
+    if (!busy && (!projectDirty || await confirmPlanning("项目内容尚未保存，关闭后将丢失修改。确定关闭？"))) setDraft(null);
   };
   async function saveProject(e?: FormEvent, automatic = false) {
     e?.preventDefault();
@@ -360,7 +363,7 @@ export default function ManagementProjectsPage() {
   }
   async function changeDeleted(project: PlanningProject, deleted: boolean) {
     if (!project.id || busy || planSaving || planDirty || actionLock.current) return;
-    if (deleted && !window.confirm(`删除“${project.name}”？项目将移入回收站，可恢复，版本记录会保留。${projectDirty ? "本次未保存修改会丢失。" : ""}`)) return;
+    if (deleted && !await confirmPlanning(`删除“${project.name}”？项目将移入回收站，可恢复，版本记录会保留。${projectDirty ? "本次未保存修改会丢失。" : ""}`)) return;
     actionLock.current = true;
     setBusy(true);
     setError("");
@@ -463,9 +466,9 @@ export default function ManagementProjectsPage() {
             <label className="mp-unit-picker">
               管理分院
               <select aria-label="管理分院" value={unit} disabled={loading || busy || planSaving}
-                onChange={(e) => {
+                onChange={async (e) => {
                   const next = e.target.value;
-                  if (projectDirty && !window.confirm("项目内容尚未保存，确定切换分院并放弃修改？")) return;
+                  if (projectDirty && !await confirmPlanning("项目内容尚未保存，确定切换分院并放弃修改？")) return;
                   safeChange(() => {
                     setUnit(next); setDraft(null); setStaffDraft(null); setReportDraft(null);
                     setPerson(0); setSearch(""); setCreatedProject(null); setNotice(""); setError("");
@@ -543,14 +546,15 @@ export default function ManagementProjectsPage() {
           <select
             value={year}
             disabled={busy}
-            onChange={(e) =>
-              safeChange(() => {
-                setYear(Number(e.target.value));
-                setStart(`${e.target.value}-01-01`);
+            onChange={(e) => {
+              const value = e.target.value;
+              void safeChange(() => {
+                setYear(Number(value));
+                setStart(`${value}-01-01`);
                 setCreatedProject(null);
                 setNotice("");
-              })
-            }
+              });
+            }}
           >
             {Array.from(
               new Set([
@@ -572,7 +576,7 @@ export default function ManagementProjectsPage() {
               aria-label="搜索项目"
               placeholder="搜索项目名称…"
               value={search}
-              onChange={(e) => safeChange(() => setSearch(e.target.value))}
+              onChange={(e) => { const value=e.target.value; void safeChange(() => setSearch(value)); }}
             />
             <details className="mp-simple-filters">
               <summary>更多筛选{person || statusFilter !== "all" || archive || trash ? " · 已启用" : ""}</summary>
@@ -580,7 +584,7 @@ export default function ManagementProjectsPage() {
                 <select
                   aria-label="按人员筛选"
                   value={person}
-                  onChange={(e) => safeChange(() => setPerson(Number(e.target.value)))}
+                  onChange={(e) => { const value=Number(e.target.value); void safeChange(() => setPerson(value)); }}
                 >
                   <option value={0}>全部人员</option>
                   {staff.map((s) => (
@@ -592,7 +596,7 @@ export default function ManagementProjectsPage() {
                 <select
                   aria-label="项目状态筛选"
                   value={statusFilter}
-                  onChange={(e) => safeChange(() => setStatusFilter(e.target.value as ProjectStatusFilter))}
+                  onChange={(e) => { const value=e.target.value as ProjectStatusFilter; void safeChange(() => setStatusFilter(value)); }}
                 >
                   <option value="all">全部状态</option>
                   <option value="overdue">有延期事项</option>
@@ -603,7 +607,7 @@ export default function ManagementProjectsPage() {
                   <input
                     type="checkbox"
                     checked={archive}
-                    onChange={(e) => safeChange(() => { setArchive(e.target.checked); setTrash(false); })}
+                    onChange={(e) => { const value=e.target.checked; void safeChange(() => { setArchive(value); setTrash(false); }); }}
                   />
                   已归档
                 </label>

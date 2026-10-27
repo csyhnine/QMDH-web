@@ -1,3 +1,4 @@
+import { confirmPlanning } from "./confirmPlanning";
 import { useEffect, useRef, useState } from "react";
 import type { GanttStatic } from "dhtmlx-gantt";
 import { initializePlanningGantt, renderPlanningGantt } from "./ganttBridge";
@@ -49,9 +50,9 @@ export default function ProjectPlan({
   }, [start, days]);
   const [editor, setEditor] = useState<{ projectId: number; stage: Stage; isNew: boolean } | null>(null);
   const effective = projects.map(p => pending[p.id!] || p);
-  const openStage = (projectId: number, stageId?: string) => {
+  const openStage = async (projectId: number, stageId?: string) => {
     if (saveLock.current) return;
-    if (latest.current.editor && !window.confirm("当前工作尚未应用到预览，确定放弃编辑并切换？")) return;
+    if (latest.current.editor && !await confirmPlanning("当前工作尚未应用到预览，确定放弃编辑并切换？")) return;
     const project = latest.current.pending[projectId] || latest.current.projects.find(p => p.id === projectId);
     if (!project) return;
     const stage = project.stages.find(s => s.id === stageId);
@@ -184,7 +185,7 @@ export default function ProjectPlan({
           <label>进度（%）<input aria-label="工作进度" type="number" min={0} max={100} required value={editor.stage.progress} onChange={e => patch({ progress: Number(e.target.value) })} /></label>
           <label><input type="checkbox" checked={editor.stage.milestone} onChange={e => patch({ milestone: e.target.checked, ...(e.target.checked ? { end: editor.stage.start } : {}) })} />里程碑（单日）</label>
           <div className="mp-work-people"><b>参与人员</b><p>同一工作中的参与者共享日期。参与时段或工作内容不同，请分别添加工作。</p>{staff.filter(s => s.is_active || editor.stage.assignees.includes(s.id)).map(s => <label key={s.id}><input type="checkbox" disabled={!s.is_active && !editor.stage.assignees.includes(s.id)} checked={editor.stage.assignees.includes(s.id)} onChange={e => patch({ assignees: e.target.checked ? [...editor.stage.assignees, s.id] : editor.stage.assignees.filter(id => id !== s.id) })} />{s.name}<small className="mp-affiliation">{staffAffiliation(s)}</small>{s.is_active ? "" : "（停用）"}</label>)}</div>
-          <footer><button type="submit" className="mp-primary">应用到甘特图预览</button>{!editor.isNew && <button type="button" onClick={() => { if (window.confirm("从本次计划移除此工作安排？保存后生效。")) applyStage(true); }}>移除工作</button>}</footer>
+          <footer><button type="submit" className="mp-primary">应用到甘特图预览</button>{!editor.isNew && <button type="button" onClick={async () => { if (await confirmPlanning("从本次计划移除此工作安排？保存后生效。")) applyStage(true); }}>移除工作</button>}</footer>
         </fieldset>{archived && <p>已归档项目只读，请先在项目资料中恢复。</p>}
       </form>}
       {Object.keys(pending).length ? (

@@ -1,3 +1,4 @@
+import { confirmPlanning } from "./confirmPlanning";
 import { useEffect, useRef, useState } from "react";
 import { addDays, type PlanningProject } from "./planning";
 import { summarizeWeek } from "./pillarPlanning";
@@ -101,13 +102,13 @@ export default function WeeklyBrief({
           />
           <button
             disabled={disabled || busy}
-            onClick={() => {
+            onClick={async () => {
               const text = summarizeWeek(project, week, kind);
               if (!text) {
                 setError(kind === "previous" ? "上周没有实际推进记录，请直接手写。" : "下周没有排期，请直接手写。");
                 return;
               }
-              if (draft[kind] && !window.confirm("用已有记录整理的内容替换当前文字？")) return;
+              if (draft[kind] && !await confirmPlanning("用已有记录整理的内容替换当前文字？")) return;
               change(kind, text);
             }}
           >

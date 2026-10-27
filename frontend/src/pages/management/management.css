@@ -2089,3 +2089,13 @@
 @media(max-width:640px){.mp-week-writing {grid-template-columns:minmax(0,1fr);}.mp-simple-assignees>div {grid-template-columns:repeat(2,minmax(0,1fr));}}
 
 .mp-simple-work-card .mp-date-field {display:grid;grid-template-columns:1fr auto;gap:5px;}.mp-date-caption {grid-column:1/-1;color:#718198;font-size:12px;}
+
+/* Confirmation prompts stay in the viewport center above editors and sticky headers. */
+.mp-confirm-dialog {position:fixed;inset:0;margin:auto;width:min(440px,calc(100vw - 32px));max-height:calc(100dvh - 48px);box-sizing:border-box;padding:24px;border:1px solid #dce4ef;border-radius:14px;background:#fff;color:#25354c;box-shadow:0 18px 64px #152a4c40;font-family:inherit;font-size:14px;line-height:1.6;height:fit-content;overflow:auto;}
+.mp-confirm-dialog::backdrop {background:#172a4666;backdrop-filter:blur(2px);}
+.mp-confirm-dialog h2 {font-size:18px;margin:0 0 12px;color:#1a2a44;}
+.mp-confirm-dialog p {margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;}
+.mp-confirm-actions {display:flex;justify-content:flex-end;gap:10px;margin-top:24px;}
+.mp-confirm-actions button {font:inherit;cursor:pointer;min-width:76px;padding:9px 16px;border:1px solid #dce4ef;border-radius:8px;background:#fff;color:#425472;}
+.mp-confirm-actions .mp-confirm-accept {background:#4169df;border-color:#4169df;color:#fff;}
+.mp-confirm-actions button:focus-visible {outline:3px solid #bdcdfa;outline-offset:2px;}

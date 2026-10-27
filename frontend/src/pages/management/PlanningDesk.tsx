@@ -1,3 +1,4 @@
+import { confirmPlanning } from "./confirmPlanning";
 import { useEffect, useRef, useState } from "react";
 import PlanningDate from "./PlanningDate";
 import WeeklyBrief from "./WeeklyBrief";
@@ -120,7 +121,7 @@ export default function PlanningDesk({
   const patch = (value: Partial<Stage>) => setEditor((e) => (e ? { ...e, stage: { ...e.stage, ...value } } : e));
   async function save(remove = false) {
     if (!editor || lock.current || disabled) return;
-    if (remove && !window.confirm("删除这项工作或节点？")) return;
+    if (remove && !await confirmPlanning("删除这项工作或节点？")) return;
     lock.current = true;
     setBusy(true);
     setError("");
@@ -270,8 +271,8 @@ export default function PlanningDesk({
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => {
-                  if (window.confirm("关闭并放弃未保存内容？")) setEditor(null);
+                onClick={async () => {
+                  if (await confirmPlanning("关闭并放弃未保存内容？")) setEditor(null);
                 }}
               >
                 关闭

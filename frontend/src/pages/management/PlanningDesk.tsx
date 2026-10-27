@@ -224,7 +224,7 @@ export default function PlanningDesk({
                 .filter((s) => s.milestone)
                 .map((s) => (
                   <p key={s.id}>
-                    ◆ {s.start} · {s.name} · {s.deliverable || "交付物待填写"}
+                    ◆ {s.start} · {s.name}{s.deliverable ? ` · ${s.deliverable}` : ""}
                   </p>
                 ))}
               <button disabled={disabled || briefDirty} onClick={onProjectPlan}>
@@ -441,7 +441,7 @@ export default function PlanningDesk({
                   </details>
                   {editor.stage.milestone && (
                     <label>
-                      交付物
+                      交付物（选填）
                       <textarea
                         aria-label="交付物"
                         maxLength={1000}

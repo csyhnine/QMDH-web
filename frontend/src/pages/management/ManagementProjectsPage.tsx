@@ -121,6 +121,7 @@ export default function ManagementProjectsPage() {
   const [days, setDays] = useState(30);
   const [peoplePeriod, setPeoplePeriod] = useState<SchedulePeriod>("week");
   const peopleRange = scheduleRange(start, peoplePeriod);
+  const ganttRange = days === 7 ? scheduleRange(start, "week") : { start, days };
   const [workRequest, setWorkRequest] = useState<WorkRequest | null>(null);
   const [draft, setDraft] = useState<PlanningProject | null>(null);
   const nextWeek = weekRange(addDays(today(), 7)).start;
@@ -701,7 +702,7 @@ export default function ManagementProjectsPage() {
                   ‹
                 </button>
                 <PlanningDate
-                  label={view === "people" ? "排期所在日期" : "排期开始日期"}
+                  label={view === "people" || days === 7 ? "排期所在日期" : "排期开始日期"}
                   required
                   disabled={planDirty}
                   value={start}
@@ -725,6 +726,7 @@ export default function ManagementProjectsPage() {
                     value={days}
                     onChange={(e) => setDays(Number(e.target.value))}
                   >
+                    <option value={7}>按周</option>
                     <option value={14}>两周</option>
                     <option value={30}>月计划</option>
                     <option value={90}>季度计划</option>
@@ -744,15 +746,15 @@ export default function ManagementProjectsPage() {
                 )}
               </div>
             </div>
-            <PlanningDesk autoSave={autoSave} onBusy={setPlanSaving} onProjectPlan={() => changeView("gantt")} onReassign={reassignSchedule} rangeStart={view==="people"?peopleRange.start:start} rangeDays={view==="people"?peopleRange.days:days} request={workRequest} onRequestHandled={() => setWorkRequest(null)} projects={filtered} staff={staff} disabled={planSaving || chartDirty || archive} onPersist={persistSchedule} onDirty={setDeskDirty} />
+            <PlanningDesk autoSave={autoSave} onBusy={setPlanSaving} onProjectPlan={() => changeView("gantt")} onReassign={reassignSchedule} rangeStart={view==="people"?peopleRange.start:ganttRange.start} rangeDays={view==="people"?peopleRange.days:ganttRange.days} request={workRequest} onRequestHandled={() => setWorkRequest(null)} projects={filtered} staff={staff} disabled={planSaving || chartDirty || archive} onPersist={persistSchedule} onDirty={setDeskDirty} />
             {view === "gantt" ? (
               <ProjectPlan
                 key={`${year}-${archive}-${search}-${person}-${statusFilter}-${refresh}`}
                 projects={filtered}
                 workloadProjects={projects}
                 staff={staff}
-                start={start}
-                days={days}
+                start={ganttRange.start}
+                days={ganttRange.days}
                 archived={archive}
                 onEdit={editProject}
                 onPersist={persistSchedule}
@@ -1277,11 +1279,11 @@ export default function ManagementProjectsPage() {
               </label>
               <label>
                 数据更新日期
-                <input
-                  type="date"
+                <PlanningDate
+                  label="数据更新日期"
                   required
                   value={reportDraft.data_as_of || ""}
-                  onChange={(e) => setReportDraft({ ...reportDraft, data_as_of: e.target.value })}
+                  onChange={(date) => setReportDraft({ ...reportDraft, data_as_of: date })}
                 />
               </label>
             </fieldset>

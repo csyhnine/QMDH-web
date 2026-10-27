@@ -48,7 +48,7 @@ export default function ProjectPlan({
     const dates = items.flatMap(p => p.stages.flatMap(s => [s.start, s.end])).sort();
     return dates.length ? { start: addDays(dates[0], -2), days: Math.max(14, dayNumber(dates.slice(-1)[0]) - dayNumber(dates[0]) + 5) } : { start, days };
   };
-  const [range, setRange] = useState(() => fitRange(projects));
+  const [range, setRange] = useState(() => days === 7 ? { start, days } : fitRange(projects));
   const requestedRange = useRef({ start, days });
   useEffect(() => {
     if (requestedRange.current.start !== start || requestedRange.current.days !== days) setRange({ start, days });
@@ -91,7 +91,8 @@ export default function ProjectPlan({
     if (!p || p.stages.length >= 200) { setError("该项目工作数量已达上限"); return; }
     const node: Stage = { id: crypto.randomUUID(), name, start: date, end: date, assignees: [], milestone: true, deliverable, progress: 0, allocation: 100, notes: "" };
     setPending(previous => ({ ...previous, [p.id!]: { ...p, stages: [...p.stages, node] } }));
-    setRange(fitRange([...effective.filter(v => v.id !== p.id), { ...p, stages: [...p.stages, node] }]));
+    if (days !== 7 && (date < range.start || date >= addDays(range.start, range.days)))
+      setRange(fitRange([...effective.filter(v => v.id !== p.id), { ...p, stages: [...p.stages, node] }]));
     setError(""); setDelivery(null);
   }
   const latest = useRef({ projects, pending, saving, archived, onEdit, editor, quickBusy, quick, delivery });
@@ -203,7 +204,7 @@ export default function ProjectPlan({
           <label>阶段 / 工作名称<input aria-label="阶段或工作名称" required maxLength={250} value={editor.stage.name} onChange={e => patch({ name: e.target.value })} /></label>
           <label>开始日期<PlanningDate label="工作开始日期" value={editor.stage.start} required onChange={start => patch({ start, ...(editor.stage.milestone ? { end: start } : {}) })} /></label>
           <label>结束日期<PlanningDate label="工作结束日期" value={editor.stage.end} min={editor.stage.start} required onChange={end => patch({ end, ...(editor.stage.milestone ? { start: end } : {}) })} /></label>
-          <label>交付物<input aria-label="阶段交付物" maxLength={1000} value={editor.stage.deliverable || ""} onChange={e=>patch({deliverable:e.target.value})}/></label>
+          <label>交付物（选填）<input aria-label="阶段交付物" maxLength={1000} value={editor.stage.deliverable || ""} onChange={e=>patch({deliverable:e.target.value})}/></label>
           <label>工作内容<textarea aria-label="工作内容" maxLength={2000} value={editor.stage.notes} onChange={e => patch({ notes: e.target.value })} /></label>
           <label>每人投入（%）<input aria-label="每人投入" type="number" min={1} max={100} required value={editor.stage.allocation} onChange={e => patch({ allocation: Number(e.target.value) })} /></label>
           <label>进度（%）<input aria-label="工作进度" type="number" min={0} max={100} required value={editor.stage.progress} onChange={e => patch({ progress: Number(e.target.value) })} /></label>

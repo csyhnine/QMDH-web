@@ -31,7 +31,14 @@ function QuickPanel({ x, y, title, busy, onClose, children }: {
   return createPortal(<div className="mp-quick-layer" onPointerDown={e => { if (e.target === e.currentTarget && !busy) onClose(); }}>
     <div className="mp-quick-panel" ref={panel} style={position} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}
       onKeyDown={e => {
-        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (!busy) onClose(); }
+        if (e.key === "Escape") {
+          e.preventDefault(); e.stopPropagation();
+          const calendar = panel.current?.querySelector<HTMLElement>("[popover]:popover-open");
+          if (calendar) {
+            calendar.hidePopover();
+            [...(panel.current?.querySelectorAll<HTMLButtonElement>("button[aria-controls]") || [])].find(b => b.getAttribute("aria-controls") === calendar.id)?.focus();
+          } else if (!busy) onClose();
+        }
         if (e.key !== "Tab") return;
         const elements = [...(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary') || [])].filter(el => el.getClientRects().length);
         const first = elements[0], last = elements.at(-1);
@@ -111,11 +118,11 @@ export function QuickDeliveryInsert({ request, project, disabled, onInsert, onCl
   const full = project.stages.length >= 200;
   return <QuickPanel {...request} title="插入交付节点" busy={false} onClose={onClose}>
     <p className="mp-quick-context">{project.name}</p>
-    <form onSubmit={e => { e.preventDefault(); if (name.trim() && date && deliverable.trim()) onInsert(name.trim(), date, deliverable.trim()); }}>
+    <form onSubmit={e => { e.preventDefault(); if (name.trim() && date) onInsert(name.trim(), date, deliverable.trim()); }}>
       <fieldset disabled={disabled || full}>
         <label>节点名称<input aria-label="快捷交付节点名称" required maxLength={250} value={name} onChange={e => setName(e.target.value)} /></label>
         <label>交付日期<PlanningDate label="快捷交付日期" required value={date} onChange={setDate} /></label>
-        <label>交付物<input aria-label="快捷交付物" required maxLength={1000} value={deliverable} onChange={e => setDeliverable(e.target.value)} /></label>
+        <label>交付物（选填）<input aria-label="快捷交付物" maxLength={1000} value={deliverable} onChange={e => setDeliverable(e.target.value)} /></label>
         <button type="submit" className="mp-primary">插入甘特图</button>
       </fieldset>
       {full && <p className="mp-quick-error" role="alert">该项目工作数量已达上限，请先整理工作或节点。</p>}

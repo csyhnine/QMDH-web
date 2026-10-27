@@ -56,7 +56,7 @@ def list_units(user: User = Depends(manager), db: Session = Depends(get_db)):
         select(ManagementStaff).where(ManagementStaff.unit.in_(unit_aliases(user.company_unit)))).all()
     people = db.scalars(select(User)).all()
     return {"current_unit": canonical_unit(user.company_unit), "units": [
-        {"name": unit, "label": "二分院（原二、四分院）" if unit == "二分院" else unit,
+        {"name": unit, "label": unit,
          "staff_count": sum(canonical_unit(s.unit) == unit and s.is_active for s in staff),
          "account_count": sum(account_unit(u) == unit for u in people)} for unit in allowed]}
 

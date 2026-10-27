@@ -456,7 +456,7 @@ export default function ManagementProjectsPage() {
             <p className="mp-eyebrow">{report?.unit || currentUser?.company_unit} · 管理工作台</p>
             <h1>项目管理</h1>
             <p>掌握项目进展，安排团队下一步工作。</p>
-            <small className="mp-unit-boundary">当前分院独立管理项目、人员和费用；原二、四分院同属新二分院。</small>
+            <small className="mp-unit-boundary">各分院独立管理本院项目、人员和进展。</small>
           </div>
           <div className="mp-header-actions">
             <label className="mp-inline" title="适用于已有项目资料、项目计划和人员排期；新项目首次仍需创建，人员名册与台账信息单独保存。"><input type="checkbox" checked={autoSave} onChange={e => {
@@ -475,7 +475,7 @@ export default function ManagementProjectsPage() {
                   });
                 }}>
                 {(units.length ? units : [{ name: unit, label: unit, staff_count: staff.length, account_count: 0 }]).map((u) =>
-                  <option key={u.name} value={u.name}>{u.label} · {u.staff_count} 人</option>)}
+                  <option key={u.name} value={u.name}>{unitName(u.name)} · {u.staff_count} 人</option>)}
               </select>
             </label>
             <span>{currentUser?.company_position}</span>

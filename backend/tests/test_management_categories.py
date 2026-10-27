@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 
 import sqlalchemy as sa
+import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
@@ -26,6 +27,7 @@ def test_categories_require_company_grant_and_only_authorized_admin_switches(env
     assert [u['name'] for u in http.get('/management/units', headers=headers()).json()['units']] == ['二分院']
     authorize_admin(sessions)
     assert [u['name'] for u in http.get('/management/units', headers=headers(1)).json()['units']] == ['一分院', '二分院', '三分院']
+    assert all(u['label'] == u['name'] for u in http.get('/management/units', headers=headers(1)).json()['units'])
     p = http.post('/management/projects?year=2026&unit=一分院', headers=headers(1), json={'name':'一院项目'}).json()
     assert p['unit'] == '一分院'
     assert http.get('/management/projects?year=2026', headers=headers()).json() == []
@@ -160,3 +162,45 @@ def test_migration_keeps_old_data_and_grants_and_adds_defaults():
         assert db.exec_driver_sql('select document,deleted from management_projects').one() == ('original',0)
         assert db.exec_driver_sql('select company_management,group_name from users').one() == (0,'城市更新四分院')
     engine.dispose()
+
+
+@pytest.mark.parametrize('own', ['一分院', '二分院', '三分院'])
+@pytest.mark.parametrize('role', ['designer', 'ops'])
+def test_branch_managers_cannot_read_progress_export_snapshots_or_switch_by_forging_unit(env, own, role):
+    http, sessions = env
+    authorize_admin(sessions)
+    plans, snapshots = {}, {}
+    for unit in ('一分院', '二分院', '三分院'):
+        plans[unit] = http.post('/management/projects?year=2026&unit='+unit, headers=headers(1), json={
+            'name':unit+'私有项目', 'weekly_briefs':[{'week_start':'2026-10-26','previous':'私有推进','following':'私有计划'}],
+            'stages':[{'id':'work','name':'私有工作','start':'2026-10-26','end':'2026-10-30','progress':70}],
+        }).json()
+        snapshots[unit] = http.post('/management/weekly-snapshots?year=2026&unit='+unit,
+            headers=headers(1), json={'week_start':'2026-10-26'}).json()
+    with sessions() as db:
+        user = db.get(User, 3)
+        user.role, user.company_unit = role, own
+        db.commit()
+    categories = http.get('/management/units', headers=headers()).json()['units']
+    assert [(u['name'],u['label']) for u in categories] == [(own,own)]
+    assert {p['id'] for p in http.get('/management/projects?year=2026',headers=headers()).json()} == {plans[own]['id']}
+    assert {p['id'] for p in http.get('/management/report-data?year=2026',headers=headers()).json()['projects']} == {plans[own]['id']}
+    assert {s['id'] for s in http.get('/management/weekly-snapshots?year=2026',headers=headers()).json()} == {snapshots[own]['id']}
+    for foreign in set(plans)-{own}:
+        for path in ('/projects?year=2026','/projects?year=2026&archived=true','/projects?year=2026&deleted=true',
+                     '/staff','/reports/2026','/report-data?year=2026','/weekly-snapshots?year=2026'):
+            separator = '&' if '?' in path else '?'
+            assert http.get('/management'+path+separator+'unit='+foreign,headers=headers()).status_code == 403
+        ident, snapshot = plans[foreign]['id'], snapshots[foreign]['id']
+        assert http.get(f'/management/projects/{ident}/revisions',headers=headers()).status_code == 404
+        assert http.get(f'/management/weekly-snapshots/{snapshot}',headers=headers()).status_code == 404
+        assert http.put(f'/management/projects/{ident}',headers=headers(),json=payload(plans[foreign])).status_code == 404
+        assert http.put(f'/management/projects/{ident}?unit={foreign}',headers=headers(),json=payload(plans[foreign])).status_code == 403
+        assert http.delete(f'/management/projects/{ident}?version=1',headers=headers()).status_code == 404
+        assert http.post('/management/projects?year=2026&unit='+foreign,headers=headers(),json={'name':'不可跨院立项'}).status_code == 403
+        assert http.post('/management/assignments/reassign',headers=headers(),json={
+            'source_project_id':plans[own]['id'],'source_stage_id':'work','source_version':1,
+            'target_project_id':ident,'target_version':1,'person_id':1,'start':'2026-10-27','end':'2026-10-28',
+        }).status_code == 404
+    with sessions() as db:
+        assert all(p.version == 1 for p in db.scalars(sa.select(ManagementProject)).all())

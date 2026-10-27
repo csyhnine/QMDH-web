@@ -1,0 +1,34 @@
+{
+  "results": [
+    {
+      "name": "1920px: editor close confirmation is centered; cancel/Escape preserve input, confirm closes",
+      "passed": true
+    },
+    {
+      "name": "390px: editor close confirmation is centered; cancel/Escape preserve input, confirm closes",
+      "passed": true
+    },
+    {
+      "name": "Confirmation stays centered after scrolling and uses literal safe text; keyboard focus stays inside",
+      "passed": true
+    },
+    {
+      "name": "Delete cancellation issues no write; confirm deletes one work exactly once",
+      "passed": true
+    },
+    {
+      "name": "Unsaved drag preview uses centered view-switch protection and cancel keeps edits",
+      "passed": true
+    },
+    {
+      "name": "Global rail cancels navigation immediately and replays the selected action once after approval",
+      "passed": true
+    },
+    {
+      "name": "Queued confirmations resolve once in order and default Enter cancels safely",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "nativePrompts": []
+}

@@ -1,3 +1,7 @@
+2026-10-27当前基线：前端源码51bf2de/镜像24aec6613906，backend6b971be9ea3b、三worker fa3f8984f8a4，迁移b94de295f179。生效第三Compose为`/opt/qmdh-frp/releases/center-confirm-20261027/compose.release.yml`，Qwen模板挂载仍依赖`management-categories-20261026/workflows`。最新前端配对备份25文件，DB/媒体继承pillars完整数据基线，不是新快照。详细接手、容量/恢复链与限制见[2026-10-27开发交接](handoff-management-2026-10-27.md)。服务器旧Git不能直接pull重建。
+
+以下为历史发布条目；当前版本与路径以上述入口及新交接为准，不按旧段落执行。
+
 2026-10-26Studio入口归并已上线：前端7a31b8c/01a2fb29f9df，灵感/反馈/导航归其他，画布归生成，保留原地址和权限；18定向/8目标strict0/浏览器4场景及51文件和公网资源核对通过。仅前端替换，后端/三worker和业务数据保持。当前第三Compose为/opt/qmdh-frp/releases/navigation-merge-20261026/compose.release.yml，模板仍依赖management-categories-20261026/workflows。配对备份23文件SHA一致。见[记录](navigation-merge-2026-10-26.md)，72待验收/25冻结/R98保持。
 
 以下为此前记录，当前前端及Compose以顶部为准。

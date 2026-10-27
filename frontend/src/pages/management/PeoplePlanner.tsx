@@ -160,7 +160,7 @@ export default function PeoplePlanner({
             </span>
           ))}
         </div>
-        <small>点击空白格添加 · 点击工作编辑 · 拖动改期 / 转交</small>
+        <small>点击空白格添加 · 划选柱体改派一段 · ↕ 拖动整项</small>
       </div>
       <PeopleSchedule
         projects={preview}
@@ -170,7 +170,8 @@ export default function PeoplePlanner({
         days={days}
         period={period}
         disabled={blocked}
-        onSelect={(p, s) => open({ projectId: p.id, stageId: s.id, date: s.start })}
+        onSelect={(p, s, personId, date) => open({ projectId: p.id, stageId: s.id, personId, date })}
+        onSegment={(p,s,personId,date,end)=>open({projectId:p.id,stageId:s.id,personId,date,end,intent:"segment"})}
         onAdd={(personId, date) => open({ personId, date })}
         onStageDrag={(event, p, s, personId, anchor) =>
           begin(event, { projectId: p.id!, stageId: s.id, personId, anchor })

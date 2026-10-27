@@ -1,4 +1,5 @@
 """Company planning data: deliberately separate from Studio projects and site roles."""
+from copy import deepcopy
 from datetime import date, timedelta
 from dataclasses import dataclass
 from decimal import Decimal
@@ -7,7 +8,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -137,6 +138,18 @@ class Stage(StrictModel):
         return self
 
 
+class WeeklyBrief(StrictModel):
+    week_start: date
+    previous: str = Field(default="", max_length=4000)
+    following: str = Field(default="", max_length=4000)
+
+    @model_validator(mode="after")
+    def monday(self):
+        if self.week_start.weekday() != 0:
+            raise ValueError("工作周须从周一开始")
+        return self
+
+
 class ProjectInput(StrictModel):
     name: str = Field(min_length=1, max_length=250)
     color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
@@ -161,6 +174,7 @@ class ProjectInput(StrictModel):
     project_type: str = Field(default="", max_length=250)
     phase: str = Field(default="", max_length=250)
     notes: str = Field(default="", max_length=4000)
+    weekly_briefs: list[WeeklyBrief] = Field(default_factory=list, max_length=260)
     stages: list[Stage] = Field(default_factory=list, max_length=200)
     archived: bool = False
     version: int = Field(default=0, ge=0)
@@ -169,6 +183,8 @@ class ProjectInput(StrictModel):
     def unique_stages(self):
         if len({s.id for s in self.stages}) != len(self.stages):
             raise ValueError("阶段 ID 重复")
+        if len({b.week_start for b in self.weekly_briefs}) != len(self.weekly_briefs):
+            raise ValueError("工作周不可重复")
         return self
 
 
@@ -366,7 +382,7 @@ def save_project(db, user, payload, row=None, year=None):
     validate_staff(db, user, payload, row.document if row else None)
     doc = payload.model_dump(mode="json", exclude={"version", "archived"})
     if row:
-        for key in ("contract_status", "weekly_plan_mode", "collaboration_unit", "color"):
+        for key in ("contract_status", "weekly_plan_mode", "collaboration_unit", "color", "weekly_briefs"):
             if key not in payload.model_fields_set and key in row.document:
                 doc[key] = row.document[key]
         old_stages = {s["id"]: s for s in row.document.get("stages", [])}
@@ -439,3 +455,88 @@ def delete_project(project_id: int, version: int = Query(ge=1),
 def restore_project(project_id: int, version: int = Query(ge=1),
                     user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
     return set_deleted(db, user, project_id, version, False)
+
+
+class ReassignInput(StrictModel):
+    source_project_id: int = Field(gt=0)
+    source_stage_id: str = Field(min_length=1, max_length=64)
+    source_version: int = Field(ge=1)
+    target_project_id: int = Field(gt=0)
+    target_version: int = Field(ge=1)
+    person_id: int = Field(gt=0)
+    start: date
+    end: date
+    work: str = Field(default="", max_length=250)
+
+    @model_validator(mode="after")
+    def dates(self):
+        if self.start > self.end or self.end == date.max:
+            raise ValueError("请选择有效的改派日期区间")
+        if self.source_project_id == self.target_project_id:
+            raise ValueError("请选择其他项目")
+        return self
+
+
+@router.post("/assignments/reassign")
+def reassign_work(payload: ReassignInput, user: PlanningScope = Depends(planning_scope), db: Session = Depends(get_db)):
+    # Both plans and their history commit together; an error must never leave half a reassignment.
+    try:
+        rows = db.scalars(select(ManagementProject).where(
+            ManagementProject.id.in_([payload.source_project_id, payload.target_project_id]),
+            ManagementProject.unit.in_(unit_aliases(user.company_unit)), ManagementProject.deleted.is_(False)
+        ).order_by(ManagementProject.id).with_for_update()).all()
+        by_id = {r.id: r for r in rows}
+        if len(by_id) != 2:
+            raise HTTPException(404, "项目不存在")
+        source, target = by_id[payload.source_project_id], by_id[payload.target_project_id]
+        if source.archived or target.archived or source.year != target.year:
+            raise HTTPException(422, "只能在同一年度的在管项目间改派")
+        if source.version != payload.source_version or target.version != payload.target_version:
+            raise HTTPException(409, "项目已被修改，请保留输入并刷新后重试；本次改派尚未保存。")
+        person = db.scalar(select(ManagementStaff).where(ManagementStaff.id == payload.person_id,
+            ManagementStaff.unit.in_(unit_aliases(user.company_unit)), ManagementStaff.is_active.is_(True)).with_for_update())
+        if not person:
+            raise HTTPException(422, "请选择本院在用人员")
+        source_doc, target_doc = deepcopy(source.document), deepcopy(target.document)
+        work = next((s for s in source_doc.get("stages", []) if s["id"] == payload.source_stage_id), None)
+        if not work or work.get("milestone") or payload.person_id not in work["assignees"]:
+            raise HTTPException(422, "原工作或人员安排已变化，请刷新")
+        start, end = payload.start.isoformat(), payload.end.isoformat()
+        if start < work["start"] or end > work["end"]:
+            raise HTTPException(422, "改派区间须在原工作日期内")
+        if any(p["start"] <= end and (not p.get("until") or p["until"] > start)
+               and (not p.get("people") or payload.person_id in p["people"]) for p in work.get("pauses", [])):
+            raise HTTPException(422, "该人员在此区间已暂停，请先恢复原工作或编辑已有临时安排")
+        work.setdefault("pauses", []).append({"id": uuid4().hex, "start": start,
+            "until": (payload.end + timedelta(days=1)).isoformat(), "people": [payload.person_id],
+            "reason": "抽调至「" + target_doc["name"] + "」"})
+        target_doc.setdefault("stages", []).append({"id": uuid4().hex, "name": payload.work or work["name"],
+            "start": start, "end": end, "assignees": [payload.person_id], "progress": 0,
+            "allocation": work.get("allocation", 100), "milestone": False,
+            "notes": "由「" + source_doc["name"] + "」临时抽调"})
+        validated = []
+        for row, doc in [(source, source_doc), (target, target_doc)]:
+            value = ProjectInput.model_validate({**doc, "version": row.version, "archived": row.archived})
+            validate_staff(db, user, value, row.document)
+            validated.append((row, value.model_dump(mode="json", exclude={"version", "archived"})))
+        for row, doc in validated:
+            result = db.execute(update(ManagementProject).where(ManagementProject.id == row.id,
+                ManagementProject.version == row.version, ManagementProject.deleted.is_(False),
+                ManagementProject.archived.is_(False)).values(document=doc, version=row.version + 1, updated_by=user.id))
+            if result.rowcount != 1:
+                raise HTTPException(409, "项目已被修改，本次改派未保存")
+            db.flush(); db.refresh(row)
+            db.add(ManagementRevision(project_id=row.id, version=row.version, actor_id=user.id,
+                                      snapshot={**doc, "archived": False}))
+        db.add(AuditLog(event_type="management.assignment_reassigned", actor_name="company-manager", actor_id=user.id,
+            target_type="management_project", target_id=source.id, target_name=user.company_unit,
+            details={"target_project_id": target.id, "person_id": payload.person_id, "start": start, "end": end}))
+        db.commit()
+        return {"projects": [project_out(db.get(ManagementProject, payload.source_project_id)),
+                             project_out(db.get(ManagementProject, payload.target_project_id))]}
+    except ValidationError as exc:
+        db.rollback()
+        raise HTTPException(422, "工作或暂停记录已达上限，请整理后重试") from exc
+    except Exception:
+        db.rollback()
+        raise

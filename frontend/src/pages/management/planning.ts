@@ -62,6 +62,7 @@ export type PlanningProject = {
   project_type: string;
   phase: string;
   notes: string;
+  weekly_briefs?: { week_start: string; previous: string; following: string }[];
   stages: Stage[];
   archived: boolean;
   deleted?: boolean;

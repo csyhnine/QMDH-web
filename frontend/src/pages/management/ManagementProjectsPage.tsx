@@ -22,6 +22,7 @@ import {
   type Stage,
 } from "./planning";
 import PlanningDesk, { type WorkRequest } from "./PlanningDesk";
+import type { Reassignment } from "./pillarPlanning";
 import { scheduleRange, moveSchedulePeriod, type SchedulePeriod } from "./scheduleCalendar";
 import ProjectLedger from "./ProjectLedger";
 import ProjectPlan from "./ProjectPlan";
@@ -234,6 +235,11 @@ export default function ManagementProjectsPage() {
       block: "start",
     });
   };
+  async function reassignSchedule(payload: Reassignment) {
+    const result = await scopedRequest<{projects:PlanningProject[]}>("/assignments/reassign",payload,"POST");
+    setProjects(current=>current.map(p=>result.projects.find(next=>next.id===p.id)||p));
+    setNotice("选中日期已改派；原工作无人接替的区间已标记暂停。");
+  }
   async function persistSchedule(project: PlanningProject) {
     const saved = await scopedRequest<PlanningProject>(`/projects/${project.id}`, projectPayload(project));
     setProjects((current) => current.map((p) => (p.id === saved.id ? saved : p)));
@@ -735,7 +741,7 @@ export default function ManagementProjectsPage() {
                 )}
               </div>
             </div>
-            <PlanningDesk request={workRequest} onRequestHandled={() => setWorkRequest(null)} projects={filtered} staff={staff} disabled={planSaving || chartDirty || archive} onPersist={persistSchedule} onDirty={setDeskDirty} />
+            <PlanningDesk autoSave={autoSave} onBusy={setPlanSaving} onReassign={reassignSchedule} rangeStart={view==="people"?peopleRange.start:start} rangeDays={view==="people"?peopleRange.days:days} request={workRequest} onRequestHandled={() => setWorkRequest(null)} projects={filtered} staff={staff} disabled={planSaving || chartDirty || archive} onPersist={persistSchedule} onDirty={setDeskDirty} />
             {view === "gantt" ? (
               <ProjectPlan
                 key={`${year}-${archive}-${search}-${person}-${statusFilter}-${refresh}`}

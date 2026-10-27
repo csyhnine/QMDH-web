@@ -15,6 +15,7 @@ function load(file, overrides = {}, globals = {}) {
 }
 const planning = load('pages/management/planning.ts');
 const calendar = load('pages/management/scheduleCalendar.ts', {'./planning':planning});
+const pillars=load('pages/management/pillarPlanning.ts',{'./planning':planning});
 test('affiliation counts active internal and external people separately without guessing unknown identities', () => {
   const staff = [{is_active:true,employment_type:'internal'},{is_active:true,employment_type:'external',employer:'Partner'}, {is_active:true}, {is_active:false,employment_type:'internal'}];
   assert.equal(JSON.stringify(planning.staffCounts(staff)), JSON.stringify({active:3,internal:1,external:1,unknown:1}));
@@ -227,11 +228,25 @@ test('calendar periods use real week/month/quarter/year boundaries including lea
 });
 
 test('personnel calendar renders names as column headers, dates as rows, hidden project load and personal pauses',()=>{
- const Schedule=load('pages/management/PeopleSchedule.tsx',{'./planning':planning,react:{...require('react'),useMemo:fn=>fn(),useLayoutEffect:()=>{},useRef:()=>({current:null}),useState:x=>[x,()=>{}]}}).default;
+ const Schedule=load('pages/management/PeopleSchedule.tsx',{'./planning':planning,'./pillarPlanning':pillars,react:{...require('react'),useMemo:fn=>fn(),useLayoutEffect:()=>{},useRef:()=>({current:null}),useState:x=>[x,()=>{}]}}).default;
  const a={...stage('work','2026-10-26','2026-10-27',[1,2],60),pauses:[{id:'p',start:'2026-10-26',until:null,people:[1],reason:'抽调'}]};
  const p=makeProject(1,[a]),hidden=makeProject(2,[stage('hidden','2026-10-26','2026-10-26',[2],60)]);
  const html=renderToStaticMarkup(Schedule({projects:[p],workloadProjects:[p,hidden],staff:[{id:1,name:'甲',is_active:true},{id:2,name:'乙',is_active:true}],start:'2026-10-26',days:7,period:'week'}));
  assert.ok(html.includes('scope="col"'));assert.ok(html.includes('<strong>甲</strong>'));assert.equal((html.match(/scope="row"/g)||[]).length,7);
- assert.ok(html.includes('全部项目计划负荷 120%'));assert.ok(html.includes('mp-work-paused'));assert.ok(html.includes('甲 2026-10-26 添加工作'));
+ assert.ok(!html.includes('120%'));assert.ok(html.includes('mp-pillar-pause'));assert.ok(html.includes('mp-work-pillar'));assert.ok(html.includes('甲 2026-10-26 添加工作'));
  assert.ok(!html.includes('选人面板'));assert.ok(!html.includes('安排工作'));
+});
+
+
+test('pause masks distinguish one person away from nobody responsible and summarize only actual progress',()=>{
+ const work={...stage('w','2026-10-26','2026-10-30',[1,2]),pauses:[{id:'p',start:'2026-10-27',until:'2026-10-29',people:[1],reason:'支援'}],updates:[{id:'u',date:'2026-10-23',note:'实际完成底图'}]};
+ assert.equal(pillars.unattended(work,'2026-10-27'),false);
+ const all={...work,pauses:[{...work.pauses[0],people:[]}]},p=makeProject(1,[all]);
+ assert.equal(pillars.unattended(all,'2026-10-27'),true);assert.equal(pillars.unattended(all,'2026-10-29'),false);
+ assert.equal(JSON.stringify(pillars.pauseWarnings([p]).map(w=>[w.start,w.end])),JSON.stringify([['2026-10-27','2026-10-28']]));
+ assert.equal(pillars.pauseWarnings([makeProject(1,[work])]).length,0);
+ assert.equal(pillars.pauseSlices(work,1,'2026-10-26',5)[0].width,2);
+ assert.equal(pillars.summarizeWeek(p,'2026-10-26','previous'),'2026-10-23 · w：实际完成底图');
+ assert.equal(pillars.summarizeWeek(makeProject(1,[{...work,updates:[]}]),'2026-10-26','previous'),'');
+ assert.equal(pillars.dayAtPointer(100,260,80,'2026-10-26',7),'2026-10-28');
 });

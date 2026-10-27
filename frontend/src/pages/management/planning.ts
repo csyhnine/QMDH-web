@@ -316,7 +316,7 @@ export function ganttData(projects: PlanningProject[], staff: Staff[], start: st
         stageId: stage.id,
         text: escapeHtml(stage.name),
         color: projectTint(project),
-        paused: (stage.pauses || []).some(p => p.start <= today() && (!p.until || p.until > today())),
+        paused: !stage.milestone && stage.assignees.length > 0 && stage.assignees.every(id => isPaused(stage, id, today())),
         deliverable: escapeHtml(stage.deliverable || ""),
         type: stage.milestone ? "milestone" : "task",
         open: true,

@@ -15,7 +15,7 @@ function load(file, overrides = {}, globals = {}) {
 }
 const planning = load('pages/management/planning.ts');
 const calendar = load('pages/management/scheduleCalendar.ts', {'./planning':planning});
-const pillars=load('pages/management/pillarPlanning.ts',{'./planning':planning});
+const pillars=load('pages/management/pillarPlanning.ts',{'./planning':planning},{crypto:require('node:crypto').webcrypto});
 test('affiliation counts active internal and external people separately without guessing unknown identities', () => {
   const staff = [{is_active:true,employment_type:'internal'},{is_active:true,employment_type:'external',employer:'Partner'}, {is_active:true}, {is_active:false,employment_type:'internal'}];
   assert.equal(JSON.stringify(planning.staffCounts(staff)), JSON.stringify({active:3,internal:1,external:1,unknown:1}));
@@ -182,15 +182,40 @@ test('chart adapter preserves inclusive dates, milestones, stable IDs and escape
   const milestone=planning.stageFromGantt({...p.stages[0],milestone:true},{start_date:new Date(2027,0,2),end_date:new Date(2027,0,3),progress:0});
   assert.equal(milestone.start,milestone.end);
 });
-test('community chart blocks parent/archived drags, edits through drawer and disables dependency writes', () => {
-  const listeners={},config={},templates={};let changed,edited;
+test('community chart blocks parent/archived drags and offers quick actions, details and dated delivery insertion', () => {
+  const listeners={},config={},templates={};let changed,edited,stageEdit,quick,delivery;
   const chart={config,templates,i18n:{setLocale(){}},attachEvent:(name,fn)=>{listeners[name]=fn;},init(){},
     getTask:id=>id==='parent'?{projectId:1,readonly:true}:{projectId:1,stageId:'stage',readonly:id==='archived',start_date:new Date(2026,9,16),end_date:new Date(2026,9,18),progress:0.3}};
   const bridge=load('pages/management/ganttBridge.ts',{'./planning':planning});
-  bridge.initializePlanningGantt(chart,{}, {canDrag:()=>true,onChange:(...args)=>changed=args,onEdit:id=>edited=id});
+  bridge.initializePlanningGantt(chart,{}, {canDrag:()=>true,onChange:(...args)=>changed=args,onEdit:id=>edited=id,onStage:(...args)=>stageEdit=args,onQuick:(...args)=>quick=args,onDelivery:(...args)=>delivery=args});
   assert.equal(listeners.onBeforeTaskDrag('parent'),false);assert.equal(listeners.onBeforeTaskDrag('archived'),false);assert.equal(listeners.onBeforeTaskDrag('normal'),true);
   listeners.onAfterTaskDrag('normal');assert.equal(changed[0],1);assert.equal(changed[1],'stage');
-  assert.equal(listeners.onTaskDblClick('normal'),false);assert.equal(edited,1);assert.equal(config.drag_links,false);
+  assert.equal(listeners.onTaskDblClick('normal'),false);assert.equal(stageEdit.join(','),'1,stage');
+  listeners.onTaskDblClick('parent');assert.equal(edited,1);assert.equal(config.drag_links,false);
+  listeners.onTaskClick('normal',{target:{closest:()=>null},clientX:250,clientY:100});assert.equal(quick.join(','),'1,stage,250,100');
+  const row={getAttribute:()=> 'parent'};chart.isTaskExists=()=>true;chart.dateFromPos=x=>{assert.equal(x,300);return new Date(2026,9,28);};
+  const host={querySelector:()=>({getBoundingClientRect:()=>({left:100})})};
+  bridge.initializePlanningGantt(chart,host,{canDrag:()=>true,onChange(){},onEdit(){},onDelivery:(...args)=>delivery=args});
+  listeners.onEmptyClick({target:{closest:()=>row},clientX:400,clientY:250});assert.equal(delivery.join(','),'1,2026-10-28,400,250');
+});
+
+test('quick pause and partial resume preserve other people, surrounding dates, deliverables and deadlines',()=>{
+ const original={...stage('work','2026-10-26','2026-11-03',[1,2]),milestone:false,deliverable:'交付',pauses:[]};
+ const paused=pillars.adjustWorkPause(original,1,'2026-10-30','2026-11-02');
+ assert.equal(paused.pauses[0].until,'2026-11-03');assert.equal(planning.isPaused(paused,1,'2026-11-02'),true);assert.equal(planning.isPaused(paused,2,'2026-11-02'),false);
+ assert.equal(paused.end,original.end);assert.equal(original.pauses.length,0);assert.equal(paused.deliverable,'交付');
+ assert.throws(()=>pillars.adjustWorkPause(paused,1,'2026-11-02','2026-11-03'),/已有暂停/);
+ assert.throws(()=>pillars.adjustWorkPause(original,3,'2026-10-30','2026-11-02'),/参与人员/);
+ assert.throws(()=>pillars.adjustWorkPause(original,1,'2026-10-25','2026-10-30'),/有效时段/);
+ const group={...original,pauses:[{id:'group',start:'2026-10-26',until:null,people:[],reason:'全员暂停'}]};
+ const resumed=pillars.adjustWorkPause(group,1,'2026-10-28','2026-10-30',true);
+ for(const date of ['2026-10-26','2026-10-28','2026-10-30','2026-10-31'])assert.equal(planning.isPaused(resumed,2,date),true);
+ assert.equal(planning.isPaused(resumed,1,'2026-10-27'),true);assert.equal(planning.isPaused(resumed,1,'2026-10-28'),false);assert.equal(planning.isPaused(resumed,1,'2026-10-30'),false);assert.equal(planning.isPaused(resumed,1,'2026-10-31'),true);
+ assert.equal(resumed.pauses.find(p=>p.people.includes(2)).reason,'全员暂停');assert.equal(group.pauses[0].people.length,0);
+ const now=planning.today(),part={...original,start:now,end:now,pauses:[{id:'p',start:now,until:null,people:[1],reason:'支援'}]};
+ assert.equal(planning.ganttData([makeProject(1,[part])],[],now)[1].paused,false);
+ assert.equal(planning.ganttData([makeProject(1,[{...part,assignees:[1]}])],[],now)[1].paused,true);
+ assert.throws(()=>pillars.adjustWorkPause(original,1,'2026-10-28','2026-10-30',true),/没有暂停/);
 });
 
 test('saving several changed projects acknowledges only committed writes and preserves failed/unattempted work', async () => {

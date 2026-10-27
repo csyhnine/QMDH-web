@@ -10,6 +10,27 @@ export type Reassignment = {
   end: string;
   work: string;
 };
+/** Inclusive UI dates; stored pause.until is the first day back at work. */
+export function adjustWorkPause(stage: Stage, person: number, from: string, to: string, resume = false): Stage {
+  if (stage.milestone || !stage.assignees.includes(person)) throw Error("请选择这项工作的参与人员");
+  if (!from || !to || !Number.isFinite(dayNumber(from)) || !Number.isFinite(dayNumber(to)) || from > to || from < stage.start || to > stage.end)
+    throw Error("请选择工作起止日期内的有效时段");
+  const until = addDays(to, 1), pauses = stage.pauses || [];
+  const overlaps = (p: NonNullable<Stage["pauses"]>[number]) => p.start < until && (!p.until || p.until > from) && (!p.people.length || p.people.includes(person));
+  if (!resume && pauses.some(overlaps)) throw Error("所选人员在该时段已有暂停，请先恢复或选择其他日期");
+  if (resume && !pauses.some(overlaps)) throw Error("所选人员在该时段没有暂停");
+  const next = resume ? pauses.flatMap(p => {
+    if (!overlaps(p)) return [p];
+    const pieces: typeof pauses = [];
+    const others = (p.people.length ? p.people : stage.assignees).filter(id => id !== person);
+    if (others.length) pieces.push({ ...p, people: others });
+    if (p.start < from) pieces.push({ ...p, id: crypto.randomUUID(), until: from, people: [person] });
+    if (p.until === null || p.until > until) pieces.push({ ...p, id: crypto.randomUUID(), start: until, people: [person] });
+    return pieces;
+  }) : [...pauses, { id: crypto.randomUUID(), start: from, until, people: [person], reason: "临时中断" }];
+  if (next.length > 100) throw Error("暂停记录已达上限，请缩小恢复时段或先整理记录");
+  return { ...stage, pauses: next };
+}
 export const unattended = (stage: Stage, date: string) =>
   !stage.milestone && stage.assignees.length > 0 && stage.assignees.every((id) => isPaused(stage, id, date));
 export function pauseSlices(stage: Stage, person: number, start: string, days: number) {

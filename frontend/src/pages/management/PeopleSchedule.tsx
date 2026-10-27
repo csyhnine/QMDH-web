@@ -34,8 +34,8 @@ export default function PeopleSchedule({
   period: SchedulePeriod;
   workloadProjects?: PlanningProject[];
   disabled?: boolean;
-  onSelect: (p: PlanningProject, s: Stage, person: number, date: string) => void;
-  onSegment: (p: PlanningProject, s: Stage, person: number, start: string, end: string) => void;
+  onSelect: (p: PlanningProject, s: Stage, person: number, date: string, x: number, y: number) => void;
+  onSegment: (p: PlanningProject, s: Stage, person: number, start: string, end: string, x: number, y: number) => void;
   onAdd: (person: number, date: string) => void;
   onStageDrag: (e: DragEvent, p: PlanningProject, s: Stage, person: number, anchor: string) => void;
   onDragEnd: () => void;
@@ -118,7 +118,7 @@ export default function PeopleSchedule({
         <span>
           {start}—{addDays(start, days - 1)} · {people.length} 人
         </span>
-        <span>{over ? `⚠ ${over} 人的安排需要协调 · ` : ""}在柱上划选日期改派 · ↕ 拖动整项 · 灰白表示暂停</span>
+        <span>{over ? `⚠ ${over} 人的安排需要协调 · ` : ""}点击柱体快捷调整 · 划选一段暂停或改派 · ↕ 拖动整项 · 灰白表示暂停</span>
       </div>
       <div
         className={`mp-people-board mp-calendar-board mp-pillar-board mp-period-${period}`}
@@ -215,7 +215,7 @@ export default function PeopleSchedule({
                       style={{ backgroundColor: projectTint(e.project) }}
                       disabled={disabled}
                       aria-label={`${person.name} ${e.project.name} · ${e.stage.name}`}
-                      title={`${e.project.name} · ${e.stage.name}\n${e.stage.start}—${e.stage.end}\n点击编辑；按住柱体划选日期，改派到其他项目`}
+                      title={`${e.project.name} · ${e.stage.name}\n${e.stage.start}—${e.stage.end}\n点击快捷调整；按住柱体划选日期，暂停或改派到其他项目`}
                       onPointerDown={(event) => {
                         if (event.button !== 0 || disabled || e.stage.milestone) return;
                         suppress.current = false;
@@ -262,6 +262,8 @@ export default function PeopleSchedule({
                             p.person,
                             a < e.stage.start ? e.stage.start : a,
                             b > e.stage.end ? e.stage.end : b,
+                            event.clientX,
+                            event.clientY,
                           );
                         }
                       }}
@@ -271,7 +273,8 @@ export default function PeopleSchedule({
                           return;
                         }
                         const date = event.detail ? dateAt(event.clientY) : addDays(start, e.left);
-                        onSelect(e.project, e.stage, person.id, date);
+                        const box = event.currentTarget.getBoundingClientRect();
+                        onSelect(e.project, e.stage, person.id, date, event.detail ? event.clientX : box.right, event.detail ? event.clientY : box.top);
                       }}
                       onDragOver={!disabled ? onDateDragOver : undefined}
                       onDrop={!disabled ? (event) => onDateDrop(event, person.id, dateAt(event.clientY)) : undefined}

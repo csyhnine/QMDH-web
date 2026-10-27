@@ -246,7 +246,6 @@ export default function ManagementProjectsPage() {
   async function persistSchedule(project: PlanningProject) {
     const saved = await scopedRequest<PlanningProject>(`/projects/${project.id}`, projectPayload(project));
     setProjects((current) => current.map((p) => (p.id === saved.id ? saved : p)));
-    setNotice(`“${saved.name}”的排期已保存`);
     return saved;
   }
   useEffect(() => {
@@ -745,17 +744,19 @@ export default function ManagementProjectsPage() {
                 )}
               </div>
             </div>
-            <PlanningDesk autoSave={autoSave} onBusy={setPlanSaving} onReassign={reassignSchedule} rangeStart={view==="people"?peopleRange.start:start} rangeDays={view==="people"?peopleRange.days:days} request={workRequest} onRequestHandled={() => setWorkRequest(null)} projects={filtered} staff={staff} disabled={planSaving || chartDirty || archive} onPersist={persistSchedule} onDirty={setDeskDirty} />
+            <PlanningDesk autoSave={autoSave} onBusy={setPlanSaving} onProjectPlan={() => changeView("gantt")} onReassign={reassignSchedule} rangeStart={view==="people"?peopleRange.start:start} rangeDays={view==="people"?peopleRange.days:days} request={workRequest} onRequestHandled={() => setWorkRequest(null)} projects={filtered} staff={staff} disabled={planSaving || chartDirty || archive} onPersist={persistSchedule} onDirty={setDeskDirty} />
             {view === "gantt" ? (
               <ProjectPlan
                 key={`${year}-${archive}-${search}-${person}-${statusFilter}-${refresh}`}
                 projects={filtered}
+                workloadProjects={projects}
                 staff={staff}
                 start={start}
                 days={days}
                 archived={archive}
                 onEdit={editProject}
                 onPersist={persistSchedule}
+                onReassign={reassignSchedule}
                 onDirty={setPlanDirty}
                 onBusy={setPlanSaving}
                 autoSave={autoSave}
@@ -772,6 +773,7 @@ export default function ManagementProjectsPage() {
                 period={peoplePeriod}
                 disabled={deskDirty}
                 onOpen={setWorkRequest}
+                onReassign={reassignSchedule}
                 archived={archive}
                 onPersist={persistSchedule}
                 onDirty={setPlanDirty}

@@ -4,6 +4,8 @@ export type ChartCallbacks = {
   canDrag: () => boolean;
   onEdit: (projectId: number) => void;
   onStage?: (projectId: number, stageId?: string) => void;
+  onQuick?: (projectId: number, stageId: string, x: number, y: number) => void;
+  onDelivery?: (projectId: number, date: string, x: number, y: number) => void;
   onChange: (projectId: number, stageId: string, task: { start_date: Date; end_date: Date; progress: number }) => void;
 };
 export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, callbacks: ChartCallbacks) {
@@ -16,7 +18,7 @@ export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, c
     row_height: 46,
     bar_height: 26,
     scale_height: 60,
-    grid_width: 720,
+    grid_width: 760,
     min_column_width: 34,
     drag_links: false,
     drag_progress: false,
@@ -32,7 +34,9 @@ export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, c
       { name: "text", label: "项目 / 设计阶段", tree: true, width: 245, resize: true },
       { name: "people", label: "参与人员", width: 140, template: (task: any) => task.people || "未安排" },
       { name: "dates", label: "起止日期（含结束日）", width: 170, template: (task: any) => task.dates || "待排期" },
-      { name: "actions", label: "操作", width: 90, template: (task: any) => `<button type="button" class="mp-gantt-action" data-project="${Number(task.projectId)}" data-stage="${task.stageId ? encodeURIComponent(task.stageId) : ""}">${task.stageId ? "编辑工作" : "＋ 添加工作"}</button>` },
+      { name: "actions", label: "操作", width: 130, template: (task: any) => task.stageId
+        ? '<button type="button" class="mp-gantt-action">详细编辑</button>'
+        : '<button type="button" class="mp-gantt-action">＋ 工作</button> <button type="button" class="mp-gantt-delivery">◆ 节点</button>' },
       {
         name: "progress",
         label: "进度",
@@ -42,14 +46,30 @@ export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, c
     ],
   });
   gantt.templates.task_text = (_start, _end, task) => task.text;
-  gantt.templates.rightside_text = (_start, _end, task) => task.people || "";
+  gantt.templates.rightside_text = (_start, _end, task) => task.type === "milestone"
+    ? `${task.text}${task.deliverable ? ` · ${task.deliverable}` : ""}` : `${task.paused ? "⚠ 工作暂停 · " : ""}${task.people || ""}`;
+  const insertAtPointer = (e: Event) => {
+    const row = (e.target as HTMLElement | null)?.closest(".gantt_task_row");
+    if (!row || !callbacks.canDrag()) return false;
+    const id = row.getAttribute(gantt.config.task_attribute), data = host.querySelector(".gantt_data_area");
+    if (!id || !gantt.isTaskExists(id) || !data) return false;
+    const mouse = e as MouseEvent, date = gantt.dateFromPos(mouse.clientX - data.getBoundingClientRect().left);
+    if (!date) return false;
+    callbacks.onDelivery?.(gantt.getTask(id).projectId, dateInput(date), mouse.clientX, mouse.clientY);
+    return true;
+  };
   gantt.attachEvent("onTaskClick", (id, e) => {
+    if (e && insertAtPointer(e)) return false;
     const action = (e?.target as HTMLElement | undefined)?.closest(".mp-gantt-action");
     const task = gantt.getTask(id);
+    const delivery = (e?.target as HTMLElement | undefined)?.closest(".mp-gantt-delivery");
+    const mouse = e as MouseEvent;
+    if (delivery) { callbacks.onDelivery?.(task.projectId, dateInput(task.start_date || new Date()), mouse.clientX, mouse.clientY); return false; }
     if (action) { callbacks.onStage?.(task.projectId, task.stageId); return false; }
-    if (task.stageId) callbacks.onStage?.(task.projectId, task.stageId);
+    if (task.stageId) callbacks.onQuick?.(task.projectId, task.stageId, mouse.clientX, mouse.clientY);
     return true;
   });
+  gantt.attachEvent("onEmptyClick", insertAtPointer);
   gantt.templates.task_class = (_start, _end, task) =>
     task.paused ? "mp-chart-paused" : task.unscheduled
       ? "mp-chart-unscheduled"
@@ -73,7 +93,9 @@ export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, c
       });
   });
   gantt.attachEvent("onTaskDblClick", (id) => {
-    callbacks.onEdit(gantt.getTask(id).projectId);
+    const task = gantt.getTask(id);
+    if (task.stageId) callbacks.onStage?.(task.projectId, task.stageId);
+    else callbacks.onEdit(task.projectId);
     return false;
   });
   gantt.init(host);

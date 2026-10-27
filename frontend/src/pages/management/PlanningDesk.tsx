@@ -26,6 +26,7 @@ export default function PlanningDesk({
   rangeStart = today(),
   rangeDays = 7,
   onReassign,
+  onProjectPlan,
 }: {
   projects: PlanningProject[];
   staff: Staff[];
@@ -39,6 +40,7 @@ export default function PlanningDesk({
   rangeStart?: string;
   rangeDays?: number;
   onReassign: (r: Reassignment) => Promise<void>;
+  onProjectPlan: () => void;
 }) {
   const [selected, setSelected] = useState(0),
     [open, setOpen] = useState(false),
@@ -167,7 +169,7 @@ export default function PlanningDesk({
     <section className="mp-planning-desk">
       <div className="mp-desk-heading">
         <button disabled={briefDirty || briefBusy} aria-expanded={open} onClick={() => setOpen(!open)}>
-          关键总览 · 上周推进 / 下周安排 / 交付节点 {open ? "收起 ▴" : "展开 ▾"}
+          关键总览 · 上周推进 / 下周安排 {open ? "收起 ▴" : "展开 ▾"}
         </button>
         <select
           aria-label="关键总览项目"
@@ -221,12 +223,12 @@ export default function PlanningDesk({
               {project.stages
                 .filter((s) => s.milestone)
                 .map((s) => (
-                  <button key={s.id} disabled={disabled || briefDirty} onClick={() => begin(project, s)}>
+                  <p key={s.id}>
                     ◆ {s.start} · {s.name} · {s.deliverable || "交付物待填写"}
-                  </button>
+                  </p>
                 ))}
-              <button disabled={disabled || briefDirty} onClick={() => begin(project)}>
-                ＋ 添加交付节点
+              <button disabled={disabled || briefDirty} onClick={onProjectPlan}>
+                前往项目计划编辑交付节点
               </button>
             </article>
             <article>

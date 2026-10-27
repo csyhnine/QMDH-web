@@ -2099,3 +2099,24 @@
 .mp-confirm-actions button {font:inherit;cursor:pointer;min-width:76px;padding:9px 16px;border:1px solid #dce4ef;border-radius:8px;background:#fff;color:#425472;}
 .mp-confirm-actions .mp-confirm-accept {background:#4169df;border-color:#4169df;color:#fff;}
 .mp-confirm-actions button:focus-visible {outline:3px solid #bdcdfa;outline-offset:2px;}
+
+/* Small contextual actions shared by the personnel board and project Gantt. */
+.mp-quick-layer {position:fixed;inset:0;z-index:2200;background:#172a4614;}
+.mp-quick-panel {position:fixed;width:min(368px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;box-sizing:border-box;border:1px solid #dbe3ef;border-radius:12px;padding:16px;background:#fff;box-shadow:0 12px 45px #18305040;color:#26364c;font-family:inherit;font-size:13px;line-height:1.5;}
+.mp-quick-panel header,.mp-quick-panel footer {display:flex;justify-content:space-between;gap:10px;align-items:center;}
+.mp-quick-panel header>strong {font-size:15px;}.mp-quick-panel header>button {padding:2px 8px;font-size:18px;}
+.mp-quick-panel fieldset {border:0;margin:0;padding:0;display:grid;gap:10px;min-width:0;}
+.mp-quick-panel label {display:grid;gap:4px;min-width:0;color:#52637b;font-size:12px;}
+.mp-quick-panel input,.mp-quick-panel select {box-sizing:border-box;width:100%;min-width:0;padding:7px 8px;border:1px solid #d7e0ec;border-radius:6px;background:#fff;color:#26364c;font:inherit;}
+.mp-quick-panel button {padding:7px 10px;border:1px solid #d6e0ee;border-radius:6px;background:#fff;color:#3a5484;font:inherit;cursor:pointer;}
+.mp-quick-panel button:disabled {opacity:.5;cursor:default;}.mp-quick-panel button.mp-primary {background:#4169df;border-color:#4169df;color:#fff;}
+.mp-quick-panel :focus-visible {outline:2px solid #8eacf8;outline-offset:2px;}
+.mp-quick-context {margin:12px 0;overflow-wrap:anywhere;}.mp-quick-context span {display:block;color:#7b889b;font-size:12px;}
+.mp-quick-dates {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.mp-quick-buttons {display:flex;gap:8px;}.mp-quick-buttons button {flex:1;}
+.mp-quick-panel .mp-date-field {display:flex;gap:3px;}.mp-quick-panel .mp-date-field>details {display:none;}
+.mp-quick-panel .mp-date-field>input::-webkit-calendar-picker-indicator {display:block;cursor:pointer;}
+.mp-quick-panel fieldset small {color:#8591a2;font-size:11px;line-height:1.6;}
+.mp-quick-panel footer {margin-top:12px;padding-top:10px;border-top:1px solid #edf0f5;font-size:11px;color:#7a889c;}
+.mp-quick-error {padding:8px;background:#fff2f1;color:#af3434;border-radius:6px;}
+.management-page .mp-gantt-delivery {padding:3px 5px;font-size:11px;color:#93621f;}

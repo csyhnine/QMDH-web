@@ -5,6 +5,8 @@ import { changePeoplePlan, type PeopleChange } from "./staffPlanning";
 import type { WorkRequest } from "./PlanningDesk";
 import type { SchedulePeriod } from "./scheduleCalendar";
 import usePlanningAutoSave from "./usePlanningAutoSave";
+import QuickWorkActions, { type QuickWork } from "./QuickWorkActions";
+import type { Reassignment } from "./pillarPlanning";
 
 type DragItem = { projectId: number; stageId: string; personId: number; anchor: string };
 export default function PeoplePlanner({
@@ -19,6 +21,7 @@ export default function PeoplePlanner({
   disabled = false,
   onOpen,
   onPersist,
+  onReassign,
   onDirty,
   onBusy,
   autoSave = true,
@@ -34,11 +37,13 @@ export default function PeoplePlanner({
   disabled?: boolean;
   onOpen: (request: WorkRequest) => void;
   onPersist: (p: PlanningProject) => Promise<PlanningProject>;
+  onReassign: (r: Reassignment) => Promise<void>;
   onDirty: (v: boolean) => void;
   onBusy: (v: boolean) => void;
   autoSave?: boolean;
 }) {
   const [pending, setPending] = useState<Record<number, PlanningProject>>({});
+  const [quick, setQuick] = useState<QuickWork | null>(null), [quickBusy, setQuickBusy] = useState(false);
   const [autoFailed, setAutoFailed] = useState(false),
     [saving, setSaving] = useState(false),
     [message, setMessage] = useState("");
@@ -49,7 +54,7 @@ export default function PeoplePlanner({
   const preview = projects.map((p) => pending[p.id!] || p),
     allPreview = workloadProjects.map((p) => pending[p.id!] || p);
   const changed = Object.keys(pending).length,
-    blocked = archived || saving || disabled;
+    blocked = archived || saving || disabled || quickBusy;
   const names = (ids: number[]) =>
     ids.map((id) => staff.find((s) => s.id === id)?.name || `#${id}`).join("、") || "未安排";
   useEffect(() => {
@@ -59,13 +64,13 @@ export default function PeoplePlanner({
     };
   }, []);
   useEffect(() => {
-    onDirty(changed > 0);
+    onDirty(changed > 0 || Boolean(quick));
     return () => onDirty(false);
-  }, [changed, onDirty]);
+  }, [changed, Boolean(quick), onDirty]);
   useEffect(() => {
-    onBusy(saving);
+    onBusy(saving || quickBusy);
     return () => onBusy(false);
-  }, [saving, onBusy]);
+  }, [saving, quickBusy, onBusy]);
   function write(next: Record<number, PlanningProject>) {
     edits.current = next;
     if (mounted.current) setPending(next);
@@ -81,7 +86,7 @@ export default function PeoplePlanner({
       if (JSON.stringify(next) === JSON.stringify(projects.find((p) => p.id === id))) delete updated[id];
       write(updated);
       setAutoFailed(false);
-      setMessage(autoSave ? "调整已预览，稍后自动保存…" : "调整已预览，确认后点击“保存人员与排期”。");
+      setMessage(autoSave ? "" : "调整已预览，确认后点击“保存人员与排期”。");
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "调整失败，请重试。");
     }
@@ -103,7 +108,7 @@ export default function PeoplePlanner({
       setMessage(
         failure
           ? `${failure instanceof Error ? failure.message : "保存失败"}。未保存调整仍保留；版本冲突时请先复制下方调整记录。`
-          : "人员与排期已保存。",
+          : "",
       );
     }
   }
@@ -125,9 +130,13 @@ export default function PeoplePlanner({
     event.dataTransfer.setData("application/x-qmdh-people-plan", "stage");
     event.dataTransfer.effectAllowed = "move";
   }
+  function openQuick(request: QuickWork) {
+    if (changed || lock.current) { setMessage("请等待当前调整保存；保存失败时可重试。"); return; }
+    if (!blocked) setQuick(request);
+  }
   return (
     <div className="mp-people-workspace mp-compact">
-      {changed > 0 && (
+      {changed > 0 && (!autoSave || autoFailed) && (
         <div className="mp-pending" role="status">
           <div>
             <strong>{changed} 个项目待保存</strong>
@@ -160,7 +169,7 @@ export default function PeoplePlanner({
             </span>
           ))}
         </div>
-        <small>点击空白格添加 · 划选柱体改派一段 · ↕ 拖动整项</small>
+        <small>点击柱体快捷调整 · 划选一段暂停或支援 · ↕ 拖动整项</small>
       </div>
       <PeopleSchedule
         projects={preview}
@@ -170,8 +179,8 @@ export default function PeoplePlanner({
         days={days}
         period={period}
         disabled={blocked}
-        onSelect={(p, s, personId, date) => open({ projectId: p.id, stageId: s.id, personId, date })}
-        onSegment={(p,s,personId,date,end)=>open({projectId:p.id,stageId:s.id,personId,date,end,intent:"segment"})}
+        onSelect={(p, s, personId, date, x, y) => openQuick({ projectId: p.id!, stageId: s.id, personId, date, x, y })}
+        onSegment={(p,s,personId,date,end,x,y)=>openQuick({projectId:p.id!,stageId:s.id,personId,date,end,x,y})}
         onAdd={(personId, date) => open({ personId, date })}
         onStageDrag={(event, p, s, personId, anchor) =>
           begin(event, { projectId: p.id!, stageId: s.id, personId, anchor })
@@ -199,7 +208,9 @@ export default function PeoplePlanner({
             });
         }}
       />
-      {changed > 0 && (
+      {quick && <QuickWorkActions key={`${quick.projectId}:${quick.stageId}:${quick.date}:${quick.end}`} request={quick} projects={workloadProjects} staff={staff} disabled={archived || disabled || saving}
+        onPersist={onPersist} onReassign={onReassign} onBusy={setQuickBusy} onClose={() => setQuick(null)} onDetails={() => { setQuick(null); onDirty(false); open({ projectId: quick.projectId, stageId: quick.stageId, personId: quick.personId, date: quick.date }); }} />}
+      {changed > 0 && (!autoSave || autoFailed) && (
         <details className="mp-change-list">
           <summary>未保存调整 · 冲突时可复制保留</summary>
           {Object.values(pending).map((p) => (

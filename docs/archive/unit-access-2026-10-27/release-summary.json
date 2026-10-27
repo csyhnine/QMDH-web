@@ -1,0 +1,86 @@
+{
+  "source_commit": "c45fd00235bf508d05be07a58400aeb22d753553",
+  "frontend_sha256": "a65ce71a27ff4cb82ded0c1615d6d5df30ce6722ddb2fc5cc6fbf2acc38e635c",
+  "frontend_file_count": 52,
+  "expected_frontend_image": "sha256:967cdf8608faf4128632b265fa6f0b842e100087c2142e3c21429217d15a3145",
+  "database_media_recovery_baseline": null,
+  "new_database_snapshot_created": true,
+  "previous_router_sha256": "b559d8e5b3e66bede5753305a4e8b5e734549ea19723e07f4b1ceaec67a72c9b",
+  "router_sha256": "7ff6a5cda83dbd5e6894d0d6f02af7250b1dbc74a6df50b4699d4d89000b4f9b",
+  "expected_backend_image": "sha256:6b971be9ea3b9af79a446226f1c46d03652a5cf6b689f4dfccf045ff9586e7a1",
+  "media_recovery_baseline": "/www/backup/qmdh-release-20261027-pillars",
+  "status": "DEPLOYED_VERIFIED",
+  "frontend_image": "sha256:69e51190c586f0a7de422f8a26b6cdfd7c69bc460dca922a7492357649e02cc9",
+  "backend_image": "sha256:dad05b8dc0474e3f7996c87ec0a51442410c4c663b6fdb748931d595707a4894",
+  "backend_changed": true,
+  "worker_unchanged": true,
+  "unrelated_containers_unchanged": true,
+  "frontend_files_checked": 52,
+  "public_assets": [
+    {
+      "file": "index.html",
+      "sha256": "b0aa62dcbec445e413118a005f18e4580d5f6d065e35b8bb0735336ebc400401"
+    },
+    {
+      "file": "assets/ManagementProjectsPage-CiA-aAkh.css",
+      "sha256": "64c7340f26bcc159280b9dcd5280348f8f081bcb8c42a6ec295a86fe481bf3d5"
+    },
+    {
+      "file": "assets/ManagementProjectsPage-kOucemAb.js",
+      "sha256": "de86a1cf54b304e662fb32cbfe71b425b16ffa79a9bc7a19dd1c38332d3c7218"
+    },
+    {
+      "file": "assets/OtherToolsPage-CUCey6zn.js",
+      "sha256": "3d641ff13863e6d6c6321027c1b502318cce243d65e46d812651c63c695c08e0"
+    },
+    {
+      "file": "assets/OtherToolsPage-CRy8uIVh.css",
+      "sha256": "53a81fd3916a8ca46ab61eee0dd57f8da9cd3c077882e9a45aa3deb0764941b3"
+    },
+    {
+      "file": "assets/GeneratePage-D-xJ1U-d.css",
+      "sha256": "2f2d2ec947020a4d0695762b6f148d6ea6d6915a21611d559977cdd9f99165b0"
+    },
+    {
+      "file": "assets/GeneratePage-RMyYUfWr.js",
+      "sha256": "9646fee01cfc986539a4ce84559f9c9bf3e3085f306b423a95fc57fb12475b84"
+    },
+    {
+      "file": "assets/reportWorkbook-CJyqogxR.js",
+      "sha256": "1742a60a65170de38b4e77ab5b33f91cc5fe1d4abcc8f5915dcb8013c185ea17"
+    },
+    {
+      "file": "assets/index-Tkq2BHAJ.css",
+      "sha256": "5fe74b63a21e9d7f6f33a021efa98176e50ee820228165c68fff9ec429ef1d10"
+    },
+    {
+      "file": "assets/index-B6fB71jR.js",
+      "sha256": "27ac0f488ec61b3655df18680ce530f991e2f932963d6365fc78bb571417ef54"
+    }
+  ],
+  "migration_executed": false,
+  "business_data_written": false,
+  "public_routes_checked": 9,
+  "qwen_reference_counts": [
+    1,
+    2
+  ],
+  "migration": "b94de295f179",
+  "workflow_hashes_preserved": true,
+  "compose_files": [
+    "/www/wwwroot/qmdh-web/docker-compose.yml",
+    "/opt/qmdh-frp/compose.frp.yml",
+    "/opt/qmdh-frp/releases/unit-access-20261027/compose.release.yml"
+  ],
+  "workflow_root_preserved": "/opt/qmdh-frp/releases/management-categories-20261026/workflows",
+  "disk_free_GiB": 8.02132797241211,
+  "paired_backup_files_verified": 28,
+  "backend_target_tests_passed": 22,
+  "frontend_tests_passed": 20,
+  "target_type_files": 13,
+  "new_type_diagnostics": 0,
+  "browser_scenarios_passed": 3,
+  "running_guarded_routes_verified": 18,
+  "account_grants_unchanged": true,
+  "independent_acceptance": "PENDING"
+}

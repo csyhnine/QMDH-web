@@ -1,4 +1,4 @@
-2026-10-27当前基线：前端源码a9becdf/镜像967cdf8608fa，backend6b971be9ea3b、三worker fa3f8984f8a4，迁移b94de295f179。生效第三Compose为`/opt/qmdh-frp/releases/calendar-week-20261027/compose.release.yml`，Qwen模板挂载仍依赖`management-categories-20261026/workflows`。最新前端配对备份26文件，DB/媒体继承pillars完整数据基线，不是新快照。详细接手、容量/恢复链与限制见[2026-10-27开发交接](handoff-management-2026-10-27.md)。服务器旧Git不能直接pull重建。
+2026-10-27当前基线：前端源码c45fd00/镜像69e51190c586，backend dad05b8dc047、三worker fa3f8984f8a4，迁移b94de295f179。生效第三Compose为`/opt/qmdh-frp/releases/unit-access-20261027/compose.release.yml`，Qwen模板挂载仍依赖`management-categories-20261026/workflows`。最新配对备份28文件：停止前后端后创建独立新DB快照，媒体清单不变并复用pillars链/本机基础包；三worker未重启。详细接手、容量/恢复链与限制见[2026-10-27开发交接](handoff-management-2026-10-27.md)。服务器旧Git不能直接pull重建。
 
 以下为历史发布条目；当前版本与路径以上述入口及新交接为准，不按旧段落执行。
 

@@ -2,10 +2,10 @@
 
 ## 冷启动先读
 
-这是当前接手入口，覆盖旧交接里的版本号、Compose路径、人员数量和页面设计。先读本文件，再按具体新需求读对应代码；不要重审全项目或原样重跑历史部署脚本。当前用户明确提出的交付物选填、项目按周与统一日历（此前快捷调整等保持）均已提交、推送并部署，等待后续新需求，不重复部署。
+这是当前接手入口，覆盖旧交接里的版本号、Compose路径、人员数量和页面设计。先读本文件，再按具体新需求读对应代码；不要重审全项目或原样重跑历史部署脚本。当前用户明确提出的规范分院名称与分院权限核验，以及此前日历/周计划/快捷调整均已提交、推送并部署，等待后续新需求，不重复部署。
 
 - 仓库：`E:/projects/QMDH-web`；分支：`bugfix/migration-bootstrap-001`；origin：`https://github.com/csyhnine/QMDH-web.git`。
-- 实际最新前端源码：`a9becdfe10fba23f755304510fc1bb84ec1c90e5`；后端/worker功能源码：`55340d752cbe01058417156014abfa50b40af26c`。交接/发布文档会另提交，文档SHA不等于运行源码。
+- 实际最新前端/后端源码：`c45fd00235bf508d05be07a58400aeb22d753553`（后端只改分院label）；worker功能源码：`55340d752cbe01058417156014abfa50b40af26c`。交接/发布文档会另提交，文档SHA不等于运行源码。
 - 草稿PR：[#5](https://github.com/csyhnine/QMDH-web/pull/5)，已更新，不合并main。
 - 不创建新分支/新worktree，不委派；不reset/clean/force/stash，不执行`git add .`。提交用明确白名单。后续用户明确提出开发后可沿用已有提交、推送和验证后部署授权，不重复索要同一授权。
 - `docs/checks.md`、`docs/plan.md`、`docs/review.md`是本轮之前已有的未提交内容，本轮未覆盖、未提交。已另存原文、补丁、SHA及status到被忽略的`local/handoff-management-20261027-confirm/`。大量既有未跟踪`docs/archive/*`和`scripts/_tmp_*`也保留，不一起加入Git，不清理。
@@ -25,7 +25,8 @@
 10. 页面内关闭/删除/切换/覆盖确认都在整个视口正中央，不用`window.confirm`。浏览器关闭/刷新整个标签页的beforeunload系统提示不能由网页定位，已保留并向用户说明。
 11. 人员/甘特排期自动保存开启时，不显示待保存横条/调整清单/保存成功提示；失败或关闭自动保存时仍保留手动保存和调整记录。
 12. 管理页面所有日期统一用PlanningDate自定义日历，快捷卡片也一样；顶层popover避开裁切，Escape先关日历，选填可清空，今天也遵守min/max。
-13. 左侧Studio入口已归并：灵感、反馈、导航归其他；无限画布归生成，原URL与鉴权保留。Qwen图像编辑按1/2张输入调用固定v1.1工作流，不退回旧v1.0参数。
+13. 界面/API仅用规范分院名称，不加历史括注。仅在用个人账号+company_management+admin可显式跨院；其他院管理者只能本院，直接unit参数/其他院项目及快照ID均被后端拦截。最新18路由与权限聚合只读核验保持，未扩大授权。
+14. 左侧Studio入口已归并：灵感、反馈、导航归其他；无限画布归生成，原URL与鉴权保留。Qwen图像编辑按1/2张输入调用固定v1.1工作流，不退回旧v1.0参数。
 
 ## 代码导航
 
@@ -70,15 +71,15 @@
 
 | 服务 | 当前镜像 |
 | --- | --- |
-| backend | `sha256:6b971be9ea3b9af79a446226f1c46d03652a5cf6b689f4dfccf045ff9586e7a1` |
+| backend | `sha256:dad05b8dc0474e3f7996c87ec0a51442410c4c663b6fdb748931d595707a4894` |
 | worker ×3 | `sha256:fa3f8984f8a464343a89628ba937813163a94200b052257cbebdc00ce2f41793` |
-| frontend | `sha256:967cdf8608faf4128632b265fa6f0b842e100087c2142e3c21429217d15a3145` |
+| frontend | `sha256:69e51190c586f0a7de422f8a26b6cdfd7c69bc460dca922a7492357649e02cc9` |
 
 生效Compose三件套：
 
 1. `/www/wwwroot/qmdh-web/docker-compose.yml`
 2. `/opt/qmdh-frp/compose.frp.yml`
-3. `/opt/qmdh-frp/releases/calendar-week-20261027/compose.release.yml`
+3. `/opt/qmdh-frp/releases/unit-access-20261027/compose.release.yml`
 
 **模板挂载源仍是**`/opt/qmdh-frp/releases/management-categories-20261026/workflows` → `/app/integration/comfyui:ro`，8文件，不要因为目录旧而删除。保留env/key、媒体、FRP网络、ODA/FFmpeg/Xvfb等挂载与依赖。
 
@@ -86,29 +87,30 @@
 
 SSH只从被忽略的`local/server-access.md`在内存中读取；不输出凭据，不提交。现成runner固定校验`docs/archive/server-readonly-2026-10-25/server-metadata.json`中SSH指纹。
 
-最新统一日历/周计划轮：52个当前前端文件逐字节、10公网资源、9路由、健康、Qwen输入数[1,2]、未登录管理鉴权通过；只换前端，其余容器未重启，无测试安排写入。旧hash资源保留，静态包不按容器内全部资源数断言。
+最新规范名称/分院核验轮：52个当前前端文件逐字节、10公网资源、9路由、健康、Qwen输入数[1,2]、未登录管理鉴权通过；替换前后端（后端只改名称），三worker及其他容器未重启，无测试安排写入。旧hash资源保留，静态包不按容器内全部资源数断言。
 
 ## 备份、容量与发布脚本
 
-最新前端回滚/配置配对备份：
+最新前后端回滚/配置/数据配对备份：
 
-- 服务器`/www/backup/qmdh-release-20261027-calendar-week`
-- 本机`E:/backups/QMDH-web/release-20261027-calendar-week`
-- 26文件SHA一致。**DB/媒体继承pillars轮不可变恢复基线，是硬链接复用，不是新数据库快照。**前端回滚不降级数据库。
+- 服务器`/www/backup/qmdh-release-20261027-unit-access`
+- 本机`E:/backups/QMDH-web/release-20261027-unit-access`
+- 28文件SHA一致。**本轮在前后端暂停、队列空闲后创建独立新DB快照，非硬链接旧dump；媒体清单与pillars链一致，继续复用旧媒体恢复链和本机基础包。**回滚不降迁移或覆盖新业务数据。
 
-最近完整数据基线：
+此前完整数据/媒体链基线（新数据库快照以上述unit-access轮为准）：
 
 - `/www/backup/qmdh-release-20261027-pillars`
 - `E:/backups/QMDH-web/release-20261027-pillars`
 - 28个列入checksums文件一致；另留本机`database-before-pause.dump`，其私有SHA已核验。5849媒体、37归档恢复链仍依赖本机两基础包；按`resolved-media-chain.json`和本机基础连续性记录查找，不把服务器小增量误当完整媒体备份。
 
-上次盘余8.223GiB；这是时点值，后续发布前复测8GiB门槛、内存及任务/队列/GPU锁/上游队列。只可处理本任务能证明有镜像/本机原包/配对备份的临时构建副本，不清理业务媒体、正式备份、工作流或回滚镜像。几个旧release的html/verified-html、源码bundle/前端tar临时副本已退役，不能原样重跑依赖它们的旧verify脚本后误判生产坏了。
+上次盘余8.021GiB；这是时点值，后续发布前复测8GiB门槛、内存及任务/队列/GPU锁/上游队列。只可处理本任务能证明有镜像/本机原包/配对备份的临时构建副本，不清理业务媒体、正式备份、工作流或回滚镜像。几个旧release的html/verified-html、源码bundle/前端tar临时副本已退役，不能原样重跑依赖它们的旧verify脚本后误判生产坏了。
 
 本次pillars发布第一次因备份后新增媒体而自动恢复旧服务，补备份后重发成功；以后遇到清单变化也必须补增量后再切换，不能跳过断言。停止服务后最终DB备份没有在服务器再复制一份大dump，初始dump先留本机，避免磁盘门槛溢出。
 
 私有脚本与产物均在被忽略的local：
 
-- `local/calendar_runner.py`、`calendar_backup.py`、`calendar_deploy.py`：最新日历/周计划纯前端轮，读取`local/calendar-week-20261027/`；数据继承pillars基线，不用于后端/迁移发布完整备份。
+- `local/unit_runner.py`、`unit_backup.py`、`unit_deploy.py`：最新规范名称轮，读取`local/unit-access-20261027/`；仅覆盖backend的management.py和前端，保持worker。切换中停止前后端、借worker再次只读查空队列、创建独立dump、核媒体不变后启新服务，失败退镜像不还原业务库。
+- `local/calendar_runner.py`、`calendar_backup.py`、`calendar_deploy.py`：此前日历/周计划纯前端轮，读取`local/calendar-week-20261027/`；数据继承pillars基线，不用于后端/迁移发布完整备份。
 - `local/quick_runner.py`、`quick_backup.py`、`quick_deploy.py`：此前快捷调整纯前端轮，读取`local/quick-actions-20261027/`，同样只继承数据恢复基线；不能用于后端/迁移发布完整备份。
 - `local/confirm_runner.py`、`confirm_backup.py`、`confirm_deploy.py`：此前确认框前端轮，读取`local/center-confirm-20261027/`。本轮backup逻辑是继承数据基线，仅适用于纯前端；不能拿它当后端/迁移发布完整备份。
 - `local/pillar_runner.py`、`pillar_backup.py`、`pillar_prepare_dir.py`、`pillar_build.py`、`pillar_smoke.py`、`pillar_accept.py`、`pillar_prepare.py`、`pillar_switch.py`、`pillar_verify.py`：最近后端+三worker+前端轮，读取`local/pillars-20261027/`。
@@ -127,11 +129,13 @@ node --test scripts/test-management.mjs
 
 # cwd E:/projects/QMDH-web/backend
 .venv/Scripts/python.exe -m pytest tests/test_management.py tests/test_management_categories.py tests/test_management_affiliation.py tests/test_management_reporting.py tests/test_management_simple.py tests/test_management_pillars.py -q --disable-warnings
-# 最近36项通过；最后纯前端轮没有重复后端
+# 此为此前36项范围。最新名称/权限轮仅跑categories、reporting、pillars及个人登录撤权用例，共22项通过；不扩大到全套。
 
 # cwd E:/projects/QMDH-web
 node local/quick-types.mjs
 # 13个目标文件strict诊断零新增；不是整仓typecheck通过
+node local/unit-access-20261027/browser.mjs
+# 3新场景：旧label也显示规范名称、管理员切院请求作用域、院管理者仅本院
 node local/calendar-week-20261027/browser.mjs
 # 7新场景：空交付物、自然周/跨年/重挂载、周内节点、日历上下界/焦点/Escape、闰年月历/受限今天、视窗/立项/台账日历、手机
 node local/calendar-week-20261027/regression.mjs
@@ -148,6 +152,7 @@ node local/pillars-20261027/browser.mjs
 
 最新正式证据与说明：
 
+- `docs/unit-access-2026-10-27.md`、`docs/archive/unit-access-2026-10-27/`
 - `docs/calendar-week-2026-10-27.md`、`docs/archive/calendar-week-2026-10-27/`
 - `docs/quick-actions-2026-10-27.md`、`docs/archive/quick-actions-2026-10-27/`
 - `docs/center-confirm-2026-10-27.md`、`docs/archive/center-confirm-2026-10-27/`

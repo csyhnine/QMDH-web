@@ -10,4 +10,8 @@
 
 代码：PeopleSchedule呈现，usePillarResize持有本地预览/指针捕获/取消/自动滚动，staffPlanning.resizeWorkEndpoint只修改指定端点，PeoplePlanner仍复用项目CAS保存。证据：`docs/archive/pillar-resize-2026-10-28/`。私有测试/截图/候选：ignored 的 `local/pillar-resize-20261028/`；一次性发布脚本：`local/pillar_resize_runner.py`、`pillar_resize_preflight.py`、`pillar_resize_backup.py`、`pillar_resize_deploy.py`。本轮只改前端，不创建分支/worktree，不委派，保留既有WIP与冻结状态。
 
-发布前核对前端e678de9b906f、后端dad05b8dc047、三worker fa3f8984f8a4、迁移b94de295f179、配置/8工作流/恢复基线，任务/派发/Redis/上游队列与GPU锁为空，盘余约8.332GiB。无清理；部署结果随后补入。
+发布前核对前端e678de9b906f、后端dad05b8dc047、三worker fa3f8984f8a4、迁移b94de295f179、配置/8工作流/恢复基线，任务/派发/Redis/上游队列与GPU锁为空，盘余约8.332GiB。无清理；部署情况见下。
+
+2026-10-28 已部署前端源码 `98c5735741addb62bbfe40ba9a99b4583c5c3e36`，镜像 `2ebc0b0b4992`。52文件逐字节、10公网资源、25页面地址、健康、Qwen输入数[1,2]及管理鉴权通过，旧hash资源保留。后端、三worker及其他容器ID/启动时间和env/挂载/网络/8工作流保持，无迁移或生产测试写入。
+
+生效第三Compose：`/opt/qmdh-frp/releases/pillar-resize-20261028/compose.release.yml`；服务器 `/www/backup/qmdh-release-20261028-pillar-resize` ↔ 本机 `E:/backups/QMDH-web/release-20261028-pillar-resize` 的26文件SHA一致。DB/媒体硬链接经work-card-close→personnel-zoom→navigation-fixed继承unit-access独立恢复基线，非本轮新快照；回滚只切前端，不覆盖新业务数据。发布后盘余约8.311GiB，仍须后续复测8GiB门槛。本轮无清理。

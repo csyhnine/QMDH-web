@@ -1,21 +1,21 @@
 # 新对话开发交接：项目管理（2026-10-27）
 
-## 2026-10-28 工作卡片保存关闭与删除泳道已发布（优先阅读）
+## 2026-10-28 人员泳道独立端点拖拽已发布（优先阅读）
 
-前端源码 `1528a445c61f8b52847193032ba8869fb11690db` 已上线，镜像 `e678de9b906f`。工作卡片页头相邻“不保存关闭”与蓝色“保存关闭”；前者明确放弃直接关闭，不二次确认。点击卡片外遮罩空白使用同一表单requestSubmit保存成功后关闭；卡片内/日历操作不误提交。必填/日期/trim名称校验、保存失败/冲突均保留卡片输入，忙碌锁防重复保存或关闭。人员/甘特共用快捷卡片增加“删除泳道”（节点为“删除交付节点”），站内中央确认明确删除整项工作及所有参与者泳道，按当前项目版本仅移除该stage；取消不写，失败保留选择可重试。
+前端源码 `98c5735741addb62bbfe40ba9a99b4583c5c3e36` 已上线，镜像 `2ebc0b0b4992`。原顶部整项拖动现拆为上下端分别改开始/结束，另一端固定，最短一天；单独 ⠿ 手柄保留整项平移/人员转交。Pointer Capture按日实时预览，同步共享工作的所有人员泳道；日期浮签、阴影/高亮、松手落点反馈，Esc/取消/失焦撤销，边缘自动滚动，方向键/Shift按天/周改端点。只在松手后应用并进入原CAS自动保存，拖动中暂停保存；失败保留本地调整可重试/撤销。裁切的真实端点不在视窗时不显示该端手柄；密集单日柱优先上下端，放大后可用整项手柄。暂停/改派/进度/交付/参与者语义保持。
 
-22管理定向、21目标strict零新增、9新增+10回归完整浏览器场景、Vite构建（883模块/52文件）通过。线上52文件/10资源/25路由、健康/管理鉴权/Qwen能力核验通过。只替换前端，后端/三worker/其他容器未重启，无迁移或生产测试写入，也无清理。
+23管理定向、23目标strict零新增、11新增+10回归完整浏览器场景、Vite构建（884模块/52文件）通过。新增含真实手机触摸、10并行细轨、自动滚动、跨年/缩放、取消/失败/手动撤销。线上52文件/10资源/25路由、健康/管理鉴权/Qwen能力通过。只替前端，后端/三worker/其他容器未重启，无迁移、生产测试写入或清理。
 
-第三Compose：`/opt/qmdh-frp/releases/work-card-close-20261028/compose.release.yml`；服务器 `/www/backup/qmdh-release-20261028-work-card-close` ↔ 本机 `E:/backups/QMDH-web/release-20261028-work-card-close` 的26文件SHA一致。数据恢复基线继承personnel-zoom→navigation-fixed→unit-access，不是本轮新快照。发布后盘余约8.332GiB，后续仍复测8GiB门槛。
+第三Compose：`/opt/qmdh-frp/releases/pillar-resize-20261028/compose.release.yml`；服务器 `/www/backup/qmdh-release-20261028-pillar-resize` ↔ 本机 `E:/backups/QMDH-web/release-20261028-pillar-resize` 的26文件SHA一致。DB/媒体经工作卡片→人员缩放→导航轮继承unit-access独立恢复基线，非本轮新快照。发布后盘余约8.311GiB，仍复测8GiB门槛。
 
-私有候选/截图/测试为 `local/work-card-close-20261028/`，一次性脚本为 `local/work_card_runner.py`、`work_card_preflight.py`、`work_card_backup.py`、`work_card_deploy.py`，不可对已发布路径原样重跑。详见[本轮记录](work-card-close-2026-10-28.md)。人员Ctrl+滚轮/双击新增/10并行压窄、固定生成画布导航与后台归组保持；此前指定缓存链已清理，不重跑或扩大授权。
+私有候选/测试/截图：`local/pillar-resize-20261028/`，一次性脚本：`local/pillar_resize_runner.py`、`pillar_resize_preflight.py`、`pillar_resize_backup.py`、`pillar_resize_deploy.py`。不对已发布路径原样重跑。详见[记录](pillar-resize-2026-10-28.md)。此前工作卡片双按钮/遮罩保存关闭/快捷删除、Ctrl缩放/双击新增、固定导航/后台归组保持；指定旧缓存链早已清理，不重跑或扩大。
 
 ## 冷启动先读
 
-这是当前接手入口，覆盖旧交接里的版本号、Compose路径、人员数量和页面设计。先读本文件，再按具体新需求读对应代码；不要重审全项目或原样重跑历史部署脚本。当前用户明确提出的工作卡片保存关闭/快捷删除、人员排期缩放/双击新增/并行泳道、固定生成/画布导航与后台归组，以及此前分院权限/日历/周计划/快捷调整均已提交、推送并部署，等待后续新需求，不重复部署。
+这是当前接手入口，覆盖旧交接里的版本号、Compose路径、人员数量和页面设计。先读本文件，再按具体新需求读对应代码；不要重审全项目或原样重跑历史部署脚本。当前用户明确提出的泳道独立端点拖拽/实时反馈、工作卡片保存关闭/快捷删除、人员排期缩放/双击新增/并行泳道、固定生成/画布导航与后台归组，以及此前分院权限/日历/周计划/快捷调整均已提交、推送并部署，等待后续新需求，不重复部署。
 
 - 仓库：`E:/projects/QMDH-web`；分支：`bugfix/migration-bootstrap-001`；origin：`https://github.com/csyhnine/QMDH-web.git`。
-- 实际最新前端源码：`1528a445c61f8b52847193032ba8869fb11690db`；后端源码：`c45fd00235bf508d05be07a58400aeb22d753553`（后端只改分院label）；worker功能源码：`55340d752cbe01058417156014abfa50b40af26c`。交接/发布文档会另提交，文档SHA不等于运行源码。
+- 实际最新前端源码：`98c5735741addb62bbfe40ba9a99b4583c5c3e36`；后端源码：`c45fd00235bf508d05be07a58400aeb22d753553`（后端只改分院label）；worker功能源码：`55340d752cbe01058417156014abfa50b40af26c`。交接/发布文档会另提交，文档SHA不等于运行源码。
 - 草稿PR：[#5](https://github.com/csyhnine/QMDH-web/pull/5)，已更新，不合并main。
 - 不创建新分支/新worktree，不委派；不reset/clean/force/stash，不执行`git add .`。提交用明确白名单。后续用户明确提出开发后可沿用已有提交、推送和验证后部署授权，不重复索要同一授权。
 - `docs/checks.md`、`docs/plan.md`、`docs/review.md`是本轮之前已有的未提交内容，本轮未覆盖、未提交。已另存原文、补丁、SHA及status到被忽略的`local/handoff-management-20261027-confirm/`。大量既有未跟踪`docs/archive/*`和`scripts/_tmp_*`也保留，不一起加入Git，不清理。
@@ -27,7 +27,7 @@
 2. 极简立项：名称必填，统筹和目标日期选填；创建时随机保存颜色，不让用户填颜色。
 3. 项目计划支持按自然周展示七天，前后按整周翻页，跨年/重挂载保持范围；两周/月/季度保留。人员排期横向为人名、纵向为日期，约60px列宽，仅显示姓名。默认自然周，可切换自然月/季度/年，也可Ctrl+滚轮自定一页可见日期数（3天起、按视口18px最小行高限制上限），锚定鼠标日期并按当前天数翻页，可重置；当前仍按每日一行展示，并非把季度/年聚合成月份行。
 4. 不能再恢复“选人面板”“安排工作”两个侧面入口，不在人员图显示职位或100%计划占用比例。
-5. 工作是连续细竖柱（单轨最多20px，并行增多自动压窄、列宽不膨胀）；双击空白日期格新增，点击柱体或甘特工作条打开就地快捷卡片，可改进度、暂停/恢复或中断并支援其他项目；详细编辑另有按钮。快捷卡片可“删除泳道”，明确确认后删除整项工作及全部参与者泳道，取消不写、失败保留。柱顶“↕”拖动整项改期/转交；柱体划选一段日期直接预填快捷区间。
+5. 工作是连续细竖柱（单轨最多20px，并行增多自动压窄、列宽不膨胀）；双击空白日期格新增，点击柱体或甘特工作条打开就地快捷卡片，可改进度、暂停/恢复或中断并支援其他项目；详细编辑另有按钮。快捷卡片可“删除泳道”，明确确认后删除整项工作及全部参与者泳道，取消不写、失败保留。上下端分别调整开始/结束，另一端固定，松手后应用；⠿ 单独平移整项或转交；柱体划选一段日期预填快捷区间。拖动实时浮签/阴影/落点动效，Esc取消、边缘滚动、手机触摸和键盘支持。
 6. 默认工作卡片只保留项目、工作内容、日期、参与者；页头相邻“不保存关闭”（直接放弃）和蓝色“保存关闭”，点击卡片外空白保存成功后关闭，失败/校验不通过保留输入，内部/日历不误提交；更多说明/交付物/推进记录折叠，交付节点在项目计划的项目行或甘特空白日期格快捷插入，交付物选填并显示单日菱形。
 7. 上周实际推进、下周安排可手写、从已有记录整理、自动保存。整理为本地确定性汇总，不调用AI/付费模型，不把计划推测成实际完成。
 8. 临时抽调在选中区间生成另一项目的工作，同时暂停原工作中该人；无人接替的区间灰白蒙层显示“工作暂停”及警示。不另填复杂暂停表，不自动推迟交付日。
@@ -46,15 +46,16 @@
 | 文件 | 职责 / 需要保留的语义 |
 | --- | --- |
 | `ManagementProjectsPage.tsx` | 院/年度/筛选、主Tabs、快速立项/详情、请求与保存协调。`persistSchedule`做项目CAS保存；`reassignSchedule`调用改派API后同时合并两个项目。 |
-| `PeopleSchedule.tsx` | 日期底表+绝对定位竖柱覆盖层，Ctrl+滚轮与按钮缩放、空白格双击新增、并行工作在固定列内排窄轨道；列宽同时用于表头/底表/覆盖层，不能错位。划选区间用Pointer Capture，抑制随后click；↕单独用原生drag。 |
-| `PeoplePlanner.tsx` | 拖动整项的本地预览、待保存队列、约1秒自动保存、失败保留与手动重试。负荷仍在内部用于冲突提示，包含被项目筛选隐藏的安排。 |
+| `PeopleSchedule.tsx` | 日期底表+绝对定位竖柱覆盖层，Ctrl+滚轮与按钮缩放、空白格双击新增、并行工作在固定列内排窄轨道；列宽同时用于表头/底表/覆盖层，不能错位。端点与划选分别用Pointer Capture；上下端绑定usePillarResize，⠿仍用原生drag平移/转交，落点格高亮。 |
+| `usePillarResize.ts` | 独立端点本地预览、按日吸附、Pointer Capture/取消/自动滚动/键盘、日期浮签与落点高亮；仅松手提交，拖动时通知忙碌并暂停自动保存。 |
+| `PeoplePlanner.tsx` | 端点改期和整项移动的本地预览、待保存队列、约1秒自动保存、失败保留与手动重试。负荷仍在内部用于冲突提示，包含被项目筛选隐藏的安排。 |
 | `QuickWorkActions.tsx` | 人员/甘特共用就地快捷卡片、按项目版本确认删除整项stage泳道、单人时段暂停恢复、原子改派及交付节点快速插入。恢复原工作不会删除支援安排。 |
 | `PlanningDesk.tsx` | 共享关键总览、相邻双按钮工作卡片、仅遮罩click触发表单requestSubmit保存关闭、交付节点只读摘要、旧部分日期改派表单、无人接替警示。接收`WorkRequest`（可带personId/date/end/intent=segment）；日常快捷操作已转到QuickWorkActions。 |
 | `WeeklyBrief.tsx` | 按项目及工作周手写/整理，约1秒自动保存，保留版本基线与失败输入；未保存时不能折叠/换项目。 |
 | `pillarPlanning.ts` | `adjustWorkPause`按人员与含结束日区间暂停/部分恢复，保留其他人员和前后片段；暂停片段、无人接替区间、上周实际/下周排期整理、日期命中计算；`Reassignment`请求类型。 |
 | `confirmPlanning.ts` | `await confirmPlanning(message)`：独立HTML dialog顶层、全视口居中、取消默认焦点、Escape/Enter取消、Tab循环、焦点恢复、安全textContent、顺序队列、单次结算。 |
 | `ProjectPlan.tsx` / `ganttBridge.ts` | DHTMLX项目甘特、真实拖动/拉伸、整项阶段编辑；与人员页共用项目/stages。 |
-| `planning.ts` / `staffPlanning.ts` | 类型、随机/稳定项目色、暂停/日期/参与人数/负荷、旧整项移动与人员转交、保存队列；不可把计划负荷误当完成进度。 |
+| `planning.ts` / `staffPlanning.ts` | resizeWorkEndpoint只改指定端点、保留另一端与人员/暂停记录；类型、随机/稳定项目色、暂停/日期/参与人数/负荷、旧整项移动与人员转交、保存队列；不可把计划负荷误当完成进度。 |
 | `personnelViewport.ts` | 人员视窗缩放锚定、3天/18px日高密度边界、列内并行轨道几何；ManagementProjectsPage持有自定天数，与详情/图例/翻页同步。 |
 | `scheduleCalendar.ts` / `PlanningDate.tsx` | 周/月/季/年真实边界、跨年闰年、日期输入/顶层popover自定义月历（min/max/caption），含快捷卡片与台账数据更新日期；不再用details或原生选择器替代。 |
 | `management.css` | 多轮样式在文件后段覆盖。共同frame是`.management-shell > .canvas-area`，共享`.mp-workspace-header`吸顶；确认框`.mp-confirm-dialog`在body顶层。 |
@@ -85,13 +86,13 @@
 | --- | --- |
 | backend | `sha256:dad05b8dc0474e3f7996c87ec0a51442410c4c663b6fdb748931d595707a4894` |
 | worker ×3 | `sha256:fa3f8984f8a464343a89628ba937813163a94200b052257cbebdc00ce2f41793` |
-| frontend | `sha256:e678de9b906fe053cd840d5b3e03d087ca8f4c5fa4ce0b34c324265a81a6202d` |
+| frontend | `sha256:2ebc0b0b4992e391b8c7bbcf94fab177ccadf9bf3ee1f0829e5deef91bf40414` |
 
 生效Compose三件套：
 
 1. `/www/wwwroot/qmdh-web/docker-compose.yml`
 2. `/opt/qmdh-frp/compose.frp.yml`
-3. `/opt/qmdh-frp/releases/work-card-close-20261028/compose.release.yml`
+3. `/opt/qmdh-frp/releases/pillar-resize-20261028/compose.release.yml`
 
 **模板挂载源仍是**`/opt/qmdh-frp/releases/management-categories-20261026/workflows` → `/app/integration/comfyui:ro`，8文件，不要因为目录旧而删除。保留env/key、媒体、FRP网络、ODA/FFmpeg/Xvfb等挂载与依赖。
 
@@ -99,15 +100,15 @@
 
 SSH只从被忽略的`local/server-access.md`在内存中读取；不输出凭据，不提交。现成runner固定校验`docs/archive/server-readonly-2026-10-25/server-metadata.json`中SSH指纹。
 
-最新工作卡片轮：52个当前前端文件逐字节、10公网资源、25路由、健康、Qwen输入数[1,2]、未登录管理鉴权通过；只替换前端，后端/三worker及其他容器未重启，无测试安排写入。旧hash资源保留，静态包不按容器内全部资源数断言。
+最新端点拖拽轮：52个当前前端文件逐字节、10公网资源、25路由、健康、Qwen输入数[1,2]、未登录管理鉴权通过；只替换前端，后端/三worker及其他容器未重启，无测试安排写入。旧hash资源保留，静态包不按容器内全部资源数断言。
 
 ## 备份、容量与发布脚本
 
 最新前端回滚/配置与数据恢复基线配对备份：
 
-- 服务器`/www/backup/qmdh-release-20261028-work-card-close`
-- 本机`E:/backups/QMDH-web/release-20261028-work-card-close`
-- 26文件SHA一致。**纯前端轮DB/媒体硬链接继承personnel-zoom→navigation-fixed→unit-access恢复基线，不是本轮新快照。**回滚不降迁移或覆盖新业务数据。
+- 服务器`/www/backup/qmdh-release-20261028-pillar-resize`
+- 本机`E:/backups/QMDH-web/release-20261028-pillar-resize`
+- 26文件SHA一致。**纯前端轮DB/媒体硬链接继承work-card-close→personnel-zoom→navigation-fixed→unit-access恢复基线，不是本轮新快照。**回滚不降迁移或覆盖新业务数据。
 
 最近独立数据库快照：`/www/backup/qmdh-release-20261027-unit-access` ↔ `E:/backups/QMDH-web/release-20261027-unit-access`，该轮28文件一致，在前后端暂停并核空队列后新建DB dump；其媒体清单与pillars链一致。
 
@@ -117,13 +118,14 @@ SSH只从被忽略的`local/server-access.md`在内存中读取；不输出凭�
 - `E:/backups/QMDH-web/release-20261027-pillars`
 - 28个列入checksums文件一致；另留本机`database-before-pause.dump`，其私有SHA已核验。5849媒体、37归档恢复链仍依赖本机两基础包；按`resolved-media-chain.json`和本机基础连续性记录查找，不把服务器小增量误当完整媒体备份。
 
-上次盘余8.332GiB；这是时点值，后续发布前复测8GiB门槛、内存及任务/队列/GPU锁/上游队列。只可处理本任务能证明有镜像/本机原包/配对备份的临时构建副本，不清理业务媒体、正式备份、工作流或回滚镜像。几个旧release的html/verified-html、源码bundle/前端tar临时副本已退役，不能原样重跑依赖它们的旧verify脚本后误判生产坏了。
+上次盘余8.311GiB；这是时点值，后续发布前复测8GiB门槛、内存及任务/队列/GPU锁/上游队列。只可处理本任务能证明有镜像/本机原包/配对备份的临时构建副本，不清理业务媒体、正式备份、工作流或回滚镜像。几个旧release的html/verified-html、源码bundle/前端tar临时副本已退役，不能原样重跑依赖它们的旧verify脚本后误判生产坏了。
 
 本次pillars发布第一次因备份后新增媒体而自动恢复旧服务，补备份后重发成功；以后遇到清单变化也必须补增量后再切换，不能跳过断言。停止服务后最终DB备份没有在服务器再复制一份大dump，初始dump先留本机，避免磁盘门槛溢出。
 
 私有脚本与产物均在被忽略的local：
 
-- `local/work_card_runner.py`、`work_card_preflight.py`、`work_card_backup.py`、`work_card_deploy.py`：最新工作卡片纯前端轮，读取`local/work-card-close-20261028/`，继承人员缩放轮→导航轮→unit-access恢复基线，无清理。一轮路径不重跑。
+- `local/pillar_resize_runner.py`、`pillar_resize_preflight.py`、`pillar_resize_backup.py`、`pillar_resize_deploy.py`：最新端点拖拽纯前端轮，读取`local/pillar-resize-20261028/`，继承工作卡片轮恢复基线；无清理、不对本轮唯一目录重跑。
+- `local/work_card_runner.py`、`work_card_preflight.py`、`work_card_backup.py`、`work_card_deploy.py`：此前工作卡片纯前端轮，读取`local/work-card-close-20261028/`，继承人员缩放轮→导航轮→unit-access恢复基线，无清理。一轮路径不重跑。
 - `local/personnel_runner.py`、`personnel_preflight.py`、`personnel_backup.py`、`personnel_deploy.py`：此前人员缩放纯前端轮，读取`local/personnel-zoom-20261028/`；继承导航轮→unit-access恢复基线。仅替换前端，不清理；一轮路径不重跑。
 - `local/nav_runner.py`、`nav_backup.py`、`nav_deploy.py`：此前导航纯前端轮，服务器/备份路径为20261028；本机候选目录仍20261027，继承unit-access DB/媒体恢复基线。缓存清理已完成，不重跑、不扩展。
 - `local/unit_runner.py`、`unit_backup.py`、`unit_deploy.py`：最新规范名称轮，读取`local/unit-access-20261027/`；仅覆盖backend的management.py和前端，保持worker。切换中停止前后端、借worker再次只读查空队列、创建独立dump、核媒体不变后启新服务，失败退镜像不还原业务库。
@@ -142,15 +144,19 @@ SSH只从被忽略的`local/server-access.md`在内存中读取；不输出凭�
 ```powershell
 # cwd E:/projects/QMDH-web/frontend
 node --test scripts/test-management.mjs
-# 最近22项通过
+# 最近23项通过
 
 # cwd E:/projects/QMDH-web/backend
 .venv/Scripts/python.exe -m pytest tests/test_management.py tests/test_management_categories.py tests/test_management_affiliation.py tests/test_management_reporting.py tests/test_management_simple.py tests/test_management_pillars.py -q --disable-warnings
 # 此为此前36项范围。最新名称/权限轮仅跑categories、reporting、pillars及个人登录撤权用例，共22项通过；不扩大到全套。
 
 # cwd E:/projects/QMDH-web
-node local/personnel-types.mjs
-# 21个目标文件strict诊断零新增；不是整仓typecheck通过
+node local/resize-types.mjs
+# 23个目标文件strict诊断零新增；不是整仓typecheck通过
+node local/pillar-resize-20261028/browser.mjs
+# 11新增场景：两端固定/实时预览/不提前写入/最短一天/取消/滚动/裁切/跨年键盘/失败/手动缩放/10并行/触摸减动
+node local/pillar-resize-20261028/regression.mjs
+# 10回归场景：整项移动/暂停/改派/甘特/交付/手机键盘
 node local/work-card-close-20261028/browser.mjs
 # 9新场景：相邻按钮/蓝色/不保存、遮罩自动保存、日历不误触、校验/失败/防重复、编辑、人员/甘特删除、手机
 node local/work-card-close-20261028/regression.mjs
@@ -167,7 +173,7 @@ node local/pillars-20261027/browser.mjs
 # 8场景：竖柱、极简表单、周文字、划选改派、灰白警示、冲突、整项拖动、手机/周期
 ```
 
-浏览器脚本使用实际AppShell和页面，API为合成数据，拒绝外部请求；此前personnel-zoom及calendar-week等脚本若涉及工作卡片的旧“保存卡片”/“关闭”按钮与关闭二次确认，须适配本轮双按钮行为，不把历史断言当线上故障。不能切成生产API写真实安排。pillar浏览器脚本有些操作仍按旧原生确认自动应答，center-confirm脚本的柱体点击则仍预期直接开完整表单；最新交互以work-card-close的browser及regression脚本为准，缩放/并行布局另参考personnel-zoom证据，复用历史脚本需先适配快捷卡片/详细编辑入口与站内确认。
+浏览器脚本使用实际AppShell和页面，API为合成数据，拒绝外部请求；此前personnel-zoom及calendar-week等脚本若涉及工作卡片的旧“保存卡片”/“关闭”按钮与关闭二次确认，须适配本轮双按钮行为，不把历史断言当线上故障。不能切成生产API写真实安排。pillar浏览器脚本有些操作仍按旧原生确认自动应答，center-confirm脚本的柱体点击则仍预期直接开完整表单；最新端点拖拽以pillar-resize的browser及regression脚本为准；工作卡片另参考work-card-close，缩放/并行布局另参考personnel-zoom证据，复用历史脚本需先适配快捷卡片/详细编辑入口与站内确认。
 
 离线Vite（cwd frontend）：`node node_modules/vite/bin/vite.js build --outDir ../local/新的发布目录/dist --emptyOutDir`。保持此前构建开关/环境，不把`frontend/dist`当源码提交；仅保留既有大块提示，不宣称整套通过。
 
@@ -175,6 +181,7 @@ node local/pillars-20261027/browser.mjs
 
 最新正式证据与说明：
 
+- `docs/pillar-resize-2026-10-28.md`、`docs/archive/pillar-resize-2026-10-28/`
 - `docs/work-card-close-2026-10-28.md`、`docs/archive/work-card-close-2026-10-28/`
 - `docs/personnel-zoom-2026-10-28.md`、`docs/archive/personnel-zoom-2026-10-28/`
 - `docs/navigation-fixed-2026-10-27.md`、`docs/archive/navigation-fixed-2026-10-27/`（28日上线）

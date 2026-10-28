@@ -1,7 +1,9 @@
 import type { GanttStatic } from "dhtmlx-gantt";
 import { addDays, dateInput, ganttData, type PlanningProject, type Staff } from "./planning";
+import { dragDateOffset } from "./staffPlanning";
 export type ChartCallbacks = {
   canDrag: () => boolean;
+  onDragBusy?: (busy: boolean) => void;
   onEdit: (projectId: number) => void;
   onStage?: (projectId: number, stageId?: string) => void;
   onQuick?: (projectId: number, stageId: string, x: number, y: number) => void;
@@ -9,6 +11,43 @@ export type ChartCallbacks = {
   onChange: (projectId: number, stageId: string, task: { start_date: Date; end_date: Date; progress: number }) => void;
 };
 export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, callbacks: ChartCallbacks) {
+  let drag: { id: string | number; edge: "start" | "end" | "move"; start: Date; end: Date; x: number; step: number; canceled: boolean } | null = null;
+  let feedback: HTMLDivElement | null = null;
+  let landedId: string | null = null;
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  const point = (event?: Event) => {
+    const e = event as MouseEvent & { touches?: TouchList; changedTouches?: TouchList };
+    return e?.touches?.[0] || e?.changedTouches?.[0] || { clientX: e?.clientX || 0, clientY: e?.clientY || 0 };
+  };
+  const clearFeedback = () => { feedback?.remove(); feedback = null; host.classList?.remove("mp-gantt-dragging"); };
+  const restore = () => {
+    if (!drag) return;
+    drag.canceled = true;
+    const task = gantt.getTask(drag.id);
+    task.start_date = new Date(drag.start); task.end_date = new Date(drag.end);
+    task.duration = Math.round((drag.end.getTime() - drag.start.getTime()) / 86400000);
+    gantt.refreshTask(drag.id); clearFeedback(); callbacks.onDragBusy?.(false);
+  };
+  const cancelKey = (event: KeyboardEvent) => { if (event.key === "Escape" && drag) { event.preventDefault(); restore(); } };
+  const ownerWindow = host.ownerDocument?.defaultView;
+  ownerWindow?.addEventListener("keydown", cancelKey, true);
+  ownerWindow?.addEventListener("blur", restore);
+  const paint = (task: { start_date: Date; end_date: Date }, event?: Event) => {
+    if (!drag || drag.canceled || !host.ownerDocument) return;
+    if (!feedback) {
+      feedback = host.ownerDocument.createElement("div");
+      feedback.className = "mp-pillar-resize-feedback mp-gantt-drag-feedback";
+      feedback.setAttribute("role", "status");
+      feedback.append(host.ownerDocument.createElement("strong"), host.ownerDocument.createElement("span"), host.ownerDocument.createElement("small"));
+      host.ownerDocument.body.append(feedback);
+    }
+    feedback.children[0].textContent = drag.edge === "start" ? "调整开始 · 结束固定" : drag.edge === "end" ? "调整结束 · 开始固定" : "整项移动 · 工期不变";
+    feedback.children[1].textContent = `${dateInput(task.start_date)} — ${addDays(dateInput(task.end_date), -1)}`;
+    feedback.children[2].textContent = "松开应用 · Esc 取消";
+    const p = point(event), w = ownerWindow?.innerWidth || 1000, h = ownerWindow?.innerHeight || 800;
+    feedback.style.left = `${Math.max(12, Math.min(p.clientX + 18, w - 250))}px`;
+    feedback.style.top = `${Math.max(12, Math.min(p.clientY + 18, h - 90))}px`;
+  };
   gantt.i18n.setLocale("cn");
   Object.assign(gantt.config, {
     date_format: "%Y-%m-%d %H:%i",
@@ -71,26 +110,67 @@ export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, c
   });
   gantt.attachEvent("onEmptyClick", insertAtPointer);
   gantt.templates.task_class = (_start, _end, task) =>
-    task.paused ? "mp-chart-paused" : task.unscheduled
+    (task.paused ? "mp-chart-paused" : task.unscheduled
       ? "mp-chart-unscheduled"
       : task.type === "project"
         ? "mp-chart-project"
         : task.progress === 1
           ? "mp-chart-done"
-          : "mp-chart-stage";
+          : "mp-chart-stage") + (String(task.id) === landedId ? " mp-gantt-landed" : "");
   gantt.templates.grid_date_format = (date) => dateInput(date);
-  gantt.attachEvent("onBeforeTaskDrag", (id) => {
+  gantt.attachEvent("onBeforeTaskDrag", (id, _mode, event) => {
     const task = gantt.getTask(id);
-    return Boolean(task.stageId && !task.readonly && callbacks.canDrag());
+    if (!(task.stageId && !task.readonly && callbacks.canDrag())) return false;
+    const target = event?.target as HTMLElement | undefined;
+    const edge = target?.closest(".task_left") ? "start" : target?.closest(".task_right") ? "end" : "move";
+    const date = new Date(task.start_date), next = new Date(date); next.setDate(next.getDate() + 1);
+    const step = Math.abs((gantt.posFromDate?.(next) || 0) - (gantt.posFromDate?.(date) || 0)) || 34;
+    drag = { id, edge, start: new Date(task.start_date), end: new Date(task.end_date), x: point(event).clientX, step, canceled: false };
+    host.classList?.add("mp-gantt-dragging"); callbacks.onDragBusy?.(true);
+    return true;
+  });
+  gantt.attachEvent("onTaskDrag", (_id, _mode, task, _original, event) => {
+    if (!drag) return;
+    if (drag.canceled) {
+      task.start_date = new Date(drag.start); task.end_date = new Date(drag.end);
+      task.duration = Math.round((drag.end.getTime() - drag.start.getTime()) / 86400000);
+      return;
+    }
+    if (drag.edge !== "move") {
+      const offset = dragDateOffset(point(event).clientX - drag.x, drag.step);
+      const from = new Date(`${addDays(dateInput(drag.start), drag.edge === "start" ? offset : 0)}T00:00:00`);
+      const to = new Date(`${addDays(dateInput(drag.end), drag.edge === "end" ? offset : 0)}T00:00:00`);
+      const earliest = new Date(drag.start); earliest.setDate(earliest.getDate() + 1);
+      const latest = new Date(drag.end); latest.setDate(latest.getDate() - 1);
+      task.start_date = drag.edge === "start" && from > latest ? latest : from;
+      task.end_date = drag.edge === "end" && to < earliest ? earliest : to;
+      task.duration = Math.round((task.end_date.getTime() - task.start_date.getTime()) / 86400000);
+    }
+    paint(task as { start_date: Date; end_date: Date }, event);
   });
   gantt.attachEvent("onAfterTaskDrag", (id) => {
     const task = gantt.getTask(id);
+    const canceled = drag?.canceled;
+    drag = null; clearFeedback(); callbacks.onDragBusy?.(false);
+    if (canceled) return;
+    landedId = String(id);
+    const node = gantt.getTaskNode?.(id);
+    node?.classList.add("mp-gantt-landed");
+    if (host.ownerDocument) {
+      const timer = setTimeout(() => { landedId = null; gantt.getTaskNode?.(id)?.classList.remove("mp-gantt-landed"); timers.delete(timer); }, 260);
+      timers.add(timer);
+    }
     if (task.stageId && task.start_date && task.end_date)
       callbacks.onChange(task.projectId, task.stageId, {
         start_date: task.start_date,
         end_date: task.end_date,
         progress: task.progress ?? 0,
       });
+  });
+  gantt.attachEvent("onDestroy", () => {
+    clearFeedback(); timers.forEach(timer => clearTimeout(timer));
+    ownerWindow?.removeEventListener("keydown", cancelKey, true); ownerWindow?.removeEventListener("blur", restore);
+    callbacks.onDragBusy?.(false);
   });
   gantt.attachEvent("onTaskDblClick", (id) => {
     const task = gantt.getTask(id);

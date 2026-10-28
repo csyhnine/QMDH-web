@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
 import { dayNumber, type PlanningProject, type Stage } from "./planning";
-import { resizeWorkEndpoint } from "./staffPlanning";
+import { dragDateOffset, resizeWorkEndpoint } from "./staffPlanning";
 
 type Edge = "start" | "end";
-type Preview = { projectId: number; stageId: string; edge: Edge; stage: Stage; x: number; y: number };
+type Preview = { projectId: number; stageId: string; edge: Edge; stage: Stage; offset: number; x: number; y: number };
 type Gesture = { id: number; element: HTMLButtonElement; project: PlanningProject; original: Stage; edge: Edge; y: number; scroll: number; clientX: number; clientY: number; stage: Stage; moved: boolean };
 
 export default function usePillarResize({ board, rowHeight, start, days, disabled, onCommit, onBusy }: {
@@ -23,10 +23,10 @@ export default function usePillarResize({ board, rowHeight, start, days, disable
   function update() {
     const g = gesture.current;
     if (!g) return;
-    if (Math.abs(g.clientY - g.y) >= 4) g.moved = true;
-    const offset = g.moved ? Math.round((g.clientY - g.y + (board.current?.scrollTop || 0) - g.scroll) / latest.current.rowHeight) : 0;
+    if (Math.abs(g.clientY - g.y) > 6) g.moved = true;
+    const offset = g.moved ? dragDateOffset(g.clientY - g.y + (board.current?.scrollTop || 0) - g.scroll, latest.current.rowHeight) : 0;
     g.stage = resizeWorkEndpoint(g.original, g.edge, offset);
-    setPreview({ projectId: g.project.id!, stageId: g.original.id, edge: g.edge, stage: g.stage, x: g.clientX, y: g.clientY });
+    setPreview({ projectId: g.project.id!, stageId: g.original.id, edge: g.edge, stage: g.stage, offset, x: g.clientX, y: g.clientY });
   }
   function finish(commit: boolean) {
     const g = gesture.current;

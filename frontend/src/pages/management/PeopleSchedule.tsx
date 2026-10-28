@@ -81,8 +81,7 @@ export default function PeopleSchedule({
         lanes: lanes.length,
       };
     });
-  const dates = Array.from({ length: days }, (_, i) => addDays(start, i)),
-    current = today(),
+  const current = today(),
     board = useRef<HTMLDivElement>(null),
     body = useRef<HTMLTableSectionElement>(null);
   const [height, setHeight] = useState(600),
@@ -105,6 +104,8 @@ export default function PeopleSchedule({
     suppress = useRef(false);
   const rowHeight = fitDates ? Math.max(18, (height - 37) / days) : period === "week" ? Math.max(62, Math.floor((height - 36) / 7)) : period === "month" ? 44 : 34;
   const resize = usePillarResize({ board, rowHeight, start, days, disabled, onCommit: onResize, onBusy: onResizeBusy });
+  const displayDays = days + (resize.preview?.edge === "end" ? Math.min(366, Math.max(7, resize.preview.offset + 7)) : 0),
+    dates = Array.from({ length: displayDays }, (_, i) => addDays(start, i));
   const [moving, setMoving] = useState(""), [dropTarget, setDropTarget] = useState("");
   const extra = Math.max(0, boardWidth - 72 - people.reduce((n, p) => n + p.width, 0)) / Math.max(1, people.length);
   const widths = [72, ...people.map((p) => p.width + extra)],
@@ -206,7 +207,7 @@ export default function PeopleSchedule({
                   <tr
                     key={date}
                     style={{ height: rowHeight }}
-                    className={`${weekday === 0 || weekday === 6 ? "mp-calendar-weekend " : ""}${date === current ? "mp-calendar-today" : ""}`}
+                    className={`${weekday === 0 || weekday === 6 ? "mp-calendar-weekend " : ""}${date === current ? "mp-calendar-today " : ""}${i >= days ? "mp-resize-buffer" : ""}`}
                   >
                     <th scope="row">
                       <strong>{date.slice(5).replace("-", "/")}</strong>
@@ -248,7 +249,7 @@ export default function PeopleSchedule({
               })}
             </tbody>
           </table>
-          <div className="mp-pillar-overlay" style={{ height: days * rowHeight, gridTemplateColumns: grid }}>
+          <div className="mp-pillar-overlay" style={{ height: displayDays * rowHeight, gridTemplateColumns: grid }}>
             <div />
             {people.map(({ person, items, width, lanes }) => (
               <div className="mp-person-pillar-track" key={person.id}>
@@ -257,8 +258,10 @@ export default function PeopleSchedule({
                     key = `${e.project.id}:${e.stage.id}`,
                     active = resize.preview?.projectId === e.project.id && resize.preview.stageId === e.stage.id,
                     shown = active ? resize.preview!.stage : e.stage,
-                    left = Math.max(0, Math.min(days - 1, dayNumber(shown.start) - dayNumber(start))),
-                    widthDays = Math.max(1, Math.min(days, dayNumber(shown.end) - dayNumber(start) + 1) - left),
+                    visualStart = active && resize.preview!.edge === "start" && e.stage.start < start ? addDays(start, resize.preview!.offset) : shown.start,
+                    visualEnd = active && resize.preview!.edge === "end" && e.stage.end > addDays(start, days - 1) ? addDays(start, days - 1 + resize.preview!.offset) : shown.end,
+                    left = Math.max(0, Math.min(displayDays - 1, dayNumber(visualStart) - dayNumber(start))),
+                    widthDays = Math.max(1, Math.min(displayDays, dayNumber(visualEnd) - dayNumber(start) + 1) - left),
                     moveEnabled = moveWork?.projectId === e.project.id && moveWork.stageId === e.stage.id;
                   return (
                   <div

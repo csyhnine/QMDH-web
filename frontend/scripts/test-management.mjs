@@ -190,7 +190,7 @@ test('community chart blocks parent/archived drags and offers quick actions, det
   const listeners={},config={},templates={};let changed,edited,stageEdit,quick,delivery;
   const chart={config,templates,i18n:{setLocale(){}},attachEvent:(name,fn)=>{listeners[name]=fn;},init(){},
     getTask:id=>id==='parent'?{projectId:1,readonly:true}:{projectId:1,stageId:'stage',readonly:id==='archived',start_date:new Date(2026,9,16),end_date:new Date(2026,9,18),progress:0.3}};
-  const bridge=load('pages/management/ganttBridge.ts',{'./planning':planning});
+  const bridge=load('pages/management/ganttBridge.ts',{'./planning':planning,'./staffPlanning':staffPlanning});
   bridge.initializePlanningGantt(chart,{}, {canDrag:()=>true,onChange:(...args)=>changed=args,onEdit:id=>edited=id,onStage:(...args)=>stageEdit=args,onQuick:(...args)=>quick=args,onDelivery:(...args)=>delivery=args});
   assert.equal(listeners.onBeforeTaskDrag('parent'),false);assert.equal(listeners.onBeforeTaskDrag('archived'),false);assert.equal(listeners.onBeforeTaskDrag('normal'),true);
   listeners.onAfterTaskDrag('normal');assert.equal(changed[0],1);assert.equal(changed[1],'stage');
@@ -286,6 +286,15 @@ test('personnel endpoint resizing fixes the opposite inclusive date and preserve
  for(const edge of ['start','end']){const n=staffPlanning.resizeWorkEndpoint(s,edge,edge==='start'?99999:-99999);assert.equal(n.start,n.end);}
  assert.equal(planning.dayNumber(staffPlanning.resizeWorkEndpoint(s,'end',99999).end)-planning.dayNumber(s.start),3660);
  assert.throws(()=>staffPlanning.resizeWorkEndpoint({...s,milestone:true},'end',1));assert.throws(()=>staffPlanning.resizeWorkEndpoint(s,'start',0.5));
+});
+
+test('short intentional endpoint drags respond in both orientations, while clicks stay unchanged',()=>{
+ for(const step of [18,44,80,140]) {
+  assert.equal(staffPlanning.dragDateOffset(6,step),0);assert.equal(staffPlanning.dragDateOffset(-6,step),0);
+  assert.equal(staffPlanning.dragDateOffset(12,step),1);assert.equal(staffPlanning.dragDateOffset(-12,step),-1);
+  assert.equal(staffPlanning.dragDateOffset(step,step),1);assert.equal(staffPlanning.dragDateOffset(step*2,step),2);
+ }
+ assert.equal(staffPlanning.dragDateOffset(100,0),0);
 });
 
 test('personnel zoom changes visible days across year boundaries while anchoring pointer dates and limiting density',()=>{

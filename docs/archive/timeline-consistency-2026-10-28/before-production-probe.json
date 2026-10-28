@@ -1,0 +1,90 @@
+{
+  "results": [
+    {
+      "name": "production CSS endpoint hit map",
+      "box": {
+        "x": 237,
+        "y": 714,
+        "width": 20,
+        "height": 14
+      },
+      "bar": {
+        "x": 237,
+        "y": 412,
+        "width": 20,
+        "height": 316
+      },
+      "metrics": {
+        "top": "302px",
+        "bottom": "0px",
+        "height": "14px",
+        "pointerEvents": "auto",
+        "zIndex": "2"
+      },
+      "hits": [
+        {
+          "y": 727,
+          "target": "mp-pillar-resize mp-pillar-resize-end"
+        },
+        {
+          "y": 721,
+          "target": "mp-pillar-resize mp-pillar-resize-end"
+        },
+        {
+          "y": 727,
+          "target": "mp-pillar-resize mp-pillar-resize-end"
+        }
+      ]
+    },
+    {
+      "name": "production bundle bottom edge drag preview",
+      "feedback": [
+        "调整结束 · 开始固定2026-10-26 — 2026-10-30松开应用 · Esc 取消"
+      ]
+    },
+    {
+      "name": "production bundle saved dates",
+      "stage": {
+        "start": "2026-10-26",
+        "end": "2026-10-30"
+      },
+      "events": [
+        {
+          "type": "pointerdown",
+          "target": "mp-pillar-resize mp-pillar-resize-end",
+          "buttons": 1
+        },
+        {
+          "type": "pointerup",
+          "target": "mp-pillar-resize mp-pillar-resize-end",
+          "buttons": 0
+        },
+        {
+          "type": "lostpointercapture",
+          "target": "mp-pillar-resize mp-pillar-resize-end",
+          "buttons": 0
+        }
+      ],
+      "writes": 1
+    },
+    {
+      "name": "12px bottom drag inside real viewport",
+      "feedback": [
+        "调整结束 · 开始固定2026-10-26 — 2026-10-29松开应用 · Esc 取消"
+      ]
+    },
+    {
+      "name": "12px bottom drag result",
+      "end": "2026-10-29",
+      "writes": 0
+    }
+  ],
+  "errors": [],
+  "previous_source": "31027d0dd2845edb96ad6bb7125d7465d5bbd0c9",
+  "published_css_geometry": {
+    "configured_day_height": 80,
+    "actual_day_height": 86.59375,
+    "actual_today_height": 87.59375,
+    "source": "Observed DOM metrics of the previous Vite bundle with synthetic API"
+  }
+}

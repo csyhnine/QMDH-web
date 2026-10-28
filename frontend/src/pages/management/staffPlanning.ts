@@ -25,6 +25,12 @@ export function resizeWorkEndpoint(stage: Stage, edge: "start" | "end", offset: 
   return { ...stage, [edge]: value };
 }
 
+/** A deliberate short endpoint drag already means one day; further days follow grid spacing. */
+export function dragDateOffset(distance: number, pixelsPerDay: number) {
+  if (!Number.isFinite(distance) || !Number.isFinite(pixelsPerDay) || pixelsPerDay <= 0 || Math.abs(distance) <= 6) return 0;
+  return Math.sign(distance) * Math.ceil((Math.abs(distance) - 6) / pixelsPerDay);
+}
+
 /** Apply only the explicitly selected assignment; preserve versions and other project fields. */
 export function changePeoplePlan(project: PlanningProject, staff: Staff[], change: PeopleChange): PlanningProject {
   if (project.archived) throw new Error("归档项目只读，请先恢复项目。");

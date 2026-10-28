@@ -44,6 +44,7 @@ export default function ProjectPlan({
     [error, setError] = useState("");
   const saveLock = useRef(false);
   const [quick, setQuick] = useState<QuickWork | null>(null), [delivery, setDelivery] = useState<QuickDelivery | null>(null), [quickBusy, setQuickBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const fitRange = (items: PlanningProject[]) => {
     const dates = items.flatMap(p => p.stages.flatMap(s => [s.start, s.end])).sort();
     return dates.length ? { start: addDays(dates[0], -2), days: Math.max(14, dayNumber(dates.slice(-1)[0]) - dayNumber(dates[0]) + 5) } : { start, days };
@@ -98,13 +99,13 @@ export default function ProjectPlan({
   const latest = useRef({ projects, pending, saving, archived, onEdit, editor, quickBusy, quick, delivery });
   latest.current = { projects, pending, saving, archived, onEdit, editor, quickBusy, quick, delivery };
   useEffect(() => {
-    onBusy(saving || quickBusy);
+    onBusy(saving || quickBusy || dragging);
     return () => onBusy(false);
-  }, [saving, quickBusy, onBusy]);
+  }, [saving, quickBusy, dragging, onBusy]);
   useEffect(() => {
-    onDirty(Object.keys(pending).length > 0 || Boolean(editor || quick || delivery));
+    onDirty(Object.keys(pending).length > 0 || Boolean(editor || quick || delivery) || dragging);
     return () => onDirty(false);
-  }, [pending, editor, Boolean(quick), Boolean(delivery), onDirty]);
+  }, [pending, editor, Boolean(quick), Boolean(delivery), dragging, onDirty]);
   useEffect(() => {
     let stopped = false;
     import("dhtmlx-gantt")
@@ -113,6 +114,7 @@ export default function ProjectPlan({
         const gantt = module.Gantt.getGanttInstance();
         chart.current = gantt;
         initializePlanningGantt(gantt, host.current, {
+          onDragBusy: setDragging,
           onStage: (id, stage) => openStage(id, stage),
           onQuick: (projectId, stageId, x, y) => {
             const state = latest.current;
@@ -182,7 +184,7 @@ export default function ProjectPlan({
     saveLock.current = false;
     setSaving(false);
   }
-  usePlanningAutoSave(Object.keys(pending).length ? JSON.stringify(pending) : null, autoSave, saving || archived || Boolean(editor || delivery) || Boolean(error), save);
+  usePlanningAutoSave(Object.keys(pending).length ? JSON.stringify(pending) : null, autoSave, saving || archived || dragging || Boolean(editor || delivery) || Boolean(error), save);
   return (
     <div className="mp-project-plan">
       <div className="mp-plan-tip">

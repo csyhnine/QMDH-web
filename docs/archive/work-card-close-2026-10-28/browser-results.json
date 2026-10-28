@@ -1,0 +1,42 @@
+{
+  "results": [
+    {
+      "name": "Adjacent close choices show one blue save action and discard without writing or prompting",
+      "passed": true
+    },
+    {
+      "name": "Save and close creates exactly one assigned work while backdrop saves a new work automatically",
+      "passed": true
+    },
+    {
+      "name": "Interior blanks and custom calendar interactions do not save or dismiss the card",
+      "passed": true
+    },
+    {
+      "name": "Blank, whitespace and invalid dates keep inputs open without writes on backdrop save",
+      "passed": true
+    },
+    {
+      "name": "Failed backdrop save preserves draft; retry blocks close and repeated backdrop clicks from duplicating writes",
+      "passed": true
+    },
+    {
+      "name": "Existing work card discard preserves saved content and backdrop save changes only that work",
+      "passed": true
+    },
+    {
+      "name": "Personnel quick deletion clearly confirms whole shared work, cancel keeps it and confirmed delete removes both lanes",
+      "passed": true
+    },
+    {
+      "name": "Gantt quick deletion preserves work and selected dates on failure, then removes only the selected stage on retry",
+      "passed": true
+    },
+    {
+      "name": "Mobile close buttons stay adjacent; quick delete and centered confirmation fit the viewport",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "nativePrompts": []
+}

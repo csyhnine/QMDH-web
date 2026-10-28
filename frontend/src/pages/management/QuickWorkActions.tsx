@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import PlanningDate from "./PlanningDate";
 import { adjustWorkPause, type Reassignment } from "./pillarPlanning";
 import { type PlanningProject, type Staff } from "./planning";
+import { confirmPlanning } from "./confirmPlanning";
 
 export type QuickWork = { projectId: number; stageId: string; personId?: number; date: string; end?: string; x: number; y: number };
 export type QuickDelivery = { projectId: number; date: string; x: number; y: number };
@@ -66,11 +67,14 @@ export default function QuickWorkActions({ request, projects, staff, disabled, o
   useEffect(() => () => onBusy(false), [onBusy]);
   if (!project || !stage) return null;
   const blocked = busy || disabled || project.archived;
-  async function run(kind: "pause" | "resume" | "transfer" | "progress", progress?: number) {
+  async function run(kind: "pause" | "resume" | "transfer" | "progress" | "delete", progress?: number) {
     if (lock.current || blocked || !project || !stage) return;
     lock.current = true; setBusy(true); onBusy(true); setError("");
     try {
-      if (kind === "transfer") {
+      if (kind === "delete") {
+        if (!await confirmPlanning(`删除“${project.name} · ${stage.name}”？这会删除整项${stage.milestone ? "交付节点" : "工作及所有参与人员的泳道"}。`)) return;
+        await onPersist({ ...project, stages: project.stages.filter(s => s.id !== stage.id) });
+      } else if (kind === "transfer") {
         // Validate the same selected-person interval before invoking the atomic two-project API.
         adjustWorkPause(stage, person, from, to);
         const dest = projects.find(p => p.id === target && !p.archived && p.id !== project.id);
@@ -106,7 +110,10 @@ export default function QuickWorkActions({ request, projects, staff, disabled, o
       </>}
     </fieldset>
     {error && <p className="mp-quick-error" role="alert">{error}</p>}
-    <footer><span>{busy ? "正在保存…" : "选择操作后直接保存"}</span><button type="button" disabled={blocked} onClick={onDetails}>详细编辑</button></footer>
+    <footer className="mp-quick-work-footer"><span>{busy ? "正在保存…" : "选择操作后直接保存"}</span>
+      <div><button type="button" className="mp-quick-delete" disabled={blocked} onClick={() => void run("delete")}>{stage.milestone ? "删除交付节点" : "删除泳道"}</button>
+        <button type="button" disabled={blocked} onClick={onDetails}>详细编辑</button></div>
+    </footer>
   </QuickPanel>;
 }
 

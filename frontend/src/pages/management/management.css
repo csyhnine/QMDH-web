@@ -2138,5 +2138,12 @@
 .mp-calendar[popover] .mp-calendar-grid button[aria-pressed=true] {background:#4169df;color:white;}
 .mp-quick-panel fieldset small {color:#8591a2;font-size:11px;line-height:1.6;}
 .mp-quick-panel footer {margin-top:12px;padding-top:10px;border-top:1px solid #edf0f5;font-size:11px;color:#7a889c;}
+.mp-simple-work-card>header {flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+.mp-simple-work-card>header h2 {min-width:0;overflow-wrap:anywhere;}
+.mp-work-card-actions {display:flex;gap:8px;flex-shrink:0;}
+.mp-work-card-actions button {white-space:nowrap;}
+.mp-quick-panel .mp-quick-work-footer {flex-wrap:wrap;}
+.mp-quick-work-footer>div {display:flex;gap:8px;margin-left:auto;}
+.mp-quick-panel .mp-quick-delete {color:#a52b32;border-color:#e5b5ba;}
 .mp-quick-error {padding:8px;background:#fff2f1;color:#af3434;border-radius:6px;}
 .management-page .mp-gantt-delivery {padding:3px 5px;font-size:11px;color:#93621f;}

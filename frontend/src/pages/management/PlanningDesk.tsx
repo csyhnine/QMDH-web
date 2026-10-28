@@ -57,7 +57,8 @@ export default function PlanningDesk({
     [work, setWork] = useState("");
   const [note, setNote] = useState("");
   const lock = useRef(false),
-    alive = useRef(true);
+    alive = useRef(true),
+    card = useRef<HTMLFormElement>(null);
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -130,6 +131,7 @@ export default function PlanningDesk({
     try {
       const p = editor.project,
         s = { ...editor.stage };
+      if (!remove && !segment && !s.name.trim()) throw Error("请填写工作或节点名称，再保存关闭。");
       if (segment && !remove) {
         const dest = projects.find((p) => p.id === target);
         if (!dest || !person) throw Error("请选择人员和支援项目");
@@ -249,12 +251,16 @@ export default function PlanningDesk({
         </>
       )}
       {editor && (
-        <div className="mp-modal">
+        <div className="mp-modal" onClick={(event) => {
+          if (event.target === event.currentTarget && !busy && !disabled && !lock.current) card.current?.requestSubmit();
+        }}>
           <form
+            ref={card}
             className="mp-node-card mp-simple-work-card"
             role="dialog"
             aria-modal="true"
             aria-label="节点与工作卡片"
+            onInvalid={() => setError("请检查必填内容和日期，填写完整后再保存关闭。")}
             onSubmit={(e) => {
               e.preventDefault();
               void save();
@@ -270,15 +276,14 @@ export default function PlanningDesk({
                       : "添加工作"
                     : editor.stage.name}
               </h2>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={async () => {
-                  if (await confirmPlanning("关闭并放弃未保存内容？")) setEditor(null);
-                }}
-              >
-                关闭
-              </button>
+              <div className="mp-work-card-actions">
+                <button type="button" disabled={busy || disabled} onClick={() => { if (!lock.current) setEditor(null); }}>
+                  不保存关闭
+                </button>
+                <button type="submit" className="mp-primary" disabled={busy || disabled}>
+                  {busy ? "正在保存…" : "保存关闭"}
+                </button>
+              </div>
             </header>
             {error && (
               <p className="mp-error" role="alert">
@@ -535,9 +540,6 @@ export default function PlanningDesk({
                 </>
               )}
               <footer>
-                <button type="submit" className="mp-primary">
-                  {busy ? "正在保存…" : segment ? "确认改派" : "保存卡片"}
-                </button>
                 {segment && (
                   <button type="button" onClick={() => setSegment(false)}>
                     返回编辑

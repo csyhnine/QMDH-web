@@ -2068,7 +2068,9 @@
 .management-page .mp-pillar-grid th:first-child {width:72px;padding:7px 2px;}
 .mp-pillar-grid th strong {font-size:11px;white-space:nowrap;}
 .management-page .mp-pillar-grid tbody th,.management-page .mp-pillar-grid td {height:var(--mp-row-height);padding:0;}
-.management-page .mp-pillar-grid tbody th {padding-top:8px;}
+.management-page .mp-pillar-grid tbody th {padding:0;vertical-align:middle;}
+.mp-pillar-grid tbody th strong {line-height:18px;}
+.mp-pillar-grid tbody th small {line-height:12px;}
 .management-page .mp-pillar-add {width:100%;height:calc(var(--mp-row-height) - 1px);border:0;border-radius:0;padding:0;background:transparent;color:#dbe4f2;}
 .mp-pillar-add:hover {background:#eef4ff!important;color:#5074d6!important;}
 .mp-pillar-overlay {display:grid;position:absolute;top:36px;left:0;right:0;pointer-events:none;}
@@ -2081,6 +2083,17 @@
 .mp-pillar-pause>span {writing-mode:vertical-rl;font-size:10px;line-height:16px;max-height:100%;overflow:hidden;}
 .mp-pillar-unattended {background:repeating-linear-gradient(135deg,#f5f6f8f7 0 6px,#e4e7edf7 6px 12px);color:#976227;}
 .mp-pillar-selection {position:absolute;left:0;right:0;background:#ffffff80;outline:2px solid #345dd9;outline-offset:-2px;pointer-events:none;}
+.mp-compact .mp-pillar-board {max-height:none;}
+.mp-personnel-zoom {display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.management-page .mp-personnel-zoom button {padding:2px 7px;font-size:11px;line-height:18px;}
+.management-page .mp-pillar-add:focus-visible {outline:2px solid #4169df;outline-offset:-3px;}
+.management-page .mp-dense-dates .mp-pillar-grid tbody th {padding:0;vertical-align:middle;}
+.mp-dense-dates .mp-pillar-grid tbody th small {display:none;}
+.mp-dense-dates .mp-pillar-grid tbody th strong {line-height:16px;font-size:10px;}
+.mp-pillar-wrap .mp-work-pillar {min-width:0;padding-left:0;padding-right:0;}
+.mp-pillar-wrap .mp-pillar-grip {min-width:0;overflow:hidden;}
+.mp-pillar-narrow .mp-pillar-caption,.mp-pillar-narrow .mp-pillar-pause>span {display:none;}
+.management-page .mp-pillar-narrow .mp-pillar-grip {font-size:0;}
 .mp-pause-warnings {padding:8px 10px;margin-top:8px;border:1px solid #ead8b8;border-radius:7px;background:#fffaf0;font-size:12px;color:#946326;}
 .mp-pause-warnings>button {display:block;text-align:left;margin-top:5px;font-size:11px;}
 .mp-week-writing {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px;}

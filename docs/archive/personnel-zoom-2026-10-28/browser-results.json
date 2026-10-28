@@ -1,0 +1,34 @@
+{
+  "results": [
+    {
+      "name": "Ctrl wheel changes visible date count, anchors pointer date, updates next range and restores natural week",
+      "passed": true
+    },
+    {
+      "name": "Zoom supports month scroll anchors, clamps dense rows and period changes reset view",
+      "passed": true
+    },
+    {
+      "name": "Ordinary wheel scrolls without changing dates; zoom outside personnel table is untouched",
+      "passed": true
+    },
+    {
+      "name": "Blank cells have no plus; single click does nothing, double click creates one dated/person-assigned lane",
+      "passed": true
+    },
+    {
+      "name": "Ten simultaneous projects keep identical staff columns, narrow separate lanes and each opens quick actions",
+      "passed": true
+    },
+    {
+      "name": "Keyboard adds from a blank cell; mobile zoom buttons and ten-lane layout remain usable",
+      "passed": true
+    },
+    {
+      "name": "Zoomed narrow lanes retain exact selection dates and whole-work drag with quiet autosave",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "nativePrompts": []
+}

@@ -120,7 +120,8 @@ export default function ManagementProjectsPage() {
   const [start, setStart] = useState(today());
   const [days, setDays] = useState(30);
   const [peoplePeriod, setPeoplePeriod] = useState<SchedulePeriod>("week");
-  const peopleRange = scheduleRange(start, peoplePeriod);
+  const [peopleZoomDays, setPeopleZoomDays] = useState<number | null>(null);
+  const peopleRange = peopleZoomDays ? { start, days: peopleZoomDays } : scheduleRange(start, peoplePeriod);
   const ganttRange = days === 7 ? scheduleRange(start, "week") : { start, days };
   const [workRequest, setWorkRequest] = useState<WorkRequest | null>(null);
   const [draft, setDraft] = useState<PlanningProject | null>(null);
@@ -697,7 +698,7 @@ export default function ManagementProjectsPage() {
               <div>
                 <button
                   disabled={planDirty}
-                  onClick={() => setStart(view === "people" ? moveSchedulePeriod(start, peoplePeriod, -1) : addDays(start, -days))}
+                  onClick={() => setStart(view === "people" ? peopleZoomDays ? addDays(start, -peopleZoomDays) : moveSchedulePeriod(start, peoplePeriod, -1) : addDays(start, -days))}
                 >
                   ‹
                 </button>
@@ -712,7 +713,7 @@ export default function ManagementProjectsPage() {
                 />
                 <button
                   disabled={planDirty}
-                  onClick={() => setStart(view === "people" ? moveSchedulePeriod(start, peoplePeriod, 1) : addDays(start, days))}
+                  onClick={() => setStart(view === "people" ? peopleZoomDays ? addDays(start, peopleZoomDays) : moveSchedulePeriod(start, peoplePeriod, 1) : addDays(start, days))}
                 >
                   ›
                 </button>
@@ -735,9 +736,10 @@ export default function ManagementProjectsPage() {
                   <select
                     aria-label="人员排期跨度"
                     disabled={planDirty || planSaving}
-                    value={peoplePeriod}
-                    onChange={(e) => setPeoplePeriod(e.target.value as SchedulePeriod)}
+                    value={peopleZoomDays ? "custom" : peoplePeriod}
+                    onChange={(e) => { if (e.target.value !== "custom") { setPeoplePeriod(e.target.value as SchedulePeriod); setPeopleZoomDays(null); } }}
                   >
+                    {peopleZoomDays && <option value="custom">自定 · {peopleZoomDays} 天</option>}
                     <option value="week">按周</option>
                     <option value="month">按月</option>
                     <option value="quarter">按季度</option>
@@ -773,6 +775,9 @@ export default function ManagementProjectsPage() {
                 start={peopleRange.start}
                 days={peopleRange.days}
                 period={peoplePeriod}
+                fitDates={peopleZoomDays !== null}
+                onZoom={(date, count) => { if (!planDirty && !planSaving) { setStart(date); setPeopleZoomDays(count); } }}
+                onResetZoom={() => { if (!planDirty && !planSaving) setPeopleZoomDays(null); }}
                 disabled={deskDirty}
                 onOpen={setWorkRequest}
                 onReassign={reassignSchedule}

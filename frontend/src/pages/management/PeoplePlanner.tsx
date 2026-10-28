@@ -16,6 +16,9 @@ export default function PeoplePlanner({
   start,
   days,
   period,
+  fitDates,
+  onZoom,
+  onResetZoom,
   personFilter,
   archived,
   disabled = false,
@@ -32,6 +35,9 @@ export default function PeoplePlanner({
   start: string;
   days: number;
   period: SchedulePeriod;
+  fitDates: boolean;
+  onZoom: (start: string, days: number) => void;
+  onResetZoom: () => void;
   personFilter: number;
   archived: boolean;
   disabled?: boolean;
@@ -178,6 +184,9 @@ export default function PeoplePlanner({
         start={start}
         days={days}
         period={period}
+        fitDates={fitDates}
+        onZoom={onZoom}
+        onResetZoom={onResetZoom}
         disabled={blocked}
         onSelect={(p, s, personId, date, x, y) => openQuick({ projectId: p.id!, stageId: s.id, personId, date, x, y })}
         onSegment={(p,s,personId,date,end,x,y)=>openQuick({projectId:p.id!,stageId:s.id,personId,date,end,x,y})}

@@ -11,12 +11,16 @@ import {
 } from "./planning";
 import { dayAtPointer, pauseSlices } from "./pillarPlanning";
 import type { SchedulePeriod } from "./scheduleCalendar";
+import { personnelLane, zoomPersonnelWindow } from "./personnelViewport";
 export default function PeopleSchedule({
   projects,
   staff,
   start,
   days,
   period,
+  fitDates,
+  onZoom,
+  onResetZoom,
   workloadProjects = projects,
   disabled = false,
   onSelect,
@@ -32,6 +36,9 @@ export default function PeopleSchedule({
   start: string;
   days: number;
   period: SchedulePeriod;
+  fitDates: boolean;
+  onZoom: (start: string, days: number) => void;
+  onResetZoom: () => void;
   workloadProjects?: PlanningProject[];
   disabled?: boolean;
   onSelect: (p: PlanningProject, s: Stage, person: number, date: string, x: number, y: number) => void;
@@ -61,7 +68,8 @@ export default function PeopleSchedule({
         person,
         items,
         loads: staffLoads(workload, person.id, days),
-        width: Math.max(60, lanes.length * 22 + 14),
+        width: 60,
+        lanes: lanes.length,
       };
     });
   const dates = Array.from({ length: days }, (_, i) => addDays(start, i)),
@@ -86,7 +94,7 @@ export default function PeopleSchedule({
       person: number;
     } | null>(null),
     suppress = useRef(false);
-  const rowHeight = period === "week" ? Math.max(62, Math.floor((height - 36) / 7)) : period === "month" ? 44 : 34;
+  const rowHeight = fitDates ? Math.max(18, (height - 37) / days) : period === "week" ? Math.max(62, Math.floor((height - 36) / 7)) : period === "month" ? 44 : 34;
   const extra = Math.max(0, boardWidth - 72 - people.reduce((n, p) => n + p.width, 0)) / Math.max(1, people.length);
   const widths = [72, ...people.map((p) => p.width + extra)],
     grid = widths.map((w) => `${w}px`).join(" "),
@@ -108,6 +116,30 @@ export default function PeopleSchedule({
       observer.disconnect();
     };
   }, [start, period, people.length]);
+  useLayoutEffect(() => {
+    if (fitDates && board.current) board.current.scrollTop = 0;
+  }, [start, days, fitDates]);
+  function zoom(direction: number, offset?: number) {
+    const element = board.current;
+    if (!element || disabled) return;
+    const next = zoomPersonnelWindow(start, days, rowHeight, element.clientHeight, offset ?? element.clientHeight / 2, element.scrollTop, direction);
+    onZoom(next.start, next.days);
+  }
+  useLayoutEffect(() => {
+    const element = board.current;
+    if (!element) return;
+    let delta = 0;
+    const wheel = (event: WheelEvent) => {
+      if (!event.ctrlKey) { delta = 0; return; }
+      event.preventDefault();
+      delta += event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? element.clientHeight : 1);
+      if (Math.abs(delta) < 40) return;
+      zoom(Math.sign(delta), event.clientY - element.getBoundingClientRect().top);
+      delta = 0;
+    };
+    element.addEventListener("wheel", wheel, { passive: false });
+    return () => element.removeEventListener("wheel", wheel);
+  }, [start, days, rowHeight, disabled, onZoom]);
   function dateAt(y: number) {
     return dayAtPointer(body.current?.getBoundingClientRect().top || 0, y, rowHeight, start, days);
   }
@@ -118,10 +150,15 @@ export default function PeopleSchedule({
         <span>
           {start}—{addDays(start, days - 1)} · {people.length} 人
         </span>
-        <span>{over ? `⚠ ${over} 人的安排需要协调 · ` : ""}点击柱体快捷调整 · 划选一段暂停或改派 · ↕ 拖动整项 · 灰白表示暂停</span>
+        <div className="mp-personnel-zoom">
+          <span>{over ? `⚠ ${over} 人的安排需要协调 · ` : ""}Ctrl + 滚轮缩放 · {fitDates ? `当前 ${days} 天` : "双击空白新增"}</span>
+          <button disabled={disabled} aria-label="缩小日期视图" title="显示更多日期" onClick={() => zoom(1)}>−</button>
+          <button disabled={disabled} aria-label="放大日期视图" title="显示更少日期" onClick={() => zoom(-1)}>＋</button>
+          {fitDates && <button disabled={disabled} onClick={onResetZoom}>重置缩放</button>}
+        </div>
       </div>
       <div
-        className={`mp-people-board mp-calendar-board mp-pillar-board mp-period-${period}`}
+        className={`mp-people-board mp-calendar-board mp-pillar-board mp-period-${period}${rowHeight < 38 ? " mp-dense-dates" : ""}`}
         ref={board}
         style={{ height, "--mp-row-height": `${rowHeight}px` } as CSSProperties}
         tabIndex={0}
@@ -175,11 +212,17 @@ export default function PeopleSchedule({
                         <button
                           className="mp-pillar-add"
                           aria-label={`${person.name} ${date} 添加工作`}
+                          title="双击新增工作；键盘按 Enter 新增"
                           disabled={disabled || !person.is_active || !projects.length}
-                          onClick={() => onAdd(person.id, date)}
-                        >
-                          <span>＋</span>
-                        </button>
+                          onDoubleClick={() => onAdd(person.id, date)}
+                          onKeyDown={(event) => {
+                            if (event.repeat) return;
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              onAdd(person.id, date);
+                            }
+                          }}
+                        />
                       </td>
                     ))}
                   </tr>
@@ -189,25 +232,18 @@ export default function PeopleSchedule({
           </table>
           <div className="mp-pillar-overlay" style={{ height: days * rowHeight, gridTemplateColumns: grid }}>
             <div />
-            {people.map(({ person, items }) => (
+            {people.map(({ person, items, width, lanes }) => (
               <div className="mp-person-pillar-track" key={person.id}>
-                {items.map((e) => (
+                {items.map((e) => {
+                  const lane = personnelLane(width + extra, lanes, e.lane);
+                  return (
                   <div
                     key={`${e.project.id}:${e.stage.id}`}
-                    className="mp-pillar-wrap"
+                    className={`mp-pillar-wrap${lane.width < 12 ? " mp-pillar-narrow" : ""}`}
                     style={{
                       top: e.left * rowHeight + 2,
                       height: e.width * rowHeight - 4,
-                      left:
-                        Math.max(
-                          4,
-                          (people.find((p) => p.person.id === person.id)!.width +
-                            extra -
-                            Math.max(1, ...items.map((i) => i.lane + 1)) * 22) /
-                            2,
-                        ) +
-                        e.lane * 22,
-                      width: 20,
+                      ...lane,
                     }}
                   >
                     <button
@@ -322,7 +358,8 @@ export default function PeopleSchedule({
                       </button>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -330,7 +367,7 @@ export default function PeopleSchedule({
         {!people.length && <p className="mp-empty">暂无人员，请先维护人员名册。</p>}
       </div>
       <p className="mp-help">
-        点击空白日期格新增工作。多人工作共享起止日期；改派一段只抽调所选人员。未安排人员的工作{" "}
+        双击空白日期格新增工作；键盘可聚焦空白格后按 Enter。并行任务自动压窄，悬停可查看名称。多人工作共享起止日期；改派一段只抽调所选人员。未安排人员的工作{" "}
         {entries.filter((e) => !e.stage.assignees.length).length} 项。
       </p>
     </>

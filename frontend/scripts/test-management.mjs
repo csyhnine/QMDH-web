@@ -15,6 +15,7 @@ function load(file, overrides = {}, globals = {}) {
 }
 const planning = load('pages/management/planning.ts');
 const calendar = load('pages/management/scheduleCalendar.ts', {'./planning':planning});
+const viewport = load('pages/management/personnelViewport.ts', {'./planning':planning});
 const pillars=load('pages/management/pillarPlanning.ts',{'./planning':planning},{crypto:require('node:crypto').webcrypto});
 test('affiliation counts active internal and external people separately without guessing unknown identities', () => {
   const staff = [{is_active:true,employment_type:'internal'},{is_active:true,employment_type:'external',employer:'Partner'}, {is_active:true}, {is_active:false,employment_type:'internal'}];
@@ -255,13 +256,33 @@ test('calendar periods use real week/month/quarter/year boundaries including lea
 });
 
 test('personnel calendar renders names as column headers, dates as rows, hidden project load and personal pauses',()=>{
- const Schedule=load('pages/management/PeopleSchedule.tsx',{'./planning':planning,'./pillarPlanning':pillars,react:{...require('react'),useMemo:fn=>fn(),useLayoutEffect:()=>{},useRef:()=>({current:null}),useState:x=>[x,()=>{}]}}).default;
+ const Schedule=load('pages/management/PeopleSchedule.tsx',{'./planning':planning,'./pillarPlanning':pillars,'./personnelViewport':viewport,react:{...require('react'),useMemo:fn=>fn(),useLayoutEffect:()=>{},useRef:()=>({current:null}),useState:x=>[x,()=>{}]}}).default;
  const a={...stage('work','2026-10-26','2026-10-27',[1,2],60),pauses:[{id:'p',start:'2026-10-26',until:null,people:[1],reason:'抽调'}]};
  const p=makeProject(1,[a]),hidden=makeProject(2,[stage('hidden','2026-10-26','2026-10-26',[2],60)]);
  const html=renderToStaticMarkup(Schedule({projects:[p],workloadProjects:[p,hidden],staff:[{id:1,name:'甲',is_active:true},{id:2,name:'乙',is_active:true}],start:'2026-10-26',days:7,period:'week'}));
  assert.ok(html.includes('scope="col"'));assert.ok(html.includes('<strong>甲</strong>'));assert.equal((html.match(/scope="row"/g)||[]).length,7);
  assert.ok(!html.includes('120%'));assert.ok(html.includes('mp-pillar-pause'));assert.ok(html.includes('mp-work-pillar'));assert.ok(html.includes('甲 2026-10-26 添加工作'));
  assert.ok(!html.includes('选人面板'));assert.ok(!html.includes('安排工作'));
+});
+
+test('ten parallel lanes fit a fixed personnel column without overlap and retain blank margins',()=>{
+ for(const width of [60,90,240]) {
+  const lanes=Array.from({length:10},(_,i)=>viewport.personnelLane(width,10,i));
+  assert.ok(lanes[0].left>=6);assert.ok(lanes.at(-1).left+lanes.at(-1).width<=width-6);
+  assert.ok(lanes.every(l=>l.width>0&&l.width<=20));
+  for(let i=1;i<lanes.length;i++)assert.ok(lanes[i-1].left+lanes[i-1].width<lanes[i].left);
+ }
+ assert.equal(viewport.personnelLane(60,1,0).width,20);
+});
+
+test('personnel zoom changes visible days across year boundaries while anchoring pointer dates and limiting density',()=>{
+ const out=viewport.zoomPersonnelWindow('2026-12-28',7,80,597,236,0,1);
+ assert.equal(out.days,9);
+ assert.equal(planning.addDays(out.start,Math.floor(200/(560/9))),'2026-12-30');
+ const scrolled=viewport.zoomPersonnelWindow('2026-12-01',31,44,597,256,440,1);
+ assert.equal(planning.addDays(scrolled.start,Math.floor(220/(560/scrolled.days))),planning.addDays('2026-12-01',15));
+ assert.equal(viewport.zoomPersonnelWindow('2026-12-30',3,560/3,597,100,0,-1).days,3);
+ assert.equal(viewport.zoomPersonnelWindow('2026-12-30',31,18,597,100,0,1).days,31);
 });
 
 

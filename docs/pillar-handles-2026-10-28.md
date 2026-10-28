@@ -10,4 +10,8 @@
 
 证据：`docs/archive/pillar-handles-2026-10-28/`，包含修前诊断。私有候选/测试/截图：ignored 的 `local/pillar-handles-20261028/`；一次性发布脚本：`local/pillar_handles_runner.py`、`pillar_handles_preflight.py`、`pillar_handles_backup.py`、`pillar_handles_deploy.py`，不对历史路径/清理脚本重跑。只改前端，保持既有WIP、分院鉴权、草稿PR与冻结状态。
 
-发布前核对前端2ebc0b0b4992、后端dad05b8dc047、三worker fa3f8984f8a4、迁移b94de295f179、配置/8工作流/恢复基线，队列及GPU锁为空，盘余约8.299GiB。无清理；部署结果随后补入。
+发布前核对前端2ebc0b0b4992、后端dad05b8dc047、三worker fa3f8984f8a4、迁移b94de295f179、配置/8工作流/恢复基线，队列及GPU锁为空，盘余约8.299GiB。无清理；部署情况见下。
+
+2026-10-28 已部署前端源码 `31027d0dd2845edb96ad6bb7125d7465d5bbd0c9`，镜像 `f3cf6526e97e`。52文件逐字节、10公网资源、25页面地址、健康、Qwen输入数[1,2]与管理鉴权通过，保留旧hash资源。后端、三个worker及其他容器ID/启动时间、env/挂载/网络和8工作流保持，无迁移或生产测试写入。
+
+第三Compose：`/opt/qmdh-frp/releases/pillar-handles-20261028/compose.release.yml`。服务器 `/www/backup/qmdh-release-20261028-pillar-handles` ↔ 本机 `E:/backups/QMDH-web/release-20261028-pillar-handles` 的26文件SHA一致，DB/媒体经pillar-resize及此前纯前端轮继承unit-access独立恢复基线，非本轮新快照；回滚只切前端，不覆盖新业务数据。盘余约8.270GiB，仍须后续复测8GiB门槛。本轮无清理。

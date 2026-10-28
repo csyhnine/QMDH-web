@@ -50,6 +50,7 @@ export default function PeoplePlanner({
 }) {
   const [pending, setPending] = useState<Record<number, PlanningProject>>({});
   const [quick, setQuick] = useState<QuickWork | null>(null), [quickBusy, setQuickBusy] = useState(false);
+  const [resizing, setResizing] = useState(false);
   const [autoFailed, setAutoFailed] = useState(false),
     [saving, setSaving] = useState(false),
     [message, setMessage] = useState("");
@@ -70,13 +71,13 @@ export default function PeoplePlanner({
     };
   }, []);
   useEffect(() => {
-    onDirty(changed > 0 || Boolean(quick));
+    onDirty(changed > 0 || Boolean(quick) || resizing);
     return () => onDirty(false);
-  }, [changed, Boolean(quick), onDirty]);
+  }, [changed, Boolean(quick), resizing, onDirty]);
   useEffect(() => {
-    onBusy(saving || quickBusy);
+    onBusy(saving || quickBusy || resizing);
     return () => onBusy(false);
-  }, [saving, quickBusy, onBusy]);
+  }, [saving, quickBusy, resizing, onBusy]);
   function write(next: Record<number, PlanningProject>) {
     edits.current = next;
     if (mounted.current) setPending(next);
@@ -118,7 +119,7 @@ export default function PeoplePlanner({
       );
     }
   }
-  usePlanningAutoSave(changed ? JSON.stringify(pending) : null, autoSave, saving || archived || autoFailed, save);
+  usePlanningAutoSave(changed ? JSON.stringify(pending) : null, autoSave, saving || archived || autoFailed || resizing, save);
 
   function open(request: Omit<WorkRequest, "nonce">) {
     if (changed || lock.current) {
@@ -175,7 +176,7 @@ export default function PeoplePlanner({
             </span>
           ))}
         </div>
-        <small>点击柱体快捷调整 · 划选一段暂停或支援 · ↕ 拖动整项</small>
+        <small>上下端调整起止 · ⠿ 整项平移或转交 · 柱体划选暂停或支援</small>
       </div>
       <PeopleSchedule
         projects={preview}
@@ -187,6 +188,8 @@ export default function PeoplePlanner({
         fitDates={fitDates}
         onZoom={onZoom}
         onResetZoom={onResetZoom}
+        onResize={(p, s, edge, offset) => apply(p.id!, { kind: "resize", stageId: s.id, edge, offset })}
+        onResizeBusy={setResizing}
         disabled={blocked}
         onSelect={(p, s, personId, date, x, y) => openQuick({ projectId: p.id!, stageId: s.id, personId, date, x, y })}
         onSegment={(p,s,personId,date,end,x,y)=>openQuick({projectId:p.id!,stageId:s.id,personId,date,end,x,y})}

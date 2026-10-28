@@ -16,6 +16,7 @@ function load(file, overrides = {}, globals = {}) {
 const planning = load('pages/management/planning.ts');
 const calendar = load('pages/management/scheduleCalendar.ts', {'./planning':planning});
 const viewport = load('pages/management/personnelViewport.ts', {'./planning':planning});
+const staffPlanning = load('pages/management/staffPlanning.ts', {'./planning':planning});
 const pillars=load('pages/management/pillarPlanning.ts',{'./planning':planning},{crypto:require('node:crypto').webcrypto});
 test('affiliation counts active internal and external people separately without guessing unknown identities', () => {
   const staff = [{is_active:true,employment_type:'internal'},{is_active:true,employment_type:'external',employer:'Partner'}, {is_active:true}, {is_active:false,employment_type:'internal'}];
@@ -256,7 +257,7 @@ test('calendar periods use real week/month/quarter/year boundaries including lea
 });
 
 test('personnel calendar renders names as column headers, dates as rows, hidden project load and personal pauses',()=>{
- const Schedule=load('pages/management/PeopleSchedule.tsx',{'./planning':planning,'./pillarPlanning':pillars,'./personnelViewport':viewport,react:{...require('react'),useMemo:fn=>fn(),useLayoutEffect:()=>{},useRef:()=>({current:null}),useState:x=>[x,()=>{}]}}).default;
+ const Schedule=load('pages/management/PeopleSchedule.tsx',{'./planning':planning,'./pillarPlanning':pillars,'./personnelViewport':viewport,'./usePillarResize':{default:()=>({preview:null,landed:'',bind:()=>({})})},react:{...require('react'),useMemo:fn=>fn(),useLayoutEffect:()=>{},useRef:()=>({current:null}),useState:x=>[x,()=>{}]}}).default;
  const a={...stage('work','2026-10-26','2026-10-27',[1,2],60),pauses:[{id:'p',start:'2026-10-26',until:null,people:[1],reason:'抽调'}]};
  const p=makeProject(1,[a]),hidden=makeProject(2,[stage('hidden','2026-10-26','2026-10-26',[2],60)]);
  const html=renderToStaticMarkup(Schedule({projects:[p],workloadProjects:[p,hidden],staff:[{id:1,name:'甲',is_active:true},{id:2,name:'乙',is_active:true}],start:'2026-10-26',days:7,period:'week'}));
@@ -273,6 +274,18 @@ test('ten parallel lanes fit a fixed personnel column without overlap and retain
   for(let i=1;i<lanes.length;i++)assert.ok(lanes[i-1].left+lanes[i-1].width<lanes[i].left);
  }
  assert.equal(viewport.personnelLane(60,1,0).width,20);
+});
+
+test('personnel endpoint resizing fixes the opposite inclusive date and preserves people, pauses and other work',()=>{
+ const s={...stage('resize','2026-12-29','2027-01-03',[1,2]),deliverable:'保留交付物',pauses:[{id:'p',start:'2026-12-30',until:'2026-12-31',people:[1]}]};
+ const p=makeProject(1,[s,stage('untouched','2027-01-05','2027-01-07')]);
+ const a=staffPlanning.changePeoplePlan(p,[],{kind:'resize',stageId:s.id,edge:'start',offset:2});
+ assert.equal(a.stages[0].start,'2026-12-31');assert.equal(a.stages[0].end,s.end);assert.equal(a.stages[0].assignees,s.assignees);assert.equal(a.stages[0].pauses,s.pauses);assert.equal(a.stages[1],p.stages[1]);
+ const b=staffPlanning.changePeoplePlan(p,[],{kind:'resize',stageId:s.id,edge:'end',offset:-2});
+ assert.equal(b.stages[0].start,s.start);assert.equal(b.stages[0].end,'2027-01-01');assert.equal(b.stages[0].deliverable,s.deliverable);assert.equal(p.stages[0],s);
+ for(const edge of ['start','end']){const n=staffPlanning.resizeWorkEndpoint(s,edge,edge==='start'?99999:-99999);assert.equal(n.start,n.end);}
+ assert.equal(planning.dayNumber(staffPlanning.resizeWorkEndpoint(s,'end',99999).end)-planning.dayNumber(s.start),3660);
+ assert.throws(()=>staffPlanning.resizeWorkEndpoint({...s,milestone:true},'end',1));assert.throws(()=>staffPlanning.resizeWorkEndpoint(s,'start',0.5));
 });
 
 test('personnel zoom changes visible days across year boundaries while anchoring pointer dates and limiting density',()=>{

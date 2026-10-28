@@ -1,9 +1,10 @@
-import { addDays, dayNumber, type PlanningProject, type Staff, type TeamKey } from "./planning";
+import { addDays, dayNumber, type PlanningProject, type Staff, type Stage, type TeamKey } from "./planning";
 
 export type PeopleChange =
   | { kind: "assign" | "remove"; stageId: string; personId: number }
   | { kind: "role"; role: TeamKey; personId: number; remove?: boolean }
   | { kind: "dates"; stageId: string; start: string; end: string }
+  | { kind: "resize"; stageId: string; edge: "start" | "end"; offset: number }
   | { kind: "move"; stageId: string; fromPerson: number; personId: number; offset: number };
 
 function validDate(value: string): boolean {
@@ -12,6 +13,16 @@ function validDate(value: string): boolean {
     Number.isFinite(dayNumber(value)) &&
     new Date(dayNumber(value) * 86400000).toISOString().slice(0, 10) === value
   );
+}
+
+/** Resize one inclusive endpoint; never move the opposite endpoint or the people. */
+export function resizeWorkEndpoint(stage: Stage, edge: "start" | "end", offset: number): Stage {
+  if (stage.milestone || !Number.isInteger(offset)) throw Error("请选择工作的起止端点调整日期。");
+  const date = addDays(stage[edge], offset),
+    lower = edge === "start" ? addDays(stage.end, -3660) : stage.start,
+    upper = edge === "start" ? stage.end : addDays(stage.start, 3660),
+    value = date < lower ? lower : date > upper ? upper : date;
+  return { ...stage, [edge]: value };
 }
 
 /** Apply only the explicitly selected assignment; preserve versions and other project fields. */
@@ -29,6 +40,7 @@ export function changePeoplePlan(project: PlanningProject, staff: Staff[], chang
   const stage = project.stages.find((s) => s.id === change.stageId);
   if (!stage) throw new Error("阶段已不存在，请保留调整后刷新项目。");
   let next = { ...stage };
+  if (change.kind === "resize") next = resizeWorkEndpoint(stage, change.edge, change.offset);
   if (change.kind === "assign") next.assignees = [...new Set([...stage.assignees, change.personId])];
   if (change.kind === "remove") next.assignees = stage.assignees.filter((id) => id !== change.personId);
   if (change.kind === "dates") {

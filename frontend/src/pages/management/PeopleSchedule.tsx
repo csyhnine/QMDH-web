@@ -1,6 +1,8 @@
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { createPortal } from "react-dom";
 import {
   addDays,
+  dayNumber,
   ganttEntries,
   staffLoads,
   projectTint,
@@ -12,6 +14,7 @@ import {
 import { dayAtPointer, pauseSlices } from "./pillarPlanning";
 import type { SchedulePeriod } from "./scheduleCalendar";
 import { personnelLane, zoomPersonnelWindow } from "./personnelViewport";
+import usePillarResize from "./usePillarResize";
 export default function PeopleSchedule({
   projects,
   staff,
@@ -21,6 +24,8 @@ export default function PeopleSchedule({
   fitDates,
   onZoom,
   onResetZoom,
+  onResize,
+  onResizeBusy,
   workloadProjects = projects,
   disabled = false,
   onSelect,
@@ -39,6 +44,8 @@ export default function PeopleSchedule({
   fitDates: boolean;
   onZoom: (start: string, days: number) => void;
   onResetZoom: () => void;
+  onResize: (project: PlanningProject, stage: Stage, edge: "start" | "end", offset: number) => void;
+  onResizeBusy: (busy: boolean) => void;
   workloadProjects?: PlanningProject[];
   disabled?: boolean;
   onSelect: (p: PlanningProject, s: Stage, person: number, date: string, x: number, y: number) => void;
@@ -95,6 +102,8 @@ export default function PeopleSchedule({
     } | null>(null),
     suppress = useRef(false);
   const rowHeight = fitDates ? Math.max(18, (height - 37) / days) : period === "week" ? Math.max(62, Math.floor((height - 36) / 7)) : period === "month" ? 44 : 34;
+  const resize = usePillarResize({ board, rowHeight, start, days, disabled, onCommit: onResize, onBusy: onResizeBusy });
+  const [moving, setMoving] = useState(""), [dropTarget, setDropTarget] = useState("");
   const extra = Math.max(0, boardWidth - 72 - people.reduce((n, p) => n + p.width, 0)) / Math.max(1, people.length);
   const widths = [72, ...people.map((p) => p.width + extra)],
     grid = widths.map((w) => `${w}px`).join(" "),
@@ -121,7 +130,7 @@ export default function PeopleSchedule({
   }, [start, days, fitDates]);
   function zoom(direction: number, offset?: number) {
     const element = board.current;
-    if (!element || disabled) return;
+    if (!element || disabled || resize.preview) return;
     const next = zoomPersonnelWindow(start, days, rowHeight, element.clientHeight, offset ?? element.clientHeight / 2, element.scrollTop, direction);
     onZoom(next.start, next.days);
   }
@@ -139,7 +148,11 @@ export default function PeopleSchedule({
     };
     element.addEventListener("wheel", wheel, { passive: false });
     return () => element.removeEventListener("wheel", wheel);
-  }, [start, days, rowHeight, disabled, onZoom]);
+  }, [start, days, rowHeight, disabled, onZoom, Boolean(resize.preview)]);
+  function drop(event: DragEvent, person: number, date: string) {
+    setMoving(""); setDropTarget("");
+    onDateDrop(event, person, date);
+  }
   function dateAt(y: number) {
     return dayAtPointer(body.current?.getBoundingClientRect().top || 0, y, rowHeight, start, days);
   }
@@ -158,7 +171,7 @@ export default function PeopleSchedule({
         </div>
       </div>
       <div
-        className={`mp-people-board mp-calendar-board mp-pillar-board mp-period-${period}${rowHeight < 38 ? " mp-dense-dates" : ""}`}
+        className={`mp-people-board mp-calendar-board mp-pillar-board mp-period-${period}${rowHeight < 38 ? " mp-dense-dates" : ""}${resize.preview ? " mp-resizing-board" : ""}`}
         ref={board}
         style={{ height, "--mp-row-height": `${rowHeight}px` } as CSSProperties}
         tabIndex={0}
@@ -205,9 +218,12 @@ export default function PeopleSchedule({
                         key={person.id}
                         data-person={person.id}
                         data-date={date}
-                        className={loads[i] > 100 ? "mp-cell-over" : ""}
-                        onDragOver={!disabled && person.is_active ? onDateDragOver : undefined}
-                        onDrop={!disabled && person.is_active ? (e) => onDateDrop(e, person.id, date) : undefined}
+                        className={`${loads[i] > 100 ? "mp-cell-over" : ""}${dropTarget === `${person.id}:${date}` ? " mp-pillar-drop-target" : ""}`}
+                        onDragOver={!disabled && person.is_active ? (event) => {
+                          onDateDragOver(event);
+                          if (event.defaultPrevented) setDropTarget(`${person.id}:${date}`);
+                        } : undefined}
+                        onDrop={!disabled && person.is_active ? (e) => drop(e, person.id, date) : undefined}
                       >
                         <button
                           className="mp-pillar-add"
@@ -235,14 +251,19 @@ export default function PeopleSchedule({
             {people.map(({ person, items, width, lanes }) => (
               <div className="mp-person-pillar-track" key={person.id}>
                 {items.map((e) => {
-                  const lane = personnelLane(width + extra, lanes, e.lane);
+                  const lane = personnelLane(width + extra, lanes, e.lane),
+                    key = `${e.project.id}:${e.stage.id}`,
+                    active = resize.preview?.projectId === e.project.id && resize.preview.stageId === e.stage.id,
+                    shown = active ? resize.preview!.stage : e.stage,
+                    left = Math.max(0, dayNumber(shown.start) - dayNumber(start)),
+                    widthDays = Math.min(days, dayNumber(shown.end) - dayNumber(start) + 1) - left;
                   return (
                   <div
                     key={`${e.project.id}:${e.stage.id}`}
-                    className={`mp-pillar-wrap${lane.width < 12 ? " mp-pillar-narrow" : ""}`}
+                    className={`mp-pillar-wrap${lane.width < 12 ? " mp-pillar-narrow" : ""}${active ? " mp-pillar-resizing" : ""}${resize.landed === key ? " mp-pillar-landed" : ""}${moving === key ? " mp-pillar-moving" : ""}`}
                     style={{
-                      top: e.left * rowHeight + 2,
-                      height: e.width * rowHeight - 4,
+                      top: left * rowHeight + 2,
+                      height: widthDays * rowHeight - 4,
                       ...lane,
                     }}
                   >
@@ -253,7 +274,7 @@ export default function PeopleSchedule({
                       aria-label={`${person.name} ${e.project.name} · ${e.stage.name}`}
                       title={`${e.project.name} · ${e.stage.name}\n${e.stage.start}—${e.stage.end}\n点击快捷调整；按住柱体划选日期，暂停或改派到其他项目`}
                       onPointerDown={(event) => {
-                        if (event.button !== 0 || disabled || e.stage.milestone) return;
+                        if (event.button !== 0 || disabled || e.stage.milestone || resize.preview) return;
                         suppress.current = false;
                         const date = dateAt(event.clientY);
                         pointer.current = {
@@ -312,18 +333,21 @@ export default function PeopleSchedule({
                         const box = event.currentTarget.getBoundingClientRect();
                         onSelect(e.project, e.stage, person.id, date, event.detail ? event.clientX : box.right, event.detail ? event.clientY : box.top);
                       }}
-                      onDragOver={!disabled ? onDateDragOver : undefined}
-                      onDrop={!disabled ? (event) => onDateDrop(event, person.id, dateAt(event.clientY)) : undefined}
+                      onDragOver={!disabled && person.is_active ? (event) => {
+                        onDateDragOver(event);
+                        if (event.defaultPrevented) setDropTarget(`${person.id}:${dateAt(event.clientY)}`);
+                      } : undefined}
+                      onDrop={!disabled && person.is_active ? (event) => drop(event, person.id, dateAt(event.clientY)) : undefined}
                     >
                       <span className="mp-pillar-caption">
                         {e.stage.milestone ? "◆ " : ""}
                         {e.project.name} · {e.stage.name}
                       </span>
-                      {pauseSlices(e.stage, person.id, addDays(start, e.left), e.width).map((s) => (
+                      {pauseSlices(shown, person.id, addDays(start, left), widthDays).map((s) => (
                         <span
                           key={s.left}
                           className={`mp-pillar-pause${s.unattended ? " mp-pillar-unattended" : ""}`}
-                          style={{ top: `${(s.left / e.width) * 100}%`, height: `${(s.width / e.width) * 100}%` }}
+                          style={{ top: `${(s.left / widthDays) * 100}%`, height: `${(s.width / widthDays) * 100}%` }}
                           title={s.unattended ? "⚠ 工作暂停 · 暂无人员接替" : "该人员暂停参与，其他人员继续负责"}
                         >
                           <span>{s.unattended ? "⚠ 工作暂停" : "暂停参与"}</span>
@@ -343,19 +367,31 @@ export default function PeopleSchedule({
                         )}
                     </button>
                     {!e.stage.milestone && person.is_active && (
+                      <>
+                      {e.stage.start >= start && <button type="button" className="mp-pillar-resize mp-pillar-resize-start"
+                        aria-label={`${person.name} ${e.project.name} · ${e.stage.name} 调整开始日期`}
+                        title="拖动开始日期，结束日期固定；↑↓调整一天，Shift+↑↓调整一周"
+                        disabled={disabled} {...resize.bind(e.project, e.stage, "start")}><span /></button>}
+                      {e.stage.end <= addDays(start, days - 1) && <button type="button" className="mp-pillar-resize mp-pillar-resize-end"
+                        aria-label={`${person.name} ${e.project.name} · ${e.stage.name} 调整结束日期`}
+                        title="拖动结束日期，开始日期固定；↑↓调整一天，Shift+↑↓调整一周"
+                        disabled={disabled} {...resize.bind(e.project, e.stage, "end")}><span /></button>}
+                      {e.width * rowHeight >= 36 &&
                       <button
                         className="mp-pillar-grip"
                         aria-label={`${person.name} ${e.stage.name} 拖动整项`}
-                        title="拖动整项改期或转交"
+                        title="整项平移或转交：起止日期一起移动"
                         draggable={!disabled}
                         disabled={disabled}
-                        onDragStart={(event) =>
-                          onStageDrag(event, e.project, e.stage, person.id, addDays(start, e.left))
-                        }
-                        onDragEnd={onDragEnd}
+                        onDragStart={(event) => {
+                          onStageDrag(event, e.project, e.stage, person.id, addDays(start, e.left));
+                          if (!event.defaultPrevented) setMoving(key);
+                        }}
+                        onDragEnd={() => { setMoving(""); setDropTarget(""); onDragEnd(); }}
                       >
-                        ↕
-                      </button>
+                        ⠿
+                      </button>}
+                      </>
                     )}
                   </div>
                   );
@@ -366,8 +402,13 @@ export default function PeopleSchedule({
         </div>
         {!people.length && <p className="mp-empty">暂无人员，请先维护人员名册。</p>}
       </div>
+      {resize.preview && createPortal(<div className="mp-pillar-resize-feedback" role="status"
+        style={{ left: Math.max(12, Math.min(resize.preview.x + 18, window.innerWidth - 250)), top: Math.max(12, Math.min(resize.preview.y + 18, window.innerHeight - 90)) }}>
+        <strong>{resize.preview.edge === "start" ? "调整开始 · 结束固定" : "调整结束 · 开始固定"}</strong>
+        <span>{resize.preview.stage.start} — {resize.preview.stage.end}</span><small>松开应用 · Esc 取消</small>
+      </div>, document.body)}
       <p className="mp-help">
-        双击空白日期格新增工作；键盘可聚焦空白格后按 Enter。并行任务自动压窄，悬停可查看名称。多人工作共享起止日期；改派一段只抽调所选人员。未安排人员的工作{" "}
+        上下端分别调整起止，另一端固定；⠿ 平移整项或转交，柱体划选暂停/支援。双击空白新增，键盘 Enter 也可。多人工作共享起止日期。未安排人员的工作{" "}
         {entries.filter((e) => !e.stage.assignees.length).length} 项。
       </p>
     </>

@@ -2145,5 +2145,23 @@
 .mp-quick-panel .mp-quick-work-footer {flex-wrap:wrap;}
 .mp-quick-work-footer>div {display:flex;gap:8px;margin-left:auto;}
 .mp-quick-panel .mp-quick-delete {color:#a52b32;border-color:#e5b5ba;}
+/* Endpoints resize independently; the separate grip explicitly moves the whole work. */
+.mp-pillar-wrap {transition:top 100ms ease-out,height 100ms ease-out,left 100ms ease-out;}
+.management-page .mp-pillar-grip {top:10px;height:12px;line-height:12px;border-radius:2px;font-size:12px;}
+.management-page .mp-pillar-resize {position:absolute;left:0;width:100%;height:8px;min-width:0;min-height:0;padding:0;border:0;border-radius:3px;background:#ffffff65;pointer-events:auto;touch-action:none;cursor:ns-resize;z-index:2;box-shadow:none;}
+.mp-pillar-resize-start {top:0;}.mp-pillar-resize-end {bottom:0;}
+.mp-pillar-resize>span {display:block;height:2px;background:#fff;margin:0 2px;border-radius:1px;}
+.management-page .mp-pillar-resize:hover,.management-page .mp-pillar-resize:focus-visible {background:#ffffffb8;outline:2px solid #4169df;outline-offset:1px;}
+.mp-pillar-resizing {z-index:8;transition:top 60ms linear,height 60ms linear;filter:drop-shadow(0 2px 5px #345dd980);}
+.mp-pillar-resizing .mp-work-pillar {outline:2px solid #4169df;outline-offset:1px;}
+.mp-resizing-board {user-select:none;cursor:ns-resize;}
+.mp-pillar-moving {opacity:.55;filter:drop-shadow(0 2px 5px #345dd980);}
+.management-page .mp-person-calendar .mp-pillar-drop-target {background:#dfeaff;box-shadow:inset 0 0 0 2px #6b8de5;transition:background 100ms;}
+.mp-pillar-landed {animation:mp-pillar-land 260ms ease-out;}
+@keyframes mp-pillar-land {0% {filter:brightness(1.2) drop-shadow(0 0 5px #4169df);transform:scaleX(1.12);} 100% {filter:none;transform:scaleX(1);}}
+.mp-pillar-resize-feedback {position:fixed;z-index:3000;width:238px;box-sizing:border-box;pointer-events:none;padding:9px 12px;border:1px solid #bdd0fc;border-radius:8px;background:#f7faff;color:#2a477c;box-shadow:0 4px 18px #25416a30;font-family:inherit;font-size:12px;line-height:1.5;}
+.mp-pillar-resize-feedback strong,.mp-pillar-resize-feedback span,.mp-pillar-resize-feedback small {display:block;}
+.mp-pillar-resize-feedback small {color:#718198;font-size:10px;}
+@media(prefers-reduced-motion:reduce) {.mp-pillar-wrap,.mp-pillar-resizing {transition:none;}.mp-pillar-landed {animation:none;}}
 .mp-quick-error {padding:8px;background:#fff2f1;color:#af3434;border-radius:6px;}
 .management-page .mp-gantt-delivery {padding:3px 5px;font-size:11px;color:#93621f;}

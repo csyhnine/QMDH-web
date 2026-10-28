@@ -1,4 +1,4 @@
-2026-10-27当前基线：前端源码c45fd00/镜像69e51190c586，backend dad05b8dc047、三worker fa3f8984f8a4，迁移b94de295f179。生效第三Compose为`/opt/qmdh-frp/releases/unit-access-20261027/compose.release.yml`，Qwen模板挂载仍依赖`management-categories-20261026/workflows`。最新配对备份28文件：停止前后端后创建独立新DB快照，媒体清单不变并复用pillars链/本机基础包；三worker未重启。详细接手、容量/恢复链与限制见[2026-10-27开发交接](handoff-management-2026-10-27.md)。服务器旧Git不能直接pull重建。
+2026-10-28当前基线：前端源码a8dfe6e/镜像746b3bff23e3，backend dad05b8dc047、三worker fa3f8984f8a4，迁移b94de295f179。生效第三Compose为`/opt/qmdh-frp/releases/navigation-fixed-20261028/compose.release.yml`，Qwen模板挂载仍依赖`management-categories-20261026/workflows`。最新纯前端配对备份26文件：DB/媒体继承unit-access轮独立DB快照及其媒体链/本机基础包；后端和三worker未重启。用户已批准并完成指定旧缓存链清理，非全局prune，盘余约8.350GiB仍需后续复测。详细接手、容量/恢复链与限制见[2026-10-27开发交接](handoff-management-2026-10-27.md)。服务器旧Git不能直接pull重建。
 
 以下为历史发布条目；当前版本与路径以上述入口及新交接为准，不按旧段落执行。
 

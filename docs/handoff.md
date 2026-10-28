@@ -2,17 +2,15 @@
 
 ## 当前接手入口
 
-先读[新对话开发交接：项目管理（2026-10-27）](handoff-management-2026-10-27.md)。最新导航候选a8dfe6e已提交/推送并验证，因线上盘余7.900GiB低于8GiB门槛尚未上线；等待用户明确授权清理指定旧构建缓存后再发布。当前线上仍为规范分院名称轮c45fd00。后续按用户新需求继续，不恢复已删除的入口/字段。
+先读[开发交接](handoff-management-2026-10-27.md)。固定生成/画布导航及后台归组已于2026-10-28上线，前端a8dfe6e/746b3bff23e3；用户已授权的旧缓存链清理已完成，不再等待确认、不扩大清理。后端仍c45fd00对应镜像，后续按新需求继续。
 
 保留`bugfix/migration-bootstrap-001`，草稿PR #5不合并；72待验收/25冻结/R98状态保持。`docs/checks.md`、`docs/plan.md`、`docs/review.md`是既有未提交文档，不覆盖或顺带提交。完整工作区保护、线上基线、备份链、CI已知失败、代码导航和验证方式均在新交接文件。
 
 ## Latest Handoffs（仅保留最新3条）
 
-**当前待发布候选**：[生成/画布导航固定与后台归组](navigation-fixed-2026-10-27.md)。25定向/20目标strict零新增/5实际浏览器场景/构建通过；用户缓存清理授权待答，服务未切换，未擅自清理缓存或降低门槛。以下三条是已上线基线。
-
-1. **2026-10-27 规范名称与分院隔离核验已上线**：前后端源码c45fd00、backend dad05b8dc047/frontend 69e51190c586，worker保持；仅规范分院名称，不改授权。22后端定向/20前端/13目标strict零新增/3浏览器场景，18运行路由鉴权/授权聚合前后一致，52文件/10资源/9路由通过。新独立DB快照+媒体既有恢复链，28文件两端SHA一致。当前第三Compose为`/opt/qmdh-frp/releases/unit-access-20261027/compose.release.yml`；盘余8.021GiB须后续复测。见[记录](unit-access-2026-10-27.md)。
-2. **2026-10-27 统一日历与项目周计划已上线**：前端源码a9becdf、镜像967cdf8608fa；交付物选填，项目支持自然周，所有管理日期使用同款顶层自定义月历。20前端定向/13目标strict零新增/7新+10回归浏览器场景、52文件/10资源/9路由通过。当前第三Compose为`/opt/qmdh-frp/releases/calendar-week-20261027/compose.release.yml`；26文件配对备份SHA一致，DB/媒体继承pillars基线。见[记录](calendar-week-2026-10-27.md)。 前端已由最新一轮替换。
-3. **2026-10-27 快捷调整和交付节点已上线**：前端源码daf2fcb、镜像7e8ddd868f73；去掉自动保存冗余提示，人员/甘特工作条就地暂停/恢复/支援，甘特空白日期格和项目行插入单日交付节点。20前端定向/13目标strict零新增/10完整浏览器场景，52文件/10资源/9路由通过。当前第三Compose为`/opt/qmdh-frp/releases/quick-actions-20261027/compose.release.yml`；26文件配对备份SHA一致，DB/媒体继承pillars基线，无新数据快照。见[记录](quick-actions-2026-10-27.md)。 前端已由最新一轮替换。
+1. **2026-10-28 导航固定与后台归组已上线**：前端a8dfe6e/746b3bff23e3；后端/3worker未重启。25前端定向、20目标strict零新增、5实际浏览器场景、52文件/10资源/25路由通过。用户授权的同一旧构建缓存链释放约492MiB，镜像/服务保持。第三Compose为`/opt/qmdh-frp/releases/navigation-fixed-20261028/compose.release.yml`；26文件配对备份一致，DB/媒体继承unit-access恢复基线，盘余约8.350GiB。见[记录](navigation-fixed-2026-10-27.md)。
+2. **2026-10-27 规范名称与分院隔离核验已上线**：前后端源码c45fd00、backend dad05b8dc047/frontend 69e51190c586，worker保持；仅规范分院名称，不改授权。22后端定向/20前端/13目标strict零新增/3浏览器场景，18运行路由鉴权/授权聚合前后一致，52文件/10资源/9路由通过。新独立DB快照+媒体既有恢复链，28文件两端SHA一致。当前第三Compose为`/opt/qmdh-frp/releases/unit-access-20261027/compose.release.yml`；盘余8.021GiB须后续复测。见[记录](unit-access-2026-10-27.md)。 后端保持，前端已由最新一轮替换。
+3. **2026-10-27 统一日历与项目周计划已上线**：前端源码a9becdf、镜像967cdf8608fa；交付物选填，项目支持自然周，所有管理日期使用同款顶层自定义月历。20前端定向/13目标strict零新增/7新+10回归浏览器场景、52文件/10资源/9路由通过。当前第三Compose为`/opt/qmdh-frp/releases/calendar-week-20261027/compose.release.yml`；26文件配对备份SHA一致，DB/媒体继承pillars基线。见[记录](calendar-week-2026-10-27.md)。 前端已由最新一轮替换。
 
 ## 使用规则
 

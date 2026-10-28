@@ -1,19 +1,21 @@
 # 新对话开发交接：项目管理（2026-10-27）
 
-## 待发布导航候选（优先阅读）
+## 2026-10-28 导航已发布（优先阅读）
 
-最新用户需求为固定生成工作台/无限画布页签及后台导航归组。候选源码 `a8dfe6e1762540496e483e06160f83da2cde3a56` 已提交/推送，25前端定向、20目标strict零新增、5个实际AppRouter/生成控制器/画布浏览器场景和构建通过，**尚未部署**。当前线上前后端仍为下文c45fd00对应镜像。
+用户已明确授权清理指定旧缓存并发布。根缓存及同一次旧构建的五条引用记录已按白名单释放，共约492.45MiB；缓存清理前后所有镜像和运行容器保持。没有执行全局prune或其他临时副本退役脚本。该缓存链已不存在，不重跑清理脚本，也不据此扩大清理授权。
 
-只读预检盘余约7.900GiB，低于8GiB门槛；没有开始服务切换、没有运行历史临时副本退役脚本。已通过用户问答请求“仅删除一条约514MB、未被镜像共享的旧构建缓存后发布”的额外授权，目前等待用户选择。`local/nav_remove_one_cache.py` 已写好，未执行，必须获得用户针对该缓存清理的明确同意才可运行；不能将时间流逝当同意。该脚本按单一cache ID核验/筛选，保留全部镜像及容器。若不授权，保留候选与现有服务，不降低发布门槛。
+前端源码 `a8dfe6e1762540496e483e06160f83da2cde3a56` 已上线，镜像 `746b3bff23e3`；生成工作台/无限画布共用固定导航行，后台分为看板/数据/内容/创作/系统，按既有权限只显示当前组子页。25前端定向、20目标strict零新增、5实际AppRouter/生成控制器/画布场景、构建及52文件/10资源/25路由通过。后端、三worker及其他容器未重启；无迁移或生产测试写入。
 
-私有候选：`local/navigation-fixed-20261027/`（含52文件构建、前端tar、source bundle、manifest及完整浏览器脚本）；`local/nav_runner.py`、`nav_preflight.py`、`nav_backup.py`、`nav_deploy.py` 已准备但未创建服务器新release/backup目录。后续若获授权并容量复检通过，仅换前端，恢复基线继承unit-access轮独立DB快照及既有媒体链；后端/worker保持。不要重跑unit-access后端发布脚本。见[候选说明](navigation-fixed-2026-10-27.md)。
+生效第三Compose为 `/opt/qmdh-frp/releases/navigation-fixed-20261028/compose.release.yml`；服务器 `/www/backup/qmdh-release-20261028-navigation-fixed` 与本机 `E:/backups/QMDH-web/release-20261028-navigation-fixed` 的26文件SHA一致。DB/媒体硬链接继承unit-access轮恢复基线，不是本轮新快照。发布后盘余约8.350GiB，后续仍须复测8GiB门槛。
+
+私有候选与证据仍在 `local/navigation-fixed-20261027/`；部署/备份名称是20261028。`nav_runner.py`/`nav_backup.py`/`nav_deploy.py`现指向28日发布；旧prepare-release.py和package.py是候选构建材料，不直接重跑。候选manifest曾有过旧父镜像断言，已与unit-access实测基线核对更正；包/source bundle不变。详见[发布记录](navigation-fixed-2026-10-27.md)。
 
 ## 冷启动先读
 
-这是当前接手入口，覆盖旧交接里的版本号、Compose路径、人员数量和页面设计。先读本文件，再按具体新需求读对应代码；不要重审全项目或原样重跑历史部署脚本。当前用户明确提出的规范分院名称与分院权限核验，以及此前日历/周计划/快捷调整均已提交、推送并部署，等待后续新需求，不重复部署。
+这是当前接手入口，覆盖旧交接里的版本号、Compose路径、人员数量和页面设计。先读本文件，再按具体新需求读对应代码；不要重审全项目或原样重跑历史部署脚本。当前用户明确提出的固定生成/画布导航与后台归组，以及此前分院权限/日历/周计划/快捷调整均已提交、推送并部署，等待后续新需求，不重复部署。
 
 - 仓库：`E:/projects/QMDH-web`；分支：`bugfix/migration-bootstrap-001`；origin：`https://github.com/csyhnine/QMDH-web.git`。
-- 实际最新前端/后端源码：`c45fd00235bf508d05be07a58400aeb22d753553`（后端只改分院label）；worker功能源码：`55340d752cbe01058417156014abfa50b40af26c`。交接/发布文档会另提交，文档SHA不等于运行源码。
+- 实际最新前端源码：`a8dfe6e1762540496e483e06160f83da2cde3a56`；后端源码：`c45fd00235bf508d05be07a58400aeb22d753553`（后端只改分院label）；worker功能源码：`55340d752cbe01058417156014abfa50b40af26c`。交接/发布文档会另提交，文档SHA不等于运行源码。
 - 草稿PR：[#5](https://github.com/csyhnine/QMDH-web/pull/5)，已更新，不合并main。
 - 不创建新分支/新worktree，不委派；不reset/clean/force/stash，不执行`git add .`。提交用明确白名单。后续用户明确提出开发后可沿用已有提交、推送和验证后部署授权，不重复索要同一授权。
 - `docs/checks.md`、`docs/plan.md`、`docs/review.md`是本轮之前已有的未提交内容，本轮未覆盖、未提交。已另存原文、补丁、SHA及status到被忽略的`local/handoff-management-20261027-confirm/`。大量既有未跟踪`docs/archive/*`和`scripts/_tmp_*`也保留，不一起加入Git，不清理。
@@ -34,7 +36,8 @@
 11. 人员/甘特排期自动保存开启时，不显示待保存横条/调整清单/保存成功提示；失败或关闭自动保存时仍保留手动保存和调整记录。
 12. 管理页面所有日期统一用PlanningDate自定义日历，快捷卡片也一样；顶层popover避开裁切，Escape先关日历，选填可清空，今天也遵守min/max。
 13. 界面/API仅用规范分院名称，不加历史括注。仅在用个人账号+company_management+admin可显式跨院；其他院管理者只能本院，直接unit参数/其他院项目及快照ID均被后端拦截。最新18路由与权限聚合只读核验保持，未扩大授权。
-14. 左侧Studio入口已归并：灵感、反馈、导航归其他；无限画布归生成，原URL与鉴权保留。Qwen图像编辑按1/2张输入调用固定v1.1工作流，不退回旧v1.0参数。
+14. 生成工作台与无限画布页签为共用固定56px行，生成页不再把页签埋在右侧内容区。后台收为看板/数据/内容/创作/系统，子导航只列当前组有权限模块，URL和鉴权不变；定义在features/admin/adminNavigation.ts，壳在AppShell集中渲染，router不重复插入。
+15. 左侧Studio入口已归并：灵感、反馈、导航归其他；无限画布归生成，原URL与鉴权保留。Qwen图像编辑按1/2张输入调用固定v1.1工作流，不退回旧v1.0参数。
 
 ## 代码导航
 
@@ -81,13 +84,13 @@
 | --- | --- |
 | backend | `sha256:dad05b8dc0474e3f7996c87ec0a51442410c4c663b6fdb748931d595707a4894` |
 | worker ×3 | `sha256:fa3f8984f8a464343a89628ba937813163a94200b052257cbebdc00ce2f41793` |
-| frontend | `sha256:69e51190c586f0a7de422f8a26b6cdfd7c69bc460dca922a7492357649e02cc9` |
+| frontend | `sha256:746b3bff23e3d9a0380eff7db9a7476d0525ce61b5593bf471bde030e2f477da` |
 
 生效Compose三件套：
 
 1. `/www/wwwroot/qmdh-web/docker-compose.yml`
 2. `/opt/qmdh-frp/compose.frp.yml`
-3. `/opt/qmdh-frp/releases/unit-access-20261027/compose.release.yml`
+3. `/opt/qmdh-frp/releases/navigation-fixed-20261028/compose.release.yml`
 
 **模板挂载源仍是**`/opt/qmdh-frp/releases/management-categories-20261026/workflows` → `/app/integration/comfyui:ro`，8文件，不要因为目录旧而删除。保留env/key、媒体、FRP网络、ODA/FFmpeg/Xvfb等挂载与依赖。
 
@@ -95,28 +98,31 @@
 
 SSH只从被忽略的`local/server-access.md`在内存中读取；不输出凭据，不提交。现成runner固定校验`docs/archive/server-readonly-2026-10-25/server-metadata.json`中SSH指纹。
 
-最新规范名称/分院核验轮：52个当前前端文件逐字节、10公网资源、9路由、健康、Qwen输入数[1,2]、未登录管理鉴权通过；替换前后端（后端只改名称），三worker及其他容器未重启，无测试安排写入。旧hash资源保留，静态包不按容器内全部资源数断言。
+最新导航轮：52个当前前端文件逐字节、10公网资源、25路由、健康、Qwen输入数[1,2]、未登录管理鉴权通过；只替换前端，后端/三worker及其他容器未重启，无测试安排写入。旧hash资源保留，静态包不按容器内全部资源数断言。
 
 ## 备份、容量与发布脚本
 
-最新前后端回滚/配置/数据配对备份：
+最新前端回滚/配置与数据恢复基线配对备份：
 
-- 服务器`/www/backup/qmdh-release-20261027-unit-access`
-- 本机`E:/backups/QMDH-web/release-20261027-unit-access`
-- 28文件SHA一致。**本轮在前后端暂停、队列空闲后创建独立新DB快照，非硬链接旧dump；媒体清单与pillars链一致，继续复用旧媒体恢复链和本机基础包。**回滚不降迁移或覆盖新业务数据。
+- 服务器`/www/backup/qmdh-release-20261028-navigation-fixed`
+- 本机`E:/backups/QMDH-web/release-20261028-navigation-fixed`
+- 26文件SHA一致。**纯前端轮DB/媒体硬链接继承unit-access恢复基线，不是本轮新快照。**回滚不降迁移或覆盖新业务数据。
 
-此前完整数据/媒体链基线（新数据库快照以上述unit-access轮为准）：
+最近独立数据库快照：`/www/backup/qmdh-release-20261027-unit-access` ↔ `E:/backups/QMDH-web/release-20261027-unit-access`，该轮28文件一致，在前后端暂停并核空队列后新建DB dump；其媒体清单与pillars链一致。
+
+此前完整数据/媒体链基线（新数据库快照以unit-access轮为准）：
 
 - `/www/backup/qmdh-release-20261027-pillars`
 - `E:/backups/QMDH-web/release-20261027-pillars`
 - 28个列入checksums文件一致；另留本机`database-before-pause.dump`，其私有SHA已核验。5849媒体、37归档恢复链仍依赖本机两基础包；按`resolved-media-chain.json`和本机基础连续性记录查找，不把服务器小增量误当完整媒体备份。
 
-上次盘余8.021GiB；这是时点值，后续发布前复测8GiB门槛、内存及任务/队列/GPU锁/上游队列。只可处理本任务能证明有镜像/本机原包/配对备份的临时构建副本，不清理业务媒体、正式备份、工作流或回滚镜像。几个旧release的html/verified-html、源码bundle/前端tar临时副本已退役，不能原样重跑依赖它们的旧verify脚本后误判生产坏了。
+上次盘余8.350GiB；这是时点值，后续发布前复测8GiB门槛、内存及任务/队列/GPU锁/上游队列。只可处理本任务能证明有镜像/本机原包/配对备份的临时构建副本，不清理业务媒体、正式备份、工作流或回滚镜像。几个旧release的html/verified-html、源码bundle/前端tar临时副本已退役，不能原样重跑依赖它们的旧verify脚本后误判生产坏了。
 
 本次pillars发布第一次因备份后新增媒体而自动恢复旧服务，补备份后重发成功；以后遇到清单变化也必须补增量后再切换，不能跳过断言。停止服务后最终DB备份没有在服务器再复制一份大dump，初始dump先留本机，避免磁盘门槛溢出。
 
 私有脚本与产物均在被忽略的local：
 
+- `local/nav_runner.py`、`nav_backup.py`、`nav_deploy.py`：最新导航纯前端轮，服务器/备份路径为20261028；本机候选目录仍20261027，继承unit-access DB/媒体恢复基线。缓存清理已完成，不重跑、不扩展。
 - `local/unit_runner.py`、`unit_backup.py`、`unit_deploy.py`：最新规范名称轮，读取`local/unit-access-20261027/`；仅覆盖backend的management.py和前端，保持worker。切换中停止前后端、借worker再次只读查空队列、创建独立dump、核媒体不变后启新服务，失败退镜像不还原业务库。
 - `local/calendar_runner.py`、`calendar_backup.py`、`calendar_deploy.py`：此前日历/周计划纯前端轮，读取`local/calendar-week-20261027/`；数据继承pillars基线，不用于后端/迁移发布完整备份。
 - `local/quick_runner.py`、`quick_backup.py`、`quick_deploy.py`：此前快捷调整纯前端轮，读取`local/quick-actions-20261027/`，同样只继承数据恢复基线；不能用于后端/迁移发布完整备份。
@@ -140,8 +146,10 @@ node --test scripts/test-management.mjs
 # 此为此前36项范围。最新名称/权限轮仅跑categories、reporting、pillars及个人登录撤权用例，共22项通过；不扩大到全套。
 
 # cwd E:/projects/QMDH-web
-node local/quick-types.mjs
-# 13个目标文件strict诊断零新增；不是整仓typecheck通过
+node local/nav-types.mjs
+# 20个目标文件strict诊断零新增；不是整仓typecheck通过
+node local/navigation-fixed-20261027/browser.mjs
+# 5新场景：实际生成/画布固定页签、后台分组吸顶、ops权限、手机生成/画布、手机后台
 node local/unit-access-20261027/browser.mjs
 # 3新场景：旧label也显示规范名称、管理员切院请求作用域、院管理者仅本院
 node local/calendar-week-20261027/browser.mjs
@@ -160,6 +168,7 @@ node local/pillars-20261027/browser.mjs
 
 最新正式证据与说明：
 
+- `docs/navigation-fixed-2026-10-27.md`、`docs/archive/navigation-fixed-2026-10-27/`（28日上线）
 - `docs/unit-access-2026-10-27.md`、`docs/archive/unit-access-2026-10-27/`
 - `docs/calendar-week-2026-10-27.md`、`docs/archive/calendar-week-2026-10-27/`
 - `docs/quick-actions-2026-10-27.md`、`docs/archive/quick-actions-2026-10-27/`

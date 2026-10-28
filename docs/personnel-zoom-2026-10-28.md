@@ -10,4 +10,8 @@
 
 验证通过：22 项管理定向检查（含 10 泳道几何、跨年/已滚动视图的缩放锚定和密度边界），21 个目标文件 strict 诊断零新增，Vite 构建通过（仅既有大块提示）。实际 AppShell/管理页面浏览器 7 项新增场景与 10 项已有回归通过，API 为合成数据、阻断外部请求，无页面错误或原生确认提示。新增场景覆盖 Ctrl 缩放与翻页/重置、月视图滚动锚定与密度边界、普通/表外滚轮、双击保存一条真实合成工作、10 并行项各自可点击、键盘/手机、缩放后细泳道划选与拖动自动保存。
 
-证据位于 `docs/archive/personnel-zoom-2026-10-28/`。私有候选、截图和一次性发布材料位于 ignored 的 `local/personnel-zoom-20261028/`；`local/personnel_runner.py`、`personnel_preflight.py`、`personnel_backup.py`、`personnel_deploy.py` 为本轮独立路径，不重跑历史清理。发布前只读核对前端 746b3bff23e3、后端 dad05b8dc047、三 worker fa3f8984f8a4、迁移 b94de295f179、工作流/配置/恢复基线，盘余约 8.375GiB，任务/派发/Redis/上游队列为空且无 GPU 锁。本轮只改前端，保留已有 WIP、权限和冻结验收状态，发布结果随后补入。
+证据位于 `docs/archive/personnel-zoom-2026-10-28/`。私有候选、截图和一次性发布材料位于 ignored 的 `local/personnel-zoom-20261028/`；`local/personnel_runner.py`、`personnel_preflight.py`、`personnel_backup.py`、`personnel_deploy.py` 为本轮独立路径，不重跑历史清理。发布前只读核对前端 746b3bff23e3、后端 dad05b8dc047、三 worker fa3f8984f8a4、迁移 b94de295f179、工作流/配置/恢复基线，盘余约 8.375GiB，任务/派发/Redis/上游队列为空且无 GPU 锁。本轮只改前端，保留已有 WIP、权限和冻结验收状态，发布情况见下。
+
+2026-10-28 已部署前端源码 `050053fcf9347856580d49f83c130e2945c79918`，镜像 `d15c5aebca10`。52 个候选文件逐字节、10 个公网资源、25 个页面地址、健康、Qwen 输入数 [1,2] 及未登录管理鉴权核验通过，旧 hash 静态资源保留。后端、三个 worker 及其他容器 ID/启动时间、环境、挂载、网络、工作流保持，未执行迁移或生产测试写入。
+
+生效第三 Compose：`/opt/qmdh-frp/releases/personnel-zoom-20261028/compose.release.yml`。服务器 `/www/backup/qmdh-release-20261028-personnel-zoom` 与本机 `E:/backups/QMDH-web/release-20261028-personnel-zoom` 的 26 文件 SHA 一致。DB/媒体硬链接继承导航轮及 unit-access 独立数据库恢复基线，不是本轮新数据快照；回滚只切前端，不覆盖新业务数据。发布后盘余约 8.354GiB，后续仍须复测 8GiB 门槛。本轮未做任何缓存或文件清理。

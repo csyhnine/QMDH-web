@@ -1,4 +1,4 @@
-2026-10-28当前基线：前端源码a8dfe6e/镜像746b3bff23e3，backend dad05b8dc047、三worker fa3f8984f8a4，迁移b94de295f179。生效第三Compose为`/opt/qmdh-frp/releases/navigation-fixed-20261028/compose.release.yml`，Qwen模板挂载仍依赖`management-categories-20261026/workflows`。最新纯前端配对备份26文件：DB/媒体继承unit-access轮独立DB快照及其媒体链/本机基础包；后端和三worker未重启。用户已批准并完成指定旧缓存链清理，非全局prune，盘余约8.350GiB仍需后续复测。详细接手、容量/恢复链与限制见[2026-10-27开发交接](handoff-management-2026-10-27.md)。服务器旧Git不能直接pull重建。
+2026-10-28当前基线：人员排期缩放/双击新增/并行压窄，前端源码050053f/镜像d15c5aebca10，backend dad05b8dc047、三worker fa3f8984f8a4，迁移b94de295f179。生效第三Compose为`/opt/qmdh-frp/releases/personnel-zoom-20261028/compose.release.yml`，Qwen模板挂载仍依赖`management-categories-20261026/workflows`。22定向/21目标strict零新增/7新+10回归浏览器与52文件/10资源/25路由通过。最新纯前端配对备份`release-20261028-personnel-zoom`共26文件SHA一致：DB/媒体经导航轮继承unit-access独立DB快照及其媒体链/本机基础包，不是本轮新快照。后端/三worker和其他容器未重启，无迁移/生产测试写入/清理。盘余约8.354GiB仍须后续复测8GiB。之前用户授权的旧缓存链已清理，不重跑、不扩展。详细接手与恢复链见[开发交接](handoff-management-2026-10-27.md)和[本轮记录](personnel-zoom-2026-10-28.md)，服务器旧Git不能直接pull重建。
 
 以下为历史发布条目；当前版本与路径以上述入口及新交接为准，不按旧段落执行。
 

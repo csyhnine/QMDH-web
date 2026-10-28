@@ -1,21 +1,21 @@
 # 新对话开发交接：项目管理（2026-10-27）
 
-## 2026-10-28 导航已发布（优先阅读）
+## 2026-10-28 人员排期缩放与并行泳道已发布（优先阅读）
 
-用户已明确授权清理指定旧缓存并发布。根缓存及同一次旧构建的五条引用记录已按白名单释放，共约492.45MiB；缓存清理前后所有镜像和运行容器保持。没有执行全局prune或其他临时副本退役脚本。该缓存链已不存在，不重跑清理脚本，也不据此扩大清理授权。
+前端源码 `050053fcf9347856580d49f83c130e2945c79918` 已上线，镜像 `d15c5aebca10`。人员排期表内 Ctrl+滚轮调整一页日期数，向下显示更多、向上放大，锚定鼠标日期；自定范围按当前天数翻页，可重置/选择自然周期。日期格移除加号，双击新增独立工作泳道并预填人员和日期，键盘 Enter/空格也可新增。同一人员列保持约60px，10项并行任务自动压窄，过细字隐藏但保留悬停/点击/拖动与划选。修正旧日期行被内边距撑高造成的柱体/日期错位。
 
-前端源码 `a8dfe6e1762540496e483e06160f83da2cde3a56` 已上线，镜像 `746b3bff23e3`；生成工作台/无限画布共用固定导航行，后台分为看板/数据/内容/创作/系统，按既有权限只显示当前组子页。25前端定向、20目标strict零新增、5实际AppRouter/生成控制器/画布场景、构建及52文件/10资源/25路由通过。后端、三worker及其他容器未重启；无迁移或生产测试写入。
+22前端管理定向、21目标strict零新增、7新增+10回归完整浏览器场景和构建通过；线上52文件/10资源/25路由、健康/管理鉴权/Qwen能力核验通过。只替换前端，后端/三worker/其他容器未重启，无迁移或生产测试写入。本轮无清理操作。
 
-生效第三Compose为 `/opt/qmdh-frp/releases/navigation-fixed-20261028/compose.release.yml`；服务器 `/www/backup/qmdh-release-20261028-navigation-fixed` 与本机 `E:/backups/QMDH-web/release-20261028-navigation-fixed` 的26文件SHA一致。DB/媒体硬链接继承unit-access轮恢复基线，不是本轮新快照。发布后盘余约8.350GiB，后续仍须复测8GiB门槛。
+第三Compose为 `/opt/qmdh-frp/releases/personnel-zoom-20261028/compose.release.yml`；服务器 `/www/backup/qmdh-release-20261028-personnel-zoom` ↔ 本机 `E:/backups/QMDH-web/release-20261028-personnel-zoom` 的26文件SHA一致。DB/媒体继承navigation-fixed→unit-access恢复基线，不是本轮新快照。发布后盘余约8.354GiB，后续仍复测8GiB门槛。
 
-私有候选与证据仍在 `local/navigation-fixed-20261027/`；部署/备份名称是20261028。`nav_runner.py`/`nav_backup.py`/`nav_deploy.py`现指向28日发布；旧prepare-release.py和package.py是候选构建材料，不直接重跑。候选manifest曾有过旧父镜像断言，已与unit-access实测基线核对更正；包/source bundle不变。详见[发布记录](navigation-fixed-2026-10-27.md)。
+私有候选/截图/测试在 `local/personnel-zoom-20261028/`，一次性脚本 `local/personnel_runner.py`、`personnel_preflight.py`、`personnel_backup.py`、`personnel_deploy.py`。不可对已发布路径原样重跑。详见[本轮记录](personnel-zoom-2026-10-28.md)。此前导航轮固定生成/画布导航和后台归组保持，用户授权的旧缓存链清理已经完成，不重跑、不扩大授权。
 
 ## 冷启动先读
 
-这是当前接手入口，覆盖旧交接里的版本号、Compose路径、人员数量和页面设计。先读本文件，再按具体新需求读对应代码；不要重审全项目或原样重跑历史部署脚本。当前用户明确提出的固定生成/画布导航与后台归组，以及此前分院权限/日历/周计划/快捷调整均已提交、推送并部署，等待后续新需求，不重复部署。
+这是当前接手入口，覆盖旧交接里的版本号、Compose路径、人员数量和页面设计。先读本文件，再按具体新需求读对应代码；不要重审全项目或原样重跑历史部署脚本。当前用户明确提出的人员排期缩放/双击新增/并行泳道、固定生成/画布导航与后台归组，以及此前分院权限/日历/周计划/快捷调整均已提交、推送并部署，等待后续新需求，不重复部署。
 
 - 仓库：`E:/projects/QMDH-web`；分支：`bugfix/migration-bootstrap-001`；origin：`https://github.com/csyhnine/QMDH-web.git`。
-- 实际最新前端源码：`a8dfe6e1762540496e483e06160f83da2cde3a56`；后端源码：`c45fd00235bf508d05be07a58400aeb22d753553`（后端只改分院label）；worker功能源码：`55340d752cbe01058417156014abfa50b40af26c`。交接/发布文档会另提交，文档SHA不等于运行源码。
+- 实际最新前端源码：`050053fcf9347856580d49f83c130e2945c79918`；后端源码：`c45fd00235bf508d05be07a58400aeb22d753553`（后端只改分院label）；worker功能源码：`55340d752cbe01058417156014abfa50b40af26c`。交接/发布文档会另提交，文档SHA不等于运行源码。
 - 草稿PR：[#5](https://github.com/csyhnine/QMDH-web/pull/5)，已更新，不合并main。
 - 不创建新分支/新worktree，不委派；不reset/clean/force/stash，不执行`git add .`。提交用明确白名单。后续用户明确提出开发后可沿用已有提交、推送和验证后部署授权，不重复索要同一授权。
 - `docs/checks.md`、`docs/plan.md`、`docs/review.md`是本轮之前已有的未提交内容，本轮未覆盖、未提交。已另存原文、补丁、SHA及status到被忽略的`local/handoff-management-20261027-confirm/`。大量既有未跟踪`docs/archive/*`和`scripts/_tmp_*`也保留，不一起加入Git，不清理。
@@ -25,9 +25,9 @@
 
 1. 项目管理主入口仅：人员排期（默认）、项目计划、项目台账（最右）；详情在台账内。不要恢复管理总览为独立主页面。
 2. 极简立项：名称必填，统筹和目标日期选填；创建时随机保存颜色，不让用户填颜色。
-3. 项目计划支持按自然周展示七天，前后按整周翻页，跨年/重挂载保持范围；两周/月/季度保留。人员排期横向为人名、纵向为日期，约60px列宽，仅显示姓名。默认自然周，可切换自然月/季度/年；当前仍按每日一行展示，并非把季度/年聚合成月份行。
+3. 项目计划支持按自然周展示七天，前后按整周翻页，跨年/重挂载保持范围；两周/月/季度保留。人员排期横向为人名、纵向为日期，约60px列宽，仅显示姓名。默认自然周，可切换自然月/季度/年，也可Ctrl+滚轮自定一页可见日期数（3天起、按视口18px最小行高限制上限），锚定鼠标日期并按当前天数翻页，可重置；当前仍按每日一行展示，并非把季度/年聚合成月份行。
 4. 不能再恢复“选人面板”“安排工作”两个侧面入口，不在人员图显示职位或100%计划占用比例。
-5. 工作是连续20px细竖柱；点击空白日期格新增，点击柱体或甘特工作条打开就地快捷卡片，可改进度、暂停/恢复或中断并支援其他项目；详细编辑另有按钮。柱顶“↕”拖动整项改期/转交；柱体划选一段日期直接预填快捷区间。
+5. 工作是连续细竖柱（单轨最多20px，并行增多自动压窄、列宽不膨胀）；双击空白日期格新增，点击柱体或甘特工作条打开就地快捷卡片，可改进度、暂停/恢复或中断并支援其他项目；详细编辑另有按钮。柱顶“↕”拖动整项改期/转交；柱体划选一段日期直接预填快捷区间。
 6. 默认工作卡片只保留项目、工作内容、日期、参与者；更多说明/交付物/推进记录折叠，交付节点在项目计划的项目行或甘特空白日期格快捷插入，交付物选填并显示单日菱形。
 7. 上周实际推进、下周安排可手写、从已有记录整理、自动保存。整理为本地确定性汇总，不调用AI/付费模型，不把计划推测成实际完成。
 8. 临时抽调在选中区间生成另一项目的工作，同时暂停原工作中该人；无人接替的区间灰白蒙层显示“工作暂停”及警示。不另填复杂暂停表，不自动推迟交付日。
@@ -46,7 +46,7 @@
 | 文件 | 职责 / 需要保留的语义 |
 | --- | --- |
 | `ManagementProjectsPage.tsx` | 院/年度/筛选、主Tabs、快速立项/详情、请求与保存协调。`persistSchedule`做项目CAS保存；`reassignSchedule`调用改派API后同时合并两个项目。 |
-| `PeopleSchedule.tsx` | 日期底表+绝对定位竖柱覆盖层，按并行工作排窄轨道；列宽同时用于表头/底表/覆盖层，不能错位。划选区间用Pointer Capture，抑制随后click；↕单独用原生drag。 |
+| `PeopleSchedule.tsx` | 日期底表+绝对定位竖柱覆盖层，Ctrl+滚轮与按钮缩放、空白格双击新增、并行工作在固定列内排窄轨道；列宽同时用于表头/底表/覆盖层，不能错位。划选区间用Pointer Capture，抑制随后click；↕单独用原生drag。 |
 | `PeoplePlanner.tsx` | 拖动整项的本地预览、待保存队列、约1秒自动保存、失败保留与手动重试。负荷仍在内部用于冲突提示，包含被项目筛选隐藏的安排。 |
 | `QuickWorkActions.tsx` | 人员/甘特共用就地快捷卡片、单人时段暂停恢复、原子改派及交付节点快速插入。恢复原工作不会删除支援安排。 |
 | `PlanningDesk.tsx` | 共享关键总览、极简工作卡片、交付节点只读摘要、旧部分日期改派表单、无人接替警示。接收`WorkRequest`（可带personId/date/end/intent=segment）；日常快捷操作已转到QuickWorkActions。 |
@@ -55,6 +55,7 @@
 | `confirmPlanning.ts` | `await confirmPlanning(message)`：独立HTML dialog顶层、全视口居中、取消默认焦点、Escape/Enter取消、Tab循环、焦点恢复、安全textContent、顺序队列、单次结算。 |
 | `ProjectPlan.tsx` / `ganttBridge.ts` | DHTMLX项目甘特、真实拖动/拉伸、整项阶段编辑；与人员页共用项目/stages。 |
 | `planning.ts` / `staffPlanning.ts` | 类型、随机/稳定项目色、暂停/日期/参与人数/负荷、旧整项移动与人员转交、保存队列；不可把计划负荷误当完成进度。 |
+| `personnelViewport.ts` | 人员视窗缩放锚定、3天/18px日高密度边界、列内并行轨道几何；ManagementProjectsPage持有自定天数，与详情/图例/翻页同步。 |
 | `scheduleCalendar.ts` / `PlanningDate.tsx` | 周/月/季/年真实边界、跨年闰年、日期输入/顶层popover自定义月历（min/max/caption），含快捷卡片与台账数据更新日期；不再用details或原生选择器替代。 |
 | `management.css` | 多轮样式在文件后段覆盖。共同frame是`.management-shell > .canvas-area`，共享`.mp-workspace-header`吸顶；确认框`.mp-confirm-dialog`在body顶层。 |
 | `ProjectLedger.tsx` / `ManagementReporting.tsx` / `reporting.ts` / `reportWorkbook.ts` | 详情入口、折叠经营/人员周报、金额精确统计、不可改写快照和三表Excel。 |
@@ -84,13 +85,13 @@
 | --- | --- |
 | backend | `sha256:dad05b8dc0474e3f7996c87ec0a51442410c4c663b6fdb748931d595707a4894` |
 | worker ×3 | `sha256:fa3f8984f8a464343a89628ba937813163a94200b052257cbebdc00ce2f41793` |
-| frontend | `sha256:746b3bff23e3d9a0380eff7db9a7476d0525ce61b5593bf471bde030e2f477da` |
+| frontend | `sha256:d15c5aebca10f1f75b8a622d7a88f564f40049762c6e8ba7aef9720132dc13a7` |
 
 生效Compose三件套：
 
 1. `/www/wwwroot/qmdh-web/docker-compose.yml`
 2. `/opt/qmdh-frp/compose.frp.yml`
-3. `/opt/qmdh-frp/releases/navigation-fixed-20261028/compose.release.yml`
+3. `/opt/qmdh-frp/releases/personnel-zoom-20261028/compose.release.yml`
 
 **模板挂载源仍是**`/opt/qmdh-frp/releases/management-categories-20261026/workflows` → `/app/integration/comfyui:ro`，8文件，不要因为目录旧而删除。保留env/key、媒体、FRP网络、ODA/FFmpeg/Xvfb等挂载与依赖。
 
@@ -98,15 +99,15 @@
 
 SSH只从被忽略的`local/server-access.md`在内存中读取；不输出凭据，不提交。现成runner固定校验`docs/archive/server-readonly-2026-10-25/server-metadata.json`中SSH指纹。
 
-最新导航轮：52个当前前端文件逐字节、10公网资源、25路由、健康、Qwen输入数[1,2]、未登录管理鉴权通过；只替换前端，后端/三worker及其他容器未重启，无测试安排写入。旧hash资源保留，静态包不按容器内全部资源数断言。
+最新人员缩放轮：52个当前前端文件逐字节、10公网资源、25路由、健康、Qwen输入数[1,2]、未登录管理鉴权通过；只替换前端，后端/三worker及其他容器未重启，无测试安排写入。旧hash资源保留，静态包不按容器内全部资源数断言。
 
 ## 备份、容量与发布脚本
 
 最新前端回滚/配置与数据恢复基线配对备份：
 
-- 服务器`/www/backup/qmdh-release-20261028-navigation-fixed`
-- 本机`E:/backups/QMDH-web/release-20261028-navigation-fixed`
-- 26文件SHA一致。**纯前端轮DB/媒体硬链接继承unit-access恢复基线，不是本轮新快照。**回滚不降迁移或覆盖新业务数据。
+- 服务器`/www/backup/qmdh-release-20261028-personnel-zoom`
+- 本机`E:/backups/QMDH-web/release-20261028-personnel-zoom`
+- 26文件SHA一致。**纯前端轮DB/媒体硬链接继承navigation-fixed→unit-access恢复基线，不是本轮新快照。**回滚不降迁移或覆盖新业务数据。
 
 最近独立数据库快照：`/www/backup/qmdh-release-20261027-unit-access` ↔ `E:/backups/QMDH-web/release-20261027-unit-access`，该轮28文件一致，在前后端暂停并核空队列后新建DB dump；其媒体清单与pillars链一致。
 
@@ -116,13 +117,14 @@ SSH只从被忽略的`local/server-access.md`在内存中读取；不输出凭�
 - `E:/backups/QMDH-web/release-20261027-pillars`
 - 28个列入checksums文件一致；另留本机`database-before-pause.dump`，其私有SHA已核验。5849媒体、37归档恢复链仍依赖本机两基础包；按`resolved-media-chain.json`和本机基础连续性记录查找，不把服务器小增量误当完整媒体备份。
 
-上次盘余8.350GiB；这是时点值，后续发布前复测8GiB门槛、内存及任务/队列/GPU锁/上游队列。只可处理本任务能证明有镜像/本机原包/配对备份的临时构建副本，不清理业务媒体、正式备份、工作流或回滚镜像。几个旧release的html/verified-html、源码bundle/前端tar临时副本已退役，不能原样重跑依赖它们的旧verify脚本后误判生产坏了。
+上次盘余8.354GiB；这是时点值，后续发布前复测8GiB门槛、内存及任务/队列/GPU锁/上游队列。只可处理本任务能证明有镜像/本机原包/配对备份的临时构建副本，不清理业务媒体、正式备份、工作流或回滚镜像。几个旧release的html/verified-html、源码bundle/前端tar临时副本已退役，不能原样重跑依赖它们的旧verify脚本后误判生产坏了。
 
 本次pillars发布第一次因备份后新增媒体而自动恢复旧服务，补备份后重发成功；以后遇到清单变化也必须补增量后再切换，不能跳过断言。停止服务后最终DB备份没有在服务器再复制一份大dump，初始dump先留本机，避免磁盘门槛溢出。
 
 私有脚本与产物均在被忽略的local：
 
-- `local/nav_runner.py`、`nav_backup.py`、`nav_deploy.py`：最新导航纯前端轮，服务器/备份路径为20261028；本机候选目录仍20261027，继承unit-access DB/媒体恢复基线。缓存清理已完成，不重跑、不扩展。
+- `local/personnel_runner.py`、`personnel_preflight.py`、`personnel_backup.py`、`personnel_deploy.py`：最新人员缩放纯前端轮，读取`local/personnel-zoom-20261028/`；继承导航轮→unit-access恢复基线。仅替换前端，不清理；一轮路径不重跑。
+- `local/nav_runner.py`、`nav_backup.py`、`nav_deploy.py`：此前导航纯前端轮，服务器/备份路径为20261028；本机候选目录仍20261027，继承unit-access DB/媒体恢复基线。缓存清理已完成，不重跑、不扩展。
 - `local/unit_runner.py`、`unit_backup.py`、`unit_deploy.py`：最新规范名称轮，读取`local/unit-access-20261027/`；仅覆盖backend的management.py和前端，保持worker。切换中停止前后端、借worker再次只读查空队列、创建独立dump、核媒体不变后启新服务，失败退镜像不还原业务库。
 - `local/calendar_runner.py`、`calendar_backup.py`、`calendar_deploy.py`：此前日历/周计划纯前端轮，读取`local/calendar-week-20261027/`；数据继承pillars基线，不用于后端/迁移发布完整备份。
 - `local/quick_runner.py`、`quick_backup.py`、`quick_deploy.py`：此前快捷调整纯前端轮，读取`local/quick-actions-20261027/`，同样只继承数据恢复基线；不能用于后端/迁移发布完整备份。
@@ -139,15 +141,19 @@ SSH只从被忽略的`local/server-access.md`在内存中读取；不输出凭�
 ```powershell
 # cwd E:/projects/QMDH-web/frontend
 node --test scripts/test-management.mjs
-# 最近20项通过
+# 最近22项通过
 
 # cwd E:/projects/QMDH-web/backend
 .venv/Scripts/python.exe -m pytest tests/test_management.py tests/test_management_categories.py tests/test_management_affiliation.py tests/test_management_reporting.py tests/test_management_simple.py tests/test_management_pillars.py -q --disable-warnings
 # 此为此前36项范围。最新名称/权限轮仅跑categories、reporting、pillars及个人登录撤权用例，共22项通过；不扩大到全套。
 
 # cwd E:/projects/QMDH-web
-node local/nav-types.mjs
-# 20个目标文件strict诊断零新增；不是整仓typecheck通过
+node local/personnel-types.mjs
+# 21个目标文件strict诊断零新增；不是整仓typecheck通过
+node local/personnel-zoom-20261028/browser.mjs
+# 7新场景：缩放/锚定/翻页/周期/普通滚轮/双击保存/10并行/键盘手机/缩放后划选与拖动
+node local/personnel-zoom-20261028/regression.mjs
+# 10回归场景：安静保存、暂停/恢复/改派、冲突、甘特进度/拖动/交付、手机键盘
 node local/navigation-fixed-20261027/browser.mjs
 # 5新场景：实际生成/画布固定页签、后台分组吸顶、ops权限、手机生成/画布、手机后台
 node local/unit-access-20261027/browser.mjs
@@ -168,6 +174,7 @@ node local/pillars-20261027/browser.mjs
 
 最新正式证据与说明：
 
+- `docs/personnel-zoom-2026-10-28.md`、`docs/archive/personnel-zoom-2026-10-28/`
 - `docs/navigation-fixed-2026-10-27.md`、`docs/archive/navigation-fixed-2026-10-27/`（28日上线）
 - `docs/unit-access-2026-10-27.md`、`docs/archive/unit-access-2026-10-27/`
 - `docs/calendar-week-2026-10-27.md`、`docs/archive/calendar-week-2026-10-27/`

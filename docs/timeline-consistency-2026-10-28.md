@@ -10,4 +10,8 @@
 
 私有候选/测试/截图：ignored 的 `local/timeline-consistency-20261028/`，实际发布格式浏览器入口 `suite.mjs`，旧发布包诊断 `production-browser.mjs`/`before-production-probe.json`。一次性发布脚本：`local/timeline_runner.py`、`timeline_preflight.py`、`timeline_backup.py`、`timeline_deploy.py`，不对历史路径或清理脚本重跑。只改前端，保留既有WIP、分院鉴权、草稿PR及冻结状态。
 
-发布前核对前端f3cf6526e97e、后端dad05b8dc047、三worker fa3f8984f8a4、迁移b94de295f179、配置/8工作流/恢复链，任务/派发/Redis/上游队列与GPU锁为空，盘余约8.253GiB。无清理；部署结果随后补入。
+发布前核对前端f3cf6526e97e、后端dad05b8dc047、三worker fa3f8984f8a4、迁移b94de295f179、配置/8工作流/恢复链，任务/派发/Redis/上游队列与GPU锁为空，盘余约8.253GiB。无清理；部署情况见下。
+
+2026-10-28 已部署前端源码 `dcce45a54104434483eb62b02b9f59622e4e9308`，镜像 `5c627d5ca11a`。52文件逐字节、10公网资源、26页面地址（含实际项目管理入口 `/management/projects`）、健康、Qwen输入数[1,2]及管理鉴权通过。旧hash资源、后端/三worker/其他容器ID和启动时间、env/挂载/网络/8工作流保持，无迁移或生产测试写入。
+
+第三Compose：`/opt/qmdh-frp/releases/timeline-consistency-20261028/compose.release.yml`；服务器 `/www/backup/qmdh-release-20261028-timeline-consistency` ↔ 本机 `E:/backups/QMDH-web/release-20261028-timeline-consistency` 的26文件SHA一致。DB/媒体经pillar-handles及此前纯前端轮继承unit-access独立恢复链，非本轮新快照；回滚只切前端，不覆盖新业务数据。盘余约8.231GiB，后续仍复测8GiB门槛，本轮无清理。

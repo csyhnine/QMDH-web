@@ -26,6 +26,7 @@ export default function PeopleSchedule({
   onResetZoom,
   onResize,
   onResizeBusy,
+  moveWork,
   workloadProjects = projects,
   disabled = false,
   onSelect,
@@ -46,6 +47,7 @@ export default function PeopleSchedule({
   onResetZoom: () => void;
   onResize: (project: PlanningProject, stage: Stage, edge: "start" | "end", offset: number) => void;
   onResizeBusy: (busy: boolean) => void;
+  moveWork?: { projectId: number; stageId: string } | null;
   workloadProjects?: PlanningProject[];
   disabled?: boolean;
   onSelect: (p: PlanningProject, s: Stage, person: number, date: string, x: number, y: number) => void;
@@ -255,12 +257,13 @@ export default function PeopleSchedule({
                     key = `${e.project.id}:${e.stage.id}`,
                     active = resize.preview?.projectId === e.project.id && resize.preview.stageId === e.stage.id,
                     shown = active ? resize.preview!.stage : e.stage,
-                    left = Math.max(0, dayNumber(shown.start) - dayNumber(start)),
-                    widthDays = Math.min(days, dayNumber(shown.end) - dayNumber(start) + 1) - left;
+                    left = Math.max(0, Math.min(days - 1, dayNumber(shown.start) - dayNumber(start))),
+                    widthDays = Math.max(1, Math.min(days, dayNumber(shown.end) - dayNumber(start) + 1) - left),
+                    moveEnabled = moveWork?.projectId === e.project.id && moveWork.stageId === e.stage.id;
                   return (
                   <div
                     key={`${e.project.id}:${e.stage.id}`}
-                    className={`mp-pillar-wrap${lane.width < 12 ? " mp-pillar-narrow" : ""}${active ? " mp-pillar-resizing" : ""}${resize.landed === key ? " mp-pillar-landed" : ""}${moving === key ? " mp-pillar-moving" : ""}`}
+                    className={`mp-pillar-wrap${lane.width < 12 ? " mp-pillar-narrow" : ""}${widthDays * rowHeight < 36 ? " mp-pillar-short" : ""}${active ? " mp-pillar-resizing" : ""}${resize.landed === key ? " mp-pillar-landed" : ""}${moving === key ? " mp-pillar-moving" : ""}${moveEnabled ? " mp-pillar-move-enabled" : ""}`}
                     style={{
                       top: left * rowHeight + 2,
                       height: widthDays * rowHeight - 4,
@@ -271,10 +274,17 @@ export default function PeopleSchedule({
                       className={`mp-work-pillar${e.stage.milestone ? " mp-pillar-milestone" : ""}`}
                       style={{ backgroundColor: projectTint(e.project) }}
                       disabled={disabled}
+                      draggable={Boolean(moveEnabled && !disabled && person.is_active)}
+                      onDragStart={(event) => {
+                        if (!moveEnabled) { event.preventDefault(); return; }
+                        onStageDrag(event, e.project, e.stage, person.id, addDays(start, e.left));
+                        if (!event.defaultPrevented) setMoving(key);
+                      }}
+                      onDragEnd={() => { setMoving(""); setDropTarget(""); onDragEnd(); }}
                       aria-label={`${person.name} ${e.project.name} · ${e.stage.name}`}
-                      title={`${e.project.name} · ${e.stage.name}\n${e.stage.start}—${e.stage.end}\n点击快捷调整；按住柱体划选日期，暂停或改派到其他项目`}
+                      title={`${e.project.name} · ${e.stage.name}\n${e.stage.start}—${e.stage.end}\n${moveEnabled ? "整项移动模式：拖至目标日期或人员" : "点击快捷调整；按住柱体划选日期，暂停或改派到其他项目"}`}
                       onPointerDown={(event) => {
-                        if (event.button !== 0 || disabled || e.stage.milestone || resize.preview) return;
+                        if (event.button !== 0 || disabled || e.stage.milestone || resize.preview || moveEnabled) return;
                         suppress.current = false;
                         const date = dateAt(event.clientY);
                         pointer.current = {
@@ -325,6 +335,7 @@ export default function PeopleSchedule({
                         }
                       }}
                       onClick={(event) => {
+                        if (moveEnabled) return;
                         if (suppress.current) {
                           suppress.current = false;
                           return;
@@ -368,29 +379,14 @@ export default function PeopleSchedule({
                     </button>
                     {!e.stage.milestone && person.is_active && (
                       <>
-                      {e.stage.start >= start && <button type="button" className="mp-pillar-resize mp-pillar-resize-start"
+                      {!moveEnabled && <button type="button" className={`mp-pillar-resize mp-pillar-resize-start${e.stage.start < start ? " mp-pillar-resize-continuation" : ""}`}
                         aria-label={`${person.name} ${e.project.name} · ${e.stage.name} 调整开始日期`}
-                        title="拖动开始日期，结束日期固定；↑↓调整一天，Shift+↑↓调整一周"
+                        title={`开始日期 ${e.stage.start}${e.stage.start < start ? "（在视图外）" : ""}；拖动调整真实日期，结束固定；↑↓调整一天`}
                         disabled={disabled} {...resize.bind(e.project, e.stage, "start")}><span /></button>}
-                      {e.stage.end <= addDays(start, days - 1) && <button type="button" className="mp-pillar-resize mp-pillar-resize-end"
+                      {!moveEnabled && <button type="button" className={`mp-pillar-resize mp-pillar-resize-end${e.stage.end > addDays(start, days - 1) ? " mp-pillar-resize-continuation" : ""}`}
                         aria-label={`${person.name} ${e.project.name} · ${e.stage.name} 调整结束日期`}
-                        title="拖动结束日期，开始日期固定；↑↓调整一天，Shift+↑↓调整一周"
+                        title={`结束日期 ${e.stage.end}${e.stage.end > addDays(start, days - 1) ? "（在视图外）" : ""}；拖动调整真实日期，开始固定；↑↓调整一天`}
                         disabled={disabled} {...resize.bind(e.project, e.stage, "end")}><span /></button>}
-                      {e.width * rowHeight >= 36 &&
-                      <button
-                        className="mp-pillar-grip"
-                        aria-label={`${person.name} ${e.stage.name} 拖动整项`}
-                        title="整项平移或转交：起止日期一起移动"
-                        draggable={!disabled}
-                        disabled={disabled}
-                        onDragStart={(event) => {
-                          onStageDrag(event, e.project, e.stage, person.id, addDays(start, e.left));
-                          if (!event.defaultPrevented) setMoving(key);
-                        }}
-                        onDragEnd={() => { setMoving(""); setDropTarget(""); onDragEnd(); }}
-                      >
-                        ⠿
-                      </button>}
                       </>
                     )}
                   </div>
@@ -405,10 +401,10 @@ export default function PeopleSchedule({
       {resize.preview && createPortal(<div className="mp-pillar-resize-feedback" role="status"
         style={{ left: Math.max(12, Math.min(resize.preview.x + 18, window.innerWidth - 250)), top: Math.max(12, Math.min(resize.preview.y + 18, window.innerHeight - 90)) }}>
         <strong>{resize.preview.edge === "start" ? "调整开始 · 结束固定" : "调整结束 · 开始固定"}</strong>
-        <span>{resize.preview.stage.start} — {resize.preview.stage.end}</span><small>松开应用 · Esc 取消</small>
+        <span>{resize.preview.stage.start} — {resize.preview.stage.end}</span><small>{resize.preview.stage.start < start || resize.preview.stage.end > addDays(start, days - 1) ? "含视图外日期 · " : ""}松开应用 · Esc 取消</small>
       </div>, document.body)}
       <p className="mp-help">
-        上下端分别调整起止，另一端固定；⠿ 平移整项或转交，柱体划选暂停/支援。双击空白新增，键盘 Enter 也可。多人工作共享起止日期。未安排人员的工作{" "}
+        上下端分别调整真实起止，另一端固定，可跨当前日期范围；整项移动在快捷卡片中选择。柱体划选暂停/支援，双击空白新增。未安排人员的工作{" "}
         {entries.filter((e) => !e.stage.assignees.length).length} 项。
       </p>
     </>

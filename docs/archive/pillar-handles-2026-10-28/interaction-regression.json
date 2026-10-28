@@ -1,0 +1,46 @@
+{
+  "results": [
+    {
+      "name": "Autosaved personnel drags stay quiet; manual mode and failures retain recovery controls",
+      "passed": true
+    },
+    {
+      "name": "Quick pause only affects chosen person and partial resume keeps other paused days",
+      "passed": true
+    },
+    {
+      "name": "Pillar selection opens quick actions with exact dates and uses one atomic reassignment",
+      "passed": true
+    },
+    {
+      "name": "Quick action validation and save conflict preserve choices; detailed edit remains accessible",
+      "passed": true
+    },
+    {
+      "name": "Gantt bar offers quick completion and pause without opening full work editor",
+      "passed": true
+    },
+    {
+      "name": "Gantt move and resize remain direct and autosave without opening a panel",
+      "passed": true
+    },
+    {
+      "name": "Delivery shortcut inserts a single day diamond with deliverable and autosaves quietly",
+      "passed": true
+    },
+    {
+      "name": "Clicking a timeline blank cell inserts a milestone for its row and date",
+      "passed": true
+    },
+    {
+      "name": "Failed Gantt autosave shows retry and preserves a newly inserted node",
+      "passed": true
+    },
+    {
+      "name": "Small screen quick panel fits viewport and keeps keyboard focus inside",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "nativePrompts": []
+}

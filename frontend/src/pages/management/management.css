@@ -2076,9 +2076,8 @@
 .mp-pillar-overlay {display:grid;position:absolute;top:36px;left:0;right:0;pointer-events:none;}
 .mp-person-pillar-track {position:relative;}
 .mp-pillar-wrap {position:absolute;pointer-events:none;}
-.management-page .mp-work-pillar {position:absolute;inset:0;width:100%;height:100%;padding:18px 2px 3px;border:0;border-radius:5px;color:#fff;overflow:hidden;pointer-events:auto;touch-action:none;box-shadow:0 1px 3px #283e6320;}
+.management-page .mp-work-pillar {position:absolute;inset:0;width:100%;height:100%;padding:0;border:0;border-radius:5px;color:#fff;overflow:hidden;pointer-events:auto;touch-action:none;box-shadow:0 1px 3px #283e6320;}
 .mp-pillar-caption {writing-mode:vertical-rl;text-orientation:mixed;display:block;margin:auto;line-height:16px;letter-spacing:1px;font-size:10px;max-height:100%;overflow:hidden;}
-.management-page .mp-pillar-grip {position:absolute;top:0;left:0;width:100%;height:17px;padding:0;border:0;border-radius:4px 4px 0 0;background:#ffffff35;color:white;font-size:13px;line-height:17px;cursor:grab;pointer-events:auto;}
 .mp-pillar-pause {position:absolute;left:0;right:0;background:#e5e8eef2;color:#7b8797;display:flex;align-items:center;justify-content:center;border-top:1px dashed #b7c0cb;border-bottom:1px dashed #b7c0cb;}
 .mp-pillar-pause>span {writing-mode:vertical-rl;font-size:10px;line-height:16px;max-height:100%;overflow:hidden;}
 .mp-pillar-unattended {background:repeating-linear-gradient(135deg,#f5f6f8f7 0 6px,#e4e7edf7 6px 12px);color:#976227;}
@@ -2091,9 +2090,8 @@
 .mp-dense-dates .mp-pillar-grid tbody th small {display:none;}
 .mp-dense-dates .mp-pillar-grid tbody th strong {line-height:16px;font-size:10px;}
 .mp-pillar-wrap .mp-work-pillar {min-width:0;padding-left:0;padding-right:0;}
-.mp-pillar-wrap .mp-pillar-grip {min-width:0;overflow:hidden;}
 .mp-pillar-narrow .mp-pillar-caption,.mp-pillar-narrow .mp-pillar-pause>span {display:none;}
-.management-page .mp-pillar-narrow .mp-pillar-grip {font-size:0;}
+.mp-pillar-short .mp-pillar-caption {display:none;}
 .mp-pause-warnings {padding:8px 10px;margin-top:8px;border:1px solid #ead8b8;border-radius:7px;background:#fffaf0;font-size:12px;color:#946326;}
 .mp-pause-warnings>button {display:block;text-align:left;margin-top:5px;font-size:11px;}
 .mp-week-writing {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px;}
@@ -2147,10 +2145,13 @@
 .mp-quick-panel .mp-quick-delete {color:#a52b32;border-color:#e5b5ba;}
 /* Endpoints resize independently; the separate grip explicitly moves the whole work. */
 .mp-pillar-wrap {transition:top 100ms ease-out,height 100ms ease-out,left 100ms ease-out;}
-.management-page .mp-pillar-grip {top:10px;height:12px;line-height:12px;border-radius:2px;font-size:12px;}
-.management-page .mp-pillar-resize {position:absolute;left:0;width:100%;height:8px;min-width:0;min-height:0;padding:0;border:0;border-radius:3px;background:#ffffff65;pointer-events:auto;touch-action:none;cursor:ns-resize;z-index:2;box-shadow:none;}
+.management-page .mp-pillar-resize {position:absolute;left:0;width:100%;height:min(14px,calc((100% - 4px)/2));min-width:0;min-height:0;padding:0;border:0;border-radius:3px;background:#ffffff65;pointer-events:auto;touch-action:none;cursor:ns-resize;z-index:2;box-shadow:none;}
 .mp-pillar-resize-start {top:0;}.mp-pillar-resize-end {bottom:0;}
 .mp-pillar-resize>span {display:block;height:2px;background:#fff;margin:0 2px;border-radius:1px;}
+.mp-pillar-resize-continuation>span {height:0;border-top:2px dashed #fff;background:transparent;}
+.mp-pillar-move-mode {display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:8px 12px;margin:6px 0;background:#eef4ff;border:1px solid #b8cef6;border-radius:8px;color:#35568b;font-size:12px;}
+.mp-pillar-move-enabled .mp-work-pillar {cursor:grab;outline:2px dashed #4169df;outline-offset:1px;}
+.mp-quick-work-footer>div {flex-wrap:wrap;justify-content:flex-end;}
 .management-page .mp-pillar-resize:hover,.management-page .mp-pillar-resize:focus-visible {background:#ffffffb8;outline:2px solid #4169df;outline-offset:1px;}
 .mp-pillar-resizing {z-index:8;transition:top 60ms linear,height 60ms linear;filter:drop-shadow(0 2px 5px #345dd980);}
 .mp-pillar-resizing .mp-work-pillar {outline:2px solid #4169df;outline-offset:1px;}

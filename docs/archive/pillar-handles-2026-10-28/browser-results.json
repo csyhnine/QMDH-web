@@ -1,0 +1,34 @@
+{
+  "results": [
+    {
+      "name": "Bottom handle extends beyond Sunday without a week clamp and fixes start",
+      "passed": true
+    },
+    {
+      "name": "Clipped bottom stays usable, untouched press never truncates and drag changes the actual date",
+      "passed": true
+    },
+    {
+      "name": "Clipped top and month/year boundaries allow relative adjustment without snapping into view",
+      "passed": true
+    },
+    {
+      "name": "Ordinary drag has no whole-move hit target; explicit move mode separates operations and exits on Escape",
+      "passed": true
+    },
+    {
+      "name": "Explicit body move preserves duration, transfers one person and exits the mode",
+      "passed": true
+    },
+    {
+      "name": "Single-day dense rows keep end, center quick actions and start hit areas separate",
+      "passed": true
+    },
+    {
+      "name": "Mobile clipped bottom touch updates its actual end and all move controls stay off the pillar",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "nativePrompts": []
+}

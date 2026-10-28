@@ -51,6 +51,7 @@ export default function PeoplePlanner({
   const [pending, setPending] = useState<Record<number, PlanningProject>>({});
   const [quick, setQuick] = useState<QuickWork | null>(null), [quickBusy, setQuickBusy] = useState(false);
   const [resizing, setResizing] = useState(false);
+  const [moveWork, setMoveWork] = useState<{ projectId: number; stageId: string } | null>(null);
   const [autoFailed, setAutoFailed] = useState(false),
     [saving, setSaving] = useState(false),
     [message, setMessage] = useState("");
@@ -78,6 +79,12 @@ export default function PeoplePlanner({
     onBusy(saving || quickBusy || resizing);
     return () => onBusy(false);
   }, [saving, quickBusy, resizing, onBusy]);
+  useEffect(() => {
+    if (!moveWork) return;
+    const cancel = (event: KeyboardEvent) => { if (event.key === "Escape") setMoveWork(null); };
+    window.addEventListener("keydown", cancel);
+    return () => window.removeEventListener("keydown", cancel);
+  }, [moveWork]);
   function write(next: Record<number, PlanningProject>) {
     edits.current = next;
     if (mounted.current) setPending(next);
@@ -176,8 +183,12 @@ export default function PeoplePlanner({
             </span>
           ))}
         </div>
-        <small>上下端调整起止 · ⠿ 整项平移或转交 · 柱体划选暂停或支援</small>
+        <small>上下端调整起止 · 整项移动请先打开快捷卡片 · 柱体划选暂停或支援</small>
       </div>
+      {moveWork && <div className="mp-pillar-move-mode" role="status">
+        <span>整项移动：拖动高亮柱体到目标日期或人员，起止日期一起移动。</span>
+        <button type="button" onClick={() => setMoveWork(null)}>取消整项移动</button>
+      </div>}
       <PeopleSchedule
         projects={preview}
         workloadProjects={allPreview}
@@ -190,6 +201,7 @@ export default function PeoplePlanner({
         onResetZoom={onResetZoom}
         onResize={(p, s, edge, offset) => apply(p.id!, { kind: "resize", stageId: s.id, edge, offset })}
         onResizeBusy={setResizing}
+        moveWork={moveWork}
         disabled={blocked}
         onSelect={(p, s, personId, date, x, y) => openQuick({ projectId: p.id!, stageId: s.id, personId, date, x, y })}
         onSegment={(p,s,personId,date,end,x,y)=>openQuick({projectId:p.id!,stageId:s.id,personId,date,end,x,y})}
@@ -199,6 +211,7 @@ export default function PeoplePlanner({
         }
         onDragEnd={() => {
           drag.current = null;
+          setMoveWork(null);
         }}
         onDateDragOver={(event) => {
           if (!blocked && drag.current) {
@@ -210,6 +223,7 @@ export default function PeoplePlanner({
           event.preventDefault();
           const item = drag.current;
           drag.current = null;
+          setMoveWork(null);
           if (item && !blocked)
             apply(item.projectId, {
               kind: "move",
@@ -221,7 +235,9 @@ export default function PeoplePlanner({
         }}
       />
       {quick && <QuickWorkActions key={`${quick.projectId}:${quick.stageId}:${quick.date}:${quick.end}`} request={quick} projects={workloadProjects} staff={staff} disabled={archived || disabled || saving}
-        onPersist={onPersist} onReassign={onReassign} onBusy={setQuickBusy} onClose={() => setQuick(null)} onDetails={() => { setQuick(null); onDirty(false); open({ projectId: quick.projectId, stageId: quick.stageId, personId: quick.personId, date: quick.date }); }} />}
+        onPersist={onPersist} onReassign={onReassign} onBusy={setQuickBusy} onClose={() => setQuick(null)}
+        onMove={() => { setMoveWork({ projectId: quick.projectId, stageId: quick.stageId }); setQuick(null); }}
+        onDetails={() => { setQuick(null); onDirty(false); open({ projectId: quick.projectId, stageId: quick.stageId, personId: quick.personId, date: quick.date }); }} />}
       {changed > 0 && (!autoSave || autoFailed) && (
         <details className="mp-change-list">
           <summary>未保存调整 · 冲突时可复制保留</summary>

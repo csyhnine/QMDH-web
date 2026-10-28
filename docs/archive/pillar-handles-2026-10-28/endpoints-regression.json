@@ -1,0 +1,50 @@
+{
+  "results": [
+    {
+      "name": "Top endpoint previews shared lanes, fixes end and performs no write until release",
+      "passed": true
+    },
+    {
+      "name": "Bottom endpoint extends and shrinks duration while start remains fixed",
+      "passed": true
+    },
+    {
+      "name": "Endpoint crossing clamps at one inclusive day, and a click without movement does not save",
+      "passed": true
+    },
+    {
+      "name": "Escape, pointer cancellation and focus loss cancel preview without modifying work",
+      "passed": true
+    },
+    {
+      "name": "Month auto scroll follows an endpoint and commits only on release",
+      "passed": true
+    },
+    {
+      "name": "Clipped endpoints remain visible and quick actions remain available",
+      "passed": true
+    },
+    {
+      "name": "Keyboard endpoints work across year boundaries while preserving the opposite date",
+      "passed": true
+    },
+    {
+      "name": "Failed autosave preserves resized preview and retry saves its fixed-opposite interval",
+      "passed": true
+    },
+    {
+      "name": "Manual mode can discard resize, and zoomed date rows retain exact end adjustment",
+      "passed": true
+    },
+    {
+      "name": "Ten narrow parallel works have independent bottom handles and retain readable feedback",
+      "passed": true
+    },
+    {
+      "name": "Touch bottom resize works on mobile, and reduced-motion preference disables the landing animation",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "nativePrompts": []
+}

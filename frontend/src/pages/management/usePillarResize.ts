@@ -24,9 +24,7 @@ export default function usePillarResize({ board, rowHeight, start, days, disable
     const g = gesture.current;
     if (!g) return;
     if (Math.abs(g.clientY - g.y) >= 4) g.moved = true;
-    const raw = g.moved ? Math.round((g.clientY - g.y + (board.current?.scrollTop || 0) - g.scroll) / latest.current.rowHeight) : 0,
-      first = dayNumber(start) - dayNumber(g.original[g.edge]),
-      offset = Math.max(first, Math.min(first + days - 1, raw));
+    const offset = g.moved ? Math.round((g.clientY - g.y + (board.current?.scrollTop || 0) - g.scroll) / latest.current.rowHeight) : 0;
     g.stage = resizeWorkEndpoint(g.original, g.edge, offset);
     setPreview({ projectId: g.project.id!, stageId: g.original.id, edge: g.edge, stage: g.stage, x: g.clientX, y: g.clientY });
   }

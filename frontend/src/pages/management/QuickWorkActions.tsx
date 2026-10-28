@@ -53,10 +53,10 @@ function QuickPanel({ x, y, title, busy, onClose, children }: {
   </div>, document.body);
 }
 
-export default function QuickWorkActions({ request, projects, staff, disabled, onPersist, onReassign, onBusy, onClose, onDetails }: {
+export default function QuickWorkActions({ request, projects, staff, disabled, onPersist, onReassign, onBusy, onClose, onDetails, onMove }: {
   request: QuickWork; projects: PlanningProject[]; staff: Staff[]; disabled: boolean;
   onPersist: (p: PlanningProject) => Promise<PlanningProject>; onReassign: (r: Reassignment) => Promise<void>;
-  onBusy: (v: boolean) => void; onClose: () => void; onDetails: () => void;
+  onBusy: (v: boolean) => void; onClose: () => void; onDetails: () => void; onMove?: () => void;
 }) {
   const project = projects.find(p => p.id === request.projectId), stage = project?.stages.find(s => s.id === request.stageId);
   const [from, setFrom] = useState(request.date), [to, setTo] = useState(request.end || stage?.end || request.date);
@@ -112,6 +112,7 @@ export default function QuickWorkActions({ request, projects, staff, disabled, o
     {error && <p className="mp-quick-error" role="alert">{error}</p>}
     <footer className="mp-quick-work-footer"><span>{busy ? "正在保存…" : "选择操作后直接保存"}</span>
       <div><button type="button" className="mp-quick-delete" disabled={blocked} onClick={() => void run("delete")}>{stage.milestone ? "删除交付节点" : "删除泳道"}</button>
+        {onMove && !stage.milestone && <button type="button" disabled={blocked} onClick={onMove}>整项移动</button>}
         <button type="button" disabled={blocked} onClick={onDetails}>详细编辑</button></div>
     </footer>
   </QuickPanel>;

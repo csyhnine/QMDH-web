@@ -17,7 +17,6 @@ import {
   scheduledWeek,
   weekRange,
   type PlanningProject,
-  type Report,
   type Staff,
   type Stage,
 } from "./planning";
@@ -106,7 +105,6 @@ export default function ManagementProjectsPage() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [affiliationFilter, setAffiliationFilter] = useState("all");
   const counts = staffCounts(staff);
-  const [report, setReport] = useState<Report | null>(null);
   const [view, setView] = useState<"ledger" | "gantt" | "people" | "staff">("people");
   const previousMainView = useRef<"ledger" | "gantt" | "people">("people");
   const [archive, setArchive] = useState(false);
@@ -132,7 +130,6 @@ export default function ManagementProjectsPage() {
   const [createdProject, setCreatedProject] = useState<PlanningProject | null>(null);
   const projectDirty = Boolean(draft && JSON.stringify(draft) !== draftBaseline);
   const [staffDraft, setStaffDraft] = useState<Staff | null>(null);
-  const [reportDraft, setReportDraft] = useState<Report | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -144,18 +141,15 @@ export default function ManagementProjectsPage() {
     setError("");
     setProjects([]);
     setStaff([]);
-    setReport(null);
     Promise.all([
       scopedRequest<PlanningProject[]>(`/projects?year=${year}&archived=${archive}&deleted=${trash}`),
       scopedRequest<Staff[]>("/staff"),
-      scopedRequest<Report>(`/reports/${year}`),
       request<{ units: UnitOption[] }>("/units"),
     ])
-      .then(([p, s, r, categories]) => {
+      .then(([p, s, categories]) => {
         if (!cancelled) {
           setProjects(p);
           setStaff(s);
-          setReport(r);
           setUnits(categories.units || []);
         }
       })
@@ -255,7 +249,7 @@ export default function ManagementProjectsPage() {
     return saved;
   }
   useEffect(() => {
-    if (!(draft || staffDraft || reportDraft) || typeof document === "undefined") return;
+    if (!(draft || staffDraft) || typeof document === "undefined") return;
     const previous = document.activeElement as HTMLElement | null,
       overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -263,7 +257,7 @@ export default function ManagementProjectsPage() {
       document.body.style.overflow = overflow;
       previous?.focus();
     };
-  }, [Boolean(draft || staffDraft || reportDraft)]);
+  }, [Boolean(draft || staffDraft)]);
   const reload = () => setRefresh((v) => v + 1);
   const change = <K extends keyof PlanningProject>(key: K, value: PlanningProject[K]) => {
     setProjectSaveStatus(projectAutoFailed ? "修改尚未保存，请核对后手动重试。" : autoSave ? "有修改，等待自动保存…" : "有修改，尚未保存。");
@@ -359,26 +353,6 @@ export default function ManagementProjectsPage() {
       setError(error instanceof Error ? error.message : "人员池更新失败");
     } finally { setBusy(false); }
   }
-  async function saveReport(e: FormEvent) {
-    e.preventDefault();
-    if (!reportDraft || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      await scopedRequest(`/reports/${year}`, {
-        compiler: reportDraft.compiler,
-        data_as_of: reportDraft.data_as_of,
-        version: reportDraft.version,
-      });
-      setReportDraft(null);
-      setNotice("台账信息已保存");
-      reload();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "保存失败");
-    } finally {
-      setBusy(false);
-    }
-  }
   async function changeDeleted(project: PlanningProject, deleted: boolean) {
     if (!project.id || busy || planSaving || planDirty || actionLock.current) return;
     if (deleted && !await confirmPlanning(`删除“${project.name}”？项目将移入回收站，可恢复，版本记录会保留。${projectDirty ? "本次未保存修改会丢失。" : ""}`)) return;
@@ -418,7 +392,7 @@ export default function ManagementProjectsPage() {
     const url = URL.createObjectURL(new Blob([ledgerCsv(filtered, staff)], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${report?.unit || unit}-${year}年度项目详情.csv`;
+    a.download = `${unit}-${year}年度项目详情.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -471,13 +445,13 @@ export default function ManagementProjectsPage() {
       <div className="mp-workspace-header">
         <header className="mp-header">
           <div>
-            <p className="mp-eyebrow">{report?.unit || currentUser?.company_unit} · 管理工作台</p>
+            <p className="mp-eyebrow">{unit || currentUser?.company_unit} · 管理工作台</p>
             <h1>项目管理</h1>
             <p>掌握项目进展，安排团队下一步工作。</p>
             <small className="mp-unit-boundary">各分院独立管理本院项目、人员和进展。</small>
           </div>
           <div className="mp-header-actions">
-            <label className="mp-inline" title="适用于已有项目资料、项目计划和人员排期；新项目首次仍需创建，分院人员池与台账信息单独保存。"><input type="checkbox" checked={autoSave} onChange={e => {
+            <label className="mp-inline" title="适用于已有项目资料、项目计划和人员排期；新项目首次仍需创建，分院人员池单独保存。"><input type="checkbox" checked={autoSave} onChange={e => {
               setAutoSave(e.target.checked);
               try { window.localStorage?.setItem(`qmdh:planning:auto:${currentUser?.name}`, e.target.checked ? "on" : "off"); } catch { /* Preference remains usable without storage. */ }
             }} />自动保存</label>
@@ -488,7 +462,7 @@ export default function ManagementProjectsPage() {
                   const next = e.target.value;
                   if (projectDirty && !await confirmPlanning("项目内容尚未保存，确定切换分院并放弃修改？")) return;
                   safeChange(() => {
-                    setUnit(next); setDraft(null); setStaffDraft(null); setReportDraft(null);
+                    setUnit(next); setDraft(null); setStaffDraft(null);
                     setPerson(0); setSearch(""); setCreatedProject(null); setNotice(""); setError("");
                   });
                 }}>
@@ -500,12 +474,7 @@ export default function ManagementProjectsPage() {
             <button disabled={loading || busy} aria-pressed={view === "staff"} onClick={() => changeView(view === "staff" ? previousMainView.current : "staff")}>
               分院人员池
             </button>
-            <button
-              disabled={loading}
-              onClick={() => report && setReportDraft({ ...report, data_as_of: report.data_as_of || today() })}
-            >
-              台账信息
-            </button>
+
           </div>
         </header>
         <nav className="mp-tabs" aria-label="项目管理视图">
@@ -534,7 +503,7 @@ export default function ManagementProjectsPage() {
           : view === "people" ? "人员排期：以本院人员为主线，查看跨项目占用，拖拽分配工作并处理冲突。"
           : "分院人员池：维护本院可安排的员工，名册职务与网站登录权限分别管理。"}
       </p>
-      {error && !(draft || staffDraft || reportDraft) ? (
+      {error && !(draft || staffDraft) ? (
         <p className="mp-error" role="alert">
           {error}
         </p>
@@ -851,9 +820,7 @@ export default function ManagementProjectsPage() {
         )}
         {!loading && view === "ledger" && !trash && <details className="mp-ledger-reports"><summary>年度经营统计与人员周报</summary><ManagementReporting key={`${unit}-${year}`} unit={unit} year={year} revision={projects} /></details>}
       </div>
-      <div className="mp-report-meta">
-        {year} 年度项目信息一览表 · 表格编制 {report?.compiler || "待填写"} · 数据更新 {report?.data_as_of || "待填写"}
-      </div>
+
       {draft && !draft.id ? (
         <div className="mp-modal"><form className="mp-small-editor" role="dialog" aria-modal="true" aria-label="快速立项" onSubmit={saveProject}>
           <h2>新建项目</h2><p className="mp-help">先建档，再安排工作。只需项目名称，其余可稍后补充。</p>
@@ -1279,51 +1246,7 @@ export default function ManagementProjectsPage() {
           </form>
         </div>
       ) : null}
-      {reportDraft ? (
-        <div className="mp-modal">
-          <form
-            className="mp-small-editor"
-            onSubmit={saveReport}
-            role="dialog"
-            aria-modal="true"
-            aria-label="编辑台账信息"
-          >
-            <h2>台账信息</h2>
-            {error ? (
-              <p role="alert" className="mp-error">
-                {error}
-              </p>
-            ) : null}
-            <fieldset disabled={busy}>
-              <label>
-                表格编制
-                <input
-                  maxLength={150}
-                  value={reportDraft.compiler}
-                  onChange={(e) => setReportDraft({ ...reportDraft, compiler: e.target.value })}
-                />
-              </label>
-              <label>
-                数据更新日期
-                <PlanningDate
-                  label="数据更新日期"
-                  required
-                  value={reportDraft.data_as_of || ""}
-                  onChange={(date) => setReportDraft({ ...reportDraft, data_as_of: date })}
-                />
-              </label>
-            </fieldset>
-            <footer>
-              <button type="button" disabled={busy} onClick={() => setReportDraft(null)}>
-                取消
-              </button>
-              <button className="mp-primary" aria-busy={busy} disabled={busy}>
-                {busy ? "正在保存…" : "保存信息"}
-              </button>
-            </footer>
-          </form>
-        </div>
-      ) : null}
+
     </section>
   );
 }

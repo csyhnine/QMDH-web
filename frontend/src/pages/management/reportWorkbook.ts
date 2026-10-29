@@ -25,7 +25,7 @@ export function reportWorkbook(data: ReportingData, start: string, days: number)
   const finance = financialSummary(data.projects), week = weeklyWorkload(data, start, days);
   const sheets: Sheet[] = [
     { name: "年度项目台账", headerRows: [3, 4], widths: LEDGER_COLUMNS.map(([key]) => key === "name" || key.endsWith("work") || key === "notes" ? 36 : 19),
-      rows: [[title], [`表格编制：${data.report.compiler || "待填写"}　数据更新：${data.report.data_as_of || "待填写"}　范围：本院本年度未删除项目（含归档）；下周安排窗口 ${addDays(start, 7)}—${addDays(start, 11)}`], header, subheader, ...projectRows],
+      rows: [[title], [`范围：本院本年度未删除项目（含归档）；下周安排窗口 ${addDays(start, 7)}—${addDays(start, 11)}`], header, subheader, ...projectRows],
       merges: [`A1:${last}1`, `A2:${last}2`, "C3:H3", ...LEDGER_COLUMNS.flatMap((_, i) => i >= 2 && i < 8 ? [] : [`${column(i)}3:${column(i)}4`])] },
     { name: "经营及分类统计", widths: [25, 32, 20, 20, 20, 20, 20], merges: ["A1:G1", "A2:G2"], headerRows: [3], rows: [
       [`${data.unit} · ${data.year}年度经营统计`], ["金额单位：万元；空白不作零；签约率只含已确认状态，回款率只含设计费与回款均已填写项目。"],

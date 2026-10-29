@@ -4,4 +4,4 @@
 
 890模块构建通过；实际最终包1900/1100/390px × 人员排期/项目计划/项目详情9场检查通过：页头左右边缘与内容容器齐平、文字原内边距保持、滚动后吸顶及高度不变，无页面横向溢出，pageerror=[]。已检查桌面截图；证据在忽略目录local/header-join-20261029。未跑无关测试或整套CI，无生产测试写入、GPU或付费生成。
 
-新目录/标签 `/opt/qmdh-frp/releases/header-join-20261029` / `qmdh-header-join-frontend:20261029`，备份 `/www/backup/qmdh-release-20261029-header-join` ↔ `E:/backups/QMDH-web/release-20261029-header-join`。实际运行镜像overlay，仅切frontend、保留旧资源，无服务器清理或迁移。DB/媒体继承此前纯前端恢复链、unit-access独立快照及本机基础包，非新数据快照；回滚不覆盖新业务数据。保留既有WIP、原分支及草稿PR #5，不合并。上线结果随后补记。
+新目录/标签 `/opt/qmdh-frp/releases/header-join-20261029` / `qmdh-header-join-frontend:20261029`，备份 `/www/backup/qmdh-release-20261029-header-join` ↔ `E:/backups/QMDH-web/release-20261029-header-join`。实际运行镜像overlay，仅切frontend、保留旧资源，无服务器清理或迁移。DB/媒体继承此前纯前端恢复链、unit-access独立快照及本机基础包，非新数据快照；回滚不覆盖新业务数据。保留既有WIP、原分支及草稿PR #5，不合并。已上线源码 `ee2c86dc4b392693800a9bfc2db0782a77356feb`，镜像 `1336862e2623`，DEPLOYED_VERIFIED。52文件逐字节、12不同公网资源、26地址与健康/管理鉴权/Qwen能力通过；27文件新配对备份SHA256两端一致，原27文件及35服务器恢复归档重核。切换前所有任务/队列/GPU锁/上游队列为空；环境/挂载/网络/8工作流及旧资源保持，其他容器未重启，无清理/迁移/生产测试写入。盘余约8.184GiB为发布后时点。

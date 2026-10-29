@@ -1,3 +1,5 @@
+import { StudioResultRevealContext } from "./StudioResultRevealContext";
+import { studioResultRevealScope } from "./studioResultReveals";
 import StudioAuthenticatedShell from "./StudioAuthenticatedShell";
 import StudioLoginView from "./StudioLoginView";
 import GuestLoginBanner from "./GuestLoginBanner";
@@ -38,7 +40,9 @@ export default function GenerateStudioShell() {
     <div className={isGuest ? "studio-guest-layout" : undefined}>
       {isGuest ? <GuestLoginBanner /> : null}
       {showAnnouncement ? <SiteAnnouncementModal /> : null}
-      <StudioAuthenticatedShell currentUser={shellUser} studio={studio} />
+      <StudioResultRevealContext.Provider value={studioResultRevealScope(currentUser, isGuest)}>
+        <StudioAuthenticatedShell currentUser={shellUser} studio={studio} />
+      </StudioResultRevealContext.Provider>
     </div>
   );
 }

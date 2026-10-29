@@ -1,3 +1,6 @@
+import { useContext, useLayoutEffect } from "react";
+import { StudioResultRevealContext } from "./StudioResultRevealContext";
+import { observeResultTask } from "./studioResultReveals";
 import StudioTaskProgress from "./StudioTaskProgress";
 import StudioFeedEmptyState from "./StudioFeedEmptyState";
 import StudioFeedGallery from "./StudioFeedGallery";
@@ -16,6 +19,8 @@ export default function StudioFeedCardResult({
   upscalingAssetKey,
   virtualProgress,
 }: StudioFeedCardResultProps) {
+  const revealScope = useContext(StudioResultRevealContext);
+  useLayoutEffect(() => { observeResultTask(revealScope, task.id, task.status); }, [revealScope, task.id, task.status]);
   const localStage =
     task.result["adapter_mode"] === "comfyui" ? String(task.result["queued_stage"] || "queued") : undefined;
   const checkpoint = task.result["comfyui"] as Record<string, unknown> | undefined;

@@ -1,3 +1,4 @@
+import { useCanvasMotion } from "./canvasMotion";
 import { Handle, Position, useUpdateNodeInternals, type Node, type NodeProps } from "@xyflow/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -34,6 +35,7 @@ const statusLabel: Record<GenerateNodeData["status"], string> = {
 };
 
 export default function GenerateNode({ id, data, selected }: GenerateNodeProps) {
+  const motionClass = useCanvasMotion(id);
   const {
     providers,
     disabled,
@@ -122,7 +124,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
 
   return (
     <div
-      className={`qmdh-canvas-node${selected ? " is-selected is-expanded" : ""}${busy ? " is-busy" : ""}${
+      className={`qmdh-canvas-node${motionClass}${selected ? " is-selected is-expanded" : ""}${busy ? " is-busy" : ""}${
         isUpload ? " is-upload" : ""
       }${isAnnotate ? " is-annotate" : ""}`}
     >

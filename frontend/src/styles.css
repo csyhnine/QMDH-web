@@ -14371,3 +14371,12 @@ textarea:focus-visible {
     max-height: 240px;
   }
 }
+
+/* Only newly observed studio image results opt into this reveal. */
+.studio-result-image-waiting { opacity: 0; }
+.studio-result-image-reveal { animation: studio-result-image-in 200ms ease-out; }
+@keyframes studio-result-image-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .studio-result-image-waiting { opacity: 1; }
+  .studio-result-image-reveal { animation: none; }
+}

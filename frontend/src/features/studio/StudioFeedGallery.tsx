@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { StudioResultRevealContext } from "./StudioResultRevealContext";
+import { canRevealResult, claimResultReveal } from "./studioResultReveals";
+import { useContext, useState } from "react";
 
 import type { Asset, Task } from "../../api";
 import StudioAssetTile from "./StudioAssetTile";
@@ -31,6 +33,7 @@ export default function StudioFeedGallery({
   onUseAssetAsReference,
   onReuse,
 }: StudioFeedGalleryProps) {
+  const revealScope = useContext(StudioResultRevealContext);
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
 
   if (assets.length === 0) return null;
@@ -61,9 +64,12 @@ export default function StudioFeedGallery({
               aria-label="查看大图"
             >
               <StudioAssetTile
+                key={`${asset.id}:${mediaUrl}`}
                 asset={asset}
                 emphasis={index === 0 ? "primary" : "secondary"}
                 aspectRatio={taskResultString(task, "aspect_ratio")}
+                revealImage={canRevealResult(revealScope, task.id, asset.id, task.status)}
+                claimImageReveal={() => claimResultReveal(revealScope, task.id, asset.id, task.status)}
                 preserveFullImage
               />
             </button>

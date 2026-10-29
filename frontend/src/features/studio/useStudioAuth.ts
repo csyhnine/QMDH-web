@@ -1,3 +1,4 @@
+import { clearStudioResultReveals } from "./studioResultReveals";
 import { type FormEvent, useEffect, useState } from "react";
 
 import {
@@ -37,6 +38,7 @@ export function useStudioAuth({ onLogout }: UseStudioAuthOptions) {
         const user = await api.me();
         setCurrentUser(user);
       } catch {
+        clearStudioResultReveals();
         clearStoredAuthToken();
         setCurrentUser(null);
       } finally {
@@ -53,6 +55,7 @@ export function useStudioAuth({ onLogout }: UseStudioAuthOptions) {
     try {
       const trimmedName = loginName.trim();
       const response = await api.login(trimmedName, loginPassword);
+      clearStudioResultReveals();
       setStoredAuthToken(response.token);
       setCurrentUser(response.user);
       if (rememberLogin) {
@@ -72,6 +75,7 @@ export function useStudioAuth({ onLogout }: UseStudioAuthOptions) {
     } catch {
       // Local logout should still clear the browser session.
     }
+    clearStudioResultReveals();
     clearStoredAuthToken();
     setCurrentUser(null);
     onLogout();

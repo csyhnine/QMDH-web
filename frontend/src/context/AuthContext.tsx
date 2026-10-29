@@ -1,3 +1,4 @@
+import { clearStudioResultReveals } from "../features/studio/studioResultReveals";
 import { clearCadPreparationDrafts } from "../features/studio/cadPreparationDrafts";
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import {
@@ -52,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const enterGuestMode = useCallback(() => {
+    clearStudioResultReveals();
     clearCadPreparationDrafts();
     clearStoredAuthToken();
     setCurrentUser(null);
@@ -73,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api.me()
       .then((user) => setCurrentUser(user))
       .catch(() => {
+        clearStudioResultReveals();
         clearCadPreparationDrafts();
         clearStoredAuthToken();
         setCurrentUser(null);
@@ -84,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await api.login(username, password);
     writeGuestModeSession(false);
     setIsGuest(false);
+    clearStudioResultReveals();
     clearCadPreparationDrafts();
     setStoredAuthToken(response.token);
     setCurrentUser(response.user);
@@ -95,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Ignore logout errors
     }
+    clearStudioResultReveals();
     clearCadPreparationDrafts();
     clearStoredAuthToken();
     setCurrentUser(null);

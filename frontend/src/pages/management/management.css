@@ -2178,3 +2178,12 @@
 @media(prefers-reduced-motion:reduce) {.mp-chart .mp-gantt-landed {animation:none;}}
 .mp-quick-error {padding:8px;background:#fff2f1;color:#af3434;border-radius:6px;}
 .management-page .mp-gantt-delivery {padding:3px 5px;font-size:11px;color:#93621f;}
+
+/* Floating surfaces enter with opacity only; positioning and immediate close stay unchanged. */
+.mp-quick-panel {animation:mp-fade-in 120ms ease-out;}
+.mp-calendar[popover]:popover-open {animation:mp-fade-in 120ms ease-out;}
+.mp-confirm-dialog[open],.mp-confirm-dialog[open]::backdrop {animation:mp-fade-in 140ms ease-out;}
+@media(prefers-reduced-motion:reduce) {
+  .mp-quick-panel,.mp-quick-layer,.mp-calendar[popover]:popover-open,
+  .mp-confirm-dialog[open],.mp-confirm-dialog[open]::backdrop {animation:none !important;}
+}

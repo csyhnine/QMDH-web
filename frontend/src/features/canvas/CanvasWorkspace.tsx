@@ -1,3 +1,5 @@
+import { CanvasMotionContext, CanvasMotionStore } from "./canvasMotion";
+import "./canvasMotion.css";
 import { inheritPromptDraft } from "../../lib/promptPolishOwnership";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -156,6 +158,8 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   const boardKey = isTemplateMode
     ? templateEditor.viewKey
     : canvas.activeProject?.id ?? "empty";
+  const motion = useMemo(() => new CanvasMotionStore(), [boardKey, currentUser?.id, canvas.viewKey, templateEditor.viewKey]);
+  useEffect(() => { motion.active = true; return () => { motion.active = false; motion.clear(); }; }, [motion]);
   const boardTitle = isTemplateMode
     ? templateEditor.template?.title || "模板工作流"
     : canvas.activeProject?.title || "无限画布";
@@ -291,6 +295,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
 
   const restoreGraph = useCallback(
     (snapshot: { nodes: CanvasFlowNode[]; edges: Edge[] }) => {
+      motion.clear();
       history.isRestoringRef.current = true;
       flushContentHistorySession();
       interactionBaselineRef.current = null;
@@ -303,7 +308,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
         history.isRestoringRef.current = false;
       });
     },
-    [flushContentHistorySession, history, persistGraph]
+    [motion, flushContentHistorySession, history, persistGraph]
   );
 
   const onUndo = useCallback(() => {
@@ -408,10 +413,11 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
 
   const onAddNode = useCallback(
     (node: CanvasFlowNode) => {
+      motion.emit([node.id], "created");
       applyGraph(nodesRef.current.concat(node), edgesRef.current);
       setSelectedNodeIds([node.id]);
     },
-    [applyGraph]
+    [motion, applyGraph]
   );
 
   const onAddConnectedNode = useCallback(
@@ -424,10 +430,11 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
         },
         edgesRef.current
       );
+      motion.emit([node.id], "created");
       applyGraph(nextNodes, nextEdges);
       setSelectedNodeIds([node.id]);
     },
-    [applyGraph]
+    [motion, applyGraph]
   );
 
   const onViewportChange = useCallback(
@@ -444,6 +451,11 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
       const allowed=()=>options?.isCurrent?.() ?? true;
       const matches=(items:CanvasFlowNode[])=>!options?.expectedData || items.some(node=>node.id===nodeId && isGenerateNode(node) && node.data===options.expectedData);
       if(!allowed() || !matches(nodesRef.current))return;
+      const prior = nodesRef.current.find(node => node.id === nodeId);
+      if (!options?.expectedData && prior && isGenerateNode(prior) &&
+          ["pending", "running", "awaiting_result"].includes(prior.data.status) &&
+          patch.status === "completed" && typeof patch.taskId === "number" && patch.taskId === prior.data.taskId &&
+          patch.assetUrls?.some(url => Boolean(url))) motion.emit([nodeId], "completed", patch.taskId);
       const recordChange=()=>{
         if(options?.recordHistory!==false){
           if(isDebouncedGeneratePatch(patch))armContentHistory();
@@ -463,7 +475,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
       setNodes(current=>allowed() ? next : current);
       persistGraph(next,edgesRef.current,viewportRef.current);
     },
-    [armContentHistory, flushContentHistorySession, history, persistGraph]
+    [motion, armContentHistory, flushContentHistorySession, history, persistGraph]
   );
 
   const patchNodeSilent = useCallback((nodeId: string, patch: Partial<GenerateNodeData>, options?: PatchNodeOptions) => {
@@ -532,8 +544,8 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     if (!next) return;
     applyGraph(next, edgesRef.current);
     const group = next.find((node) => isGroupNode(node) && !current.some((item) => item.id === node.id));
-    if (group) setSelectedNodeIds([group.id]);
-  }, [applyGraph, selectedNodeIds]);
+    if (group) { motion.emit([group.id], "created"); setSelectedNodeIds([group.id]); }
+  }, [motion, applyGraph, selectedNodeIds]);
 
   const onUngroupSelection = useCallback(() => {
     const next = ungroupSelectedNodes(nodesRef.current, selectedNodeIds);
@@ -548,10 +560,11 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     const result = duplicateCanvasSelection(nodesRef.current, edgesRef.current, selectedNodeIds);
     if (!result) return;
     applyGraph(result.nodes, result.edges);
+    motion.emit(result.createdIds, "created");
     setSelectedNodeIds(result.createdIds);
     setBannerError("");
     setBannerOk(`已复制 ${result.createdIds.length} 个节点`);
-  }, [applyGraph, selectedNodeIds, sessionLoading]);
+  }, [motion, applyGraph, selectedNodeIds, sessionLoading]);
 
   const onCopySelection = useCallback(() => {
     if (selectedNodeIds.length === 0) return;
@@ -567,10 +580,11 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     const result = pasteCanvasSnapshot(nodesRef.current, edgesRef.current, clipboardRef.current);
     if (!result) return;
     applyGraph(result.nodes, result.edges);
+    motion.emit(result.createdIds, "created");
     setSelectedNodeIds(result.createdIds);
     setBannerError("");
     setBannerOk(`已粘贴 ${result.createdIds.length} 个节点`);
-  }, [applyGraph, sessionLoading]);
+  }, [motion, applyGraph, sessionLoading]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -690,13 +704,14 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
       const uploaded=await uploadReferenceFiles(acceptedFiles,api.uploadReferenceImage);
       const created=uploaded.map((item,index)=>createUploadImageNode({x:position.x+index*36,y:position.y+index*36},nodeDefaults,item.storagePath,item.fileName));
       asyncScope.complete(operation,{nodes:created});if(!asyncScope.current(operation))return;
+      motion.emit(created.map(node => node.id), "created");
       applyGraph(nodesRef.current.concat(created),edgesRef.current);if(created[0])setSelectedNodeIds([created[0].id]);
       asyncScope.finish(operation);setBannerError("");
     } catch(err) {
       const message=err instanceof Error ? err.message : "图片上传失败";asyncScope.complete(operation,{error:message});
       if(asyncScope.current(operation)) { setBannerError(message);asyncScope.finish(operation); }
     }
-  },[asyncScope,applyGraph,nodeDefaults]);
+  },[motion,asyncScope,applyGraph,nodeDefaults]);
 
   const recoverAsyncResult = useCallback((record: CanvasAsyncRecord) => {
     if(!asyncScope.active || record.ownerId!==currentUser?.id || record.board!==asyncBoard || record.phase!=="ready")return;
@@ -986,7 +1001,8 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   }
 
   return (
-    <CanvasNodeActionsProvider value={nodeActions}>
+    <CanvasMotionContext.Provider value={motion}>
+      <CanvasNodeActionsProvider value={nodeActions}>
       <div className="qmdh-canvas-workspace">
         <header className="qmdh-canvas-toolbar">
           <div className="qmdh-canvas-toolbar-left">
@@ -1285,5 +1301,6 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
         />
       ) : null}
     </CanvasNodeActionsProvider>
+    </CanvasMotionContext.Provider>
   );
 }

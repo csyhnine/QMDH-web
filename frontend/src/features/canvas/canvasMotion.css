@@ -1,0 +1,15 @@
+.canvas-motion-created, .canvas-motion-completed {
+  outline-width: 2px;
+  outline-style: solid;
+  outline-color: transparent;
+  outline-offset: -3px;
+  animation: canvas-motion-outline 240ms ease-out;
+}
+.canvas-motion-completed { animation-duration: 300ms; }
+.canvas-motion-completed .qmdh-canvas-node-status { animation: canvas-motion-status 180ms ease-out; }
+@keyframes canvas-motion-outline { from { outline-color: #88a9e0; } to { outline-color: transparent; } }
+@keyframes canvas-motion-status { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+ .canvas-motion-created, .canvas-motion-completed { outline: none; animation: none; }
+ .canvas-motion-completed .qmdh-canvas-node-status { animation: none; }
+}

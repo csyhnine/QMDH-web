@@ -19,4 +19,4 @@
 
 沿用 `bugfix/migration-bootstrap-001`，新目录 `/opt/qmdh-frp/releases/viewport-stability-20261029`、镜像标签 `qmdh-viewport-stability-frontend:20261029`；配对备份服务器 `/www/backup/qmdh-release-20261029-viewport-stability` ↔ 本机 `E:/backups/QMDH-web/release-20261029-viewport-stability`。采用实际运行镜像 overlay，仅切换 frontend，保留旧 hash 资源；无清理、迁移或生产测试写入。
 
-数据库/媒体继承旧纯前端恢复链、unit-access 独立快照及本机媒体基础包，非本轮新快照；回滚只恢复前端及配置，不覆盖新业务数据。既有 checks/plan/review 及无关未跟踪 WIP 保留，草稿 PR #5 不合并。发布实际结果随后补记。
+数据库/媒体继承旧纯前端恢复链、unit-access 独立快照及本机媒体基础包，非本轮新快照；回滚只恢复前端及配置，不覆盖新业务数据。既有 checks/plan/review 及无关未跟踪 WIP 保留，草稿 PR #5 不合并。已发布并验证：源码 `10a852759f72f78ba57d62598a8557155df4afdb`，镜像 `ecfe01dadc63`，状态 `DEPLOYED_VERIFIED`。52 个文件与运行内容一致，12 个不同公网资源、26 地址、健康/管理鉴权/Qwen 能力通过。切换前应用任务、派发、Redis、GPU 锁与上游队列均为空，环境/网络/挂载/8 工作流与旧 hash 资源保持，后端/3 worker/其他容器 ID 和启动时间未变。27 文件新配对备份两端 SHA256 一致；原 priority-pool 28 文件和 35 服务器恢复归档重新校验，基础包沿用本会话恢复链。无迁移、清理或生产测试写入，发布后盘余约 8.181 GiB 为时点值。

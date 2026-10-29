@@ -62,7 +62,7 @@ export function applyTaskToComposerState({
 export function regenerateTaskFeedback(submitted: boolean): RegenerateTaskFeedback {
   return {
     tone: submitted ? "success" : "error",
-    message: submitted ? "已带入创作区，并开始再次生成。" : "再次生成没有提交成功。",
+    message: submitted ? "已按历史输入提交再次生成。" : "再次生成没有提交成功。",
   };
 }
 

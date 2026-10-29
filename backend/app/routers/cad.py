@@ -33,9 +33,9 @@ from app.services.cad.program_rearrange import (
     parse_rearrange_text,
 )
 from app.services.cad.room_edit import adjust_floor_room, ensure_line_layers, save_program_review, undo_floor_edit
+from app.services.cad.edit_persistence import CadMediaEdit, CadEditConflict, cad_edit_source, commit_cad_edit
 from app.services.chat_service import complete_chat_once, get_chat_models, snapshot_chat_provider_config
 from app.services.media_storage import resolve_storage_path
-from sqlalchemy.orm.attributes import flag_modified
 import copy
 
 router = APIRouter(prefix="/cad", tags=["cad"])
@@ -61,12 +61,10 @@ def _decode_cad_upload(data_url: str) -> bytes:
     return content
 
 
-def _persist_line_layers(record: CadExtract) -> None:
-    payload = copy.deepcopy(dict(record.payload_json or {}))
-    if not ensure_line_layers(payload):
-        return
-    record.payload_json = payload
-    flag_modified(record, "payload_json")
+def _cad_read_out(record: CadExtract) -> CadExtractOut:
+    result = _to_cad_extract_out(record)
+    ensure_line_layers(result.data)
+    return result
 
 
 def _to_cad_extract_out(record: CadExtract) -> CadExtractOut:
@@ -135,18 +133,23 @@ def edit_cad_room(
     if record is None:
         raise HTTPException(status_code=404, detail="CAD extract not found")
     try:
-        source = copy.deepcopy(dict(record.payload_json or {}))
-        if payload.action == "undo":
-            updated = undo_floor_edit(source, floor_index=payload.floor_index)
-        else:
-            updated = adjust_floor_room(
-                source,
-                floor_index=payload.floor_index,
-                room_id=payload.room_id,
-                action=payload.action,
-                proposal=payload.proposal,
-                strokes=payload.strokes,
-            )
+        with CadMediaEdit() as media_edit:
+            source, source_token = cad_edit_source(db, record)
+            if payload.action == "undo":
+                updated = undo_floor_edit(source, floor_index=payload.floor_index)
+            else:
+                updated = adjust_floor_room(
+                    source,
+                    floor_index=payload.floor_index,
+                    room_id=payload.room_id,
+                    action=payload.action,
+                    proposal=payload.proposal,
+                    strokes=payload.strokes,
+                )
+            commit_cad_edit(db, record, source_token, updated)
+            media_edit.reclaim_unpublished(updated)
+    except CadEditConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         detail = {
             "nothing_to_undo": "没有可撤销的修改",
@@ -157,9 +160,6 @@ def edit_cad_room(
             "room_not_found": "没有这个房间",
         }.get(str(exc), str(exc))
         raise HTTPException(status_code=400, detail=detail) from exc
-    record.payload_json = updated
-    flag_modified(record, "payload_json")
-    db.commit()
     db.refresh(record)
     return _to_cad_extract_out(record)
 
@@ -241,16 +241,19 @@ def apply_cad_program(
     if record is None:
         raise HTTPException(status_code=404, detail="CAD extract not found")
     try:
-        updated = apply_program_changes(
-            copy.deepcopy(dict(record.payload_json or {})),
-            [item.model_dump() for item in payload.items],
-        )
+        with CadMediaEdit() as media_edit:
+            source, source_token = cad_edit_source(db, record)
+            updated = apply_program_changes(
+                source,
+                [item.model_dump() for item in payload.items],
+            )
+            commit_cad_edit(db, record, source_token, updated)
+            media_edit.reclaim_unpublished(updated)
+    except CadEditConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         detail = {"nothing_to_apply": "没有可写入的修改"}.get(str(exc), str(exc))
         raise HTTPException(status_code=400, detail=detail) from exc
-    record.payload_json = updated
-    flag_modified(record, "payload_json")
-    db.commit()
     db.refresh(record)
     return _to_cad_extract_out(record)
 
@@ -272,10 +275,12 @@ def save_cad_program_review(
     )
     if record is None:
         raise HTTPException(status_code=404, detail="CAD extract not found")
-    updated = save_program_review(copy.deepcopy(dict(record.payload_json or {})), payload.notes)
-    record.payload_json = updated
-    flag_modified(record, "payload_json")
-    db.commit()
+    try:
+        source, source_token = cad_edit_source(db, record)
+        updated = save_program_review(source, payload.notes)
+        commit_cad_edit(db, record, source_token, updated)
+    except CadEditConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     db.refresh(record)
     return _to_cad_extract_out(record)
 
@@ -317,14 +322,16 @@ def prepare_cad_fitout(
     if record is None:
         raise HTTPException(status_code=404, detail="CAD extract not found")
     try:
-        updated = save_preparation(copy.deepcopy(dict(record.payload_json or {})), inputs.model_dump())
+        source, source_token = cad_edit_source(db, record)
+        ensure_line_layers(source)
+        updated = save_preparation(source, inputs.model_dump())
+        commit_cad_edit(db, record, source_token, updated)
+    except CadEditConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail="本层图像文件缺失，无法校准") from exc
-    record.payload_json = updated
-    flag_modified(record, "payload_json")
-    db.commit()
     db.refresh(record)
     return _to_cad_extract_out(record)
 
@@ -348,15 +355,17 @@ def generate_cad_fitout(
     if record is None:
         raise HTTPException(status_code=404, detail="CAD extract not found")
     try:
-        updated = write_floor_fitout(copy.deepcopy(dict(record.payload_json or {})), floor_index, clear=clear)
+        source, source_token = cad_edit_source(db, record)
+        ensure_line_layers(source)
+        updated = write_floor_fitout(source, floor_index, clear=clear)
+        commit_cad_edit(db, record, source_token, updated)
+    except CadEditConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         detail = {"floor_not_found": "没有这一层"}.get(str(exc), str(exc))
         raise HTTPException(status_code=400, detail=detail) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail="这一层还不能布置") from exc
-    record.payload_json = updated
-    flag_modified(record, "payload_json")
-    db.commit()
     db.refresh(record)
     return _to_cad_extract_out(record)
 
@@ -370,18 +379,16 @@ def get_cad_extract(
     if auth_user.user_id is None:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    record = db.scalar(
-        select(CadExtract).where(
-            CadExtract.public_id == extract_id.strip(),
-            CadExtract.user_id == auth_user.user_id,
+    with db.no_autoflush:
+        record = db.scalar(
+            select(CadExtract).where(
+                CadExtract.public_id == extract_id.strip(),
+                CadExtract.user_id == auth_user.user_id,
+            )
         )
-    )
-    if record is None:
-        raise HTTPException(status_code=404, detail="CAD extract not found")
-    _persist_line_layers(record)
-    db.commit()
-    db.refresh(record)
-    return _to_cad_extract_out(record)
+        if record is None:
+            raise HTTPException(status_code=404, detail="CAD extract not found")
+        return _cad_read_out(record)
 
 
 @router.get("/extracts", response_model=list[CadExtractOut])
@@ -393,16 +400,14 @@ def list_cad_extracts(
     if auth_user.user_id is None:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    rows = db.scalars(
-        select(CadExtract)
-        .where(CadExtract.user_id == auth_user.user_id)
-        .order_by(CadExtract.created_at.desc(), CadExtract.id.desc())
-        .limit(limit)
-    ).all()
-    for row in rows:
-        _persist_line_layers(row)
-    db.commit()
-    return [_to_cad_extract_out(row) for row in rows]
+    with db.no_autoflush:
+        rows = db.scalars(
+            select(CadExtract)
+            .where(CadExtract.user_id == auth_user.user_id)
+            .order_by(CadExtract.created_at.desc(), CadExtract.id.desc())
+            .limit(limit)
+        ).all()
+        return [_cad_read_out(row) for row in rows]
 
 
 @router.get("/usage-summary")

@@ -1,7 +1,33 @@
-.comfy-task-progress { margin: 12px 0; overflow: hidden; }
-.comfy-task-progress > b { width: 35%; animation: comfy-progress-travel 1.8s ease-in-out infinite; }
-.comfy-task-progress.is-recovering > b { background: #d97706; animation-duration: 3s; }
-@keyframes comfy-progress-travel { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+.unified-task-progress {
+  width: 100%;
+  min-width: 0;
+  margin: 10px 0 14px;
+}
+.unified-task-progress .feed-task-progress-head strong {
+  font-variant-numeric: tabular-nums;
+}
+.unified-task-progress .feed-task-progress-track > b {
+  transition: width 650ms ease;
+}
+.unified-task-progress.is-recovering .feed-task-progress-track > b {
+  background: #d97706;
+}
+.unified-task-progress.is-recovering .feed-task-progress-head > span {
+  background: #fff3df;
+  color: #9a5b08;
+}
+.unified-task-progress.is-completed .feed-task-progress-track > b {
+  background: linear-gradient(90deg, #27946a, #54bb95);
+}
+.unified-task-progress.is-completed .feed-task-progress-head > span {
+  background: #e8f6ee;
+  color: #21784f;
+}
+.unified-task-progress p {
+  overflow-wrap: anywhere;
+}
 @media (prefers-reduced-motion: reduce) {
-  .comfy-task-progress > b { width: 100%; animation: none; opacity: 0.5; }
+  .unified-task-progress .feed-task-progress-track > b {
+    transition: none;
+  }
 }

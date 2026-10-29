@@ -3,7 +3,7 @@ from __future__ import annotations
 from urllib.parse import urljoin
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import BackgroundTasks, APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,7 +13,7 @@ from app.database import get_db
 from app.models import InspirationPost
 from app.schemas import ExtractImagesIn, ExtractImagesOut, InspirationPostCreate, InspirationPostOut, InspirationPostUpdate
 from app.services.inspiration_media import prepare_inspiration_image
-from app.integrations.search.index_hooks import delete_inspiration_post, upsert_inspiration_post
+from app.services.search_index_outbox_service import enqueue_index_change, schedule_index_dispatch
 from app.services.media_storage import resolve_storage_path
 from app.services.url_safety import UnsafeUrlError, assert_public_http_url
 
@@ -76,6 +76,7 @@ def create_inspiration(
     payload: InspirationPostCreate,
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    background_tasks: BackgroundTasks = None,
 ) -> InspirationPostOut:
     """Create an inspiration post. Designers can contribute references; admins retain full library control."""
     if payload.source_type not in {"external", "user"}:
@@ -115,9 +116,10 @@ def create_inspiration(
         user_id=auth_user.user_id,
     )
     db.add(post)
+    enqueue_index_change(db, domain="inspiration", entity=post, operation="upsert")
     db.commit()
     db.refresh(post)
-    upsert_inspiration_post(post)
+    schedule_index_dispatch(background_tasks, db, "inspiration")
     return _to_out(post)
 
 
@@ -141,14 +143,16 @@ def delete_inspiration(
     post_id: int,
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    background_tasks: BackgroundTasks = None,
 ):
     require_content_ops_access(auth_user)
     post = db.get(InspirationPost, post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
+    enqueue_index_change(db, domain="inspiration", entity=post_id, operation="delete")
     db.delete(post)
     db.commit()
-    delete_inspiration_post(post_id)
+    schedule_index_dispatch(background_tasks, db, "inspiration")
     return Response(status_code=204)
 
 
@@ -158,6 +162,7 @@ def update_inspiration(
     payload: InspirationPostUpdate,
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    background_tasks: BackgroundTasks = None,
 ) -> InspirationPostOut:
     """Update an inspiration post. Admins can edit all posts; designers can edit their own uploads."""
     post = db.get(InspirationPost, post_id)
@@ -186,9 +191,10 @@ def update_inspiration(
             )
         setattr(post, field, value)
 
+    enqueue_index_change(db, domain="inspiration", entity=post, operation="upsert")
     db.commit()
     db.refresh(post)
-    upsert_inspiration_post(post)
+    schedule_index_dispatch(background_tasks, db, "inspiration")
     return _to_out(post)
 
 

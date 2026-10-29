@@ -8387,7 +8387,7 @@ textarea:focus-visible {
 }
 
 @media (max-width: 1180px) {
-  .studio-shell:not(.canvas-shell):not(.chat-shell):not(.inspiration-shell):not(.admin-shell) {
+  .studio-shell:not(.canvas-shell):not(.chat-shell):not(.inspiration-shell):not(.admin-shell):not(.studio-generation-shell) {
     grid-template-columns: 96px 240px minmax(0, 1fr);
   }
 
@@ -8658,6 +8658,19 @@ textarea:focus-visible {
   .composer-menu summary,
   .composer-menu-trigger {
     width: 100%;
+  }
+
+  .guest-login-banner {
+    align-items: flex-start;
+  }
+
+  .guest-login-banner span {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .guest-login-banner .ghost-button {
+    width: auto;
   }
 }
 
@@ -14357,4 +14370,13 @@ textarea:focus-visible {
   .cad-room-list {
     max-height: 240px;
   }
+}
+
+/* Only newly observed studio image results opt into this reveal. */
+.studio-result-image-waiting { opacity: 0; }
+.studio-result-image-reveal { animation: studio-result-image-in 200ms ease-out; }
+@keyframes studio-result-image-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .studio-result-image-waiting { opacity: 1; }
+  .studio-result-image-reveal { animation: none; }
 }

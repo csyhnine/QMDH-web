@@ -273,9 +273,13 @@ def update_issue(issue_id: int, payload: SkillIssueUpdate, db: Session = Depends
     changes = payload.model_dump(exclude_unset=True)
     if not changes or any(value is None for value in changes.values()):
         raise HTTPException(422, "Provide non-null changes")
-    if changes.get("communication_status") == "replied" and not (changes.get("admin_reply") or issue.admin_reply).strip():
+    final_communication = changes.get("communication_status", issue.communication_status)
+    final_reply = changes.get("admin_reply", issue.admin_reply)
+    final_improvement = changes.get("improvement_status", issue.improvement_status)
+    final_retest = changes.get("retest_result", issue.retest_result)
+    if final_communication == "replied" and not (final_reply or "").strip():
         raise HTTPException(422, "Reply text required to mark replied")
-    if changes.get("improvement_status") == "resolved" and not (changes.get("retest_result") or issue.retest_result).strip():
+    if final_improvement == "resolved" and not (final_retest or "").strip():
         raise HTTPException(422, "Retest result required to resolve")
     for key, value in changes.items():
         setattr(issue, key, value)

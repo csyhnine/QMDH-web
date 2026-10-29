@@ -168,6 +168,18 @@ def resolve_task_usage_meta(
         task.payload if isinstance(task.payload, dict) else {},
         capability=capability,
     )
+    result = task.result if isinstance(task.result, dict) else {}
+    progress = result.get("generation_progress")
+    resolution_plan = progress.get("resolution_plan") if isinstance(progress, dict) else None
+    if isinstance(resolution_plan, dict) and resolution_plan.get("effective_resolution") in {"1k", "2k", "4k"}:
+        usage_payload = {
+            **build_task_input_usage_payload({**(task.payload or {}), "resolution": resolution_plan["effective_resolution"]}, capability=capability),
+            **resolution_plan,
+        }
+    if isinstance(result.get("generation_progress"), dict):
+        usage_payload = {**usage_payload, "generation_progress": result["generation_progress"],
+                         "usage_records": result.get("usage_records", []), "billing": result.get("billing", {}),
+                         "billing_note": result.get("billing_note", "")}
     return capability, model_name, provider_name, usage_payload
 
 
@@ -312,7 +324,15 @@ def ensure_usage_ledger_for_task(
         provider_entry.output_tokens = 0
         provider_entry.cached_input_tokens = 0
         provider_entry.uncached_input_tokens = 0
-        provider_entry.usage_payload = {}
+        execution = call.request_summary.get("execution", {}) if isinstance(call.request_summary, dict) else {}
+        image_result = execution.get("result", {}) if isinstance(execution, dict) else {}
+        provider_entry.usage_payload = ({"generation_progress": image_result["generation_progress"],
+                                         "usage_records": image_result.get("usage_records", []), "billing": image_result.get("billing", {}),
+                                         "billing_note": image_result.get("billing_note", "")}
+                                        if isinstance(image_result, dict) and isinstance(image_result.get("generation_progress"), dict) else {})
+        resolution_plan = (image_result.get("generation_progress") or {}).get("resolution_plan") if isinstance(image_result, dict) else None
+        if isinstance(resolution_plan, dict) and resolution_plan.get("effective_resolution") in {"1k", "2k", "4k"}:
+            provider_entry.usage_payload = {**provider_entry.usage_payload, **resolution_plan}
         provider_entry.latency_ms = int(call.latency_ms or 0)
         provider_entry.error_code = str((failure or {}).get("error_code") or "").strip()
         provider_entry.error_summary = str((failure or {}).get("error_summary") or "").strip()
@@ -338,17 +358,21 @@ def record_chat_usage_ledger(
     total_tokens: int = 0,
     usage_payload: dict | None = None,
     recorded_at: datetime | None = None,
+    source_table: str = "chat_messages",
+    billing_snapshot: dict | None = None,
 ) -> UsageLedger:
+    if source_table not in {"chat_messages", "chat_agent_calls", "chat_reply_calls"}:
+        raise ValueError("Unsupported chat usage source")
     ledger = db.scalar(
         select(UsageLedger).where(
-            UsageLedger.source_table == "chat_messages",
+            UsageLedger.source_table == source_table,
             UsageLedger.source_id == message.id,
         )
     )
     if not ledger:
         ledger = UsageLedger(
             entry_type="chat.message.completed",
-            source_table="chat_messages",
+            source_table=source_table,
             source_id=message.id,
             ledger_source="chat.message.completed",
             recorded_at=recorded_at or message.created_at or _now(),
@@ -386,7 +410,7 @@ def record_chat_usage_ledger(
             "total_tokens": total_tokens,
         }
     )
-    billing = calculate_chat_billing(
+    billing = billing_snapshot if billing_snapshot is not None else calculate_chat_billing(
         db,
         provider_profile_id=provider_profile_id if provider_profile_id is not None else provider.__dict__.get("id"),
         usage=usage,
@@ -423,27 +447,34 @@ def record_chat_compaction_usage_ledger(
     user_id: int | None = None,
     user_name: str | None = None,
     usage_payload: dict | None = None,
+    call_receipt_id: int | None = None,
+    billing_snapshot: dict | None = None,
+    recorded_at: datetime | None = None,
 ) -> UsageLedger | None:
     """Record LLM cost for ordinary-chat context summarization (side call, no ChatMessage)."""
+    if call_receipt_id is not None and call_receipt_id <= 0:
+        raise ValueError("Invalid compaction receipt")
+    source_table = "chat_context_compactions" if call_receipt_id is None else "chat_compaction_calls"
+    source_id = until_message_id if call_receipt_id is None else call_receipt_id
     if until_message_id <= 0:
         return None
     usage = normalize_chat_usage(usage_payload or {})
-    if usage.total_tokens <= 0 and usage.input_tokens <= 0 and usage.output_tokens <= 0:
+    if call_receipt_id is None and usage.total_tokens <= 0 and usage.input_tokens <= 0 and usage.output_tokens <= 0:
         return None
 
     ledger = db.scalar(
         select(UsageLedger).where(
-            UsageLedger.source_table == "chat_context_compactions",
-            UsageLedger.source_id == until_message_id,
+            UsageLedger.source_table == source_table,
+            UsageLedger.source_id == source_id,
         )
     )
     if not ledger:
         ledger = UsageLedger(
             entry_type="chat.message.completed",
-            source_table="chat_context_compactions",
-            source_id=until_message_id,
+            source_table=source_table,
+            source_id=source_id,
             ledger_source="chat.context_compact",
-            recorded_at=_now(),
+            recorded_at=recorded_at or _now(),
         )
         db.add(ledger)
 
@@ -452,7 +483,7 @@ def record_chat_compaction_usage_ledger(
     resolved_model_name = (provider.model_name if provider is not None else "") or ""
     profile_id = provider_profile_id if provider_profile_id is not None else (provider.id if provider is not None else None)
 
-    billing = calculate_chat_billing(db, provider_profile_id=profile_id, usage=usage)
+    billing = billing_snapshot if billing_snapshot is not None else calculate_chat_billing(db, provider_profile_id=profile_id, usage=usage)
     ledger.task_id = None
     ledger.task_archive_id = None
     ledger.provider_call_id = None
@@ -490,5 +521,5 @@ def record_chat_compaction_usage_ledger(
     ledger.error_code = ""
     ledger.error_summary = ""
     ledger.source_deleted_at = None
-    ledger.recorded_at = _now()
+    ledger.recorded_at = recorded_at or _now()
     return ledger

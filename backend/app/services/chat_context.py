@@ -4,15 +4,21 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from copy import deepcopy
+from types import SimpleNamespace
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.config import settings
 from app.models import ChatMessage, Conversation, ProviderProfile, User
 from app.services.chat_message_content import build_provider_messages
 from app.services.chat_service import ChatProviderConfig, complete_chat_once
-from app.services.usage_ledger import record_chat_compaction_usage_ledger
+from app.services.chat_compaction_completion_service import (
+    CONTEXT_FIELDS, ChatContextUnavailable, begin_compaction, fail_compaction,
+    finish_compaction, persist_context_stats,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -459,7 +465,18 @@ async def pack_chat_context(
     `on_status` may be an async callable receiving status labels like \"compressing\".
     `memory_context` is per-user durable memory recall injected as a system note.
     """
-    context_window = resolve_context_window(provider_profile or provider_config)
+    # Snapshot before awaiting a model: rollback/expiry must not erase inputs or
+    # turn fallback/logging into another access through a failed Session.
+    conversation_id, user_id = conversation.id, conversation.user_id
+    state = SimpleNamespace(context_summary=conversation.context_summary or "",
+                            context_summary_until_message_id=conversation.context_summary_until_message_id)
+    messages = [SimpleNamespace(id=m.id, role=m.role, content=m.content, created_at=m.created_at,
+                attachments_json=deepcopy(m.attachments_json or []), token_count=m.token_count,
+                estimated_input_tokens=m.estimated_input_tokens) for m in messages]
+    profile = None if provider_profile is None else ProviderProfile(
+        id=provider_profile.id, provider_name=provider_profile.provider_name,
+        model_name=provider_profile.model_name, adapter_config=deepcopy(provider_profile.adapter_config or {}))
+    context_window = resolve_context_window(profile or provider_config)
     budget = input_token_budget(context_window)
     summary_budget = summary_token_budget()
     trigger_ratio = float(settings.chat_summary_trigger_ratio or 0.75)
@@ -472,8 +489,8 @@ async def pack_chat_context(
     recent_ids = {message.id for message in recent if message.id is not None}
     older = [message for message in ordered if message.id not in recent_ids]
 
-    until_id = conversation.context_summary_until_message_id
-    existing_summary = (conversation.context_summary or "").strip()
+    until_id = state.context_summary_until_message_id
+    existing_summary = state.context_summary.strip()
     uncovered = [
         message
         for message in older
@@ -500,45 +517,44 @@ async def pack_chat_context(
             if hasattr(maybe, "__await__"):
                 await maybe  # type: ignore[misc]
         try:
-            new_summary, compact_usage = await summarize_chat_history(
-                provider=provider_config,
-                existing_summary=existing_summary,
-                messages_to_compress=uncovered,
+            target_until = max(message.id for message in uncovered if message.id is not None)
+            base_summary, base_until = state.context_summary, state.context_summary_until_message_id
+            receipt_id = begin_compaction(
+                db, conversation_id=conversation_id, user_id=user_id,
+                provider_id=profile.id if profile is not None else None,
+                provider_name=profile.provider_name if profile is not None else "",
+                model_name=profile.model_name if profile is not None else provider_config.model_name,
+                until_message_id=target_until,
             )
-            if new_summary:
-                until_id_value = max(
-                    message.id for message in uncovered if message.id is not None
+            try:
+                new_summary, compact_usage = await summarize_chat_history(
+                    provider=provider_config, existing_summary=existing_summary, messages_to_compress=uncovered,
                 )
-                conversation.context_summary = new_summary
-                conversation.context_summary_until_message_id = until_id_value
-                conversation.context_summary_updated_at = datetime.now(timezone.utc)
-                db.add(conversation)
-                user_name = ""
-                if conversation.user_id is not None:
-                    owner = db.get(User, conversation.user_id)
-                    if owner is not None:
-                        user_name = owner.display_name or owner.name or ""
-                record_chat_compaction_usage_ledger(
-                    db,
-                    conversation=conversation,
-                    until_message_id=until_id_value,
-                    provider=provider_profile,
-                    provider_profile_id=provider_profile.id if provider_profile is not None else None,
-                    user_id=conversation.user_id,
-                    user_name=user_name,
-                    usage_payload=compact_usage,
-                )
-                db.commit()
-                db.refresh(conversation)
-                existing_summary = new_summary.strip()
-                used_summary = True
-                summarized = True
+            except BaseException:
+                fail_compaction(db, receipt_id)
+                raise
+            completed = finish_compaction(
+                db, receipt_id, new_summary, compact_usage,
+                base_summary=base_summary, base_until=base_until,
+            )
+            for key, value in completed["context"].items():
+                setattr(state, key, value)
+            existing_summary = (state.context_summary or "").strip()
+            used_summary = bool(existing_summary)
+            summarized = completed["details"]["summary_status"] == "stored"
+        except ChatContextUnavailable:
+            db.rollback()
+            raise
         except Exception:
+            # Roll back before any fallback work. Logs use only cached scalars.
+            db.rollback()
             logger.warning(
-                "chat context summarization failed; falling back to window trim",
-                exc_info=True,
-                extra={"conversation_id": conversation.id},
+                "chat context summarization unavailable; falling back to window trim",
+                extra={"conversation_id": conversation_id},
             )
+        except BaseException:
+            db.rollback()
+            raise
 
     api_messages: list[dict[str, object]] = []
     memory_note = (memory_context or "").strip()
@@ -569,16 +585,19 @@ async def pack_chat_context(
                 elif isinstance(part, dict) and part.get("type") == "image_url":
                     estimated += int(settings.chat_image_token_estimate or 765)
 
+    if not db.is_active:
+        db.rollback()
     breakdown = compute_context_breakdown(
-        conversation,
-        ordered,
-        provider_profile=provider_profile or provider_config,
-        packed_tokens=estimated,
+        state, ordered, provider_profile=profile or provider_config, packed_tokens=estimated,
     )
-    persist_conversation_context_stats(conversation, breakdown)
-    db.add(conversation)
-    db.commit()
-    db.refresh(conversation)
+    persist_conversation_context_stats(state, breakdown)
+    context = persist_context_stats(
+        db, conversation_id=conversation_id, user_id=user_id,
+        expected_summary=state.context_summary or "", expected_until=state.context_summary_until_message_id,
+        stats={key: getattr(state, key) for key in CONTEXT_FIELDS[3:]},
+    )
+    for key, value in context.items():
+        set_committed_value(conversation, key, value)
 
     return PackedChatContext(
         api_messages=api_messages,

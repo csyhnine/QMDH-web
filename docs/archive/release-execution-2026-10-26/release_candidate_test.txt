@@ -1,0 +1,197 @@
+
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 98B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/qmdh-candidate-base-worker:20261025
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [internal] load build context
+#4 transferring context: 1.26MB 0.0s done
+#4 DONE 0.1s
+
+#5 [1/2] FROM docker.io/library/qmdh-candidate-base-worker:20261025@sha256:3cc0ece1b6320977ff7d1e59b2104261d9087742824fe6824a70bef13321fbcc
+#5 resolve docker.io/library/qmdh-candidate-base-worker:20261025@sha256:3cc0ece1b6320977ff7d1e59b2104261d9087742824fe6824a70bef13321fbcc 0.1s done
+#5 DONE 0.3s
+
+#6 [2/2] COPY overlay/ /app/
+#6 DONE 0.2s
+
+#7 exporting to image
+#7 exporting layers 0.1s done
+#7 exporting manifest sha256:4a1e674b65ad8647b98c875afa6d823b2e603646070bf9f7c1bb89e16a1f9031 0.0s done
+#7 exporting config sha256:c54c011531e7a2baba2aee86577dbb86d6ac51868afa025cd6549c3c4ad82d1f 0.0s done
+#7 exporting attestation manifest sha256:d50b301d6606a3da737d01da9e17fe82093130637cbdda9f27b570ab9807b1f7 0.0s done
+#7 exporting manifest list sha256:3783fe13579c4e56f9bdc7b3ef9972fdcc534fce02f41bc7c0fa61adbc031cb9 0.0s done
+#7 naming to docker.io/library/qmdh-candidate-worker:20261025 done
+#7 unpacking to docker.io/library/qmdh-candidate-worker:20261025 0.0s done
+#7 DONE 0.3s
+
+worker image sha256:3783fe13579c4e56f9bdc7b3ef9972fdcc534fce02f41bc7c0fa61adbc031cb9
+
+
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 99B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/qmdh-candidate-base-backend:20261025
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [internal] load build context
+#4 transferring context: 4.92kB done
+#4 DONE 0.0s
+
+#5 [1/2] FROM docker.io/library/qmdh-candidate-base-backend:20261025@sha256:f8822343b1d1b5d3b2449ec1c89c8e1e6ad637220858da243890e6f7f931f86d
+#5 resolve docker.io/library/qmdh-candidate-base-backend:20261025@sha256:f8822343b1d1b5d3b2449ec1c89c8e1e6ad637220858da243890e6f7f931f86d 0.0s done
+#5 DONE 0.2s
+
+#6 [2/2] COPY overlay/ /app/
+#6 DONE 0.1s
+
+#7 exporting to image
+#7 exporting layers
+#7 exporting layers 0.2s done
+#7 exporting manifest sha256:ad05bab0055f5d994afe6007104e53308eb1ca989525f49f3e1d595f8c330888
+#7 exporting manifest sha256:ad05bab0055f5d994afe6007104e53308eb1ca989525f49f3e1d595f8c330888 0.0s done
+#7 exporting config sha256:705a3736a63887feecd25ebaccf66bceacf60fbd853bbfd0442068cc6ba84cbd 0.0s done
+#7 exporting attestation manifest sha256:083cc3ee260546e891efd724730a07a3f0003e62d0f6798c3bfbd1fb324e7344 0.0s done
+#7 exporting manifest list sha256:65a9cfbe7969a31110ae37030aa866fa7d0139636fe2eee8fdff0ef46fbbbc94 0.0s done
+#7 naming to docker.io/library/qmdh-candidate-backend:20261025 done
+#7 unpacking to docker.io/library/qmdh-candidate-backend:20261025 0.1s done
+#7 DONE 0.4s
+
+backend image sha256:65a9cfbe7969a31110ae37030aa866fa7d0139636fe2eee8fdff0ef46fbbbc94
+
+0df8eb215a0f56b81ab53fbde06645e59d8ca55283d853cdc66ed6d2d83efe61
+
+7d807d189200dd205f2a1b1859928e7a0f580d265376f1511ff7fde5a394025d
+
+4fabe35844e743db84d9b5a538e0a94d1d42ffba3fd6bdea6924bb124b700f5a
+
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> cd888e40cb37, initial schema
+INFO  [alembic.runtime.migration] Running upgrade cd888e40cb37 -> d2348a1e3427, add conversations and chat_messages tables
+INFO  [alembic.runtime.migration] Running upgrade d2348a1e3427 -> a1b2c3d4e5f6, add task deleted_at
+INFO  [alembic.runtime.migration] Running upgrade a1b2c3d4e5f6 -> b2c3d4e5f6a7, add project archived_at
+INFO  [alembic.runtime.migration] Running upgrade b2c3d4e5f6a7 -> c3d4e5f6a7b8, add task archives
+INFO  [alembic.runtime.migration] Running upgrade c3d4e5f6a7b8 -> e4f5a6b7c8d9, add usage ledgers
+INFO  [alembic.runtime.migration] Running upgrade e4f5a6b7c8d9 -> f6a7b8c9d0e1, add chat token columns to usage ledgers
+INFO  [alembic.runtime.migration] Running upgrade f6a7b8c9d0e1 -> a7b8c9d0e1f2, add agent capability layer
+INFO  [alembic.runtime.migration] Running upgrade a7b8c9d0e1f2 -> b8c9d0e1f2a3, add agent skill releases
+INFO  [alembic.runtime.migration] Running upgrade b8c9d0e1f2a3 -> c1d2e3f4a5b6, add user_feedbacks table
+INFO  [alembic.runtime.migration] Running upgrade c1d2e3f4a5b6 -> d4e5f6a7b8c9, add attachment_paths to user_feedbacks
+INFO  [alembic.runtime.migration] Running upgrade d4e5f6a7b8c9 -> e5f6a7b8c9d0, add prompt template scope
+INFO  [alembic.runtime.migration] Running upgrade e5f6a7b8c9d0 -> f7a8b9c0d1e2, add prompt template taxonomy and source image
+INFO  [alembic.runtime.migration] Running upgrade f7a8b9c0d1e2 -> a2b3c4d5e6f7, add billing pricing rules and template events
+INFO  [alembic.runtime.migration] Running upgrade a2b3c4d5e6f7 -> 0f1a2b3c4d5e, add inspiration source image path
+INFO  [alembic.runtime.migration] Running upgrade 0f1a2b3c4d5e -> 1a2b3c4d5e6f, add provider profile strategies
+INFO  [alembic.runtime.migration] Running upgrade 1a2b3c4d5e6f -> 2b3c4d5e6f7a, add provider profile display name
+INFO  [alembic.runtime.migration] Running upgrade 2b3c4d5e6f7a -> 3c4d5e6f7a8b, add user group name
+INFO  [alembic.runtime.migration] Running upgrade 3c4d5e6f7a8b -> 4d5e6f7a8b9c, add provider profile secret config
+INFO  [alembic.runtime.migration] Running upgrade 4d5e6f7a8b9c -> 5e6f7a8b9c0d, add inspiration media type
+INFO  [alembic.runtime.migration] Running upgrade 5e6f7a8b9c0d -> 6f7a8b9c0d1e, add attachments_json to chat_messages
+INFO  [alembic.runtime.migration] Running upgrade 6f7a8b9c0d1e -> g8h9i0j1k2l3, add user_feedback_messages table
+INFO  [alembic.runtime.migration] Running upgrade g8h9i0j1k2l3 -> h9i0j1k2l3m4, add canvas_templates table
+INFO  [alembic.runtime.migration] Running upgrade h9i0j1k2l3m4 -> i0j1k2l3m4n5, add conversation context summary fields
+INFO  [alembic.runtime.migration] Running upgrade i0j1k2l3m4n5 -> k2l3m4n5o6p7, add agent chat policy fields to skill releases
+INFO  [alembic.runtime.migration] Running upgrade k2l3m4n5o6p7 -> l3m4n5o6p7q8, add agent policy overrides for group/user
+INFO  [alembic.runtime.migration] Running upgrade l3m4n5o6p7q8 -> m4n5o6p7q8r9, add agent memory entries for durable cross-chat memory
+INFO  [alembic.runtime.migration] Running upgrade m4n5o6p7q8r9 -> n5o6p7q8r9s0, add admin-managed agent skill catalog
+INFO  [alembic.runtime.migration] Running upgrade n5o6p7q8r9s0 -> o6p7q8r9s0t1, add skill bundle columns to agent_skill_catalog
+INFO  [alembic.runtime.migration] Running upgrade o6p7q8r9s0t1 -> p7q8r9s0t1u2, set agent_memory conversation_id ondelete set null
+INFO  [alembic.runtime.migration] Running upgrade p7q8r9s0t1u2 -> q8r9s0t1u2v3, add site_announcements table
+INFO  [alembic.runtime.migration] Running upgrade q8r9s0t1u2v3 -> r9s0t1u2v3w4, add ai_tools table
+INFO  [alembic.runtime.migration] Running upgrade r9s0t1u2v3w4 -> s0t1u2v3w4x5, add platform_settings singleton
+INFO  [alembic.runtime.migration] Running upgrade s0t1u2v3w4x5 -> t1u2v3w4x5y6, add prompt polish platform settings
+INFO  [alembic.runtime.migration] Running upgrade t1u2v3w4x5y6 -> u2v3w4x5y6z7, add generation intents and sessions for behavior analytics
+INFO  [alembic.runtime.migration] Running upgrade u2v3w4x5y6z7 -> a8b9c0d1e2f3, add conversation context stats and message estimated_input_tokens
+INFO  [alembic.runtime.migration] Running upgrade a8b9c0d1e2f3 -> v3w4x5y6z7a8, Add per-mode prompt polish system prompts.
+INFO  [alembic.runtime.migration] Running upgrade v3w4x5y6z7a8 -> w4x5y6z7a8b9, Add editable prompt polish mode limits JSON.
+INFO  [alembic.runtime.migration] Running upgrade w4x5y6z7a8b9 -> x9y0z1a2b3c4, Add chat turn telemetry table for UX funnel metrics.
+INFO  [alembic.runtime.migration] Running upgrade x9y0z1a2b3c4 -> y0z1a2b3c4d5, Add chat telemetry alert records for P3 monitoring.
+INFO  [alembic.runtime.migration] Running upgrade y0z1a2b3c4d5 -> z1a2b3c4d5e6, Add cad_extracts for DWG/DXF structured extracts.
+INFO  [alembic.runtime.migration] Running upgrade z1a2b3c4d5e6 -> b3c4d5e6f7g8, Skill task/event intake and aggregated improvement issues.
+INFO  [alembic.runtime.migration] Running upgrade b3c4d5e6f7g8 -> c4d5e6f7g8h9, Feedback-only credentials and quarantined external problems.
+INFO  [alembic.runtime.migration] Running upgrade c4d5e6f7g8h9 -> d5e6f7g8h9i0, Opt-in public feedback sessions, never business credentials.
+INFO  [alembic.runtime.migration] Running upgrade d5e6f7g8h9i0 -> e6f7g8h9i0j1, Separate image and video prompt templates; preserve existing templates.
+INFO  [alembic.runtime.migration] Running upgrade e6f7g8h9i0j1 -> f7g8h9i0j1k2, Persist account-owned GIF compression history.
+INFO  [alembic.runtime.migration] Running upgrade f7g8h9i0j1k2 -> a16c9e74b821, Separate company management permissions and planning documents.
+INFO  [alembic.runtime.migration] Running upgrade a16c9e74b821 -> b27d0f85c932, Durable dispatch and user-scoped idempotency; additive, no history rewrite.
+INFO  [alembic.runtime.migration] Running upgrade b27d0f85c932 -> c39d8e71a624, Complete schema previously supplied only by application bootstrap.
+INFO  [alembic.runtime.migration] Running upgrade c39d8e71a624 -> d40e9f82b735, Correct SQLite Agent timestamp defaults without changing historical rows.
+INFO  [alembic.runtime.migration] Running upgrade d40e9f82b735 -> e51fa962c846, Add durable per-domain search indexing state and coalesced entity intents.
+EMPTY_POSTGRES_UPGRADE_PASS
+
+
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> cd888e40cb37, initial schema
+INFO  [alembic.runtime.migration] Running upgrade cd888e40cb37 -> d2348a1e3427, add conversations and chat_messages tables
+INFO  [alembic.runtime.migration] Running upgrade d2348a1e3427 -> a1b2c3d4e5f6, add task deleted_at
+INFO  [alembic.runtime.migration] Running upgrade a1b2c3d4e5f6 -> b2c3d4e5f6a7, add project archived_at
+INFO  [alembic.runtime.migration] Running upgrade b2c3d4e5f6a7 -> c3d4e5f6a7b8, add task archives
+INFO  [alembic.runtime.migration] Running upgrade c3d4e5f6a7b8 -> e4f5a6b7c8d9, add usage ledgers
+INFO  [alembic.runtime.migration] Running upgrade e4f5a6b7c8d9 -> f6a7b8c9d0e1, add chat token columns to usage ledgers
+INFO  [alembic.runtime.migration] Running upgrade f6a7b8c9d0e1 -> a7b8c9d0e1f2, add agent capability layer
+INFO  [alembic.runtime.migration] Running upgrade a7b8c9d0e1f2 -> b8c9d0e1f2a3, add agent skill releases
+INFO  [alembic.runtime.migration] Running upgrade b8c9d0e1f2a3 -> c1d2e3f4a5b6, add user_feedbacks table
+INFO  [alembic.runtime.migration] Running upgrade c1d2e3f4a5b6 -> d4e5f6a7b8c9, add attachment_paths to user_feedbacks
+INFO  [alembic.runtime.migration] Running upgrade d4e5f6a7b8c9 -> e5f6a7b8c9d0, add prompt template scope
+INFO  [alembic.runtime.migration] Running upgrade e5f6a7b8c9d0 -> f7a8b9c0d1e2, add prompt template taxonomy and source image
+INFO  [alembic.runtime.migration] Running upgrade f7a8b9c0d1e2 -> a2b3c4d5e6f7, add billing pricing rules and template events
+INFO  [alembic.runtime.migration] Running upgrade a2b3c4d5e6f7 -> 0f1a2b3c4d5e, add inspiration source image path
+INFO  [alembic.runtime.migration] Running upgrade 0f1a2b3c4d5e -> 1a2b3c4d5e6f, add provider profile strategies
+INFO  [alembic.runtime.migration] Running upgrade 1a2b3c4d5e6f -> 2b3c4d5e6f7a, add provider profile display name
+INFO  [alembic.runtime.migration] Running upgrade 2b3c4d5e6f7a -> 3c4d5e6f7a8b, add user group name
+INFO  [alembic.runtime.migration] Running upgrade 3c4d5e6f7a8b -> 4d5e6f7a8b9c, add provider profile secret config
+INFO  [alembic.runtime.migration] Running upgrade 4d5e6f7a8b9c -> 5e6f7a8b9c0d, add inspiration media type
+INFO  [alembic.runtime.migration] Running upgrade 5e6f7a8b9c0d -> 6f7a8b9c0d1e, add attachments_json to chat_messages
+INFO  [alembic.runtime.migration] Running upgrade 6f7a8b9c0d1e -> g8h9i0j1k2l3, add user_feedback_messages table
+INFO  [alembic.runtime.migration] Running upgrade g8h9i0j1k2l3 -> h9i0j1k2l3m4, add canvas_templates table
+INFO  [alembic.runtime.migration] Running upgrade h9i0j1k2l3m4 -> i0j1k2l3m4n5, add conversation context summary fields
+INFO  [alembic.runtime.migration] Running upgrade i0j1k2l3m4n5 -> k2l3m4n5o6p7, add agent chat policy fields to skill releases
+INFO  [alembic.runtime.migration] Running upgrade k2l3m4n5o6p7 -> l3m4n5o6p7q8, add agent policy overrides for group/user
+INFO  [alembic.runtime.migration] Running upgrade l3m4n5o6p7q8 -> m4n5o6p7q8r9, add agent memory entries for durable cross-chat memory
+INFO  [alembic.runtime.migration] Running upgrade m4n5o6p7q8r9 -> n5o6p7q8r9s0, add admin-managed agent skill catalog
+INFO  [alembic.runtime.migration] Running upgrade n5o6p7q8r9s0 -> o6p7q8r9s0t1, add skill bundle columns to agent_skill_catalog
+INFO  [alembic.runtime.migration] Running upgrade o6p7q8r9s0t1 -> p7q8r9s0t1u2, set agent_memory conversation_id ondelete set null
+INFO  [alembic.runtime.migration] Running upgrade p7q8r9s0t1u2 -> q8r9s0t1u2v3, add site_announcements table
+INFO  [alembic.runtime.migration] Running upgrade q8r9s0t1u2v3 -> r9s0t1u2v3w4, add ai_tools table
+INFO  [alembic.runtime.migration] Running upgrade r9s0t1u2v3w4 -> s0t1u2v3w4x5, add platform_settings singleton
+INFO  [alembic.runtime.migration] Running upgrade s0t1u2v3w4x5 -> t1u2v3w4x5y6, add prompt polish platform settings
+INFO  [alembic.runtime.migration] Running upgrade t1u2v3w4x5y6 -> u2v3w4x5y6z7, add generation intents and sessions for behavior analytics
+INFO  [alembic.runtime.migration] Running upgrade u2v3w4x5y6z7 -> a8b9c0d1e2f3, add conversation context stats and message estimated_input_tokens
+INFO  [alembic.runtime.migration] Running upgrade a8b9c0d1e2f3 -> v3w4x5y6z7a8, Add per-mode prompt polish system prompts.
+INFO  [alembic.runtime.migration] Running upgrade v3w4x5y6z7a8 -> w4x5y6z7a8b9, Add editable prompt polish mode limits JSON.
+INFO  [alembic.runtime.migration] Running upgrade w4x5y6z7a8b9 -> x9y0z1a2b3c4, Add chat turn telemetry table for UX funnel metrics.
+INFO  [alembic.runtime.migration] Running upgrade x9y0z1a2b3c4 -> y0z1a2b3c4d5, Add chat telemetry alert records for P3 monitoring.
+INFO  [alembic.runtime.migration] Running upgrade y0z1a2b3c4d5 -> z1a2b3c4d5e6, Add cad_extracts for DWG/DXF structured extracts.
+INFO  [alembic.runtime.migration] Running upgrade z1a2b3c4d5e6 -> b3c4d5e6f7g8, Skill task/event intake and aggregated improvement issues.
+INFO  [alembic.runtime.migration] Running upgrade b3c4d5e6f7g8 -> c4d5e6f7g8h9, Feedback-only credentials and quarantined external problems.
+INFO  [alembic.runtime.migration] Running upgrade c4d5e6f7g8h9 -> d5e6f7g8h9i0, Opt-in public feedback sessions, never business credentials.
+INFO  [alembic.runtime.migration] Running upgrade d5e6f7g8h9i0 -> e6f7g8h9i0j1, Separate image and video prompt templates; preserve existing templates.
+INFO  [alembic.runtime.migration] Running upgrade e6f7g8h9i0j1 -> f7g8h9i0j1k2, Persist account-owned GIF compression history.
+INFO  [alembic.runtime.migration] Running upgrade f7g8h9i0j1k2 -> a16c9e74b821, Separate company management permissions and planning documents.
+INFO  [alembic.runtime.migration] Running upgrade a16c9e74b821 -> b27d0f85c932, Durable dispatch and user-scoped idempotency; additive, no history rewrite.
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade b27d0f85c932 -> c39d8e71a624, Complete schema previously supplied only by application bootstrap.
+INFO  [alembic.runtime.migration] Running upgrade c39d8e71a624 -> d40e9f82b735, Correct SQLite Agent timestamp defaults without changing historical rows.
+INFO  [alembic.runtime.migration] Running upgrade d40e9f82b735 -> e51fa962c846, Add durable per-domain search indexing state and coalesced entity intents.
+CONSTRUCTED_B27_POSTGRES_UPGRADE_PASS
+
+MIGRATION_GATES_PASS
+OWNED_TEST_CONTAINERS_AND_NETWORK_REMOVED

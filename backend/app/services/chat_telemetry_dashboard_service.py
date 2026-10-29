@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import ChatTurnTelemetry, User
+from app.services.chat_telemetry_observation_service import aggregate_model_observations, read_model_observation
 
 DEFAULT_LOOKBACK_DAYS = 30
 
@@ -54,9 +55,7 @@ def get_chat_experience_overview(db: Session, *, days: int = DEFAULT_LOOKBACK_DA
     outcome_totals: Counter[str] = Counter()
     client_event_totals: Counter[str] = Counter()
     pack_ms: list[int] = []
-    ttft_ms: list[int] = []
     total_ms: list[int] = []
-    upstream_called_count = 0
     attachment_turn_count = 0
     agent_turn_count = 0
     success_count = 0
@@ -65,23 +64,18 @@ def get_chat_experience_overview(db: Session, *, days: int = DEFAULT_LOOKBACK_DA
         outcome_totals[turn.outcome or "unknown"] += 1
         if turn.outcome in SUCCESS_OUTCOMES:
             success_count += 1
-        if turn.upstream_called:
-            upstream_called_count += 1
         if turn.attachment_count > 0:
             attachment_turn_count += 1
         if turn.agent_mode:
             agent_turn_count += 1
         if turn.pack_duration_ms > 0:
             pack_ms.append(turn.pack_duration_ms)
-        if turn.ttft_ms > 0:
-            ttft_ms.append(turn.ttft_ms)
         if turn.total_duration_ms > 0:
             total_ms.append(turn.total_duration_ms)
         _merge_client_event_totals(client_event_totals, turn.client_events_json)
 
     turn_count = len(turns)
     success_rate = round(success_count / turn_count, 4) if turn_count else 0.0
-    upstream_call_rate = round(upstream_called_count / turn_count, 4) if turn_count else 0.0
     attachment_turn_share = round(attachment_turn_count / turn_count, 4) if turn_count else 0.0
     agent_mode_share = round(agent_turn_count / turn_count, 4) if turn_count else 0.0
 
@@ -90,14 +84,12 @@ def get_chat_experience_overview(db: Session, *, days: int = DEFAULT_LOOKBACK_DA
         "window_started_at": since,
         "turn_count": turn_count,
         "success_rate": success_rate,
-        "upstream_call_rate": upstream_call_rate,
+        **aggregate_model_observations(turns),
         "attachment_turn_count": attachment_turn_count,
         "attachment_turn_share": attachment_turn_share,
         "agent_mode_share": agent_mode_share,
         "avg_pack_duration_ms": _avg(pack_ms),
         "p95_pack_duration_ms": _percentile(pack_ms, 95),
-        "avg_ttft_ms": _avg(ttft_ms),
-        "p95_ttft_ms": _percentile(ttft_ms, 95),
         "avg_total_duration_ms": _avg(total_ms),
         "outcome_totals": dict(outcome_totals),
         "client_event_totals": dict(client_event_totals),
@@ -150,8 +142,7 @@ def list_chat_turns(
                 "attachment_count": turn.attachment_count,
                 "attachment_total_bytes": turn.attachment_total_bytes,
                 "pack_duration_ms": turn.pack_duration_ms,
-                "upstream_called": turn.upstream_called,
-                "ttft_ms": turn.ttft_ms,
+                **read_model_observation(turn),
                 "total_duration_ms": turn.total_duration_ms,
                 "client_event_count": len(turn.client_events_json or []),
                 "started_at": turn.started_at,

@@ -28,15 +28,14 @@ export function syncRequestedProviderForSubmission({
   form,
   provider,
   setStudioForm,
-}: SyncRequestedProviderOptions) {
+}: SyncRequestedProviderOptions): StudioFormState {
   if (provider.provider_name === form.requestedProvider) {
-    return;
+    return form;
   }
 
-  setStudioForm((current) => ({
-    ...current,
-    requestedProvider: provider.provider_name,
-  }));
+  const nextForm = { ...form, requestedProvider: provider.provider_name };
+  setStudioForm((current) => (current === form ? nextForm : current));
+  return nextForm;
 }
 
 export function beginTaskSubmission({

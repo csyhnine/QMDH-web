@@ -1,0 +1,9 @@
+{
+  "frontend/src/pages/management/PeoplePlanner.tsx": "8829fa8b6d850eeca61a86a2c1924a50763898121e100714f6d8bee9e7b18aa1",
+  "frontend/src/pages/management/PeopleSchedule.tsx": "2b1229517cf3d605ad2e66fe7c3e75f2e8c7ebce450f878c3809acc390a4609d",
+  "frontend/src/pages/management/staffPlanning.ts": "7122015381f9a4255b499dfbf84953bc3db45ab9ebe60a5372f0675ae53ed077",
+  "frontend/src/pages/management/ManagementProjectsPage.tsx": "861df2677a9c76b94cd589cb8e86f6038abc71cffc0eb1ada52f680c6c23d412",
+  "frontend/src/pages/management/management.css": "f5a28403a2d9f1cef65de5fd0c6a4a7e83c3026fe9a02914b760a1706ea15f33",
+  "frontend/scripts/test-people-planning.mjs": "a5ae1fac23c48aaee51a284ceb059feca133c575f8397a77156333c290468016",
+  "frontend/scripts/test-management.mjs": "6cd46edb4be4f0e46a9655e9ae7e420904b1bcf52463142a33187bf0404407b4"
+}

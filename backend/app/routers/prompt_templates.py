@@ -1,7 +1,7 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import BackgroundTasks, APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import and_, case, or_, select
 from sqlalchemy.orm import Session
 
@@ -17,7 +17,7 @@ from app.schemas import (
     PromptTemplateOut,
     PromptTemplateUpdate,
 )
-from app.integrations.search.index_hooks import delete_shared_template, upsert_shared_template
+from app.services.search_index_outbox_service import enqueue_index_change, schedule_index_dispatch
 from app.services.media_storage import resolve_storage_path
 
 router = APIRouter(prefix="/prompt-templates", tags=["prompt_templates"])
@@ -356,6 +356,7 @@ def create_shared_prompt_template(
     payload: PromptTemplateCreate,
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    background_tasks: BackgroundTasks = None,
 ) -> PromptTemplateOut:
     require_content_ops_access(auth_user)
     user = _get_or_create_user(db, auth_user)
@@ -378,6 +379,7 @@ def create_shared_prompt_template(
         preview_image_path=payload.preview_image_path,
     )
     db.add(template)
+    enqueue_index_change(db, domain="templates", entity=template, operation="upsert")
     write_audit_log(
         db=db,
         event_type=AuditEventType.PROMPT_TEMPLATE_CREATED,
@@ -389,7 +391,7 @@ def create_shared_prompt_template(
     )
     db.commit()
     db.refresh(template)
-    upsert_shared_template(template)
+    schedule_index_dispatch(background_tasks, db, "templates")
     return _to_prompt_template_out_for_user(template, auth_user)
 
 
@@ -399,12 +401,14 @@ def update_shared_prompt_template(
     payload: PromptTemplateUpdate,
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    background_tasks: BackgroundTasks = None,
 ) -> PromptTemplateOut:
     require_content_ops_access(auth_user)
     template = _get_shared_template(db, template_id)
     updates = payload.model_dump(exclude_unset=True)
     for field, value in updates.items():
         setattr(template, field, value)
+    enqueue_index_change(db, domain="templates", entity=template, operation="upsert")
     write_audit_log(
         db=db,
         event_type=AuditEventType.PROMPT_TEMPLATE_UPDATED,
@@ -417,7 +421,7 @@ def update_shared_prompt_template(
     )
     db.commit()
     db.refresh(template)
-    upsert_shared_template(template)
+    schedule_index_dispatch(background_tasks, db, "templates")
     return _to_prompt_template_out_for_user(template, auth_user)
 
 
@@ -426,6 +430,7 @@ def delete_shared_prompt_template(
     template_id: int,
     db: Session = Depends(get_db),
     auth_user: AuthUserProfile = Depends(get_current_auth_user),
+    background_tasks: BackgroundTasks = None,
 ) -> Response:
     require_content_ops_access(auth_user)
     template = _get_shared_template(db, template_id)
@@ -439,7 +444,8 @@ def delete_shared_prompt_template(
         target_name=template.label,
         details={"scope": "shared"},
     )
+    enqueue_index_change(db, domain="templates", entity=template_id, operation="delete")
     db.delete(template)
     db.commit()
-    delete_shared_template(template_id)
+    schedule_index_dispatch(background_tasks, db, "templates")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

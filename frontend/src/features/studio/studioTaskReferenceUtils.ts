@@ -10,8 +10,7 @@ export function taskReferenceImages(task: Task): string[] {
   if (Array.isArray(storagePaths)) {
     return storagePaths
       .map((value) => String(value || "").trim())
-      .filter((value) => Boolean(value))
-      .slice(0, 4);
+      .filter((value) => Boolean(value));
   }
 
   const storagePath = String(task.result["reference_image_storage_path"] ?? "").trim();
@@ -20,6 +19,10 @@ export function taskReferenceImages(task: Task): string[] {
 
 export function taskReferenceImageCount(task: Task): number {
   const referenceImages = taskReferenceImages(task);
+  const knownCount = Number(task.result["reference_image_count"] ?? 0);
+  if (task.result["reference_image_history_incomplete"] === true && Number.isFinite(knownCount) && knownCount > referenceImages.length) {
+    return knownCount;
+  }
   if (referenceImages.length > 0) {
     return referenceImages.length;
   }

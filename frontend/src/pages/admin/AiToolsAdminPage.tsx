@@ -1,7 +1,9 @@
-import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type FormEvent, useMemo, useRef } from "react";
+import { useContentEditor } from "./useContentEditor";
+import { useContentUploads } from "./useContentUploads";
 
 import { api, type AiToolCreatePayload, type AiToolRecord } from "../../api";
-import { formatUploadSize, MAX_REFERENCE_UPLOAD_BYTES, validateReferenceImageSize } from "../../utils/uploads";
+import { formatUploadSize, MAX_REFERENCE_UPLOAD_BYTES } from "../../utils/uploads";
 
 type AiToolDraft = {
   name: string;
@@ -38,19 +40,24 @@ function categoryLabel(category: string): string {
 export type AiToolsAdminPageProps = {
   tools: AiToolRecord[];
   error: string;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<void>;
   onSetError: (error: string) => void;
 };
 
-export default function AiToolsAdminPage({ tools, error, onRefresh, onSetError }: AiToolsAdminPageProps) {
-  const [selectedId, setSelectedId] = useState<number | null>(tools[0]?.id ?? null);
-  const [draft, setDraft] = useState<AiToolDraft>(defaultDraft);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [uploading, setUploading] = useState(false);
+export default function AiToolsAdminPage({ tools, error, onRefresh }: AiToolsAdminPageProps) {
+  const editor = useContentEditor<AiToolDraft, AiToolRecord>(tools, (row) => row ? {
+    name: row.name, description: row.description || "", url: row.url, category: row.category || "",
+    cover_image_path: row.cover_image_path || "", is_featured: row.is_featured,
+    sort_order: row.sort_order, is_active: row.is_active,
+  } : defaultDraft, onRefresh, "工具");
+  const { selectedId, draft, saving, deleting } = editor;
+  const uploads = useContentUploads({ fields: ["cover_image_path"] as const,
+    labels: { cover_image_path: "封面" }, sourceLabel: draft.name || "未命名工具",
+    capture: editor.captureField, isCurrent: editor.isCurrentEditor, readError: "封面读取失败", uploadError: "上传封面失败" });
+  const uploading = uploads.hasPending();
   const coverInputRef = useRef<HTMLInputElement | null>(null);
 
-  const selected = tools.find((item) => item.id === selectedId) ?? null;
+  const selected = editor.model.record;
   const activeCount = useMemo(() => tools.filter((item) => item.is_active).length, [tools]);
   const categoryOptions = useMemo(
     () =>
@@ -60,117 +67,50 @@ export default function AiToolsAdminPage({ tools, error, onRefresh, onSetError }
     [tools]
   );
 
-  useEffect(() => {
-    if (!selected) {
-      if (selectedId === null || tools.length === 0) setDraft(defaultDraft);
-      return;
-    }
-    setDraft({
-      name: selected.name,
-      description: selected.description || "",
-      url: selected.url,
-      category: selected.category || "",
-      cover_image_path: selected.cover_image_path || "",
-      is_featured: selected.is_featured,
-      sort_order: selected.sort_order,
-      is_active: selected.is_active,
-    });
-  }, [selected, selectedId, tools.length]);
-
   function handleCreateNew() {
-    setSelectedId(null);
-    setDraft(defaultDraft);
-    onSetError("");
-  }
-
-  async function uploadCover(file: File) {
-    const sizeError = validateReferenceImageSize(file);
-    if (sizeError) {
-      onSetError(sizeError);
-      return;
-    }
-    setUploading(true);
-    try {
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(new Error("封面读取失败"));
-        reader.readAsDataURL(file);
-      });
-      const uploaded = await api.uploadReferenceImage({
-        file_name: file.name,
-        data_url: dataUrl,
-      });
-      setDraft((current) => ({ ...current, cover_image_path: uploaded.storage_path }));
-      onSetError("");
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "上传封面失败");
-    } finally {
-      setUploading(false);
-    }
+    editor.select(null);
   }
 
   async function handleCoverChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (!file) return;
-    await uploadCover(file);
     event.target.value = "";
+    if (file) await uploads.start("cover_image_path", file);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft.name.trim()) {
-      onSetError("请填写工具名称。");
-      return;
-    }
-    if (!draft.url.trim().startsWith("http://") && !draft.url.trim().startsWith("https://")) {
-      onSetError("链接须以 http:// 或 https:// 开头。");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const payload: AiToolCreatePayload = {
-        name: draft.name.trim(),
-        description: draft.description.trim(),
-        url: draft.url.trim(),
-        category: draft.category.trim(),
-        cover_image_path: draft.cover_image_path.trim(),
-        is_featured: draft.is_featured,
-        sort_order: Number(draft.sort_order) || 0,
-        is_active: draft.is_active,
-      };
-      const next = selected
-        ? await api.updateAdminAiTool(selected.id, payload)
-        : await api.createAdminAiTool(payload);
-      setSelectedId(next.id);
-      onSetError("");
-      onRefresh();
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "保存工具失败");
-    } finally {
-      setSaving(false);
-    }
+    if (uploads.hasPending()) { editor.report("请等待当前封面上传完成，或先清空该字段。"); return; }
+    return editor.run(async (operation) => {
+      try {
+        const values = operation.values;
+        if (!values.name.trim()) { editor.report("请填写工具名称。", operation); return; }
+        if (!values.url.trim().startsWith("http://") && !values.url.trim().startsWith("https://")) {
+          editor.report("链接须以 http:// 或 https:// 开头。", operation); return;
+        }
+        const payload: AiToolCreatePayload = {
+          name: values.name.trim(), description: values.description.trim(), url: values.url.trim(),
+          category: values.category.trim(), cover_image_path: values.cover_image_path.trim(),
+          is_featured: values.is_featured, sort_order: Number(values.sort_order) || 0, is_active: values.is_active,
+        };
+        const next = operation.id !== null
+          ? await api.updateAdminAiTool(operation.id, payload)
+          : await api.createAdminAiTool(payload);
+        editor.saved(operation, next);
+        await editor.refreshAfter(operation);
+      } catch (err) { editor.report(err instanceof Error ? err.message : "保存工具失败", operation); }
+    });
   }
 
   async function handleDelete() {
-    if (!selected) {
-      onSetError("请先选择要删除的工具。");
-      return;
-    }
+    if (selectedId === null || !selected) { editor.report("请先选择要删除的工具。"); return; }
     if (!confirm(`确认删除工具「${selected.name}」吗？`)) return;
-    setDeleting(true);
-    try {
-      await api.deleteAdminAiTool(selected.id);
-      setSelectedId(null);
-      setDraft(defaultDraft);
-      onSetError("");
-      onRefresh();
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "删除工具失败");
-    } finally {
-      setDeleting(false);
-    }
+    return editor.run(async (operation) => {
+      try {
+        await api.deleteAdminAiTool(operation.id!);
+        editor.deleted(operation);
+        await editor.refreshAfter(operation);
+      } catch (err) { editor.report(err instanceof Error ? err.message : "删除工具失败", operation); }
+    }, "delete");
   }
 
   return (
@@ -184,7 +124,7 @@ export default function AiToolsAdminPage({ tools, error, onRefresh, onSetError }
           <button type="button" className="ghost-button" onClick={handleCreateNew}>
             新建工具
           </button>
-          <button type="button" className="admin-primary-button" onClick={onRefresh}>
+          <button type="button" className="admin-primary-button" onClick={() => void editor.refreshList()}>
             刷新列表
           </button>
         </div>
@@ -223,8 +163,8 @@ export default function AiToolsAdminPage({ tools, error, onRefresh, onSetError }
                 <button
                   key={tool.id}
                   type="button"
-                  className={selected?.id === tool.id ? "template-card is-active" : "template-card"}
-                  onClick={() => setSelectedId(tool.id)}
+                  className={selectedId === tool.id ? "template-card is-active" : "template-card"}
+                  onClick={() => editor.select(tool)}
                 >
                   <strong>
                     {tool.is_featured ? "★ " : ""}
@@ -246,7 +186,7 @@ export default function AiToolsAdminPage({ tools, error, onRefresh, onSetError }
         <aside className="admin-detail-panel">
           <form className="admin-side-form" onSubmit={(event) => void handleSubmit(event)}>
             <div className="admin-detail-head">
-              <h2>{selected ? "编辑工具" : "新建工具"}</h2>
+              <h2>{selectedId !== null ? "编辑工具" : "新建工具"}</h2>
               <p>{selected ? `最近更新 ${formatDate(selected.updated_at)}` : "保存后立刻出现在工作室导航页（若已启用）。"}</p>
             </div>
 
@@ -255,7 +195,7 @@ export default function AiToolsAdminPage({ tools, error, onRefresh, onSetError }
                 <span>名称</span>
                 <input
                   value={draft.name}
-                  onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+                  onChange={(event) => editor.setField("name", event.target.value)}
                   placeholder="例如：Midjourney"
                 />
               </label>
@@ -264,7 +204,7 @@ export default function AiToolsAdminPage({ tools, error, onRefresh, onSetError }
                 <span>官网链接</span>
                 <input
                   value={draft.url}
-                  onChange={(event) => setDraft((current) => ({ ...current, url: event.target.value }))}
+                  onChange={(event) => editor.setField("url", event.target.value)}
                   placeholder="https://..."
                 />
               </label>
@@ -274,7 +214,7 @@ export default function AiToolsAdminPage({ tools, error, onRefresh, onSetError }
                 <textarea
                   className="feedback-textarea"
                   value={draft.description}
-                  onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+                  onChange={(event) => editor.setField("description", event.target.value)}
                   placeholder="一句话介绍该工具"
                 />
               </label>
@@ -285,7 +225,7 @@ export default function AiToolsAdminPage({ tools, error, onRefresh, onSetError }
                   <input
                     list="admin-ai-tool-category-options"
                     value={draft.category}
-                    onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}
+                    onChange={(event) => editor.setField("category", event.target.value)}
                     placeholder="例如：图像 / 视频 / 写作"
                   />
                   <datalist id="admin-ai-tool-category-options">
@@ -300,7 +240,7 @@ export default function AiToolsAdminPage({ tools, error, onRefresh, onSetError }
                     type="number"
                     value={draft.sort_order}
                     onChange={(event) =>
-                      setDraft((current) => ({ ...current, sort_order: Number(event.target.value) || 0 }))
+                      editor.setField("sort_order", Number(event.target.value) || 0)
                     }
                   />
                 </label>
@@ -314,7 +254,7 @@ export default function AiToolsAdminPage({ tools, error, onRefresh, onSetError }
                       type="checkbox"
                       checked={draft.is_featured}
                       onChange={(event) =>
-                        setDraft((current) => ({ ...current, is_featured: event.target.checked }))
+                        editor.setField("is_featured", event.target.checked)
                       }
                     />
                     <span>优先展示</span>
@@ -327,7 +267,7 @@ export default function AiToolsAdminPage({ tools, error, onRefresh, onSetError }
                       type="checkbox"
                       checked={draft.is_active}
                       onChange={(event) =>
-                        setDraft((current) => ({ ...current, is_active: event.target.checked }))
+                        editor.setField("is_active", event.target.checked)
                       }
                     />
                     <span>设计师可见</span>
@@ -345,16 +285,16 @@ export default function AiToolsAdminPage({ tools, error, onRefresh, onSetError }
                     <button
                       type="button"
                       className="ghost-button"
-                      disabled={uploading}
+                      aria-busy={uploading}
                       onClick={() => coverInputRef.current?.click()}
                     >
-                      {uploading ? "上传中..." : draft.cover_image_path ? "更换封面" : "上传封面"}
+                      {uploading ? "重新选择封面" : draft.cover_image_path ? "更换封面" : "上传封面"}
                     </button>
-                    {draft.cover_image_path ? (
+                    {draft.cover_image_path || uploading || uploads.hasSelection("cover_image_path") ? (
                       <button
                         type="button"
                         className="ghost-button"
-                        onClick={() => setDraft((current) => ({ ...current, cover_image_path: "" }))}
+                        onClick={() => uploads.clear("cover_image_path")}
                       >
                         清空
                       </button>
@@ -373,13 +313,26 @@ export default function AiToolsAdminPage({ tools, error, onRefresh, onSetError }
             </div>
 
             {error ? <div className="floating-error">{error}</div> : null}
+            {uploads.errors.map(item => <div key={item.field} className="floating-error">{item.message}</div>)}
+            {uploads.available.map(item => <div key={item.id} className="content-upload-recovery" role="status">
+              <p>{`已上传，尚未应用：${item.sourceLabel} · ${item.fieldLabel} · ${item.fileName}`}</p>
+              <button type="button" disabled={!item.canRecover()} onClick={() => uploads.recover(item.id)}>恢复这张图片</button>
+              <small>仅可恢复到原条目或原新建草稿。</small>
+            </div>)}
+            {editor.error ? <div className="floating-error">{editor.error}</div> : null}
+            {editor.model.notice ? <div className="floating-notice" role="status">{editor.model.notice}</div> : null}
+            {editor.model.missing ? <p role="status">原工具已从列表中移除，当前草稿已保留，请核对后新建。</p> : null}
+            {editor.model.conflicts.size ? <div role="status">
+              <p>服务器同字段已更新，当前草稿已保留。加载服务器版本会替换当前草稿。</p>
+              <button type="button" onClick={editor.loadRemote}>加载服务器版本</button>
+            </div> : null}
 
             <div className="template-editor-actions">
-              <button type="submit" className="submit-button" disabled={saving || uploading}>
+              <button type="submit" className="submit-button" disabled={editor.busy || editor.model.missing || editor.model.unconfirmed || uploading}>
                 {saving ? "保存中..." : selected ? "保存修改" : "创建工具"}
               </button>
               {selected ? (
-                <button type="button" className="ghost-button" disabled={deleting} onClick={() => void handleDelete()}>
+                <button type="button" className="ghost-button" disabled={editor.busy || editor.model.missing || editor.model.unconfirmed} onClick={() => void handleDelete()}>
                   {deleting ? "删除中..." : "删除工具"}
                 </button>
               ) : null}

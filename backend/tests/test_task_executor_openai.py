@@ -1,3 +1,4 @@
+from tests.review_media_fixtures import PNG_BYTES, PNG_BASE64
 import json
 import os
 import shutil
@@ -64,7 +65,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
         payload = {
             "data": [
                 {
-                    "b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yh3cAAAAASUVORK5CYII="
+                    "b64_json": PNG_BASE64
                 }
             ],
             "usage": {"total_tokens": 123},
@@ -129,7 +130,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
             side_effect=[
                 _FakeResponse(caption_payload),
                 _FakeResponse(generation_payload),
-                _FakeBinaryResponse(b"generated-image"),
+                _FakeBinaryResponse(PNG_BYTES),
             ],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
@@ -175,7 +176,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"firered-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -217,7 +218,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"firered-reference-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -260,7 +261,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"qwen-image-edit")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -303,7 +304,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
             "data:image/png;base64,cmVmZXJlbmNlMQ==",
             "data:image/png;base64,cmVmZXJlbmNlMg==",
         ]
-        generation_payload = {"data": [{"b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yh3cAAAAASUVORK5CYII="}]}
+        generation_payload = {"data": [{"b64_json": PNG_BASE64}]}
 
         with patch(
             "app.services.task_executor.urlopen",
@@ -371,7 +372,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"chat-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -427,7 +428,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"chat-edit-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -489,7 +490,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"chat-edit-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -545,7 +546,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"chat-edit-2k")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -597,7 +598,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"smart-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -643,7 +644,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"gemini-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -690,7 +691,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"nested-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ):
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -828,7 +829,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"cpa-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -868,7 +869,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"2k-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -918,7 +919,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"cpa-2k-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -969,7 +970,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"preview-2k-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -1014,7 +1015,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"gpt-2k-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -1060,7 +1061,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"1k-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -1109,7 +1110,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"2k-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ):
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -1153,7 +1154,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"cpa-2k-image")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):
@@ -1202,7 +1203,7 @@ class OpenAIImageProviderAdapterTests(unittest.TestCase):
 
         with patch(
             "app.services.task_executor.urlopen",
-            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(b"gpt-i2i")],
+            side_effect=[_FakeResponse(generation_payload), _FakeBinaryResponse(PNG_BYTES)],
         ) as mocked_urlopen:
             with patch("app.services.task_executor.settings.media_root", self.tempdir):
                 with patch("app.services.task_executor.settings.storage_backend", "local"):

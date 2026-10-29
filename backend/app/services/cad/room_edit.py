@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import copy
 from io import BytesIO
+from pathlib import PurePosixPath
+from uuid import uuid4
 from typing import Any
 
 from PIL import Image, ImageDraw
 
 from app.services.cad.polygons import attach_room_polygons
+from app.services.cad.edit_persistence import create_cad_media
 from app.services.cad.space_layout import _ROOM_COLORS
-from app.services.media_storage import get_local_storage, read_binary_asset, resolve_storage_path, write_binary_asset
+from app.services.media_storage import coerce_relative_media_path, get_local_storage, read_binary_asset, resolve_storage_path, write_binary_asset
 
 _UNDO_LIMIT = 20
 
@@ -118,7 +121,7 @@ def ensure_line_layers(payload: dict[str, Any]) -> bool:
         mask_file = str(floor.get("mask_file") or "")
         if not mask_file:
             continue
-        line_file = _line_relative(mask_file)
+        line_file = coerce_relative_media_path(str(floor.get("line_file") or _line_relative(mask_file)))
         try:
             read_binary_asset(line_file)
         except FileNotFoundError:
@@ -128,7 +131,7 @@ def ensure_line_layers(payload: dict[str, Any]) -> bool:
                 continue
             buffer = BytesIO()
             _peel_lines(preview).save(buffer, format="PNG")
-            write_binary_asset(line_file, buffer.getvalue())
+            write_binary_asset(line_file, buffer.getvalue(), overwrite=False)
         if floor.get("line_file") != line_file:
             floor["line_file"] = line_file
             changed = True
@@ -168,32 +171,63 @@ def _discard_asset(relative_path: str) -> None:
         target.unlink()
 
 
-def _push_undo(floor: dict[str, Any], mask_file: str) -> None:
-    preview_rel = _preview_relative(mask_file)
-    seq = int(floor.get("undo_seq") or 0) + 1
-    floor["undo_seq"] = seq
-    mask_undo = mask_file.replace("-mask.png", f"-undo-{seq}-mask.png")
-    preview_undo = mask_file.replace("-mask.png", f"-undo-{seq}.png")
-    write_binary_asset(mask_undo, read_binary_asset(mask_file))
-    write_binary_asset(preview_undo, read_binary_asset(preview_rel))
+def _png_bytes(image: Image.Image) -> bytes:
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _read_edit_images(floor: dict[str, Any], *, preview_file: str | None = None):
+    mask_file = str(floor.get("mask_file") or "")
+    mask_data = read_binary_asset(mask_file)
+    preview_data = read_binary_asset(preview_file or _preview_relative(mask_file))
+    mask = Image.open(BytesIO(mask_data)).convert("L")
+    preview = Image.open(BytesIO(preview_data)).convert("RGB")
+    line_file = str(floor.get("line_file") or _line_relative(mask_file))
+    try:
+        line_data = read_binary_asset(line_file)
+        lines = Image.open(BytesIO(line_data)).convert("RGBA")
+    except FileNotFoundError:
+        lines = _peel_lines(preview)
+        line_data = _png_bytes(lines)
+    if preview.size != mask.size or lines.size != mask.size:
+        raise ValueError("image_size_mismatch")
+    return mask, preview, lines, {"mask": mask_data, "preview": preview_data, "lines": line_data}
+
+
+def _new_bundle(mask_file: str, floor_index: int, role: str, images: dict[str, bytes]) -> dict[str, str]:
+    parent = PurePosixPath(coerce_relative_media_path(mask_file)).parent
+    base = str(parent / f"{role}-{uuid4().hex}-floor-{floor_index}")
+    refs = {"mask_file": base + "-mask.png", "preview_file": base + ".png", "line_file": base + "-lines.png"}
+    for key, kind in (("mask_file", "mask"), ("preview_file", "preview"), ("line_file", "lines")):
+        refs[key] = create_cad_media(refs[key], images[kind])
+    return refs
+
+
+def _set_media_refs(floor: dict[str, Any], refs: dict[str, str]) -> None:
+    floor["mask_file"] = refs["mask_file"]
+    floor["line_file"] = refs["line_file"]
+    floor["line_path"] = resolve_storage_path(refs["line_file"])
+    if "preview_file" in floor:
+        floor["preview_file"] = refs["preview_file"]
+    version = int(floor.get("preview_version") or 0) + 1
+    floor["preview_version"] = version
+    floor["preview_path"] = f"{resolve_storage_path(refs['preview_file'])}?v={version}"
+
+
+def _push_undo(floor: dict[str, Any], original: dict[str, Any], images: dict[str, bytes]) -> None:
+    floor["undo_seq"] = int(floor.get("undo_seq") or 0) + 1
+    refs = _new_bundle(str(original["mask_file"]), int(floor.get("floor_index") or 0), "undo", images)
     stack = list(floor.get("undo_stack") or [])
-    stack.append(
-        {
-            "rooms": copy.deepcopy(list(floor.get("rooms") or [])),
-            "scheme_zh": floor.get("scheme_zh") or "",
-            "mask_file": mask_undo,
-            "preview_file": preview_undo,
-        }
-    )
-    while len(stack) > _UNDO_LIMIT:
-        _discard_asset(str(stack[0].get("mask_file") or ""))
-        _discard_asset(str(stack[0].get("preview_file") or ""))
-        stack.pop(0)
-    floor["undo_stack"] = stack
-    floor["undo_count"] = len(stack)
+    stack.append({"rooms": copy.deepcopy(list(original.get("rooms") or [])), "scheme_zh": original.get("scheme_zh") or "", **refs})
+    # Published history may have references outside this extract. Trim metadata
+    # only; request-scoped never-published drafts are reclaimed after commit.
+    floor["undo_stack"] = stack[-_UNDO_LIMIT:]
+    floor["undo_count"] = len(floor["undo_stack"])
 
 
 def undo_floor_edit(payload: dict[str, Any], *, floor_index: int) -> dict[str, Any]:
+    payload = copy.deepcopy(payload)
     floors = (payload.get("spaces") or {}).get("floors") or []
     floor = next((item for item in floors if int(item.get("floor_index") or 0) == floor_index), None)
     if floor is None:
@@ -201,24 +235,17 @@ def undo_floor_edit(payload: dict[str, Any], *, floor_index: int) -> dict[str, A
     stack = list(floor.get("undo_stack") or [])
     if not stack:
         raise ValueError("nothing_to_undo")
-    snap = stack.pop()
-    mask_file = str(floor.get("mask_file") or "")
-    if not mask_file:
+    if not floor.get("mask_file"):
         raise ValueError("mask_missing")
-    preview_rel = _preview_relative(mask_file)
-    write_binary_asset(mask_file, read_binary_asset(str(snap["mask_file"])))
-    write_binary_asset(preview_rel, read_binary_asset(str(snap["preview_file"])))
-    _discard_asset(str(snap.get("mask_file") or ""))
-    _discard_asset(str(snap.get("preview_file") or ""))
-    floor["rooms"] = snap.get("rooms") or []
+    snap = stack.pop()
+    snapshot_floor = {"mask_file": str(snap["mask_file"]), "line_file": snap.get("line_file") or floor.get("line_file")}
+    _, _, _, images = _read_edit_images(snapshot_floor, preview_file=str(snap["preview_file"]))
+    refs = _new_bundle(str(floor["mask_file"]), floor_index, "edit", images)
+    floor["rooms"] = copy.deepcopy(snap.get("rooms") or [])
     floor["scheme_zh"] = snap.get("scheme_zh") or ""
     floor["undo_stack"] = stack
     floor["undo_count"] = len(stack)
-    version = int(floor.get("preview_version") or 0) + 1
-    floor["preview_version"] = version
-    base = str(floor.get("preview_path") or "").split("?", 1)[0]
-    if base:
-        floor["preview_path"] = f"{base}?v={version}"
+    _set_media_refs(floor, refs)
     return payload
 
 
@@ -235,7 +262,7 @@ def _lines_image(floor: dict[str, Any]) -> Image.Image | None:
         return None
 
 
-def _sync_areas(rooms: list[dict[str, Any]], mask: Image.Image, floor: dict[str, Any]) -> list[dict[str, Any]]:
+def _sync_areas(rooms: list[dict[str, Any]], mask: Image.Image, floor: dict[str, Any], lines: Image.Image | None = None) -> list[dict[str, Any]]:
     square = float(floor.get("square_meters_per_pixel") or 0)
     kept: list[tuple[dict[str, Any], int]] = []
     for item in rooms:
@@ -250,7 +277,7 @@ def _sync_areas(rooms: list[dict[str, Any]], mask: Image.Image, floor: dict[str,
     for item, count in kept:
         item["area_ratio"] = round(count / total, 3)
     kept_rooms = [item for item, _ in kept]
-    attach_room_polygons(kept_rooms, mask, floor, _lines_image(floor))
+    attach_room_polygons(kept_rooms, mask, floor, lines.convert("L") if lines is not None else _lines_image(floor))
     return kept_rooms
 
 
@@ -281,7 +308,9 @@ def adjust_floor_room(
     proposal: str | None = None,
     strokes: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    ensure_line_layers(payload)
+    payload = copy.deepcopy(payload)
+    if action not in {"rename", "remove", "paint", "create"}:
+        raise ValueError("bad_action")
     floors = ((payload.get("spaces") or {}).get("floors") or [])
     floor = next((item for item in floors if int(item.get("floor_index") or 0) == floor_index), None)
     if floor is None:
@@ -295,7 +324,12 @@ def adjust_floor_room(
         raise ValueError("mask_missing")
     if action in {"paint", "create"} and len(strokes or []) < 3:
         raise ValueError("polygon_required")
-    _push_undo(floor, mask_file)
+    if action == "rename" and not (proposal or "").strip():
+        raise ValueError("proposal_required")
+    if action == "create":
+        _next_marker(rooms)
+    original = copy.deepcopy(floor)
+    mask, preview, lines, original_images = _read_edit_images(floor)
 
     if action == "rename":
         name = (proposal or "").strip()
@@ -306,11 +340,10 @@ def adjust_floor_room(
         room["layout_hint"] = "这是手动改过的功能。"
         floor["scheme_zh"] = _scheme_text(rooms)
         floor["rooms"] = rooms
+        _push_undo(floor, original, original_images)
+        _set_media_refs(floor, _new_bundle(mask_file, floor_index, "edit", original_images))
         return payload
 
-    mask = Image.open(BytesIO(read_binary_asset(mask_file))).convert("L")
-    preview_rel = _preview_relative(mask_file)
-    preview = Image.open(BytesIO(read_binary_asset(preview_rel))).convert("RGB")
     marker = int(room.get("marker") or 0) if room is not None else 0
     if action == "remove":
         pixels = mask.load()
@@ -324,7 +357,7 @@ def adjust_floor_room(
         _paint(mask, marker, strokes or [])
         if room is not None:
             room["function_source"] = "edited"
-        rooms = _sync_areas(rooms, mask, floor)
+        rooms = _sync_areas(rooms, mask, floor, lines)
     elif action == "create":
         new_marker = _next_marker(rooms)
         _paint(mask, new_marker, strokes or [])
@@ -346,25 +379,21 @@ def adjust_floor_room(
                 "layout_hint": "这是手动新建的分区。",
             }
         )
-        rooms = _sync_areas(rooms, mask, floor)
+        rooms = _sync_areas(rooms, mask, floor, lines)
         if not any(int(item.get("marker") or 0) == new_marker for item in rooms):
             raise ValueError("empty_polygon")
     else:
         raise ValueError("bad_action")
 
-    line_file = str(floor.get("line_file") or _line_relative(mask_file))
-    lines = Image.open(BytesIO(read_binary_asset(line_file))).convert("RGBA")
     _rewrite_preview(preview, mask, rooms, lines)
     preview_buffer = BytesIO()
     mask_buffer = BytesIO()
     preview.save(preview_buffer, format="PNG")
     mask.save(mask_buffer, format="PNG")
-    write_binary_asset(preview_rel, preview_buffer.getvalue())
-    write_binary_asset(mask_file, mask_buffer.getvalue())
-    version = int(floor.get("preview_version") or 0) + 1
-    floor["preview_version"] = version
-    base = str(floor.get("preview_path") or "").split("?", 1)[0]
-    floor["preview_path"] = f"{base}?v={version}"
+    _push_undo(floor, original, original_images)
+    _set_media_refs(floor, _new_bundle(mask_file, floor_index, "edit", {
+        "mask": mask_buffer.getvalue(), "preview": preview_buffer.getvalue(), "lines": original_images["lines"],
+    }))
     floor["scheme_zh"] = _scheme_text(rooms)
     floor["rooms"] = rooms
     return payload

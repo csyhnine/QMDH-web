@@ -1,4 +1,5 @@
 import type { Provider } from "../../api";
+import { comfyReferenceCount, comfyReferenceCounts, comfyReferenceChoices } from "./comfyReferenceContract";
 import type { StudioFormState } from "./studioTypes";
 import { getSelectedGrokSkuConfig, isGrokHaodeyaProvider } from "./grokVideoUtils";
 import { getSelectedHappyHorseSkuConfig, isHappyHorseProvider } from "./happyHorseVideoUtils";
@@ -15,7 +16,12 @@ export function composerModeLabel(mode: StudioFormState["creationMode"]): string
 
 export function composerReferenceZoneLabel(mode: StudioFormState["creationMode"], provider?: Provider): string {
   if (mode === "video") return "参考图（可选）";
-  if (mode === "edit" && provider?.adapter_kind === "comfyui") return "双图编辑（必传 2 张）";
+  if (mode === "edit" && provider?.adapter_kind === "comfyui") {
+    const counts = comfyReferenceCounts(provider);
+    if (!counts.length) return "图像编辑（模板暂不可用）";
+    if (counts.length > 1) return `编辑图片（上传 ${comfyReferenceChoices(provider)} 张）`;
+    return counts[0] === 1 ? "编辑原图（必传 1 张）" : counts[0] === 2 ? "双图编辑（必传 2 张）" : `图像编辑（必传 ${counts[0]} 张）`;
+  }
   return mode === "edit" ? "参考图（必传 1–4 张）" : "参考图（可选）";
 }
 
@@ -62,6 +68,15 @@ export function composerReferenceHint(
   }
   if (mode === "edit") {
     if (provider?.adapter_kind === "comfyui") {
+      const counts = comfyReferenceCounts(provider);
+      if (!counts.length) return "图像编辑模板暂不可用，请联系管理员检查。";
+      if (counts.length > 1) {
+        if (!counts.includes(referenceUploadCount)) return `请上传 ${comfyReferenceChoices(provider)} 张图片，将按数量自动选择工作流。第 1 张是目标图，其余为参考图。`;
+        return `已上传 ${referenceUploadCount} 张，将使用 ${referenceUploadCount === 1 ? "单图" : `${referenceUploadCount} 图`}编辑工作流。第 1 张是目标图${referenceUploadCount > 1 ? "，其余为参考图" : ""}，请描述修改要求。`;
+      }
+      if (comfyReferenceCount(provider) === 1) {
+        return referenceUploadCount === 1 ? "原图已就绪，请描述修改要求。当前工作流仅接收一张原图。" : "当前工作流需要一张原图，请仅保留要编辑的图片。";
+      }
       if (referenceUploadCount === 0) return "请依次上传两张图：第 1 张是要修改的目标图，第 2 张是参考图。当前工作流仅支持双图编辑。";
       if (referenceUploadCount === 1) return "已上传目标图，还需第 2 张参考图才能提交。当前工作流仅支持双图编辑。";
       if (referenceUploadCount === 2) return "两图已就绪：第 1 张目标图，第 2 张参考图。请在提示词中描述修改要求。";

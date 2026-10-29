@@ -1,0 +1,57 @@
+{
+  "source_commit": "7a31b8c74e114058b4e24eb2ac1176a4f76753be",
+  "frontend_sha256": "554ddd767f10ef84d6be36bf3cd3917b2e132a340e3e10bf93ee97e8e2870e9a",
+  "status": "DEPLOYED_VERIFIED",
+  "frontend_image": "sha256:01a2fb29f9dfada1ed988925b1f2199587fe50eb3465f9550ce7ea7da149409b",
+  "backend_worker_unchanged": true,
+  "non_frontend_containers_unchanged": true,
+  "frontend_files_checked": 51,
+  "public_assets": [
+    {
+      "file": "index.html",
+      "sha256": "63ed45e57ddc456a3de456ddc5160b4ecbdb93491d5c3a975dfced97924b1dfd"
+    },
+    {
+      "file": "assets/ManagementProjectsPage-DXu2_smJ.css",
+      "sha256": "30b37e1e5e0325120f80b64951f26956ba61c9f2687ef1ff90587a6260b5541e"
+    },
+    {
+      "file": "assets/ManagementProjectsPage--2n8qFDg.js",
+      "sha256": "a10658a1ebaafb31bfe55f29f4d4c94c483b2ace2789b0ff3604caeb5d72261a"
+    },
+    {
+      "file": "assets/OtherToolsPage-DgF1Epqp.js",
+      "sha256": "0070e0179d2b69e1571016a4cefd5dc2b41964d9e54dd6ec74ca3959f730b17b"
+    },
+    {
+      "file": "assets/OtherToolsPage-CRy8uIVh.css",
+      "sha256": "53a81fd3916a8ca46ab61eee0dd57f8da9cd3c077882e9a45aa3deb0764941b3"
+    },
+    {
+      "file": "assets/GeneratePage-D-xJ1U-d.css",
+      "sha256": "2f2d2ec947020a4d0695762b6f148d6ea6d6915a21611d559977cdd9f99165b0"
+    },
+    {
+      "file": "assets/GeneratePage-BdtwYbhN.js",
+      "sha256": "c4d244e24cbcd698491b1a9527ae8496edb6cefa1c496bc6b2d8faca802836c6"
+    },
+    {
+      "file": "assets/index-Tkq2BHAJ.css",
+      "sha256": "5fe74b63a21e9d7f6f33a021efa98176e50ee820228165c68fff9ec429ef1d10"
+    },
+    {
+      "file": "assets/index-D4dMr1XE.js",
+      "sha256": "af5d1dc0500e25db12b58397d42967078d11a69573a5b27fd6be278497911056"
+    }
+  ],
+  "migration_executed": false,
+  "business_data_written": false,
+  "compose_files": [
+    "/www/wwwroot/qmdh-web/docker-compose.yml",
+    "/opt/qmdh-frp/compose.frp.yml",
+    "/opt/qmdh-frp/releases/navigation-merge-20261026/compose.release.yml"
+  ],
+  "workflow_root_preserved": "/opt/qmdh-frp/releases/management-categories-20261026/workflows",
+  "disk_free_GiB": 8.441719055175781,
+  "paired_backup_sha256_matched_files": 23
+}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { managementRequest as request } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -12,17 +12,30 @@ import {
   projectPayload,
   TEAM_ROLES,
   today,
+  staffAffiliation,
+  staffCounts,
+  scheduledWeek,
+  weekRange,
   type PlanningProject,
-  type Report,
   type Staff,
   type Stage,
 } from "./planning";
-import ManagementOverview from "./ManagementOverview";
+import PlanningDesk, { type WorkRequest } from "./PlanningDesk";
+import type { Reassignment } from "./pillarPlanning";
+import { scheduleRange, moveSchedulePeriod, type SchedulePeriod } from "./scheduleCalendar";
 import ProjectLedger from "./ProjectLedger";
 import ProjectPlan from "./ProjectPlan";
-import PeopleSchedule from "./PeopleSchedule";
+import PeoplePlanner from "./PeoplePlanner";
+import PlanningDate from "./PlanningDate";
+import usePlanningAutoSave from "./usePlanningAutoSave";
+import ManagementReporting, { downloadReportingWorkbook } from "./ManagementReporting";
+import type { ReportingData } from "./reporting";
 import { matchesStatus, type ProjectStatusFilter } from "./planning";
+import { confirmPlanning } from "./confirmPlanning";
 import "./management.css";
+
+type UnitOption = { name: string; label: string; staff_count: number; account_count: number };
+const unitName = (name = "") => ({ "城市更新一分院": "一分院", "城市更新二分院": "二分院", "四分院": "二分院", "城市更新四分院": "二分院", "城市更新三分院": "三分院" }[name] || name);
 
 function PeopleSelect({
   value,
@@ -34,7 +47,7 @@ function PeopleSelect({
   onChange: (ids: number[]) => void;
 }) {
   const [query, setQuery] = useState("");
-  const available = staff.filter((s) => (s.is_active || value.includes(s.id)) && s.name.includes(query));
+  const available = staff.filter((s) => (s.is_active || value.includes(s.id)) && `${s.name} ${staffAffiliation(s)}`.includes(query));
   return (
     <details className="mp-people-picker">
       <summary>
@@ -58,6 +71,7 @@ function PeopleSelect({
           >
             <span>{value.includes(s.id) ? "☑" : "□"}</span>
             {s.name}
+            <small className="mp-affiliation">{staffAffiliation(s)}</small>
             {s.is_active ? "" : "（已停用）"}
           </button>
         ))}
@@ -69,23 +83,53 @@ function PeopleSelect({
 
 export default function ManagementProjectsPage() {
   const { currentUser } = useAuth();
+  const [unit, setUnit] = useState(unitName(currentUser?.company_unit));
+  const [units, setUnits] = useState<UnitOption[]>([]);
+  const scopedPath = (path: string) => unit && unit !== unitName(currentUser?.company_unit)
+    ? `${path}${path.includes("?") ? "&" : "?"}unit=${encodeURIComponent(unit)}` : path;
+  const scopedRequest = <T,>(path: string, body?: unknown, method?: string) => request<T>(scopedPath(path), body, method);
+  const actionLock = useRef(false);
+  const railReplay = useRef(false);
+  const editorForm = useRef<HTMLFormElement>(null);
+  const [autoSave, setAutoSave] = useState(() => {
+    try { return window.localStorage?.getItem(`qmdh:planning:auto:${currentUser?.name}`) !== "off"; } catch { return true; }
+  });
+  const [projectAutoFailed, setProjectAutoFailed] = useState(false);
+  const [projectSaveStatus, setProjectSaveStatus] = useState("");
+  const [composing, setComposing] = useState(false);
+  const scopeKey = `${currentUser?.name}:${unit}`;
+  const scopeNow = useRef(scopeKey);
+  scopeNow.current = scopeKey;
   const [year, setYear] = useState(new Date().getFullYear());
   const [projects, setProjects] = useState<PlanningProject[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
-  const [report, setReport] = useState<Report | null>(null);
-  const [view, setView] = useState<"overview" | "ledger" | "gantt" | "people" | "staff">("overview");
+  const [affiliationFilter, setAffiliationFilter] = useState("all");
+  const counts = staffCounts(staff);
+  const [view, setView] = useState<"ledger" | "gantt" | "people" | "staff">("people");
+  const previousMainView = useRef<"ledger" | "gantt" | "people">("people");
   const [archive, setArchive] = useState(false);
+  const [trash, setTrash] = useState(false);
   const [search, setSearch] = useState("");
   const [person, setPerson] = useState(0);
   const [statusFilter, setStatusFilter] = useState<ProjectStatusFilter>("all");
-  const [planDirty, setPlanDirty] = useState(false);
+  const [chartDirty, setPlanDirty] = useState(false);
+  const [deskDirty, setDeskDirty] = useState(false);
+  const planDirty = chartDirty || deskDirty;
   const [planSaving, setPlanSaving] = useState(false);
   const [start, setStart] = useState(today());
   const [days, setDays] = useState(30);
-  const [peopleDays, setPeopleDays] = useState(7);
+  const [peoplePeriod, setPeoplePeriod] = useState<SchedulePeriod>("week");
+  const [peopleZoomDays, setPeopleZoomDays] = useState<number | null>(null);
+  const peopleRange = peopleZoomDays ? { start, days: peopleZoomDays } : scheduleRange(start, peoplePeriod);
+  const ganttRange = days === 7 ? scheduleRange(start, "week") : { start, days };
+  const [workRequest, setWorkRequest] = useState<WorkRequest | null>(null);
   const [draft, setDraft] = useState<PlanningProject | null>(null);
+  const nextWeek = weekRange(addDays(today(), 7)).start;
+  const [conversionStart, setConversionStart] = useState(nextWeek), [conversionEnd, setConversionEnd] = useState(addDays(nextWeek, 4));
+  const [draftBaseline, setDraftBaseline] = useState("");
+  const [createdProject, setCreatedProject] = useState<PlanningProject | null>(null);
+  const projectDirty = Boolean(draft && JSON.stringify(draft) !== draftBaseline);
   const [staffDraft, setStaffDraft] = useState<Staff | null>(null);
-  const [reportDraft, setReportDraft] = useState<Report | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -96,17 +140,17 @@ export default function ManagementProjectsPage() {
     setLoading(true);
     setError("");
     setProjects([]);
-    setReport(null);
+    setStaff([]);
     Promise.all([
-      request<PlanningProject[]>(`/projects?year=${year}&archived=${archive}`),
-      request<Staff[]>("/staff"),
-      request<Report>(`/reports/${year}`),
+      scopedRequest<PlanningProject[]>(`/projects?year=${year}&archived=${archive}&deleted=${trash}`),
+      scopedRequest<Staff[]>("/staff"),
+      request<{ units: UnitOption[] }>("/units"),
     ])
-      .then(([p, s, r]) => {
+      .then(([p, s, categories]) => {
         if (!cancelled) {
           setProjects(p);
           setStaff(s);
-          setReport(r);
+          setUnits(categories.units || []);
         }
       })
       .catch((e) => {
@@ -118,7 +162,7 @@ export default function ManagementProjectsPage() {
     return () => {
       cancelled = true;
     };
-  }, [year, archive, refresh]);
+  }, [year, archive, trash, unit, currentUser?.name, refresh]);
   const filtered = useMemo(
     () =>
       projects.filter(
@@ -133,17 +177,21 @@ export default function ManagementProjectsPage() {
     [projects, search, person, statusFilter],
   );
   useEffect(() => {
-    if (!planDirty) return;
+    if ((!planDirty && !projectDirty) || typeof document === "undefined") return;
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     const railGuard = (event: MouseEvent) => {
-      if (!(event.target instanceof Element) || !event.target.closest(".global-rail button")) return;
-      if (planSaving || !window.confirm("排期调整尚未保存，确定离开并放弃调整？")) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
+      if (!(event.target instanceof Element)) return;
+      const button = event.target.closest<HTMLButtonElement>(".global-rail button");
+      if (!button || railReplay.current) return;
+      event.preventDefault(); event.stopPropagation();
+      if (planSaving) return;
+      void confirmPlanning(projectDirty ? "项目内容尚未保存，确定离开？" : "排期调整尚未保存，确定离开并放弃调整？").then(answer=>{
+        if (!answer || !button.isConnected) return;
+        railReplay.current = true; try { button.click(); } finally { railReplay.current = false; }
+      });
     };
     window.addEventListener("beforeunload", warn);
     document.addEventListener("click", railGuard, true);
@@ -151,29 +199,57 @@ export default function ManagementProjectsPage() {
       window.removeEventListener("beforeunload", warn);
       document.removeEventListener("click", railGuard, true);
     };
-  }, [planDirty, planSaving]);
-  const safeChange = (action: () => void) => {
+  }, [planDirty, planSaving, projectDirty]);
+  const safeChange = async (action: () => void) => {
     if (planSaving) {
       setNotice("正在保存排期，请稍候。");
       return;
     }
-    if (!planDirty || window.confirm("排期调整尚未保存，确定放弃这些调整？")) {
-      setPlanDirty(false);
+    if (!planDirty || await confirmPlanning("排期调整尚未保存，确定放弃这些调整？")) {
+      setPlanDirty(false); setDeskDirty(false);
       action();
     }
   };
   const changeView = (next: typeof view) => {
-    if (next !== view) safeChange(() => setView(next));
+    if (next !== view) safeChange(() => {
+      if (view !== "staff") previousMainView.current = view;
+      setView(next);
+    });
   };
-  const editProject = (p: PlanningProject) => setDraft(structuredClone(p));
+  const editProject = (p: PlanningProject) => {
+    setProjectAutoFailed(false);
+    setProjectSaveStatus("");
+    setError("");
+    setDraft(structuredClone(p));
+    setDraftBaseline(JSON.stringify(p));
+    setCreatedProject(null);
+  };
+  const createProject = () => {
+    if (archive) setArchive(false);
+    if (trash) setTrash(false);
+    editProject(newProject(Math.max(0, ...projects.map((p) => p.sequence)) + 1));
+  };
+  const showProjectSection = (id: string) => {
+    const fieldset = document.getElementById(`mp-editor-${id}`);
+    const disclosure = fieldset?.closest("details");
+    if (disclosure) disclosure.open = true;
+    fieldset?.scrollIntoView({
+      behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+      block: "start",
+    });
+  };
+  async function reassignSchedule(payload: Reassignment) {
+    const result = await scopedRequest<{projects:PlanningProject[]}>("/assignments/reassign",payload,"POST");
+    setProjects(current=>current.map(p=>result.projects.find(next=>next.id===p.id)||p));
+    setNotice("选中日期已改派；原工作无人接替的区间已标记暂停。");
+  }
   async function persistSchedule(project: PlanningProject) {
-    const saved = await request<PlanningProject>(`/projects/${project.id}`, projectPayload(project));
+    const saved = await scopedRequest<PlanningProject>(`/projects/${project.id}`, projectPayload(project));
     setProjects((current) => current.map((p) => (p.id === saved.id ? saved : p)));
-    setNotice(`“${saved.name}”的排期已保存`);
     return saved;
   }
   useEffect(() => {
-    if (!(draft || staffDraft || reportDraft) || typeof document === "undefined") return;
+    if (!(draft || staffDraft) || typeof document === "undefined") return;
     const previous = document.activeElement as HTMLElement | null,
       overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -181,10 +257,12 @@ export default function ManagementProjectsPage() {
       document.body.style.overflow = overflow;
       previous?.focus();
     };
-  }, [Boolean(draft || staffDraft || reportDraft)]);
+  }, [Boolean(draft || staffDraft)]);
   const reload = () => setRefresh((v) => v + 1);
-  const change = <K extends keyof PlanningProject>(key: K, value: PlanningProject[K]) =>
+  const change = <K extends keyof PlanningProject>(key: K, value: PlanningProject[K]) => {
+    setProjectSaveStatus(projectAutoFailed ? "修改尚未保存，请核对后手动重试。" : autoSave ? "有修改，等待自动保存…" : "有修改，尚未保存。");
     setDraft((p) => (p ? { ...p, [key]: value } : p));
+  };
   const editStage = (index: number, patch: Partial<Stage>) => {
     if (draft)
       change(
@@ -192,29 +270,59 @@ export default function ManagementProjectsPage() {
         draft.stages.map((s, i) => (i === index ? { ...s, ...patch } : s)),
       );
   };
-  const closeDraft = () => {
-    if (!busy && window.confirm("关闭编辑？尚未保存的内容将丢失。")) setDraft(null);
+  const closeDraft = async () => {
+    if (!busy && (!projectDirty || await confirmPlanning("项目内容尚未保存，关闭后将丢失修改。确定关闭？"))) setDraft(null);
   };
-  async function saveProject(e: FormEvent) {
-    e.preventDefault();
-    if (!draft || busy) return;
+  async function saveProject(e?: FormEvent, automatic = false) {
+    e?.preventDefault();
+    if (!draft || busy || actionLock.current) return;
+    if (!draft.name.trim()) {
+      setError("请填写项目名称，其他资料可以稍后补充。");
+      return;
+    }
     setBusy(true);
+    actionLock.current = true;
     setError("");
+    setProjectSaveStatus("正在保存…");
+    const submitted = draft, submittedScope = scopeKey;
     try {
-      await request(
+      const saved = await scopedRequest<PlanningProject>(
         draft.id ? `/projects/${draft.id}` : `/projects?year=${year}`,
         projectPayload(draft),
         draft.id ? "PUT" : "POST",
       );
-      setDraft(null);
-      setNotice("项目已保存");
-      reload();
+      if (scopeNow.current !== submittedScope) return;
+      setProjectAutoFailed(false);
+      setProjectSaveStatus("已保存");
+      setProjects(current => (submitted.id ? current.map(p => p.id === saved.id ? saved : p) : [...current, saved]).filter(p => p.archived === archive));
+      if (automatic) {
+        setDraft(current => {
+          if (!current || current.id !== submitted.id) return current;
+          return JSON.stringify(projectPayload(current)) === JSON.stringify(projectPayload(submitted)) ? saved : { ...current, version: saved.version, updated_at: saved.updated_at, updated_by: saved.updated_by };
+        });
+        setDraftBaseline(JSON.stringify(saved));
+      } else {
+        setCreatedProject(draft.id ? null : saved);
+        setDraft(null);
+        setNotice(draft.id ? "项目已保存" : "项目已创建。可以继续安排工作，其他资料随时补充。");
+        reload();
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "保存失败");
+      if (scopeNow.current === submittedScope) {
+        setError(e instanceof Error ? e.message : "保存失败");
+        setProjectAutoFailed(true);
+        setProjectSaveStatus("保存未完成，本地修改已保留。请核对后手动重试。");
+      }
     } finally {
+      actionLock.current = false;
       setBusy(false);
     }
   }
+  usePlanningAutoSave(draft?.id && projectDirty ? JSON.stringify(draft) : null, autoSave,
+    busy || projectAutoFailed || composing, async () => {
+      if (editorForm.current?.checkValidity()) await saveProject(undefined, true);
+      else setProjectSaveStatus("请补全必填项或修正日期、金额后再保存。");
+    });
   async function saveStaff(e: FormEvent) {
     e.preventDefault();
     if (!staffDraft || busy) return;
@@ -222,7 +330,7 @@ export default function ManagementProjectsPage() {
     setError("");
     const { id, ...body } = staffDraft;
     try {
-      await request(id ? `/staff/${id}` : "/staff", body, id ? "PUT" : "POST");
+      await scopedRequest(id ? `/staff/${id}` : "/staff", body, id ? "PUT" : "POST");
       setStaffDraft(null);
       setNotice("人员已保存");
       reload();
@@ -232,22 +340,51 @@ export default function ManagementProjectsPage() {
       setBusy(false);
     }
   }
-  async function saveReport(e: FormEvent) {
-    e.preventDefault();
-    if (!reportDraft || busy) return;
+  async function togglePoolStaff(person: Staff) {
+    if (busy || loading) return;
+    setBusy(true);
+    try {
+      if (!await confirmPlanning(person.is_active ? `将${person.name}移出${unitName(unit)}人员池？历史安排保留，之后不可新增排期；已有未来安排仍需人工调整。` : `将${person.name}重新加入${unitName(unit)}人员池？`)) return;
+      const { id, ...body } = person;
+      await scopedRequest(`/staff/${id}`, { ...body, is_active: !person.is_active }, "PUT");
+      setNotice(person.is_active ? "已移出人员池，历史安排保留" : "已重新加入人员池");
+      await reload();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "人员池更新失败");
+    } finally { setBusy(false); }
+  }
+  async function changeDeleted(project: PlanningProject, deleted: boolean) {
+    if (!project.id || busy || planSaving || planDirty || actionLock.current) return;
+    if (deleted && !await confirmPlanning(`删除“${project.name}”？项目将移入回收站，可恢复，版本记录会保留。${projectDirty ? "本次未保存修改会丢失。" : ""}`)) return;
+    actionLock.current = true;
     setBusy(true);
     setError("");
     try {
-      await request(`/reports/${year}`, {
-        compiler: reportDraft.compiler,
-        data_as_of: reportDraft.data_as_of,
-        version: reportDraft.version,
-      });
-      setReportDraft(null);
+      await scopedRequest(`/projects/${project.id}${deleted ? "" : "/restore"}?version=${project.version}`, {}, deleted ? "DELETE" : "POST");
+      setDraft(null);
+      setCreatedProject(null);
+      setNotice(deleted ? "项目已删除，可在回收站恢复。" : `项目已恢复${project.archived ? "到已归档列表" : "到当前项目列表"}。`);
       reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "保存失败");
+      setError(e instanceof Error ? e.message : "操作失败");
     } finally {
+      actionLock.current = false;
+      setBusy(false);
+    }
+  }
+  async function syncRoster() {
+    if (busy || planSaving || planDirty || actionLock.current) return;
+    actionLock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await scopedRequest<{ added: number; matched: number; conflicts: string[] }>("/staff/sync", {}, "POST");
+      setNotice(`已同步${unit}员工：新增 ${result.added} 人，关联已有 ${result.matched} 人。${result.conflicts.length ? ` ${result.conflicts.length} 位同名或跨院人员需人工核对：${result.conflicts.join("、")}` : ""}`);
+      reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "同步失败");
+    } finally {
+      actionLock.current = false;
       setBusy(false);
     }
   }
@@ -255,9 +392,33 @@ export default function ManagementProjectsPage() {
     const url = URL.createObjectURL(new Blob([ledgerCsv(filtered, staff)], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${report?.unit ?? "二分院"}-${year}年度项目台账.csv`;
+    a.download = `${unit}-${year}年度项目详情.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+  async function downloadExcel() {
+    if (actionLock.current) return;
+    actionLock.current = true; setBusy(true); setError("");
+    try {
+      const data = await scopedRequest<ReportingData>(`/report-data?year=${year}`);
+      const week = weekRange(year === new Date().getFullYear() ? today() : `${year}-01-01`).start;
+      await downloadReportingWorkbook(data, week, 5);
+    } catch (e) { setError(e instanceof Error ? e.message : "Excel 导出失败"); }
+    finally { actionLock.current = false; setBusy(false); }
+  }
+  function convertWeeklyPlan() {
+    if (!draft || !draft.next_week_work.trim() || !conversionStart || !conversionEnd || conversionEnd < conversionStart) return;
+    const name = draft.next_week_work.trim();
+    if (name.length > 250) { setError("请将工作标题缩短至250字以内，详细内容可放入阶段备注。"); return; }
+    if (draft.stages.length >= 200) { setError("单个项目最多200个阶段，请先整理已有阶段。"); return; }
+    if (draft.stages.some(s => s.name === name && s.start === conversionStart && s.end === conversionEnd)) {
+      setError("相同工作和日期已经存在，请在阶段排期中调整。"); return;
+    }
+    setProjectAutoFailed(false); setProjectSaveStatus(""); setError("");
+    setDraft({ ...draft, weekly_plan_mode: "schedule", stages: [...draft.stages, {
+      id: crypto.randomUUID().replaceAll("-", ""), name, start: conversionStart, end: conversionEnd,
+      assignees: [...draft.next_week_staff], allocation: 100, progress: 0, milestone: false, notes: "",
+    }] });
   }
   const textField = (key: keyof PlanningProject, label: string, wide = false) => (
     <label key={key} className={wide ? "mp-wide" : ""}>
@@ -281,41 +442,68 @@ export default function ManagementProjectsPage() {
   );
   return (
     <section className="management-page">
-      <header className="mp-header">
-        <div>
-          <p className="mp-eyebrow">{report?.unit || currentUser?.company_unit} · 管理工作台</p>
-          <h1>项目管理</h1>
-          <p>掌握项目进展，安排团队下一步工作。</p>
-        </div>
-        <div className="mp-header-actions">
-          <span>{currentUser?.company_position}</span>
-          <button disabled={loading} onClick={() => changeView("staff")}>
-            人员名册
-          </button>
-          <button
-            disabled={loading}
-            onClick={() => report && setReportDraft({ ...report, data_as_of: report.data_as_of || today() })}
-          >
-            台账信息
-          </button>
-        </div>
-      </header>
-      <nav className="mp-tabs" aria-label="项目管理视图">
-        {(
-          [
-            ["overview", "管理总览", "◫"],
-            ["ledger", "项目台账", "▤"],
-            ["gantt", "项目计划", "▥"],
-            ["people", "人员排期", "♧"],
-          ] as const
-        ).map(([v, l, icon]) => (
-          <button key={v} className={view === v ? "selected" : ""} onClick={() => changeView(v)}>
-            <span aria-hidden="true">{icon}</span>
-            {l}
-          </button>
-        ))}
-      </nav>
-      {error ? (
+      <div className="mp-workspace-header">
+        <header className="mp-header">
+          <div>
+            <p className="mp-eyebrow">{unit || currentUser?.company_unit} · 管理工作台</p>
+            <h1>项目管理</h1>
+            <p>掌握项目进展，安排团队下一步工作。</p>
+            <small className="mp-unit-boundary">各分院独立管理本院项目、人员和进展。</small>
+          </div>
+          <div className="mp-header-actions">
+            <label className="mp-inline" title="适用于已有项目资料、项目计划和人员排期；新项目首次仍需创建，分院人员池单独保存。"><input type="checkbox" checked={autoSave} onChange={e => {
+              setAutoSave(e.target.checked);
+              try { window.localStorage?.setItem(`qmdh:planning:auto:${currentUser?.name}`, e.target.checked ? "on" : "off"); } catch { /* Preference remains usable without storage. */ }
+            }} />自动保存</label>
+            <label className="mp-unit-picker">
+              管理分院
+              <select aria-label="管理分院" value={unit} disabled={loading || busy || planSaving}
+                onChange={async (e) => {
+                  const next = e.target.value;
+                  if (projectDirty && !await confirmPlanning("项目内容尚未保存，确定切换分院并放弃修改？")) return;
+                  safeChange(() => {
+                    setUnit(next); setDraft(null); setStaffDraft(null);
+                    setPerson(0); setSearch(""); setCreatedProject(null); setNotice(""); setError("");
+                  });
+                }}>
+                {(units.length ? units : [{ name: unit, label: unit, staff_count: staff.length, account_count: 0 }]).map((u) =>
+                  <option key={u.name} value={u.name}>{unitName(u.name)} · {u.staff_count} 人</option>)}
+              </select>
+            </label>
+            <span>{currentUser?.company_position}</span>
+            <button disabled={loading || busy} aria-pressed={view === "staff"} onClick={() => changeView(view === "staff" ? previousMainView.current : "staff")}>
+              分院人员池
+            </button>
+
+          </div>
+        </header>
+        <nav className="mp-tabs" aria-label="项目管理视图">
+          {(
+            [
+              ["people", "人员排期", "♧"],
+              ["gantt", "项目计划", "▥"],
+              ["ledger", "项目详情", "▤"],
+            ] as const
+          ).map(([v, l, icon]) => (
+            <button
+              key={v}
+              aria-current={view === v ? "page" : undefined}
+              className={view === v ? "selected" : ""}
+              onClick={() => changeView(v)}
+            >
+              <span aria-hidden="true">{icon}</span>
+              {l}
+            </button>
+          ))}
+        </nav>
+      </div>
+      <p className="mp-view-purpose">
+        {view === "ledger" ? "项目详情：维护项目资料、责任分工、合同与费用，按分类查询和导出。"
+          : view === "gantt" ? "项目计划：以项目为主线，安排阶段、里程碑、起止日期与进度。"
+          : view === "people" ? "人员排期：以本院人员为主线，查看跨项目占用，拖拽分配工作并处理冲突。"
+          : "分院人员池：维护本院可安排的员工，名册职务与网站登录权限分别管理。"}
+      </p>
+      {error && !(draft || staffDraft) ? (
         <p className="mp-error" role="alert">
           {error}
         </p>
@@ -323,6 +511,17 @@ export default function ManagementProjectsPage() {
       {notice ? (
         <p role="status" className="mp-notice">
           {notice}
+          {createdProject && (
+            <button
+              onClick={() => {
+                editProject(createdProject);
+                setNotice("");
+                window.setTimeout(() => showProjectSection("schedule"), 0);
+              }}
+            >
+              安排工作 →
+            </button>
+          )}
           <button aria-label="关闭保存提示" onClick={() => setNotice("")}>
             ×
           </button>
@@ -334,12 +533,15 @@ export default function ManagementProjectsPage() {
           <select
             value={year}
             disabled={busy}
-            onChange={(e) =>
-              safeChange(() => {
-                setYear(Number(e.target.value));
-                setStart(`${e.target.value}-01-01`);
-              })
-            }
+            onChange={(e) => {
+              const value = e.target.value;
+              void safeChange(() => {
+                setYear(Number(value));
+                setStart(`${value}-01-01`);
+                setCreatedProject(null);
+                setNotice("");
+              });
+            }}
           >
             {Array.from(
               new Set([
@@ -361,213 +563,279 @@ export default function ManagementProjectsPage() {
               aria-label="搜索项目"
               placeholder="搜索项目名称…"
               value={search}
-              onChange={(e) => safeChange(() => setSearch(e.target.value))}
+              onChange={(e) => { const value=e.target.value; void safeChange(() => setSearch(value)); }}
             />
-            <select
-              aria-label="按人员筛选"
-              value={person}
-              onChange={(e) => safeChange(() => setPerson(Number(e.target.value)))}
-            >
-              <option value={0}>全部人员</option>
-              {staff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="项目状态筛选"
-              value={statusFilter}
-              onChange={(e) => safeChange(() => setStatusFilter(e.target.value as ProjectStatusFilter))}
-            >
-              <option value="all">全部状态</option>
-              <option value="overdue">有延期事项</option>
-              <option value="this-week">本周待完成</option>
-              <option value="unscheduled">尚未排期</option>
-            </select>
-            <label className="mp-inline">
-              <input
-                type="checkbox"
-                checked={archive}
-                onChange={(e) => safeChange(() => setArchive(e.target.checked))}
-              />
-              已归档
-            </label>
+            <details className="mp-simple-filters">
+              <summary>更多筛选{person || statusFilter !== "all" || archive || trash ? " · 已启用" : ""}</summary>
+              <div>
+                <select
+                  aria-label="按人员筛选"
+                  value={person}
+                  onChange={(e) => { const value=Number(e.target.value); void safeChange(() => setPerson(value)); }}
+                >
+                  <option value={0}>全部人员</option>
+                  {staff.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="项目状态筛选"
+                  value={statusFilter}
+                  onChange={(e) => { const value=e.target.value as ProjectStatusFilter; void safeChange(() => setStatusFilter(value)); }}
+                >
+                  <option value="all">全部状态</option>
+                  <option value="overdue">有延期事项</option>
+                  <option value="this-week">本周待完成</option>
+                  <option value="unscheduled">尚未排期</option>
+                </select>
+                <label className="mp-inline">
+                  <input
+                    type="checkbox"
+                    checked={archive}
+                    onChange={(e) => { const value=e.target.checked; void safeChange(() => { setArchive(value); setTrash(false); }); }}
+                  />
+                  已归档
+                </label>
+                {person || statusFilter !== "all" || archive || trash ? (
+                  <button
+                    onClick={() =>
+                      safeChange(() => {
+                        setPerson(0);
+                        setStatusFilter("all");
+                        setArchive(false);
+                        setTrash(false);
+                      })
+                    }
+                  >
+                    清除筛选
+                  </button>
+                ) : null}
+              </div>
+            </details>
             <span className="mp-toolbar-spacer" />
-            <button disabled={loading} onClick={download}>
-              ↓ 导出台账
+            {view === "ledger" && <><button disabled={loading || busy} aria-pressed={trash} onClick={() => safeChange(() => { setTrash(!trash); setArchive(false); })}>{trash ? "返回在管项目" : "回收站"}</button>
+            <button disabled={loading || trash} onClick={download}>
+              ↓ CSV 台账
             </button>
-            <button
-              className="mp-primary"
-              disabled={loading || planDirty}
-              onClick={() => {
-                if (archive) setArchive(false);
-                setDraft(newProject(Math.max(0, ...projects.map((p) => p.sequence)) + 1));
-              }}
-            >
+            <button disabled={loading || busy || trash} onClick={downloadExcel}>↓ Excel 一览表</button></>}
+            <button className="mp-primary" disabled={loading || planDirty} onClick={createProject}>
               ＋ 新建项目
             </button>
           </>
         ) : (
           <>
-            <strong>人员名册 · {staff.length} 人</strong>
+            <strong>可安排 {counts.active} 人 · 内部 {counts.internal} · 外包 {counts.external}{counts.unknown ? ` · 待确认 ${counts.unknown}` : ""}</strong>
+            <select aria-label="名册人员归属" value={affiliationFilter} onChange={e => setAffiliationFilter(e.target.value)}>
+              <option value="all">全部人员（含停用）</option><option value="internal">QMDH 内部</option><option value="external">外包人员</option><option value="unknown">归属待确认</option>
+            </select>
             <span className="mp-toolbar-spacer" />
+            <button disabled={loading || busy} onClick={syncRoster}>从账号分组补齐人员</button>
             <button
               className="mp-primary"
               disabled={loading}
-              onClick={() => setStaffDraft({ id: 0, name: "", position: "", is_active: true, version: 0 })}
+              onClick={() => setStaffDraft({ id: 0, name: "", position: "", employment_type: "unknown", employer: "", is_active: true, version: 0 })}
             >
               ＋ 添加人员
             </button>
           </>
         )}
-        <button disabled={loading || busy} onClick={() => safeChange(reload)}>
-          刷新
+        <button aria-busy={loading} disabled={loading || busy} onClick={() => safeChange(reload)}>
+          {loading ? "正在加载…" : "刷新"}
         </button>
       </div>
-      {loading ? (
-        <div className="mp-empty">正在加载项目工作台…</div>
-      ) : view === "overview" ? (
-        <ManagementOverview
-          projects={filtered}
-          staff={staff}
-          current={today()}
-          onEdit={editProject}
-          onPlan={() => changeView("gantt")}
-          onPeople={() => {
-            setStart(today());
-            changeView("people");
-          }}
-        />
-      ) : view === "ledger" ? (
-        <ProjectLedger projects={filtered} staff={staff} onEdit={editProject} />
-      ) : view === "gantt" || view === "people" ? (
-        <>
-          <div className="mp-schedule-toolbar">
-            <div>
-              <h2>{view === "gantt" ? "项目阶段计划" : "团队人员排期"}</h2>
-              <p>
-                {view === "gantt" ? "项目下展开设计阶段，调整日期与交付节奏" : "查看每位成员的安排，及时发现计划冲突"}
-              </p>
+      <div className="mp-view" key={view} aria-busy={loading}>
+        {loading ? (
+          <div className="mp-loading" role="status">
+            <span className="mp-loading-label">
+              <span className="mp-spinner" aria-hidden="true" />
+              正在加载项目工作台…
+            </span>
+            <div className="mp-skeleton-grid" aria-hidden="true">
+              {[0, 1, 2, 3].map((i) => (
+                <span key={i} />
+              ))}
             </div>
-            <div>
-              <button
-                disabled={planDirty}
-                onClick={() => setStart(addDays(start, -(view === "people" ? peopleDays : days)))}
-              >
-                ‹
-              </button>
-              <input
-                aria-label="排期开始日期"
-                type="date"
-                required
-                disabled={planDirty}
-                value={start}
-                onChange={(e) => {
-                  if (e.target.value) setStart(e.target.value);
-                }}
-              />
-              <button
-                disabled={planDirty}
-                onClick={() => setStart(addDays(start, view === "people" ? peopleDays : days))}
-              >
-                ›
-              </button>
-              <button disabled={planDirty} onClick={() => setStart(today())}>
-                今天
-              </button>
-              {view === "gantt" ? (
-                <select
-                  aria-label="时间跨度"
+            <div className="mp-skeleton-lines" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
+        ) : trash && view !== "staff" ? (
+          <section className="mp-trash" aria-label="项目回收站">
+            <h2>项目回收站 · {projects.length} 项</h2>
+            <p>已删除项目不再占用人员排期；恢复后保留原分工、日期、费用和版本记录。</p>
+            {projects.map((p) => <article key={p.id}><strong>{p.name}</strong><span>{p.archived ? "原为已归档项目" : "原为在管项目"}</span><button disabled={busy} onClick={() => changeDeleted(p, false)}>恢复项目</button></article>)}
+            {!projects.length && <p>本院本年度没有已删除项目。</p>}
+          </section>
+        ) : view === "ledger" ? (
+          <ProjectLedger projects={filtered} staff={staff} onEdit={editProject} />
+        ) : view === "gantt" || view === "people" ? (
+          <>
+            <div className="mp-schedule-toolbar">
+              <div>
+                <h2>{view === "gantt" ? "项目阶段计划" : "团队人员排期"}</h2>
+                <p>
+                  {view === "gantt" ? "项目下展开设计阶段，调整日期与交付节奏" : "查看每位成员的安排，及时发现计划冲突"}
+                </p>
+              </div>
+              <div>
+                <button
                   disabled={planDirty}
-                  value={days}
-                  onChange={(e) => setDays(Number(e.target.value))}
+                  onClick={() => setStart(view === "people" ? peopleZoomDays ? addDays(start, -peopleZoomDays) : moveSchedulePeriod(start, peoplePeriod, -1) : addDays(start, -days))}
                 >
-                  <option value={14}>两周</option>
-                  <option value={30}>月计划</option>
-                  <option value={90}>季度计划</option>
-                </select>
-              ) : (
-                <select
-                  aria-label="人员排期跨度"
-                  value={peopleDays}
-                  onChange={(e) => setPeopleDays(Number(e.target.value))}
+                  ‹
+                </button>
+                <PlanningDate
+                  label={view === "people" || days === 7 ? "排期所在日期" : "排期开始日期"}
+                  required
+                  disabled={planDirty}
+                  value={start}
+                  onChange={(date) => {
+                    if (date) setStart(date);
+                  }}
+                />
+                <button
+                  disabled={planDirty}
+                  onClick={() => setStart(view === "people" ? peopleZoomDays ? addDays(start, peopleZoomDays) : moveSchedulePeriod(start, peoplePeriod, 1) : addDays(start, days))}
                 >
-                  <option value={7}>一周</option>
-                  <option value={14}>两周</option>
-                </select>
-              )}
+                  ›
+                </button>
+                <button disabled={planDirty} onClick={() => setStart(today())}>
+                  今天
+                </button>
+                {view === "gantt" ? (
+                  <select
+                    aria-label="时间跨度"
+                    disabled={planDirty}
+                    value={days}
+                    onChange={(e) => setDays(Number(e.target.value))}
+                  >
+                    <option value={7}>按周</option>
+                    <option value={14}>两周</option>
+                    <option value={30}>月计划</option>
+                    <option value={90}>季度计划</option>
+                  </select>
+                ) : (
+                  <select
+                    aria-label="人员排期跨度"
+                    disabled={planDirty || planSaving}
+                    value={peopleZoomDays ? "custom" : peoplePeriod}
+                    onChange={(e) => { if (e.target.value !== "custom") { setPeoplePeriod(e.target.value as SchedulePeriod); setPeopleZoomDays(null); } }}
+                  >
+                    {peopleZoomDays && <option value="custom">自定 · {peopleZoomDays} 天</option>}
+                    <option value="week">按周</option>
+                    <option value="month">按月</option>
+                    <option value="quarter">按季度</option>
+                    <option value="year">按年</option>
+                  </select>
+                )}
+              </div>
             </div>
-          </div>
-          {view === "gantt" ? (
-            <ProjectPlan
-              key={`${year}-${archive}-${search}-${person}-${statusFilter}-${refresh}`}
-              projects={filtered}
-              staff={staff}
-              start={start}
-              days={days}
-              archived={archive}
-              onEdit={editProject}
-              onPersist={persistSchedule}
-              onDirty={setPlanDirty}
-              onBusy={setPlanSaving}
-            />
-          ) : (
-            <PeopleSchedule
-              projects={filtered}
-              staff={staff.filter((s) => !person || s.id === person)}
-              start={start}
-              days={peopleDays}
-              onEdit={editProject}
-            />
-          )}
-          <p className="mp-help">
-            未排期项目 {filtered.filter((p) => !p.stages.length).length} 个 · 跨年度阶段跟随所属项目年度查看。
-          </p>
-        </>
-      ) : (
-        <div className="mp-panel">
-          <div className="mp-table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>姓名</th>
-                  <th>职务</th>
-                  <th>状态</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {staff.map((s) => (
-                  <tr key={s.id}>
-                    <td>
-                      <span className="mp-avatar">{s.name.slice(-2)}</span> {s.name}
-                    </td>
-                    <td>{s.position || "—"}</td>
-                    <td>
-                      <span className={s.is_active ? "mp-badge" : "mp-badge muted"}>
-                        {s.is_active ? "在用" : "停用"}
-                      </span>
-                    </td>
-                    <td>
-                      <button onClick={() => setStaffDraft({ ...s })}>编辑</button>
-                    </td>
+            <PlanningDesk autoSave={autoSave} onBusy={setPlanSaving} onProjectPlan={() => changeView("gantt")} onReassign={reassignSchedule} rangeStart={view==="people"?peopleRange.start:ganttRange.start} rangeDays={view==="people"?peopleRange.days:ganttRange.days} request={workRequest} onRequestHandled={() => setWorkRequest(null)} projects={filtered} staff={staff} disabled={planSaving || chartDirty || archive} onPersist={persistSchedule} onDirty={setDeskDirty} />
+            {view === "gantt" ? (
+              <ProjectPlan
+                key={`${year}-${archive}-${search}-${person}-${statusFilter}-${refresh}`}
+                projects={filtered}
+                workloadProjects={projects}
+                staff={staff}
+                start={ganttRange.start}
+                days={ganttRange.days}
+                archived={archive}
+                onEdit={editProject}
+                onPersist={persistSchedule}
+                onReassign={reassignSchedule}
+                onDirty={setPlanDirty}
+                onBusy={setPlanSaving}
+                autoSave={autoSave}
+              />
+            ) : (
+              <PeoplePlanner
+                key={`${year}-${archive}-${search}-${person}-${statusFilter}-${refresh}`}
+                projects={filtered}
+                workloadProjects={projects}
+                staff={staff}
+                personFilter={person}
+                start={peopleRange.start}
+                days={peopleRange.days}
+                period={peoplePeriod}
+                fitDates={peopleZoomDays !== null}
+                onZoom={(date, count) => { if (!planDirty && !planSaving) { setStart(date); setPeopleZoomDays(count); } }}
+                onResetZoom={() => { if (!planDirty && !planSaving) setPeopleZoomDays(null); }}
+                disabled={deskDirty}
+                onOpen={setWorkRequest}
+                onReassign={reassignSchedule}
+                archived={archive}
+                onPersist={persistSchedule}
+                onDirty={setPlanDirty}
+                onBusy={setPlanSaving}
+                autoSave={autoSave}
+              />
+            )}
+            <p className="mp-help">
+              未排期项目 {filtered.filter((p) => !p.stages.length).length} 个 · 跨年度阶段跟随所属项目年度查看。
+            </p>
+          </>
+        ) : (
+          <div className="mp-panel">
+            <div className="mp-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>姓名</th>
+                    <th>职务</th>
+                    <th>人员归属 / 所属单位</th>
+                    <th>状态</th>
+                    <th>操作</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {staff.filter(s => affiliationFilter === "all" || (s.employment_type || "unknown") === affiliationFilter).map((s) => (
+                    <tr key={s.id}>
+                      <td>
+                        <span className="mp-avatar">{s.name.slice(-2)}</span> {s.name}
+                      </td>
+                      <td>{s.position || "—"}</td>
+                      <td><span className={`mp-affiliation ${s.employment_type || "unknown"}`}>{staffAffiliation(s)}</span></td>
+                      <td>
+                        <span className={s.is_active ? "mp-badge" : "mp-badge muted"}>
+                          {s.is_active ? "在用" : "停用"}
+                        </span>
+                      </td>
+                      <td>
+                        <button disabled={busy || loading} onClick={() => setStaffDraft({ ...s })}>编辑</button>
+                        <button disabled={busy || loading} onClick={() => togglePoolStaff(s)}>{s.is_active ? "移出人员池" : "重新加入"}</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mp-panel-note">
+              所属分院用于安排工作，人员归属区分内部与外包；外包不计入内部人数。账号同步后归属待确认。添加人员不会开通网站账号或授予权限，停用人员保留历史安排。
+            </p>
           </div>
-          <p className="mp-panel-note">
-            名册用于安排工作，添加人员不会授予网站权限。可添加尚无账号的员工；同名人员请注明区分。
-          </p>
-        </div>
-      )}
-      <div className="mp-report-meta">
-        {year} 年度项目信息一览表 · 表格编制 {report?.compiler || "待填写"} · 数据更新 {report?.data_as_of || "待填写"}
+        )}
+        {!loading && view === "ledger" && !trash && <details className="mp-ledger-reports"><summary>年度经营统计与人员周报</summary><ManagementReporting key={`${unit}-${year}`} unit={unit} year={year} revision={projects} /></details>}
       </div>
-      {draft ? (
+
+      {draft && !draft.id ? (
+        <div className="mp-modal"><form className="mp-small-editor" role="dialog" aria-modal="true" aria-label="快速立项" onSubmit={saveProject}>
+          <h2>新建项目</h2><p className="mp-help">先建档，再安排工作。只需项目名称，其余可稍后补充。</p>
+          {error&&<p role="alert" className="mp-error">{error}</p>}<fieldset disabled={busy}>
+          {textField("name","项目名称")}
+          <label><span>项目统筹（选填）</span><PeopleSelect value={draft.team.coordinator} staff={staff} onChange={ids=>change("team",{...draft.team,coordinator:ids})}/></label>
+          <label>目标交付日期（选填）<PlanningDate label="立项目标交付日期" value={draft.deadline||""} onChange={date=>change("deadline",date||null)}/></label>
+          </fieldset><footer><button type="button" disabled={busy} onClick={closeDraft}>取消</button><button type="submit" className="mp-primary" disabled={busy}>创建项目</button></footer>
+        </form></div>
+      ) : draft ? (
         <div className="mp-modal mp-drawer-backdrop">
           <form
+            ref={editorForm}
+            onCompositionStart={() => setComposing(true)}
+            onCompositionEnd={() => setComposing(false)}
             className="mp-editor"
             onSubmit={saveProject}
             onKeyDown={(e) => {
@@ -613,8 +881,9 @@ export default function ManagementProjectsPage() {
             <p>
               {draft.updated_at
                 ? `最后修改 ${new Date(draft.updated_at).toLocaleString("zh-CN")}`
-                : "填写基本信息，再添加人员与阶段计划"}
+                : "仅项目名称必填，其他资料可以稍后补充。"}
             </p>
+            <p className="mp-auto-status" role="status">{draft.id ? projectSaveStatus || (autoSave ? "内容有效后自动保存，停止输入约1秒触发。" : "自动保存已关闭，请点击保存修改。") : "新项目首次请点击创建项目。"}</p>
             <nav className="mp-editor-nav">
               {[
                 ["basic", "基本信息"],
@@ -622,13 +891,7 @@ export default function ManagementProjectsPage() {
                 ["finance", "合同费用"],
                 ["schedule", "阶段排期"],
               ].map(([id, label]) => (
-                <button
-                  type="button"
-                  key={id}
-                  onClick={() =>
-                    document.getElementById(`mp-editor-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })
-                  }
-                >
+                <button type="button" key={id} onClick={() => showProjectSection(id)}>
                   {label}
                 </button>
               ))}
@@ -637,102 +900,149 @@ export default function ManagementProjectsPage() {
               <legend>基本信息</legend>
               <div className="mp-fields">
                 {textField("name", "项目名称")}
-                <label>
-                  <span>序号</span>
-                  <input
-                    required
-                    type="number"
-                    min={1}
-                    max={100000}
-                    value={draft.sequence}
-                    onChange={(e) => change("sequence", Number(e.target.value))}
+                <div className="mp-field">
+                  <span>项目负责人（选填）</span>
+                  <PeopleSelect
+                    value={draft.team.coordinator}
+                    staff={staff}
+                    onChange={(ids) => change("team", { ...draft.team, coordinator: ids })}
                   />
-                </label>
-                {textField("grade", "项目等级")}
-                <label>
-                  <span>紧急程度</span>
-                  <select value={draft.urgency} onChange={(e) => change("urgency", e.target.value)}>
-                    {["常规", "重要", "紧急", "特急"].map((s) => (
-                      <option key={s}>{s}</option>
-                    ))}
-                  </select>
-                </label>
-                {textField("mode", "项目模式")}
-                {textField("source", "项目来源")}
-                {textField("project_type", "项目类型")}
-                {textField("phase", "项目阶段")}
+                  {!staff.some((s) => s.is_active) && (
+                    <small className="mp-help">可以先保存项目，稍后在分院人员池添加成员。</small>
+                  )}
+                </div>
                 <label>
                   <span>完成时间节点</span>
-                  <input
-                    type="date"
+                  <PlanningDate
+                    label="完成时间节点"
                     value={draft.deadline || ""}
-                    onChange={(e) => change("deadline", e.target.value || null)}
+                    onChange={(date) => change("deadline", date || null)}
                   />
                 </label>
-                {textField("stage_work", "阶段工作", true)}
-                {textField("notes", "备注", true)}
+                {textField("stage_work", "当前主要工作（选填）", true)}
               </div>
-            </fieldset>
-            <fieldset id="mp-editor-team" disabled={busy}>
-              <legend>项目组成员</legend>
-              <p className="mp-help">点击选择，可搜索并勾选多人；人员在“人员名册”中维护。</p>
-              <div className="mp-fields">
-                {TEAM_ROLES.map(([k, l]) => (
-                  <div className="mp-field" key={k}>
-                    <span>{l}</span>
-                    <PeopleSelect
-                      value={draft.team[k]}
-                      staff={staff}
-                      onChange={(ids) => change("team", { ...draft.team, [k]: ids })}
-                    />
-                  </div>
-                ))}
-              </div>
-            </fieldset>
-            <fieldset disabled={busy}>
-              <legend>下周工作安排</legend>
-              <div className="mp-fields">
-                {textField("next_week_work", "下周主要工作内容", true)}
-                <div className="mp-field">
-                  <span>下周主要使用人员</span>
-                  <PeopleSelect
-                    value={draft.next_week_staff}
-                    staff={staff}
-                    onChange={(ids) => change("next_week_staff", ids)}
-                  />
-                </div>
-              </div>
-            </fieldset>
-            <fieldset id="mp-editor-finance" disabled={busy}>
-              <legend>合同与费用</legend>
-              <p className="mp-help">金额单位均为万元，最多两位小数；未知可留空，0 表示已确认零金额。</p>
-              <div className="mp-fields">
-                {(
-                  [
-                    ["investment", "工程投资"],
-                    ["design_fee", "设计费用"],
-                    ["paid", "设计回款"],
-                    ["invoiced_pending", "请款中（已开发票）"],
-                  ] as const
-                ).map(([k, l]) => (
-                  <label key={k}>
-                    <span>{l}（万）</span>
+              <details className="mp-extra-info">
+                <summary>更多项目信息 · 分类、紧急程度与备注</summary>
+                <div className="mp-fields">
+                  <label>
+                    <span>序号</span>
                     <input
+                      required
                       type="number"
-                      min="0"
-                      step="0.01"
-                      max="999999999999.99"
-                      value={draft[k] ?? ""}
-                      onChange={(e) => change(k, e.target.value || null)}
+                      min={1}
+                      max={100000}
+                      value={draft.sequence}
+                      onChange={(e) => change("sequence", Number(e.target.value))}
                     />
                   </label>
-                ))}
-                {textField("contract", "合同签订情况 / 日期 / 编号")}
-              </div>
+                  <label><span>项目等级</span><select value={/^[ABCD](级)?$/.test(draft.grade) ? draft.grade[0] : draft.grade} onChange={e => change("grade", e.target.value)}>
+                    <option value="">未设置</option>{!["", "A", "B", "C", "D", "A级", "B级", "C级", "D级"].includes(draft.grade) && <option value={draft.grade}>原值：{draft.grade}（请选择等级）</option>}
+                    {["A", "B", "C", "D"].map(value => <option key={value} value={value}>{value}级</option>)}
+                  </select></label>
+                  <label>
+                    <span>紧急程度</span>
+                    <select value={draft.urgency} onChange={(e) => change("urgency", e.target.value)}>
+                      {["常规", "重要", "紧急", "特急"].map((s) => (
+                        <option key={s}>{s}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {textField("mode", "项目模式")}
+                  {textField("source", "项目来源")}
+                  {textField("project_type", "项目类型")}
+                  {textField("phase", "项目阶段")}
+                  <label><span>配合其他分院（选填）</span><select aria-label="配合其他分院" value={draft.collaboration_unit || ""} onChange={e => change("collaboration_unit", e.target.value)}><option value="">本院项目</option>{["一分院", "二分院", "三分院", "其他分院"].filter(name => name !== unit).map(name => <option key={name}>{name}</option>)}</select><small className="mp-help">只登记本院承担的配合工作，不共享其他分院的项目或人员数据。</small></label>
+                  {textField("notes", "备注", true)}
+                </div>
+              </details>
             </fieldset>
+            <details className="mp-editor-section">
+              <summary>
+                人员分工 <small>选填 · 设计、商务及参与人员</small>
+              </summary>
+              <fieldset id="mp-editor-team" disabled={busy}>
+                <legend>项目组成员</legend>
+                <p className="mp-help">点击选择，可搜索并勾选多人；人员在“分院人员池”中维护。</p>
+                <div className="mp-fields">
+                  {TEAM_ROLES.filter(([k]) => k !== "coordinator").map(([k, l]) => (
+                    <div className="mp-field" key={k}>
+                      <span>{l}</span>
+                      <PeopleSelect
+                        value={draft.team[k]}
+                        staff={staff}
+                        onChange={(ids) => change("team", { ...draft.team, [k]: ids })}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </fieldset>
+            </details>
+            <details className="mp-editor-section">
+              <summary>
+                下周工作安排 <small>选填</small>
+              </summary>
+              <fieldset disabled={busy}>
+                <legend>下周工作安排</legend>
+                <label><span>周安排来源</span><select aria-label="周安排来源" value={draft.weekly_plan_mode || "manual"} onChange={e => change("weekly_plan_mode", e.target.value as "manual" | "schedule")}><option value="schedule">按阶段排期自动汇总</option><option value="manual">手工填写（保留原文字）</option></select></label>
+                {draft.weekly_plan_mode === "schedule" ? <div className="mp-week-preview"><p>{nextWeek} — {addDays(nextWeek, 4)} · 调整甘特图日期和人员后自动更新。</p><strong>{scheduledWeek(draft, nextWeek, 5).work || "下周尚无阶段排期"}</strong><p>参与人员：{scheduledWeek(draft, nextWeek, 5).people.map(id => staff.find(s => s.id === id)?.name || `#${id}`).join("、") || "未安排"}</p><button type="button" onClick={() => showProjectSection("schedule")}>编辑阶段排期</button></div> : <>
+                <div className="mp-fields">
+                  {textField("next_week_work", "下周主要工作内容", true)}
+                  <div className="mp-field">
+                    <span>下周主要使用人员</span>
+                    <PeopleSelect
+                      value={draft.next_week_staff}
+                      staff={staff}
+                      onChange={(ids) => change("next_week_staff", ids)}
+                    />
+                  </div>
+                </div>
+                <div className="mp-fields"><PlanningDate label="转排期开始日期" value={conversionStart} onChange={setConversionStart} /><PlanningDate label="转排期结束日期" value={conversionEnd} min={conversionStart} onChange={setConversionEnd} /></div>
+                <button type="button" disabled={!draft.next_week_work.trim() || !conversionStart || !conversionEnd || conversionEnd < conversionStart} onClick={convertWeeklyPlan}>将这段安排加入阶段排期</button><p className="mp-help">确认实际日期后生成一项工作，带入所选人员；保存后进入甘特图和周统计，原文字保留。</p>
+                </>}
+              </fieldset>
+            </details>
+            <details className="mp-editor-section">
+              <summary>
+                合同与费用 <small>选填 · 未知金额留空</small>
+              </summary>
+              <fieldset id="mp-editor-finance" disabled={busy}>
+                <legend>合同与费用</legend>
+                <p className="mp-help">金额单位均为万元，最多两位小数；未知可留空，0 表示已确认零金额。</p>
+                <div className="mp-fields">
+                  {(
+                    [
+                      ["investment", "工程投资"],
+                      ["design_fee", "设计费用"],
+                      ["paid", "设计回款"],
+                      ["invoiced_pending", "请款中（已开发票）"],
+                    ] as const
+                  ).map(([k, l]) => (
+                    <label key={k}>
+                      <span>{l}（万）</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        max="999999999999.99"
+                        value={draft[k] ?? ""}
+                        onChange={(e) => change(k, e.target.value || null)}
+                      />
+                    </label>
+                  ))}
+                  {textField("contract", "合同签订情况 / 日期 / 编号")}
+                  <label><span>签约状态（用于统计）</span><select aria-label="签约状态" value={draft.contract_status || "unknown"} onChange={e => change("contract_status", e.target.value as "signed" | "unsigned" | "unknown")}><option value="unknown">待确认</option><option value="signed">已签订</option><option value="unsigned">未签订</option></select></label>
+                </div>
+              </fieldset>
+            </details>
             <fieldset id="mp-editor-schedule" disabled={busy}>
-              <legend>阶段排期 · 甘特图</legend>
-              <p className="mp-help">每个阶段可安排多人，分配比例应用到每人每天。进度由管理层更新。</p>
+              <legend>工作安排（可稍后填写）</legend>
+              <p className="mp-help">把工作拆成阶段，填写起止日期并选择人员，保存后会显示在项目计划和人员排期中。</p>
+              {!draft.stages.length && (
+                <div className="mp-schedule-empty">
+                  <strong>暂时没有工作安排</strong>
+                  <p>可以先保存项目。有明确计划时，再添加阶段和日期。</p>
+                </div>
+              )}
               {draft.stages.map((s, i) => (
                 <section className="mp-stage" key={s.id}>
                   <div className="mp-fields">
@@ -747,24 +1057,24 @@ export default function ManagementProjectsPage() {
                     </label>
                     <label>
                       <span>开始日期</span>
-                      <input
+                      <PlanningDate
                         required
-                        type="date"
+                        label={`阶段${i + 1}开始日期`}
                         value={s.start}
-                        onChange={(e) =>
-                          editStage(i, { start: e.target.value, ...(s.milestone ? { end: e.target.value } : {}) })
+                        onChange={(date) =>
+                          editStage(i, { start: date, ...(s.milestone ? { end: date } : {}) })
                         }
                       />
                     </label>
                     <label>
                       <span>完成日期</span>
-                      <input
+                      <PlanningDate
                         required
-                        type="date"
+                        label={`阶段${i + 1}完成日期`}
                         min={s.start}
                         disabled={s.milestone}
                         value={s.end}
-                        onChange={(e) => editStage(i, { end: e.target.value })}
+                        onChange={(date) => editStage(i, { end: date })}
                       />
                     </label>
                     <label>
@@ -778,17 +1088,6 @@ export default function ManagementProjectsPage() {
                         onChange={(e) => editStage(i, { progress: Number(e.target.value) })}
                       />
                     </label>
-                    <label>
-                      <span>每人分配（%）</span>
-                      <input
-                        required
-                        type="number"
-                        min={1}
-                        max={100}
-                        value={s.allocation}
-                        onChange={(e) => editStage(i, { allocation: Number(e.target.value) })}
-                      />
-                    </label>
                     <div className="mp-field">
                       <span>安排人员</span>
                       <PeopleSelect
@@ -797,25 +1096,42 @@ export default function ManagementProjectsPage() {
                         onChange={(ids) => editStage(i, { assignees: ids })}
                       />
                     </div>
-                    <label className="mp-inline">
-                      <input
-                        type="checkbox"
-                        checked={s.milestone}
-                        onChange={(e) =>
-                          editStage(i, { milestone: e.target.checked, ...(e.target.checked ? { end: s.start } : {}) })
-                        }
-                      />
-                      里程碑
-                    </label>
-                    <label>
-                      <span>排期说明</span>
-                      <input
-                        maxLength={2000}
-                        value={s.notes}
-                        onChange={(e) => editStage(i, { notes: e.target.value })}
-                      />
-                    </label>
                   </div>
+                  <details className="mp-stage-options">
+                    <summary>更多设置 · 投入比例、里程碑与说明</summary>
+                    <p className="mp-help">默认每人投入100%。同一天兼顾多个项目时，可按实际安排调整比例。</p>
+                    <div className="mp-fields">
+                      <label>
+                        <span>每人分配（%）</span>
+                        <input
+                          required
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={s.allocation}
+                          onChange={(e) => editStage(i, { allocation: Number(e.target.value) })}
+                        />
+                      </label>
+                      <label className="mp-inline">
+                        <input
+                          type="checkbox"
+                          checked={s.milestone}
+                          onChange={(e) =>
+                            editStage(i, { milestone: e.target.checked, ...(e.target.checked ? { end: s.start } : {}) })
+                          }
+                        />
+                        里程碑
+                      </label>
+                      <label>
+                        <span>排期说明</span>
+                        <input
+                          maxLength={2000}
+                          value={s.notes}
+                          onChange={(e) => editStage(i, { notes: e.target.value })}
+                        />
+                      </label>
+                    </div>
+                  </details>
                   <button
                     type="button"
                     onClick={() =>
@@ -852,17 +1168,20 @@ export default function ManagementProjectsPage() {
               </button>
             </fieldset>
             <footer>
-              <label className="mp-inline">
-                <input
-                  type="checkbox"
-                  disabled={busy}
-                  checked={draft.archived}
-                  onChange={(e) => change("archived", e.target.checked)}
-                />
-                归档项目（可从已归档列表恢复）
-              </label>
-              <button className="mp-primary" disabled={busy} type="submit">
-                {busy ? "正在保存…" : "保存项目与排期"}
+              {draft.id && <button type="button" className="mp-danger" disabled={busy || planDirty || planSaving} onClick={() => changeDeleted(draft, true)}>删除项目</button>}
+              {draft.id && (
+                <label className="mp-inline">
+                  <input
+                    type="checkbox"
+                    disabled={busy}
+                    checked={draft.archived}
+                    onChange={(e) => change("archived", e.target.checked)}
+                  />
+                  归档项目（可从已归档列表恢复）
+                </label>
+              )}
+              <button className="mp-primary" aria-busy={busy} disabled={busy} type="submit">
+                {busy ? "正在保存…" : draft.id ? "保存修改" : "创建项目"}
               </button>
             </footer>
             <p className="mp-help">每次保存保留版本记录；移除阶段只影响新版本。</p>
@@ -872,7 +1191,8 @@ export default function ManagementProjectsPage() {
       {staffDraft ? (
         <div className="mp-modal">
           <form className="mp-small-editor" onSubmit={saveStaff} role="dialog" aria-modal="true" aria-label="编辑人员">
-            <h2>人员信息</h2>
+            <h2>{unitName(unit)} · 人员信息</h2>
+            <p className="mp-help">只填姓名即可添加，职务可以稍后补充；添加人员不会开通网站账号。</p>
             {error ? (
               <p role="alert" className="mp-error">
                 {error}
@@ -896,6 +1216,16 @@ export default function ManagementProjectsPage() {
                   onChange={(e) => setStaffDraft({ ...staffDraft, position: e.target.value })}
                 />
               </label>
+              <label>
+                人员归属
+                <select aria-label="人员归属" value={staffDraft.employment_type || "unknown"} onChange={e => setStaffDraft({ ...staffDraft, employment_type: e.target.value as Staff["employment_type"] })}>
+                  <option value="unknown">待确认</option><option value="internal">QMDH 内部</option><option value="external">外包人员</option>
+                </select>
+              </label>
+              <label>
+                所属单位
+                <input maxLength={150} placeholder={staffDraft.employment_type === "internal" ? "QMDH" : "例如：外包公司名称"} value={staffDraft.employer || ""} onChange={e => setStaffDraft({ ...staffDraft, employer: e.target.value })} />
+              </label>
               <label className="mp-inline">
                 <input
                   type="checkbox"
@@ -909,58 +1239,14 @@ export default function ManagementProjectsPage() {
               <button type="button" disabled={busy} onClick={() => setStaffDraft(null)}>
                 取消
               </button>
-              <button className="mp-primary" disabled={busy}>
-                保存人员
+              <button className="mp-primary" aria-busy={busy} disabled={busy}>
+                {busy ? "正在保存…" : "保存人员"}
               </button>
             </footer>
           </form>
         </div>
       ) : null}
-      {reportDraft ? (
-        <div className="mp-modal">
-          <form
-            className="mp-small-editor"
-            onSubmit={saveReport}
-            role="dialog"
-            aria-modal="true"
-            aria-label="编辑台账信息"
-          >
-            <h2>台账信息</h2>
-            {error ? (
-              <p role="alert" className="mp-error">
-                {error}
-              </p>
-            ) : null}
-            <fieldset disabled={busy}>
-              <label>
-                表格编制
-                <input
-                  maxLength={150}
-                  value={reportDraft.compiler}
-                  onChange={(e) => setReportDraft({ ...reportDraft, compiler: e.target.value })}
-                />
-              </label>
-              <label>
-                数据更新日期
-                <input
-                  type="date"
-                  required
-                  value={reportDraft.data_as_of || ""}
-                  onChange={(e) => setReportDraft({ ...reportDraft, data_as_of: e.target.value })}
-                />
-              </label>
-            </fieldset>
-            <footer>
-              <button type="button" disabled={busy} onClick={() => setReportDraft(null)}>
-                取消
-              </button>
-              <button className="mp-primary" disabled={busy}>
-                保存信息
-              </button>
-            </footer>
-          </form>
-        </div>
-      ) : null}
+
     </section>
   );
 }

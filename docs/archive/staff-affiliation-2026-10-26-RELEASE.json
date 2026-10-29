@@ -1,0 +1,45 @@
+{
+  "status": "DEPLOYED_VERIFIED",
+  "source_commit": "701cad9c47b8325a740e995190e040345e3b51b0",
+  "images": {
+    "backend": "sha256:8794741beec9a440b61bb68a1d8a10e97ebe34d6cdbf25c14f8eb0073a62fe1f",
+    "worker": "sha256:02ab3019fd2a7871dbf069d8c10778702005952b11a421f177905cd28fc734d0",
+    "frontend": "sha256:f41100cbf94cca66c9203a4339bca578c0c9a6b6e849e0402a90fc1752eb3d33"
+  },
+  "database_revision": "a83cd184e068",
+  "data_checks": {
+    "groups_merged": true,
+    "unit_active_staff": [
+      15,
+      26,
+      8
+    ],
+    "second_unit_internal": 19,
+    "second_unit_external": 7,
+    "second_unit_inactive": 1,
+    "departure_account_disabled": true,
+    "migration": "a83cd184e068"
+  },
+  "public_asset_count": 9,
+  "frontend_files_checked": 51,
+  "public_routes_checked": 9,
+  "environment_mounts_networks_preserved": true,
+  "qwen_reference_counts": [
+    1,
+    2
+  ],
+  "accounts_created": 0,
+  "compose_files": [
+    "/www/wwwroot/qmdh-web/docker-compose.yml",
+    "/opt/qmdh-frp/compose.frp.yml",
+    "/opt/qmdh-frp/releases/staff-affiliation-20261026/compose.release.yml"
+  ],
+  "workflow_root": "/opt/qmdh-frp/releases/management-categories-20261026/workflows",
+  "disk_free_GiB": 8.276493072509766,
+  "paired_backup_checksum_files": 26,
+  "targeted_backend_tests": 26,
+  "targeted_frontend_tests": 10,
+  "browser_scenarios": 3,
+  "changed_file_type_errors": 0,
+  "restored_data_rehearsal": "users, management staff, projects and revisions; no production writes; temporary containers removed"
+}

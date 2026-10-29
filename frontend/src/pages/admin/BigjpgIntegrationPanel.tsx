@@ -1,4 +1,5 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent } from "react";
+import { useSettingsDraft } from "./useSettingsDraft";
 
 import {
   api,
@@ -50,37 +51,25 @@ function buildPayload(draft: BigjpgDraft): ProviderProfileCreatePayload {
 }
 
 export default function BigjpgIntegrationPanel({ profile, onRefresh }: BigjpgIntegrationPanelProps) {
-  const [draft, setDraft] = useState<BigjpgDraft>(() => toDraft(profile));
-  const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const editor = useSettingsDraft(toDraft(profile), profile, profile?.id ?? null, onRefresh);
+  const draft = editor.values;
+  const { saving, feedback } = editor;
+  const hasProfile = typeof editor.entity === "number";
 
-  useEffect(() => {
-    setDraft(toDraft(profile));
-  }, [profile]);
-
-
-  const hasProfile = Boolean(profile);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setFeedback(null);
-
-    const baseUrl = draft.baseUrl.trim();
-    if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
-      setFeedback({ tone: "error", message: "API 地址必须是有效的 http(s) URL。" });
-      return;
-    }
-
-    if (!hasProfile && !draft.apiKey.trim()) {
-      setFeedback({ tone: "error", message: "首次接入请填写 API Key。" });
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const payload = buildPayload(draft);
-      if (hasProfile && profile) {
-        await api.updateProviderProfile(profile.id, {
+    return editor.run(async (operation) => {
+      const draft = operation.capture.values, hasProfile = typeof operation.entity === "number";
+      const baseUrl = draft.baseUrl.trim();
+      if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+        editor.report(operation, { tone: "error", message: "API 地址必须是有效的 http(s) URL。" }); return;
+      }
+      if (!hasProfile && !draft.apiKey.trim()) {
+        editor.report(operation, { tone: "error", message: "首次接入请填写 API Key。" }); return;
+      }
+      try {
+        const payload = buildPayload(draft);
+        const saved = hasProfile ? await api.updateProviderProfile(operation.entity as number, {
           display_name: payload.display_name,
           base_url: payload.base_url,
           model_name: payload.model_name,
@@ -98,19 +87,15 @@ export default function BigjpgIntegrationPanel({ profile, onRefresh }: BigjpgInt
           reference_mode: payload.reference_mode,
           reference_caption_model: payload.reference_caption_model,
           ...(draft.apiKey.trim() ? { api_key: draft.apiKey.trim() } : {}),
-        });
-      } else {
-        await api.createProviderProfile({ ...payload, api_key: draft.apiKey.trim() });
-      }
-      setDraft((current) => ({ ...current, apiKey: "" }));
-      await onRefresh();
-      setFeedback({ tone: "success", message: "高清放大服务已保存，历史卡片「放大」将使用此连接。" });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "保存失败，请稍后重试。";
-      setFeedback({ tone: "error", message });
-    } finally {
-      setSaving(false);
-    }
+        }) : await api.createProviderProfile({ ...payload, api_key: draft.apiKey.trim() });
+        const createdId = !hasProfile && Number.isSafeInteger(saved.id) && saved.id > 0 ? saved.id : undefined;
+        editor.confirm(operation, { baseUrl: saved.base_url || payload.base_url, enabled: saved.enabled ?? draft.enabled, apiKey: "" }, undefined, createdId);
+        if (!hasProfile && createdId === undefined) editor.markUnconfirmedCreation(operation);
+        try { await editor.refreshAfter(); }
+        catch { editor.report(operation, { tone: "error", message: "高清放大配置已保存，但状态刷新失败；当前输入已保留，请刷新状态。" }, false); return; }
+        editor.report(operation, { tone: "success", message: "原提交的高清放大配置已保存；期间继续编辑的地址和密钥仍需保存。" }, false);
+      } catch (error) { editor.report(operation, { tone: "error", message: error instanceof Error ? error.message : "保存失败，请稍后重试。" }); }
+    });
   }
 
   return (
@@ -128,7 +113,7 @@ export default function BigjpgIntegrationPanel({ profile, onRefresh }: BigjpgInt
             <span>API 地址</span>
             <input
               value={draft.baseUrl}
-              onChange={(event) => setDraft((current) => ({ ...current, baseUrl: event.target.value }))}
+              onChange={(event) => editor.setField(["baseUrl"], event.target.value)}
               placeholder={BIGJPG_DEFAULT_BASE_URL}
               autoComplete="off"
             />
@@ -140,7 +125,7 @@ export default function BigjpgIntegrationPanel({ profile, onRefresh }: BigjpgInt
               name="upscale-api-key"
               type="password"
               value={draft.apiKey}
-              onChange={(event) => setDraft((current) => ({ ...current, apiKey: event.target.value }))}
+              onChange={(event) => editor.setField(["apiKey"], event.target.value)}
               placeholder={hasProfile ? `已保存：${profile?.masked_api_key || "****"}，留空则不修改` : "粘贴 32 位密钥（仅密钥本身，不要带 X-API-KEY: 前缀）"}
               autoComplete="new-password"
             />
@@ -154,7 +139,7 @@ export default function BigjpgIntegrationPanel({ profile, onRefresh }: BigjpgInt
             <input
               type="checkbox"
               checked={draft.enabled}
-              onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}
+              onChange={(event) => editor.setField(["enabled"], event.target.checked)}
             />
           </label>
 
@@ -168,6 +153,9 @@ export default function BigjpgIntegrationPanel({ profile, onRefresh }: BigjpgInt
           </div>
         </form>
 
+        {editor.hasChanges ? <p className="settings-feature-toggle-meta">有未保存修改，刷新会保留当前输入。</p> : null}
+        {editor.hasConflict ? <div className="floating-error">服务器配置或配置对象已变化，当前输入已保留；请核对后加载服务器配置。</div> : null}
+        {editor.hasChanges || editor.hasConflict ? <button type="button" className="ghost-button" onClick={editor.loadRemote}>加载服务器配置</button> : null}
         {feedback ? (
           <div className={feedback.tone === "success" ? "floating-success" : "floating-error"}>{feedback.message}</div>
         ) : null}

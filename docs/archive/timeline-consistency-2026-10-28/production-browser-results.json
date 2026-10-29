@@ -1,0 +1,43 @@
+{
+  "results": [
+    {
+      "name": "Published-format bundle: 12px personnel end drag visibly grows a day and fixes start",
+      "passed": true
+    },
+    {
+      "name": "Personnel short shrink and start adjustment respond; movements under 6px stay unchanged",
+      "passed": true
+    },
+    {
+      "name": "On-screen bottom-edge hold expands temporary date rows and scrolls beyond Sunday",
+      "passed": true
+    },
+    {
+      "name": "Temporary extension and short-drag preview cancel cleanly with Escape",
+      "passed": true
+    },
+    {
+      "name": "Project plan has visible in-bar endpoints and 12px right resize fixes start",
+      "passed": true
+    },
+    {
+      "name": "Project left resize fixes end and dates synchronize back into the people view",
+      "passed": true
+    },
+    {
+      "name": "Project Escape cancels native resize and both views keep their saved dates",
+      "passed": true
+    },
+    {
+      "name": "Project resize conflict preserves preview and can retry without changing other work",
+      "passed": true
+    },
+    {
+      "name": "Mobile short touch drag updates the personnel end, and motion preferences remain supported",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "productionBundle": true,
+  "network": "loopback fixture only"
+}

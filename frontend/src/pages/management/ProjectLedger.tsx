@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { cell, LEDGER_COLUMNS, type PlanningProject, type Staff } from "./planning";
+import { projectTint, cell, LEDGER_COLUMNS, type PlanningProject, type Staff } from "./planning";
 const INITIAL_COLUMNS = [
   "sequence",
   "name",
@@ -53,6 +53,7 @@ export default function ProjectLedger({
               <option value="phase">项目阶段</option>
               <option value="coordinator">项目统筹</option>
               <option value="urgency">紧急程度</option>
+              <option value="grade">项目等级</option><option value="source">项目来源</option><option value="project_type">项目类型</option><option value="mode">项目模式</option><option value="contract_status">签约状态</option>
             </select>
           </label>
           <details className="mp-column-picker">
@@ -151,11 +152,11 @@ function Group({
           {visible.map(([key]) => (
             <td key={key} className={key === "name" ? "mp-project-name-cell" : ""}>
               {key === "name" ? (
-                <button className="mp-project-name" onClick={() => onEdit(p)}>
-                  <span className="mp-project-symbol" aria-hidden="true">
+                <button className="mp-project-name" title="点击编辑项目详情" onClick={() => onEdit(p)}>
+                  <span className="mp-project-symbol" aria-hidden="true" style={{color:projectTint(p)}}>
                     ▤
                   </span>
-                  <strong>{p.name}</strong>
+                  <strong>{p.name}</strong><span className="mp-project-edit-hint">编辑 ✎</span>
                 </button>
               ) : key === "urgency" ? (
                 <span className={p.urgency === "紧急" || p.urgency === "特急" ? "mp-badge danger" : "mp-badge muted"}>

@@ -1,0 +1,20 @@
+{
+  "diagnostics": [
+    {
+      "case": "extend last day beyond week",
+      "feedback": "调整结束 · 开始固定\n2026-10-26 — 2026-11-01\n松开应用 · Esc 取消"
+    },
+    {
+      "savedEnd": "2026-11-01"
+    },
+    {
+      "case": "clipped work bottom handle",
+      "handles": 0
+    },
+    {
+      "case": "move grip distance from start handle",
+      "gap": 2
+    }
+  ],
+  "errors": []
+}

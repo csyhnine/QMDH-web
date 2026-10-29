@@ -1,0 +1,44 @@
+{
+  "results": [
+    {
+      "name": "Real generation controller and canvas keep matching tabs fixed while content scrolls",
+      "passed": true
+    },
+    {
+      "name": "Five admin groups expose only current-group children; one sticky row replaces duplicate template tabs",
+      "passed": true
+    },
+    {
+      "name": "Ops keeps the original six allowed modules and original protected URLs reject forbidden routes",
+      "passed": true
+    },
+    {
+      "name": "390px generator and canvas tabs stay fixed without losing scrollable work areas",
+      "passed": true
+    },
+    {
+      "name": "Mobile admin groups and child navigation stay visible while long content scrolls",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "writes": [],
+  "syntheticReadPaths": [
+    "/api/v1/auth/me",
+    "/api/v1/announcements/active",
+    "/api/v1/settings/platform",
+    "/api/v1/health",
+    "/api/v1/projects",
+    "/api/v1/providers",
+    "/api/v1/workflows",
+    "/api/v1/tasks",
+    "/api/v1/prompt-templates",
+    "/api/v1/assets",
+    "/api/v1/canvas-projects",
+    "/api/v1/canvas-projects/1",
+    "/api/v1/feedback/admin/pending-count",
+    "/api/v1/prompt-templates/admin/shared",
+    "/api/v1/canvas-templates/admin",
+    "/api/v1/inspiration"
+  ]
+}

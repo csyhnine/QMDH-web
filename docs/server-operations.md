@@ -1,4 +1,57 @@
-## 2026-10-19 ComfyUI 生产闭环（当前）
+2026-10-28当前基线：结束端短拖/日格对齐/项目计划反馈同步，前端源码dcce45a/镜像5c627d5ca11a，backend dad05b8dc047、三worker fa3f8984f8a4，迁移b94de295f179。第三Compose：`/opt/qmdh-frp/releases/timeline-consistency-20261028/compose.release.yml`，Qwen挂载仍依赖`management-categories-20261026/workflows`。24定向/23目标strict零新增/9实际Vite包+10回归、52文件/10资源/26地址（含实际管理`/management/projects`）通过。只替前端，后端/三worker/其他容器未重启，env/挂载/网络/8工作流保持，无迁移/生产测试写入/清理。配对备份`release-20261028-timeline-consistency`26文件两端SHA一致，DB/媒体经pillar-handles及此前前端轮继承unit-access独立恢复链/本机基础包，非新快照。盘余约8.231GiB，后续复测8GiB。旧缓存链早已清理，不重跑或扩展。详见[交接](handoff-management-2026-10-27.md)与[记录](timeline-consistency-2026-10-28.md)，旧Git不能直接pull重建。
+
+以下为历史发布条目；当前版本与路径以上述入口及新交接为准，不按旧段落执行。
+
+2026-10-26Studio入口归并已上线：前端7a31b8c/01a2fb29f9df，灵感/反馈/导航归其他，画布归生成，保留原地址和权限；18定向/8目标strict0/浏览器4场景及51文件和公网资源核对通过。仅前端替换，后端/三worker和业务数据保持。当前第三Compose为/opt/qmdh-frp/releases/navigation-merge-20261026/compose.release.yml，模板仍依赖management-categories-20261026/workflows。配对备份23文件SHA一致。见[记录](navigation-merge-2026-10-26.md)，72待验收/25冻结/R98保持。
+
+以下为此前记录，当前前端及Compose以顶部为准。
+
+2026-10-26自动保存已上线：前端3745c5b/镜像a6acf0585e54，已有项目资料和已应用甘特/人员排期停顿约1秒保存，可按账号关闭，失败/冲突保留草稿并停止自动重试；新项目首次仍需创建。7浏览器场景/15定向/7目标strict0通过，51文件及公网包一致。后端/三worker/分院和业务数据保持；当前第三Compose为/opt/qmdh-frp/releases/planning-autosave-20261026/compose.release.yml，模板仍依赖management-categories-20261026/workflows。配对备份23文件SHA一致。见[记录](planning-autosave-2026-10-26.md)，72待验收/25冻结/R98保持。
+
+以下为此前时点记录，当前前端及Compose以顶部为准。
+
+2026-10-26甘特直接管理已上线：前端源码7cdfcb1/镜像6a33c791833c，显示全部工作/完整日期、明确添加编辑入口、图旁编辑人员与内容、自定义月历，真实鼠标移动/拉伸及保存/冲突/窄屏通过。仅前端替换，后端/三worker/分院权限和业务数据保持；当前第三Compose为/opt/qmdh-frp/releases/gantt-direct-20261026/compose.release.yml，继续依赖management-categories-20261026/workflows。配对备份23文件SHA一致。见[记录](gantt-direct-2026-10-26.md)，72待验收/25冻结/R98保持。
+
+下方记录为此前时点，当前前端与Compose以顶部为准。
+
+2026-10-26管理导航已发布：前端85c4650/3b65e290098a，固定四页宽度与子菜单吸顶，增加页面用途和分院边界说明；隔离定向22、前端15、浏览器5场景通过。后端/三worker仍8080b23，f62迁移/42名册与项目保持；仅前端替换。当前第三Compose为/opt/qmdh-frp/releases/management-navigation-20261026/compose.release.yml，并继续依赖management-categories-20261026/workflows。23文件配对备份SHA一致。见[记录](management-navigation-2026-10-26.md)，72待验收/25冻结/R98状态保持。
+
+以下为此前记录，当前前端及Compose以顶部为准。
+
+## 2026-10-26 分院人员与项目回收站（此前）
+
+2026-10-26分院名册/删除已部署：运行源码8080b23，生产迁移f62ab073d957；一院15、合并后二院19、三院8，新增37/关联原5，共42人，原项目/账号分组和授权保持。已授权公司admin切换三院，院管理者仍本院。项目详情可删除到回收站并恢复。27文件配对备份SHA一致；当前第三Compose为/opt/qmdh-frp/releases/management-categories-20261026/compose.release.yml。详见[发布记录](management-categories-2026-10-26.md)。草稿PR #5未合并，72待验收/25冻结/R98保持。
+
+当前backend8b4a302d882f/workerf940856c2fce三副本/frontendc0f7038ea117，保留主Compose+FRP+上述第三Compose、同目录workflows只读绑定。当前私有配对备份release-20261026-management-categories，媒体26归档链仍需本机两包。回退不得降迁移或覆盖新业务库；旧管理API不理解deleted，有回收站项目时必须采用兼容过滤版本或向前修复，不能直接暴露旧列表。详见发布记录。
+
+## 2026-10-26 人员工作台与 Qwen 双图发布（此前）
+
+2026-10-26双功能已部署：运行源码d96d508已推送，人员跨项目甘特/拖拽分工与Qwen v1.1单/双图自动路由上线。公开输入数[1,2]、隔离PG保存/409与接收/幂等、公网新包通过；backend健康/3worker/frontend运行，生产迁移仍e51，无GPU出图。26文件配对备份SHA一致，25媒体归档链仍需本机两份基础包。当前第三Compose改为/opt/qmdh-frp/releases/people-qwen-20261026/compose.release.yml，工作流绑定同目录/workflows，禁止旧Git重建。详见[发布记录](release-people-qwen-2026-10-26.md)。草稿PR #5未合并，72待验收/25冻结/R98状态保持。
+
+当前镜像 backend `5d437ea00900`、worker `42ae70742308`（3副本）、frontend `5310a91ceac0`；三份 Compose 为主文件 + `/opt/qmdh-frp/compose.frp.yml` + `/opt/qmdh-frp/releases/people-qwen-20261026/compose.release.yml`，使用 `--no-build --pull never --scale worker=3`。发布目录现为生效运行材料，不得按临时候选清理；backend/worker只读工作流挂载从旧根改到该目录 `workflows`（8文件），旧根原样保留。
+
+配对备份 `/www/backup/qmdh-release-20261026-people-qwen` ↔ `E:/backups/QMDH-web/release-20261026-people-qwen`。回退先暂停/排空并核上游，用当前目录 `compose.rollback.yml` 和旧镜像标签 `20261026-people-qwen`，同时恢复旧模板绑定和审计恢复旧展示名，不降迁移/覆盖业务数据。所有此前段落只反映对应历史时点，当前完整操作以本段和发布记录为准。
+
+## 2026-10-26修复发布（此前）
+
+2026-10-26发布完成：源码e6add45已推送，草稿PR #5未合并；backend健康/3worker运行/frontend新包生效，生产迁移e51、源码/静态包/公网核验通过。23文件私有配对备份SHA一致，24媒体归档恢复链中2个基础包依赖本机。当前第三Compose和有效发布目录必须保留，详见[执行记录](release-execution-2026-10-26.md)。72待验收、25冻结及R98唯一DONE保持。
+
+当前镜像backend65a9cfbe7969/worker3783fe13579c三副本/frontenddf9975fa4bb7，实际迁移e51。保留主Compose + /opt/qmdh-frp/compose.frp.yml + /opt/qmdh-release-candidate-20261025/compose.release.yml，禁止旧Git重建，candidate目录现在是生效发布目录。env/key/挂载/网络/ODA/FFmpeg/Xvfb保持。
+
+配对备份 /www/backup/qmdh-release-20261026 ↔ E:/backups/QMDH-web/release-20261026，23文件SHA一致；媒体5843文件/15增量66179868字节。resolved-media-chain.json按24归档恢复，完整基础包及一段早期增量仅本机持有，必须结合本机基础包。旧缺链已在新清单中解析，旧归档未改。回滚先暂停入口/排空与核上游，使用compose.rollback.yml和qmdh-release-backup-{backend,worker,frontend}:20261026；只退镜像、不降迁移/覆盖新业务数据。无真实生成/GPU/历史补账或清理。
+
+## 2026-10-19 Qwen v1.1 运行切换（此前）
+
+- 后续种子热修qwen-v11-009已发布，当前backendf8822343/worker3cc0ece1（三副本），frontend仍d5dfe72b。只更新comfyui适配器，修复easy seed 2^50含上界的随机/显式/批量范围；任务8264被拒绝的失败记录不重跑。固定源码与镜像见/opt/qmdh-frp/releases/qwen-v1.1-seed-fix-20261019，主RELEASE.json已记录热修SHA；旧Git HEAD不能用于覆盖当前镜像。
+- 热修备份/www/backup/qmdh-qwen-v11-seed-fix-20261019 ↔ E:/backups/QMDH-web/frp-20261019/qwen-v11-seed-fix，21文件SHA一致，DB/env/5828媒体清单/0增量，恢复链接上一v1.1发布备份；回退镜像标签20261019-qwen-v11-seed-fix仅回到种子未修版本，不能作为继续使用的稳定方案。模板/前端/原容器/env/挂载/网络/迁移保持。Windows/Linux专项27+12sub、实际object_info范围/公开健康/六CAD通过，无GPU生成验证。下方首次切换镜像为此前状态。
+
+- 用户明确命令切换后，03e845d准备源码已发布：backend6d3c4d91、workerfa6f6e69（3副本）、frontendd5dfe72b；活跃map ae4127ee5d20a1239a8ac597f4ae1183b9126a8c5250d4842bafca4e3b511c94。id60显示v1.1、id62显示v1.1单图编辑/API reference_input_count=1；Z/三渠道enabled/600秒预算不变。未提交GPU任务，不能声称实际生成/耗时/显存通过。
+- 无commit/push/merge，服务器Git仍c70eac02且工作树未修改；运行版本以`/opt/qmdh-frp/releases/qwen-v1.1-20261019/RELEASE.json`为准。源码tar来自03e845d已核验哈希，专用Dockerfile继承发布前镜像，仅改providers/schemas/comfyui并新增静态检查器，保留生产差异。重建不得直接用服务器旧Git源码覆盖当前镜像；本地c39d8e71a624空库迁移修复未发布，线上仍b27d0f85c932。
+- 排空所有Task/dispatch与上游队列/锁后暂停入口，成套替换前后端/模板；主Compose+FRP叠加文件、3worker、原挂载/网络保持。FRP/PG/Redis/Meilisearch及其他容器ID/镜像/启动时间、env/key均保持。
+- 备份`/www/backup/qmdh-qwen-v11-release-20261019` ↔ `E:/backups/QMDH-web/frp-20261019/qwen-v11-release`，27文件两端SHA一致，含DB/env/旧模板/Git bundle/源码/验证；5828媒体清单/5增量51190080字节，恢复链继承comfy-feedback及原全链。旧镜像`qmdh-release-backup-{backend,worker,frontend}:20261019-qwen-v11`保留。回退须先停止新入口、排空并核对v1.1任务/上游，再还原旧模板map与旧镜像、旧展示名；不downgrade/不清锁/不覆盖新业务库。
+- Linux隔离后端23+8sub、三图合同、前端53/23既有TS0新增/构建、公开单图API/三份bundle SHA/健康/六CAD401通过；backend/worker读取object_info确认节点类可用，仅GET。详细事实见qwen-v1.1-preparation.md与archive/handoff-2026-10-19-qwen-v11-activation.md。
+
+## 2026-10-19 ComfyUI 生产闭环（此前）
 
 - 功能7a9874b、生产功能合并cb2bc791；迁移b27d0f85c932追加两表。backend fc3ac003/worker1fbaa318/frontend3c01a252已运行，env/key不变，ODA/FFmpeg/Xvfb/Nano Banana保留；FRP/数据库/cache/search容器ID与启动时间保持。
 - 必须使用 `docker compose -f docker-compose.yml -f /opt/qmdh-frp/compose.frp.yml ...` 并保留3worker；main单文件重建会丢专网/模板。最终私有构建输入 /opt/qmdh-frp/Dockerfile.closure 基于旧运行镜像复制合并后代码，源Git bundle与FRP运行包随发布备份保存。全量重建仍保留原ODA包/build args，不覆盖生产差异。

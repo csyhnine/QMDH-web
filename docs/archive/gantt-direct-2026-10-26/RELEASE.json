@@ -1,0 +1,37 @@
+{
+  "source_commit": "7cdfcb19f47e5145387472511a4804353466ed75",
+  "frontend_sha256": "dc9664f3633c57f4e0e93298089b5c1a4f5352f6b3ca2a9720031dda77cd8723",
+  "status": "DEPLOYED_VERIFIED",
+  "frontend_image": "sha256:6a33c791833c38c834986a8e9892a4a2f626f3476c9e9ff2575731884d4629e6",
+  "backend_worker_unchanged": true,
+  "non_frontend_containers_unchanged": true,
+  "frontend_files_checked": 51,
+  "public_assets": [
+    {
+      "file": "index.html",
+      "sha256": "bd0b56c80a5404499153653bdeda648c66b23433351d9f44997823624aa3c067"
+    },
+    {
+      "file": "assets/ManagementProjectsPage-BVBDJgwT.css",
+      "sha256": "65500ee8904a3bafaa534a82c8d252e171e321a6c83e8f21f2885c0c5ea0dc1a"
+    },
+    {
+      "file": "assets/ManagementProjectsPage-BIhFLKYQ.js",
+      "sha256": "d50689ee34012a83d7d699f5e2e3dfdf717358c155a334b07d2884f088c2ecc5"
+    },
+    {
+      "file": "assets/index-DC2reA5R.js",
+      "sha256": "dcf0888e63d72cc30ba25eb03b8fec20cf0dc09b3c7685c198f2b35885c1feee"
+    }
+  ],
+  "migration_executed": false,
+  "business_data_written": false,
+  "compose_files": [
+    "/www/wwwroot/qmdh-web/docker-compose.yml",
+    "/opt/qmdh-frp/compose.frp.yml",
+    "/opt/qmdh-frp/releases/gantt-direct-20261026/compose.release.yml"
+  ],
+  "workflow_root_preserved": "/opt/qmdh-frp/releases/management-categories-20261026/workflows",
+  "disk_free_GiB": 8.50186538696289,
+  "paired_backup_sha256_matched_files": 23
+}

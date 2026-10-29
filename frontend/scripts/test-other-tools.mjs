@@ -7,17 +7,52 @@ import ts from 'typescript';
 import { renderToStaticMarkup } from 'react-dom/server';
 const require = createRequire(import.meta.url);
 
+function shared(name) {
+  const exports={};
+  const code=ts.transpileModule(readFileSync(new URL(`../src/features/studio/${name}`,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+  vm.runInNewContext(code,{exports,require(n){
+    if(n.endsWith('/studioNavigation'))return shared('studioNavigation.ts');
+    if(n.endsWith('.css'))return {};
+    if(n.endsWith('/featureFlags'))return {isStudioCanvasEnabled:true};
+    if(n==='react-router-dom')return {Link:({to,children,...props})=>require('react').createElement('a',{...props,href:to},children)};
+    return require(n);
+  }});return exports;
+}
+
+// Static render fixtures retain the old history preset through the actual new Hook.
+function gifDisplayFixture(args, historyPreset) {
+  let cursor = 0;
+  const slots = [], layouts = [];
+  const react = {
+    useState: initial => { const i = cursor++; slots[i] ??= { value: typeof initial === 'function' ? initial() : initial }; return [slots[i].value, () => {}]; },
+    useRef: initial => { const i = cursor++; return slots[i] ??= { current: initial }; },
+    useMemo: (factory, deps) => { const i = cursor++; if (!slots[i] || deps.some((value, j) => value !== slots[i].deps[j])) slots[i] = { deps, value: factory() }; return slots[i].value; },
+    useLayoutEffect: (setup, deps) => { const i = cursor++; if (!slots[i] || deps.some((value, j) => value !== slots[i].deps[j])) { slots[i] = { deps }; layouts.push(setup); } },
+    useEffect() {},
+  };
+  const exports = {}, code = ts.transpileModule(readFileSync(new URL('../src/pages/studio/useGifDisplay.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+  vm.runInNewContext(code, { exports, require(name) { if (name === 'react') return react; if (name === '../../api') return { api: {} }; throw new Error(`undeclared display fixture import ${name}`); } });
+  const render = () => { cursor = 0; return exports.useGifDisplay(args[0], args[1], args[2], false); };
+  const first = render();
+  for (const setup of layouts.splice(0)) setup();
+  if (historyPreset) first.showHistory(historyPreset);
+  return render();
+}
+
 function load(file, states = []) {
   let i = 0, lazyIndex = 0;
   const exports = {};
   const source = readFileSync(new URL(`../src/pages/studio/${file}.tsx`, import.meta.url), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   vm.runInNewContext(code, { exports, require(name) {
-    if (name === 'react') return { lazy: () => { const label = lazyIndex++ === 0 ? 'CAD parser' : 'GIF tool'; return () => label; }, Suspense: ({ children }) => children, useEffect() {}, useRef: () => ({ current: 0 }), useState(initial) { return [states[i++] ?? initial, () => {}]; } };
+    if(name.endsWith('/StudioSectionTabs'))return shared('StudioSectionTabs.tsx');
+    if(name.endsWith('/studioNavigation'))return shared('studioNavigation.ts');
+    if (name === 'react') return { lazy: () => { const label = lazyIndex++ === 0 ? 'CAD parser' : 'GIF tool'; return () => label; }, Suspense: ({ children }) => children, useEffect() {}, useLayoutEffect() {}, useRef: () => ({ current: 0 }), useState(initial) { return [states[i++] ?? initial, () => {}]; } };
     if (name === 'react-router-dom') return { useNavigate: () => () => {}, useSearchParams: () => [new URLSearchParams()], Link: ({ to, children }) => require('react').createElement('a', { href: to }, children), NavLink: ({ to, children }) => require('react').createElement('a', { href: to }, children) };
     if (name.endsWith('/components/shared')) return { AppShell: ({ children }) => children };
     if (name.endsWith('AuthContext')) return { useAuth: () => ({ isGuest: false }) };
     if (name.endsWith('/datetime')) return { formatChinaMonthDayTime: () => '10/15 12:00' };
+    if (name === './useGifDisplay') return { useGifDisplay: (...args) => gifDisplayFixture(args, states[i++]) };
     if (name === './GifMediaDetails') return load('GifMediaDetails');
     if (name.endsWith('/gifToolBatch')) return {};
     if (name.endsWith('/uploads')) return { formatUploadSize: x => `${x} bytes` };
@@ -56,6 +91,12 @@ test('other module keeps CAD and GIF tabs and mounts only the selected tool', ()
   const gif = renderToStaticMarkup(load('OtherToolsPage').default({ tool: 'gif' }));
   assert.ok(gif.includes('GIF tool'));
   assert.ok(!gif.includes('CAD parser'));
+});
+
+test('Other landing page exposes all five tools without mounting CAD or GIF',()=>{
+  const html=renderToStaticMarkup(load('OtherToolsPage').default({}));
+  for(const route of ['inspiration','feedback','nav','cad','gif'])assert.ok(html.includes(`/studio/${route}`));
+  assert.ok(!html.includes('CAD parser'));assert.ok(!html.includes('GIF tool'));
 });
 
 

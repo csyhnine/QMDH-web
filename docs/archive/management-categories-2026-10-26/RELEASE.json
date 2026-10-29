@@ -1,0 +1,239 @@
+{
+  "source_commit": "8080b234f7c177832823b2da868a7c8934747c52",
+  "overlay": [
+    {
+      "local_path": "backend/app/models.py",
+      "container_path": "/app/app/models.py",
+      "candidate_sha256": "34aa9869af1af01d63654bb6b39d43247065c747fa3f71a38e293cc9b62e0b42",
+      "expected_absent": false,
+      "expected_live_lf_sha256": "5a3b7f6f068faf325c38ccc61968d007983fde12aba277c840419bfe95df2974"
+    },
+    {
+      "local_path": "backend/app/routers/management.py",
+      "container_path": "/app/app/routers/management.py",
+      "candidate_sha256": "4e043298dd4898df196fb126dbdc6b8d144486a9b7d9ffdfb6c57e6d1b2bffdf",
+      "expected_absent": false,
+      "expected_live_lf_sha256": "3051fc609651af0c80451c29efe47b7104d5eacad5ac004cb695029bd9c24d1a"
+    },
+    {
+      "local_path": "backend/app/services/management_units.py",
+      "container_path": "/app/app/services/management_units.py",
+      "candidate_sha256": "f798bfd5ca14b4c0c03240f8a7fa5da98d78a8bf0a00db15a36576432bdeb0e9",
+      "expected_absent": true,
+      "expected_live_lf_sha256": null
+    },
+    {
+      "local_path": "backend/migrations/versions/f62ab073d957_management_categories_and_trash.py",
+      "container_path": "/app/migrations/versions/f62ab073d957_management_categories_and_trash.py",
+      "candidate_sha256": "0710d46ab6b1935df094fe34f550842c0ab3534db1a7b8340bfb860b98a204fd",
+      "expected_absent": true,
+      "expected_live_lf_sha256": null
+    }
+  ],
+  "base_images": {
+    "backend": "sha256:5d437ea00900c2609b2bfaeda6f5a62d08df6bc06ebad37e429d2e8ade47646f",
+    "worker": "sha256:42ae707423088b0386f485459c5406598a1a48dba902f8f143260e83d8ee8467",
+    "frontend": "sha256:5310a91ceac0c8bccb58391443ac70985aa700909e929986fcd1a24bcd852b62"
+  },
+  "packages": {
+    "backend-overlay.tar.gz": "a2a88bcbb3ba00a9aa9900671f32dac582eee32ac16245bd3d96fc9fee5898e6",
+    "frontend.tar.gz": "6c3292b5a6dc7520c417138efd09e6cd96f667322403dc3acbb4ddd56653407b"
+  },
+  "images": {
+    "backend": "sha256:8b4a302d882ffbac33bf6acfa56a952950b76282a0748444e8bea7107c43b081",
+    "worker": "sha256:f940856c2fce888c97a3d615e7885361c21224ec15a55ccc9f4ba80216ee9068",
+    "frontend": "sha256:c0f7038ea117a0765ce034c2b2d8805b6e927222ef9f7ff1a5c85496d47d0100"
+  },
+  "status": "DEPLOYED_VERIFIED",
+  "workflow_root": "/opt/qmdh-frp/releases/management-categories-20261026/workflows",
+  "previous_workflow_root": "/opt/qmdh-frp/releases/people-qwen-20261026/workflows",
+  "database_revision": "f62ab073d957",
+  "candidate_checks": [
+    "PG full migration and healthy startup",
+    "PG Qwen one/two acceptance and idempotency",
+    "PG people save/version409",
+    "PG category sync/idempotency and trash/restore/version409"
+  ],
+  "compose_files": [
+    "/www/wwwroot/qmdh-web/docker-compose.yml",
+    "/opt/qmdh-frp/compose.frp.yml",
+    "/opt/qmdh-frp/releases/management-categories-20261026/compose.release.yml"
+  ],
+  "roster_verification": {
+    "units": [
+      {
+        "name": "一分院",
+        "label": "一分院",
+        "staff_count": 15,
+        "account_count": 15
+      },
+      {
+        "name": "二分院",
+        "label": "二分院（原二、四分院）",
+        "staff_count": 19,
+        "account_count": 19
+      },
+      {
+        "name": "三分院",
+        "label": "三分院",
+        "staff_count": 8,
+        "account_count": 8
+      }
+    ],
+    "staff_user_links": 42,
+    "original_project_count": 1,
+    "deleted_project_count": 0,
+    "read_only": true,
+    "sync": {
+      "units": [
+        {
+          "unit": "一分院",
+          "added": 15,
+          "matched": 0,
+          "total": 15,
+          "conflicts": []
+        },
+        {
+          "unit": "二分院",
+          "added": 14,
+          "matched": 5,
+          "total": 19,
+          "conflicts": []
+        },
+        {
+          "unit": "三分院",
+          "added": 8,
+          "matched": 0,
+          "total": 8,
+          "conflicts": []
+        }
+      ],
+      "existing_staff_preserved": 5,
+      "project_fingerprint_preserved": true,
+      "account_groups_roles_grants_preserved": true
+    }
+  },
+  "public_checks": [
+    {
+      "route": "/",
+      "status": 200
+    },
+    {
+      "route": "/management/projects",
+      "status": 200
+    },
+    {
+      "route": "/studio/generate",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/health",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/management/staff",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts/",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts?limit=3",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts?limit=20",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts/?limit=20",
+      "status": 401
+    },
+    {
+      "route": "/api/v1/cad/extracts/proxy-check",
+      "status": 401
+    }
+  ],
+  "public_qwen_contract": {
+    "provider_name": "comfyui-qwen-edit",
+    "display_name": "本机 Qwen Image 2.1 v1.1 图像编辑",
+    "model_name": "qwen_image_2_1_image_edit",
+    "capabilities": [
+      "image.edit"
+    ],
+    "configurable": true,
+    "outbound": true,
+    "adapter_kind": "comfyui",
+    "supported_resolutions": [
+      "1k",
+      "2k",
+      "4k"
+    ],
+    "reference_input_count": 1,
+    "reference_input_counts": [
+      1,
+      2
+    ]
+  },
+  "public_feature_assets": [
+    {
+      "file": "ManagementProjectsPage-B4Pm3eFH.js",
+      "sha256": "01958b8c9fef5bfe9c15f3fad8221dd8b9fdabe2e231bb62c7120c227b4013af"
+    },
+    {
+      "file": "GeneratePage-BOFHoy4N.js",
+      "sha256": "cf9794731c129a93dc9f95fb980e23efa6c5c3673e763d52ba5b145c01db7d15"
+    }
+  ],
+  "public_main_sha256": "4e19464d91fb70635d91d87b95fe2b637a4f1824921ac3427e05412c940e7af4",
+  "frontend_files_checked": 51,
+  "workflow_files": 8,
+  "preservation": [
+    {
+      "service": "backend",
+      "restart_count": 0,
+      "env_networks_preserved": true,
+      "mounts_preserved_except_versioned_workflows": true
+    },
+    {
+      "service": "worker",
+      "restart_count": 0,
+      "env_networks_preserved": true,
+      "mounts_preserved_except_versioned_workflows": true
+    },
+    {
+      "service": "worker",
+      "restart_count": 0,
+      "env_networks_preserved": true,
+      "mounts_preserved_except_versioned_workflows": true
+    },
+    {
+      "service": "worker",
+      "restart_count": 0,
+      "env_networks_preserved": true,
+      "mounts_preserved_except_versioned_workflows": true
+    },
+    {
+      "service": "frontend",
+      "restart_count": 0,
+      "env_networks_preserved": true,
+      "mounts_preserved_except_versioned_workflows": true
+    }
+  ],
+  "migration_executed": true,
+  "rollback_executed": false,
+  "real_generation_executed": false,
+  "disk_free_GiB": 8.561717987060547,
+  "private_backup": {
+    "paired_sha256_matched_files": 27,
+    "resolved_media_chain_archives": 26,
+    "media_files": 5843,
+    "media_delta_files": 0,
+    "local_only_foundation_archives": 2
+  }
+}

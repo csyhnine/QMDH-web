@@ -1,4 +1,5 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type Dispatch, type FormEvent, type SetStateAction, useEffect, useMemo } from "react";
+import { useAgentEditSessions, useAgentEditor } from "./useAgentEditSessions";
 
 import AgentOpsChatObservabilityPanel from "./AgentOpsChatObservabilityPanel";
 import AgentPolicyOverridesPanel from "./AgentPolicyOverridesPanel";
@@ -73,14 +74,26 @@ function toCreatePayload(draft: ReleaseDraft): AgentSkillReleaseCreatePayload {
   };
 }
 
+const defaultSkillDraft = {
+  key: "",
+  name: "",
+  version: "0.1.0",
+  description: "",
+  author: "",
+  inputs: "",
+  outputs: "",
+  notes: "",
+  is_active: true,
+};
+
 export type AgentOpsPageProps = {
   clients: AgentClientRecord[];
   skills: AgentOfficialSkill[];
   chatTools?: AgentChatToolRecord[];
   releases: AgentSkillReleaseRecord[];
   error: string;
-  onRefresh: () => void;
-  onSetError: (error: string) => void;
+  onRefresh: (guard?: () => boolean) => void | Promise<void>;
+  onSetError: Dispatch<SetStateAction<string>>;
 };
 
 export default function AgentOpsPage({
@@ -89,36 +102,36 @@ export default function AgentOpsPage({
   chatTools = [],
   releases,
   error,
-  onRefresh,
-  onSetError,
+  onRefresh: refreshCallback,
+  onSetError: errorCallback,
 }: AgentOpsPageProps) {
-  const [draft, setDraft] = useState<ReleaseDraft>(defaultDraft);
-  const [editingReleaseId, setEditingReleaseId] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [policyDefaults, setPolicyDefaults] = useState<ChatAgentPolicyDefaultsRecord | null>(null);
-  const [skillDraft, setSkillDraft] = useState({
-    key: "",
-    name: "",
-    version: "0.1.0",
-    description: "",
-    author: "",
-    inputs: "",
-    outputs: "",
-    notes: "",
-    is_active: true,
-  });
-  const [skillSaving, setSkillSaving] = useState(false);
-  const [skillStatusFilter, setSkillStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
-  const [togglingSkillKey, setTogglingSkillKey] = useState<string | null>(null);
-  const [installSource, setInstallSource] = useState("");
-  const [installOverwrite, setInstallOverwrite] = useState(false);
-  const [installSaving, setInstallSaving] = useState(false);
-  const [installCandidates, setInstallCandidates] = useState<AgentSkillInstallCandidate[]>([]);
-  const [expandedSkillKey, setExpandedSkillKey] = useState<string | null>(null);
-  const [previewPath, setPreviewPath] = useState<string | null>(null);
-  const [previewContent, setPreviewContent] = useState<string>("");
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [showManualCreate, setShowManualCreate] = useState(false);
+  const owner = useAgentEditSessions({ onRefresh: refreshCallback, onSetError: errorCallback });
+  const releaseEditor = useAgentEditor(owner, defaultDraft);
+  const skillEditor = useAgentEditor(owner, defaultSkillDraft);
+  const installEditor = useAgentEditor(owner, { source: "", overwrite: false });
+  const draft = releaseEditor.values, editingReleaseId = releaseEditor.id as number | null;
+  const skillDraft = skillEditor.values;
+  const setDraft = releaseEditor.setDraft, setSkillDraft = skillEditor.setDraft;
+  const saving = owner.isBusy(releaseEditor.key("release")), skillSaving = owner.isBusy(skillEditor.key("metadata"));
+  const installSaving = owner.isBusy("install");
+  const installSource = installEditor.values.source, installOverwrite = installEditor.values.overwrite;
+  const setInstallSource = (source: string) => installEditor.setDraft((current) => ({ ...current, source }));
+  const setInstallOverwrite = (overwrite: boolean) => installEditor.setDraft((current) => ({ ...current, overwrite }));
+  const ui = useMemo(() => ({
+    policyDefaults: null as ChatAgentPolicyDefaultsRecord | null,
+    skillStatusFilter: "all" as "all" | "enabled" | "disabled",
+    installCandidates: [] as AgentSkillInstallCandidate[], expandedSkillKey: null as string | null,
+    preview: null as { skillKey: string; path: string; content: string; loading: boolean; promise?: Promise<void> } | null,
+    showManualCreate: false,
+  }), [owner.scope]);
+  const { policyDefaults, skillStatusFilter, installCandidates, expandedSkillKey, showManualCreate } = ui;
+  const previewContent = ui.preview?.content ?? "", previewLoading = ui.preview?.loading ?? false;
+  const setSkillStatusFilter = (value: typeof ui.skillStatusFilter) => { if (owner.isCurrent()) { ui.skillStatusFilter = value; owner.touch(); owner.publish(); } };
+  const setShowManualCreate = (value: boolean) => { if (owner.isCurrent() && ui.showManualCreate !== value) { ui.showManualCreate = value; owner.touch(); owner.publish(); } };
+  const setInstallCandidates = (value: AgentSkillInstallCandidate[]) => { if (owner.isCurrent()) { ui.installCandidates = value; owner.publish(); } };
+  function setExpandedSkillKey(value: string | null, user = true) { if (owner.isCurrent()) { ui.expandedSkillKey = value; ui.preview = null; if (user) owner.touch(); owner.publish(); } }
+  const onSetError = (message: string) => owner.report(message);
+  const onRefresh = () => { void owner.refresh(); };
 
   const enabledSkills = useMemo(() => skills.filter((skill) => skill.is_active !== false), [skills]);
   const filteredSkills = useMemo(() => {
@@ -162,34 +175,23 @@ export default function AgentOpsPage({
   const activeReleases = releases.filter((release) => release.is_active);
 
   useEffect(() => {
+    if (!owner.isCurrent() || releaseEditor.current() !== releaseEditor.model) return;
     if (editingReleaseId !== null) {
-      const matched = releases.find((release) => release.id === editingReleaseId);
-      if (!matched) {
-        setEditingReleaseId(null);
-        setDraft(defaultDraft);
+      if (!releases.some((release) => release.id === editingReleaseId) && !releaseEditor.model.notice) {
+        releaseEditor.model.notice = "所编辑策略不在当前列表，草稿已保留，请刷新确认。"; owner.publish();
       }
       return;
     }
-    if (chatTools.length === 0) {
-      return;
-    }
-    setDraft((current) => {
-      if (current.chat_tool_allowlist.length > 0) {
-        return current;
-      }
-      return {
-        ...current,
-        chat_tool_allowlist: chatTools.map((tool) => tool.key),
-      };
-    });
-  }, [chatTools, editingReleaseId, releases]);
+    if (chatTools.length === 0 || releaseEditor.model.touched.has("chat_tool_allowlist")) return;
+    setDraft((current) => current.chat_tool_allowlist.length > 0 ? current : { ...current, chat_tool_allowlist: chatTools.map((tool) => tool.key) }, false);
+  }, [chatTools, editingReleaseId, releases, owner.scope]);
 
   useEffect(() => {
-    void api
-      .agentChatPolicyDefaults()
-      .then(setPolicyDefaults)
-      .catch(() => setPolicyDefaults(null));
-  }, []);
+    const read = owner.read("policy-defaults");
+    void api.agentChatPolicyDefaults().then((value) => {
+      if (read.allowed()) { ui.policyDefaults = value; owner.publish(); }
+    }).catch(() => { if (read.allowed()) { ui.policyDefaults = null; owner.publish(); } });
+  }, [owner.scope]);
 
   function selectAllChatTools() {
     setDraft((current) => ({ ...current, chat_tool_allowlist: chatTools.map((tool) => tool.key) }));
@@ -200,12 +202,7 @@ export default function AgentOpsPage({
   }
 
   function startNewProdRelease() {
-    setEditingReleaseId(null);
-    setDraft({
-      ...defaultDraft,
-      environment: "prod",
-      chat_tool_allowlist: chatTools.map((tool) => tool.key),
-    });
+    releaseEditor.replace({ ...defaultDraft, environment: "prod", chat_tool_allowlist: chatTools.map((tool) => tool.key) });
     onSetError("");
   }
 
@@ -221,13 +218,11 @@ export default function AgentOpsPage({
   }, [activeProdRelease, chatTools, policyDefaults?.default_tool_allowlist]);
 
   function resetDraft() {
-    setEditingReleaseId(null);
-    setDraft(defaultDraft);
+    releaseEditor.replace(defaultDraft);
   }
 
   function handleEditRelease(release: AgentSkillReleaseRecord) {
-    setEditingReleaseId(release.id);
-    setDraft({
+    releaseEditor.replace({
       key: release.key,
       display_name: release.display_name,
       environment: release.environment,
@@ -237,7 +232,7 @@ export default function AgentOpsPage({
       skill_keys: release.skill_keys,
       system_prompt_template: release.system_prompt_template,
       chat_tool_allowlist: release.chat_tool_allowlist,
-    });
+    }, release.id);
     onSetError("");
   }
 
@@ -253,69 +248,52 @@ export default function AgentOpsPage({
     });
   }
 
-  async function handleSave(event: FormEvent<HTMLFormElement>) {
+  function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const payload = toCreatePayload(draft);
-    if (!payload.display_name) {
-      onSetError("请填写配置名称");
-      return;
-    }
-    if (!payload.key) {
-      onSetError("请填写配置 Key");
-      return;
-    }
-    if (payload.chat_tool_allowlist.length === 0) {
-      onSetError("请至少选择一个 Chat 工具");
-      return;
-    }
-    // OpenClaw skills follow Skill 配置启停，保存时带上当前已启用列表
-    payload.skill_keys = enabledSkills.map((skill) => skill.key);
-
-    setSaving(true);
-    try {
-      if (editingReleaseId === null) {
-        await api.createAgentSkillRelease(payload);
-      } else {
-        await api.updateAgentSkillRelease(editingReleaseId, payload);
-      }
-      resetDraft();
-      onSetError("");
-      onRefresh();
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "保存配置失败");
-    } finally {
-      setSaving(false);
-    }
+    const original = releaseEditor.current(), revision = original.revision;
+    return owner.run(releaseEditor.key("release", original), async (operation) => {
+      const payload = toCreatePayload(original.draft), editingReleaseId = original.id as number | null;
+      const onSetError = (message: string) => owner.report(message, operation.intent);
+      if (!payload.display_name) { onSetError("请填写配置名称"); return; }
+      if (!payload.key) { onSetError("请填写配置 Key"); return; }
+      if (payload.chat_tool_allowlist.length === 0) { onSetError("请至少选择一个 Chat 工具"); return; }
+      // OpenClaw skills follow Skill 配置启停，保存时带上当前已启用列表
+      payload.skill_keys = enabledSkills.map((skill) => skill.key);
+      try {
+        if (editingReleaseId === null) await api.createAgentSkillRelease(payload);
+        else await api.updateAgentSkillRelease(editingReleaseId, payload);
+        releaseEditor.finish(original, revision, defaultDraft);
+        onSetError(""); await owner.refreshAfter(operation);
+      } catch (err) { onSetError(err instanceof Error ? err.message : "保存配置失败"); }
+    });
   }
 
-  async function runInstallSkill(skillKey?: string) {
+  function runInstallSkill(skillKey?: string) {
+    const original = installEditor.current(), revision = original.revision;
+    const { source: installSource, overwrite: installOverwrite } = original.draft;
     const source = installSource.trim();
-    if (!source) {
-      onSetError("请粘贴 GitHub 链接或 npx skills add 命令");
-      return;
-    }
-    setInstallSaving(true);
-    try {
+    if (!source) { onSetError("请粘贴 GitHub 链接或 npx skills add 命令"); return Promise.resolve(); }
+    return owner.run("install", async (operation) => {
+      const onSetError = (message: string) => owner.report(message, operation.intent);
+      try {
       const result = await api.installOfficialSkill({
         source,
         skill_key: skillKey,
         overwrite: installOverwrite,
       });
+      if (!owner.isCurrent()) return;
       if (result.status === "needs_selection") {
         setInstallCandidates(result.candidates ?? []);
         onSetError("");
         return;
       }
-      setInstallCandidates([]);
-      setInstallSource("");
-      setExpandedSkillKey(result.skill?.key ?? null);
-      onSetError("");
-      onRefresh();
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "安装 Skill 失败");
-    } finally {
-      setInstallSaving(false);
-    }
+        const unchanged = installEditor.current() === original && original.revision === revision;
+        if (unchanged) setInstallCandidates([]);
+        installEditor.finish(original, revision, { source: "", overwrite: original.draft.overwrite });
+        if (unchanged && owner.scope.intent === operation.intent) setExpandedSkillKey(result.skill?.key ?? null, false);
+        onSetError(""); await owner.refreshAfter(operation);
+      } catch (err) { onSetError(err instanceof Error ? err.message : "安装 Skill 失败"); }
+    });
   }
 
   async function handleInstallSkill(event: FormEvent<HTMLFormElement>) {
@@ -323,29 +301,31 @@ export default function AgentOpsPage({
     await runInstallSkill();
   }
 
-  async function handlePreviewSkillFile(skillKey: string, filePath: string) {
-    setPreviewLoading(true);
-    setPreviewPath(`${skillKey}:${filePath}`);
-    try {
-      const file = await api.officialSkillFile(skillKey, filePath);
-      setPreviewContent(file.content ?? `（${file.kind}，无法预览文本）`);
-    } catch (err) {
-      setPreviewContent(err instanceof Error ? err.message : "预览失败");
-    } finally {
-      setPreviewLoading(false);
-    }
+  function handlePreviewSkillFile(skillKey: string, filePath: string): Promise<void> {
+    if (!owner.isCurrent() || ui.expandedSkillKey !== skillKey) return Promise.resolve();
+    if (ui.preview?.skillKey === skillKey && ui.preview.path === filePath && ui.preview.loading) return ui.preview.promise ?? Promise.resolve();
+    const preview: NonNullable<typeof ui.preview> = { skillKey, path: filePath, content: "", loading: true };
+    ui.preview = preview; owner.touch(); owner.publish();
+    preview.promise = owner.run(preview, async () => {
+      const allowed = () => owner.isCurrent() && ui.preview === preview && ui.expandedSkillKey === skillKey;
+      try {
+        const file = await api.officialSkillFile(skillKey, filePath);
+        if (allowed()) { preview.content = file.content ?? `（${file.kind}，无法预览文本）`; owner.publish(); }
+      } catch (err) { if (allowed()) { preview.content = err instanceof Error ? err.message : "预览失败"; owner.publish(); } }
+      finally { if (allowed()) { preview.loading = false; owner.publish(); } }
+    });
+    return preview.promise;
   }
 
-  async function handleCreateSkill(event: FormEvent<HTMLFormElement>) {
+  function handleCreateSkill(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const name = skillDraft.name.trim();
-    const key = (skillDraft.key.trim() || buildKey(name)).slice(0, 100);
-    if (!name || !key) {
-      onSetError("请填写 Skill 名称与 Key");
-      return;
-    }
-    setSkillSaving(true);
-    try {
+    const original = skillEditor.current(), revision = original.revision;
+    return owner.run(skillEditor.key("metadata", original), async (operation) => {
+      const skillDraft = original.draft, name = skillDraft.name.trim();
+      const key = (skillDraft.key.trim() || buildKey(name)).slice(0, 100);
+      const onSetError = (message: string) => owner.report(message, operation.intent);
+      if (!name || !key) { onSetError("请填写 Skill 名称与 Key"); return; }
+      try {
       await api.createOfficialSkill({
         key,
         name,
@@ -363,55 +343,34 @@ export default function AgentOpsPage({
         notes: skillDraft.notes.trim(),
         is_active: skillDraft.is_active,
       });
-      setSkillDraft({
-        key: "",
-        name: "",
-        version: "0.1.0",
-        description: "",
-        author: "",
-        inputs: "",
-        outputs: "",
-        notes: "",
-        is_active: true,
-      });
-      onSetError("");
-      onRefresh();
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "添加 Skill 失败");
-    } finally {
-      setSkillSaving(false);
-    }
+        skillEditor.finish(original, revision, defaultSkillDraft);
+        onSetError(""); await owner.refreshAfter(operation);
+      } catch (err) { onSetError(err instanceof Error ? err.message : "添加 Skill 失败"); }
+    });
   }
 
-  async function handleToggleSkill(skill: AgentOfficialSkill) {
+  function handleToggleSkill(skill: AgentOfficialSkill) {
     const nextActive = skill.is_active === false;
-    setTogglingSkillKey(skill.key);
-    try {
-      await api.updateOfficialSkill(skill.key, { is_active: nextActive });
-      onSetError("");
-      onRefresh();
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : nextActive ? "启用 Skill 失败" : "停用 Skill 失败");
-    } finally {
-      setTogglingSkillKey(null);
-    }
+    return owner.run(`skill:${skill.key}`, async (operation) => {
+      try {
+        await api.updateOfficialSkill(skill.key, { is_active: nextActive });
+        owner.report("", operation.intent); await owner.refreshAfter(operation);
+      } catch (err) { owner.report(err instanceof Error ? err.message : nextActive ? "启用 Skill 失败" : "停用 Skill 失败", operation.intent); }
+    });
   }
 
-  async function handleDeleteSkill(skillKey: string) {
-    if (!window.confirm(`确认删除自定义 Skill「${skillKey}」？`)) {
-      return;
-    }
-    try {
-      await api.deleteOfficialSkill(skillKey);
-      setDraft((current) => ({
-        ...current,
-        skill_keys: current.skill_keys.filter((item) => item !== skillKey),
-      }));
-      onSetError("");
-      onRefresh();
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "删除 Skill 失败");
-    }
+  function handleDeleteSkill(skillKey: string) {
+    if (!window.confirm(`确认删除自定义 Skill「${skillKey}」？`)) return Promise.resolve();
+    const selected = releaseEditor.current();
+    return owner.run(`skill:${skillKey}`, async (operation) => {
+      try {
+        await api.deleteOfficialSkill(skillKey);
+        if (owner.isCurrent() && releaseEditor.current() === selected) {
+          setDraft((current) => ({ ...current, skill_keys: current.skill_keys.filter((item) => item !== skillKey) }), false);
+        }
+        owner.report("", operation.intent); await owner.refreshAfter(operation);
+      } catch (err) { owner.report(err instanceof Error ? err.message : "删除 Skill 失败", operation.intent); }
+    });
   }
 
   return (
@@ -581,6 +540,7 @@ export default function AgentOpsPage({
               </button>
             </form>
 
+            {installEditor.notice ? <p role="status">{installEditor.notice}</p> : null}
             {installCandidates.length > 0 ? (
               <div className="agent-skill-install-candidates">
                 <h4>仓库含多个 Skill，请选择一项</h4>
@@ -660,6 +620,7 @@ export default function AgentOpsPage({
                 <button type="submit" className="ghost-button" disabled={skillSaving}>
                   {skillSaving ? "保存中…" : "保存元数据 Skill"}
                 </button>
+                {skillEditor.notice ? <p role="status">{skillEditor.notice}</p> : null}
               </form>
             </details>
           </div>
@@ -718,8 +679,8 @@ export default function AgentOpsPage({
                                 {file.path}
                               </button>
                             ))}
-                            {previewPath?.startsWith(`${skill.key}:`) ? (
-                              <pre className="agent-skill-file-preview">
+                            {ui.preview?.skillKey === skill.key ? (
+                              <pre className="agent-skill-file-preview" aria-label={`${ui.preview.skillKey}/${ui.preview.path}`}>
                                 {previewLoading ? "加载中…" : previewContent}
                               </pre>
                             ) : null}
@@ -750,13 +711,13 @@ export default function AgentOpsPage({
                         ) : null}
                         <button
                           type="button"
-                          disabled={togglingSkillKey === skill.key}
+                          disabled={owner.isBusy(`skill:${skill.key}`)}
                           onClick={() => void handleToggleSkill(skill)}
                         >
-                          {togglingSkillKey === skill.key ? "处理中…" : active ? "停用" : "启用"}
+                          {owner.isBusy(`skill:${skill.key}`) ? "处理中…" : active ? "停用" : "启用"}
                         </button>
                         {skill.deletable ? (
-                          <button type="button" onClick={() => void handleDeleteSkill(skill.key)}>
+                          <button type="button" disabled={owner.isBusy(`skill:${skill.key}`)} onClick={() => void handleDeleteSkill(skill.key)}>
                             删除
                           </button>
                         ) : null}
@@ -941,6 +902,7 @@ export default function AgentOpsPage({
             </div>
           </div>
 
+          {releaseEditor.notice ? <p role="status">{releaseEditor.notice}</p> : null}
           {error ? <div className="floating-error">{error}</div> : null}
 
           <div className="template-editor-actions">
@@ -961,10 +923,10 @@ export default function AgentOpsPage({
           <span>高级：按用户组 / 个人差异化（可选）</span>
           <small>大多数场景只需编辑上方 Chat 配置。仅当某组或某人需要禁用部分 tool 时使用。</small>
         </summary>
-        <AgentPolicyOverridesPanel chatTools={chatTools} onSetError={onSetError} />
+        <AgentPolicyOverridesPanel chatTools={chatTools} owner={owner} />
 
 
-        <AgentOpsChatObservabilityPanel onSetError={onSetError} />
+        <AgentOpsChatObservabilityPanel owner={owner} />
       </details>
 
       <section className="admin-table-panel">

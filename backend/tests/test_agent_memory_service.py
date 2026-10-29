@@ -258,9 +258,14 @@ class MemoryLibraryTests(unittest.TestCase):
             self.assertIsNone(remaining[0].conversation_id)
 
     def test_scrub_legacy_deletes_turn_summaries_and_noise(self) -> None:
+        from app.models import Conversation
         from app.services.agent_memory_service import add_memory_entry, scrub_legacy_agent_memories
 
         with self.SessionLocal() as db:
+            db.connection().exec_driver_sql("PRAGMA foreign_keys=ON")
+            self.assertEqual(db.connection().exec_driver_sql("PRAGMA foreign_keys").scalar(), 1)
+            db.add(Conversation(id=1, user_id=7, title="synthetic legacy fixture"))
+            db.commit()
             add_memory_entry(
                 db,
                 user_id=7,
@@ -294,12 +299,20 @@ class MemoryLibraryTests(unittest.TestCase):
             db.commit()
 
             dry = scrub_legacy_agent_memories(db, dry_run=True, user_id=7)
+            self.assertEqual(dry.deleted_turn_summaries, 0)
+            self.assertEqual(dry.review_required, 4)
+            plan = {
+                "version": 1,
+                "entries": [dict(row, legacy_evidence="synthetic legacy raw-extract fixture before policy change") for row in dry.review_candidates],
+            }
+            dry = scrub_legacy_agent_memories(db, dry_run=True, user_id=7, approved_plan=plan)
             self.assertEqual(dry.deleted_turn_summaries, 1)
             self.assertEqual(dry.deleted_noise_durable, 1)
             self.assertEqual(dry.distilled_durable, 1)
+            self.assertEqual(dry.compacted_sessions, 1)
             self.assertEqual(len(list(db.scalars(select(AgentMemoryEntry).where(AgentMemoryEntry.user_id == 7)))), 4)
 
-            applied = scrub_legacy_agent_memories(db, dry_run=False, user_id=7)
+            applied = scrub_legacy_agent_memories(db, dry_run=False, user_id=7, approved_plan=plan)
             db.commit()
             self.assertEqual(applied.deleted_turn_summaries, 1)
             rows = list(db.scalars(select(AgentMemoryEntry).where(AgentMemoryEntry.user_id == 7)).all())

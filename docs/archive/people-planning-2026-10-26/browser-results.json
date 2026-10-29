@@ -1,0 +1,47 @@
+{
+  "browser": "149.0.7827.55",
+  "results": [
+    {
+      "name": "Click assignment and manager role are previewed; save is explicit",
+      "passed": true
+    },
+    {
+      "name": "Native personnel drag adds to an existing stage without discarding other assignees",
+      "passed": true
+    },
+    {
+      "name": "Native work-bar drag transfers and shifts inclusive dates with live load preview",
+      "passed": true
+    },
+    {
+      "name": "Native person drag into a management role preserves timed work; busy save cannot submit twice",
+      "passed": true
+    },
+    {
+      "name": "Calendar controls work without drag and preserve stage allocation",
+      "passed": true
+    },
+    {
+      "name": "Partial project saves keep conflicted edits; retry does not re-send successful project",
+      "passed": true
+    },
+    {
+      "name": "Hidden projects still show overload and inactive staff cannot receive a new assignment",
+      "passed": true
+    },
+    {
+      "name": "Archived view is read-only and empty view is usable",
+      "passed": true
+    },
+    {
+      "name": "Discard restores load and does not persist; desktop and mobile stay inside the viewport",
+      "passed": true
+    },
+    {
+      "name": "No network requests or uncaught page exceptions",
+      "passed": true,
+      "errors": [],
+      "blocked": []
+    }
+  ]
+}

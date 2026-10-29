@@ -1,0 +1,11 @@
+{
+  "isolated": true,
+  "migration_and_startup": true,
+  "synthetic_qwen_routing_no_gpu": true,
+  "weekly_snapshot_immutable_and_unit_scoped": true,
+  "partial_reassignment_atomic": true,
+  "stale_version_no_write": true,
+  "cross_unit_rejected": true,
+  "handwritten_weekly_brief_persisted": true,
+  "owned_test_containers_removed": true
+}

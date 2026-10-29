@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import zipfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from html import unescape
 from pathlib import Path
 import re
@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import InspirationPost
+from app.services.inspiration_bundle_workspace import BundleWorkspace
 from app.services.inspiration_media import prepare_inspiration_image
 from app.services.media_storage import media_root_path, write_binary_asset
 
@@ -145,6 +146,8 @@ class BuildSeedBundleResult:
     total: int = 0
     restored: int = 0
     placeholders: int = 0
+    cleanup_warnings: list[str] = field(default_factory=list)
+    retained_paths: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -260,18 +263,11 @@ def refresh_seed_inspiration_media(
 
 def build_seed_inspiration_bundle(output_path: str) -> BuildSeedBundleResult:
     destination = Path(output_path).expanduser().resolve()
-    destination.parent.mkdir(parents=True, exist_ok=True)
-
-    media_root = media_root_path()
-    staging_dir = destination.parent / f"{destination.stem}__bundle"
-    if staging_dir.exists():
-        shutil.rmtree(staging_dir)
-    staging_dir.mkdir(parents=True, exist_ok=True)
-
     manifest_entries: list[SeedBundleEntry] = []
     result = BuildSeedBundleResult(bundle_path=str(destination))
-
-    try:
+    with BundleWorkspace(destination) as workspace:
+        staging_dir = workspace.payload
+        media_root = media_root_path()
         for entry in SEED_INSPIRATION_ENTRIES:
             image_url = _preferred_seed_image_url(entry)
             relative_path = prepare_inspiration_image(
@@ -281,8 +277,11 @@ def build_seed_inspiration_bundle(output_path: str) -> BuildSeedBundleResult:
                 namespace="seed",
                 overwrite=True,
             )
+            workspace.check_owned()
             source_file = (media_root / Path(relative_path)).resolve()
-            target_file = staging_dir / Path(relative_path)
+            target_file = (staging_dir / Path(relative_path)).resolve()
+            if not target_file.is_relative_to(staging_dir):
+                raise ValueError("Prepared bundle media is outside this build workspace")
             target_file.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source_file, target_file)
 
@@ -302,20 +301,21 @@ def build_seed_inspiration_bundle(output_path: str) -> BuildSeedBundleResult:
             else:
                 result.restored += 1
 
+        workspace.check_owned()
         manifest_path = staging_dir / "manifest.json"
         manifest_path.write_text(
             json.dumps({"entries": [asdict(entry) for entry in manifest_entries]}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
 
-        with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+        workspace.check_owned()
+        with zipfile.ZipFile(workspace.archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
             for path in staging_dir.rglob("*"):
                 if path.is_file():
                     bundle.write(path, arcname=path.relative_to(staging_dir).as_posix())
-    finally:
-        if staging_dir.exists():
-            shutil.rmtree(staging_dir)
-
+        workspace.publish()
+    result.cleanup_warnings = list(workspace.cleanup_warnings)
+    result.retained_paths = list(workspace.retained_paths)
     return result
 
 

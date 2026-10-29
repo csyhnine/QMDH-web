@@ -1,3 +1,4 @@
+import { useCanvasMotion } from "./canvasMotion";
 import { type Node, type NodeProps } from "@xyflow/react";
 
 import { CanvasDraftTextarea } from "./CanvasDraftField";
@@ -7,10 +8,11 @@ import type { NoteNodeData } from "./canvasTypes";
 type NoteNodeProps = NodeProps<Node<NoteNodeData, "note">>;
 
 export default function NoteNode({ id, data, selected }: NoteNodeProps) {
+  const motionClass = useCanvasMotion(id);
   const { disabled, patchNoteNode } = useCanvasNodeActions();
 
   return (
-    <div className={`qmdh-canvas-note-node${selected ? " is-selected" : ""}`}>
+    <div className={`qmdh-canvas-note-node${motionClass}${selected ? " is-selected" : ""}`}>
       <header>备注</header>
       <CanvasDraftTextarea
         value={data.text}

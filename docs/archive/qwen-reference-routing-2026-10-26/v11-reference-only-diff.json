@@ -1,0 +1,27 @@
+{
+  "changes": [
+    {
+      "node": "459:474",
+      "changed_input_keys": [
+        "images.image_2"
+      ]
+    },
+    {
+      "node": "459:485",
+      "changed_input_keys": [
+        "images.image1"
+      ]
+    },
+    {
+      "node": "475",
+      "change": "added",
+      "class_type": "LoadImage"
+    }
+  ],
+  "original_v11_nodes_preserved": true,
+  "no_v10_template_read_by_builder": true,
+  "steps": 50,
+  "cache_device": "gpu",
+  "thinking_matches_v11": true,
+  "seed_links_match_v11": true
+}

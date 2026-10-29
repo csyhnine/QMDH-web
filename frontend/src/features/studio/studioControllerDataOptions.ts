@@ -41,6 +41,7 @@ export function buildStudioDataLoaderOptions({
     setPromptTemplates: studioTemplates.setPromptTemplates,
     setState: controllerState.setState,
     tasks: controllerState.state.tasks,
+    projects: controllerState.state.projects,
   };
 }
 
@@ -49,12 +50,15 @@ export function buildStudioProjectsOptions({
   studioData,
 }: {
   controllerState: ControllerState;
-  studioData: Pick<StudioDataLoaderState, "loadData">;
+  studioData: Pick<StudioDataLoaderState, "getProjects" | "applyProjectMutation" | "refreshProjects">;
 }): Parameters<typeof useStudioProjects>[0] {
   return {
-    loadData: () => studioData.loadData(),
-    onError: controllerState.pushLoadError,
-    projects: controllerState.state.projects,
+    getProjects: studioData.getProjects,
+    applyProjectMutation: studioData.applyProjectMutation,
+    refreshProjects: studioData.refreshProjects,
+    onError: (message, isCurrent = () => true) => controllerState.setState((current) =>
+      isCurrent() ? { ...current, error: message } : current
+    ),
     selectedProjectCode: controllerState.studioForm.projectCode,
     setStudioForm: controllerState.setStudioForm,
   };

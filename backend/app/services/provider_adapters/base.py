@@ -25,9 +25,10 @@ class RequestDiagnostics:
 
 
 class ProviderExecutionError(Exception):
-    def __init__(self, message: str, *, diagnostics: RequestDiagnostics):
+    def __init__(self, message: str, *, diagnostics: RequestDiagnostics, partial_outcome: ExecutionOutcome | None = None):
         super().__init__(message)
         self.diagnostics = diagnostics
+        self.partial_outcome = partial_outcome
 
 
 class ProviderAdapter:

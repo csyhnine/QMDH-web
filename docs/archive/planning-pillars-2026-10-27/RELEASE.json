@@ -1,0 +1,112 @@
+{
+  "source_commit": "55340d752cbe01058417156014abfa50b40af26c",
+  "base_images": {
+    "backend": "sha256:555ab26cec3c3660bfd792a40729c393c1b87fc5d0f74e526cccb2f33d7ea43c",
+    "worker": "sha256:2638db9e9090b332acdb6afaccb48967ecc6b5c1afe6fc7ee6474d7aae5ce2c2",
+    "frontend": "sha256:c138103e79e99ea335b204b22932a99b51c2b21ab44631306f9b5ca850e3c28a"
+  },
+  "overlay": [
+    {
+      "local_path": "backend/app/routers/management.py",
+      "container_path": "/app/app/routers/management.py",
+      "candidate_sha256": "b559d8e5b3e66bede5753305a4e8b5e734549ea19723e07f4b1ceaec67a72c9b",
+      "expected_live_lf_sha256": "67e8dafa2096d7a8f64ad80292f15c3f223338f4e50eeb45cd094ed54fdb1cfe"
+    }
+  ],
+  "packages": {
+    "backend-overlay.tar.gz": "5a6b0f4fc98073211e4d36c79bf2b5636d2a08a1023515f569d3d8be8a9f8620",
+    "frontend.tar.gz": "b6c2222365f1bd3b72f017c12ce2b62df0c4dd0c223ec367b16f86ecfa9a3480"
+  },
+  "frontend_file_count": 52,
+  "images": {
+    "backend": "sha256:6b971be9ea3b9af79a446226f1c46d03652a5cf6b689f4dfccf045ff9586e7a1",
+    "worker": "sha256:fa3f8984f8a464343a89628ba937813163a94200b052257cbebdc00ce2f41793",
+    "frontend": "sha256:31cbdbe242aaa62b93a8eeb359d7243cfd16d2c0bc18d40e8512190e4a3be0e8"
+  },
+  "status": "DEPLOYED_VERIFIED",
+  "workflow_root": "/opt/qmdh-frp/releases/management-categories-20261026/workflows",
+  "database_revision": "b94de295f179",
+  "candidate_checks": [
+    "36 focused backend tests and 19 frontend tests",
+    "11 TypeScript targets: no new diagnostics",
+    "8 real AppShell browser interaction scenarios",
+    "isolated PostgreSQL migration/startup, synthetic Qwen routing, immutable snapshots and unit isolation",
+    "atomic partial reassignment, stale-version no-write and handwritten weekly brief persistence"
+  ],
+  "compose_files": [
+    "/www/wwwroot/qmdh-web/docker-compose.yml",
+    "/opt/qmdh-frp/compose.frp.yml",
+    "/opt/qmdh-frp/releases/pillars-20261027/compose.release.yml"
+  ],
+  "production_containers": {
+    "backend": [
+      {
+        "id": "c874726f853ebde93618b0d3b54fc63a4a9ac461aa967d7871bb7dee5017e606",
+        "image": "sha256:6b971be9ea3b9af79a446226f1c46d03652a5cf6b689f4dfccf045ff9586e7a1",
+        "status": "running",
+        "health": "healthy"
+      }
+    ],
+    "worker": [
+      {
+        "id": "01c5a8e5ba3c23de8f385169f2799bd7e06145bf9646974353d7c851f901b306",
+        "image": "sha256:fa3f8984f8a464343a89628ba937813163a94200b052257cbebdc00ce2f41793",
+        "status": "running",
+        "health": null
+      },
+      {
+        "id": "8bcdf03c7fb5f0066fcee41d0b6bf8700da3256f632602476ed74ae535d481a9",
+        "image": "sha256:fa3f8984f8a464343a89628ba937813163a94200b052257cbebdc00ce2f41793",
+        "status": "running",
+        "health": null
+      },
+      {
+        "id": "9cd1a8b6cbc9fc574cad364dc63e1ec2a6767ac804acdbed14d52a261ec3b7e5",
+        "image": "sha256:fa3f8984f8a464343a89628ba937813163a94200b052257cbebdc00ce2f41793",
+        "status": "running",
+        "health": null
+      }
+    ],
+    "frontend": [
+      {
+        "id": "011a2e33d8c6655417d3084bd7b12e4e2249157b37ac2828165b7a4f7c1309c4",
+        "image": "sha256:31cbdbe242aaa62b93a8eeb359d7243cfd16d2c0bc18d40e8512190e4a3be0e8",
+        "status": "running",
+        "health": null
+      }
+    ]
+  },
+  "data_checks": {
+    "groups_merged": true,
+    "annual_projects": 2,
+    "weekly_snapshots": 0,
+    "structured_fields_available": true,
+    "unit_active_staff": [
+      15,
+      26,
+      8
+    ],
+    "second_unit_internal": 19,
+    "second_unit_external": 7,
+    "second_unit_inactive": 1,
+    "departure_account_disabled": true,
+    "migration": "b94de295f179"
+  },
+  "public_asset_count": 10,
+  "frontend_files_checked": 52,
+  "public_routes_checked": 9,
+  "environment_mounts_networks_preserved": true,
+  "qwen_reference_counts": [
+    1,
+    2
+  ],
+  "migration_executed": false,
+  "atomic_reassignment_route_requires_login": true,
+  "production_test_assignments_written": false,
+  "accounts_created": 0,
+  "existing_business_fingerprints_preserved": true,
+  "disk_free_GiB": 8.006938934326172,
+  "initial_database_backup_preserved_locally": true,
+  "media_restore_archives": 37,
+  "media_files": 5849
+}

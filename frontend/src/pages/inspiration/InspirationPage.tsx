@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { api, type InspirationPost } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import { useServerSearch } from "../../lib/search/useServerSearch";
-import { validateReferenceImageSize } from "../../utils/uploads";
 import {
   hasInspirationComparePreview,
   InspirationMainMediaPreview,
@@ -11,6 +10,8 @@ import {
   isVideoInspirationPost,
 } from "./inspirationMediaUtils";
 import { copyInspirationPrompt, getInspirationPromptText } from "./inspirationPromptUtils";
+import { useInspirationList } from "./useInspirationList";
+import { useInspirationDialogs } from "./useInspirationDialogs";
 
 /* ─── Props ─── */
 
@@ -27,18 +28,7 @@ const TAG_BATCH_MODES = [
   { key: "remove", label: "移除标签" },
 ] as const;
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("读取图片失败"));
-    reader.readAsDataURL(file);
-  });
-}
-
 export type InspirationPageProps = {
-  posts: InspirationPost[];
-  onPostsChange: (posts: InspirationPost[]) => void;
   canContribute: boolean;
   canManageLibrary?: boolean;
   mode?: "studio" | "admin";
@@ -46,23 +36,25 @@ export type InspirationPageProps = {
 
 
 export default function InspirationPage({
-  posts,
-  onPostsChange,
   canContribute,
   canManageLibrary = false,
   mode = "studio",
 }: InspirationPageProps) {
   const navigate = useNavigate();
-  const { isGuest } = useAuth();
-  const [category, setCategory] = useState("全部");
+  const { isGuest, currentUser } = useAuth();
+  const scopeKey = JSON.stringify([currentUser?.id, currentUser?.name, isGuest, mode]);
+  const { posts, category, actionError, isRefreshing, selectedPostIds,
+    loadPosts, selectCategory, setActionError, setSelectedPostIds,
+  } = useInspirationList(scopeKey);
+  const { importDialog, editDialog, openImport, openEdit, closeImport, closeEdit,
+    setImportField, setEditField, uploadImport, uploadEdit, extract, saveImport, saveEdit,
+    newImport, resumeImport, checkImportResult, recoverableImports,
+  } = useInspirationDialogs(scopeKey, loadPosts);
   const [sourceFilter, setSourceFilter] = useState<(typeof SOURCE_FILTERS)[number]["key"]>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [lightbox, setLightbox] = useState<InspirationPost | null>(null);
   const [copiedPromptPostId, setCopiedPromptPostId] = useState<number | null>(null);
-  const [actionError, setActionError] = useState("");
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<number | null>(null);
-  const [selectedPostIds, setSelectedPostIds] = useState<number[]>([]);
   const [bulkCategory, setBulkCategory] = useState("建筑");
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [isBatchUpdating, setIsBatchUpdating] = useState(false);
@@ -73,12 +65,6 @@ export default function InspirationPage({
   const [searchSyncSummary, setSearchSyncSummary] = useState("");
   const importUploadInputRef = useRef<HTMLInputElement | null>(null);
   const editUploadInputRef = useRef<HTMLInputElement | null>(null);
-  const [importDialog, setImportDialog] = useState<{
-    open: boolean; url: string; loading: boolean; images: string[];
-    selectedImage: string; title: string; category: string; tags: string;
-    error: string; manualMode: boolean; uploadingFile?: boolean;
-  }>({ open: false, url: "", loading: false, images: [], selectedImage: "", title: "", category: "建筑", tags: "", error: "", manualMode: false });
-  const [editDialog, setEditDialog] = useState<{ postId: number; title: string; image_path: string; source_url: string; uploadingFile?: boolean; uploadError?: string } | null>(null);
   const importedCount = posts.filter((post) => post.source_type === "external").length;
   const sharedCount = posts.filter((post) => post.source_type === "user").length;
   const seedCount = posts.filter((post) => post.source_type !== "external" && post.source_type !== "user").length;
@@ -126,111 +112,32 @@ export default function InspirationPage({
     );
   }
 
-  async function uploadImageFile(file: File): Promise<string> {
-    if (!file.type.startsWith("image/")) {
-      throw new Error("请选择图片文件");
-    }
-    const dataUrl = await readFileAsDataUrl(file);
-    const uploaded = await api.uploadReferenceImage({
-      file_name: file.name,
-      data_url: dataUrl,
-    });
-    return uploaded.storage_path;
-  }
-
-  async function handleImportFileUpload(file: File) {
-    setImportDialog((current) => ({ ...current, error: "", uploadingFile: true }));
-    try {
-      const sizeError = validateReferenceImageSize(file);
-      if (sizeError) {
-        throw new Error(sizeError);
-      }
-      const storagePath = await uploadImageFile(file);
-      setImportDialog((current) => ({
-        ...current,
-        selectedImage: storagePath,
-        manualMode: true,
-        error: "",
-        uploadingFile: false,
-      }));
-    } catch (err) {
-      setImportDialog((current) => ({
-        ...current,
-        error: err instanceof Error ? err.message : "上传图片失败",
-        uploadingFile: false,
-      }));
-    }
-  }
-
-  async function handleEditFileUpload(file: File) {
-    setEditDialog((current) => (current ? { ...current, uploadError: "", uploadingFile: true } : current));
-    try {
-      const sizeError = validateReferenceImageSize(file);
-      if (sizeError) {
-        throw new Error(sizeError);
-      }
-      const storagePath = await uploadImageFile(file);
-      setEditDialog((current) =>
-        current
-          ? {
-              ...current,
-              image_path: storagePath,
-              uploadError: "",
-              uploadingFile: false,
-            }
-          : current
-      );
-    } catch (err) {
-      setEditDialog((current) =>
-        current
-          ? {
-              ...current,
-              uploadError: err instanceof Error ? err.message : "上传图片失败",
-              uploadingFile: false,
-            }
-          : current
-      );
-    }
-  }
-
   function handleImportFileInputChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    void handleImportFileUpload(file);
+    void uploadImport(file);
   }
 
   function handleEditFileInputChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    void handleEditFileUpload(file);
+    void uploadEdit(file);
   }
 
   function handleImportDrop(event: DragEvent<HTMLButtonElement>) {
     event.preventDefault();
     const file = event.dataTransfer.files?.[0];
     if (!file) return;
-    void handleImportFileUpload(file);
+    void uploadImport(file);
   }
 
   function handleEditDrop(event: DragEvent<HTMLButtonElement>) {
     event.preventDefault();
     const file = event.dataTransfer.files?.[0];
     if (!file) return;
-    void handleEditFileUpload(file);
-  }
-
-  async function loadPosts(cat: string) {
-    setIsRefreshing(true);
-    setActionError("");
-    try {
-      onPostsChange(await api.inspiration(cat));
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "加载灵感库失败");
-    } finally {
-      setIsRefreshing(false);
-    }
+    void uploadEdit(file);
   }
 
   function togglePostSelection(postId: number) {
@@ -274,7 +181,7 @@ export default function InspirationPage({
     try {
       await api.deleteInspiration(post.id);
       setSelectedPostIds((current) => current.filter((id) => id !== post.id));
-      await loadPosts(category);
+      await loadPosts();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "删除灵感失败");
     } finally {
@@ -293,8 +200,8 @@ export default function InspirationPage({
       await Promise.all(
         selectedPostIds.map((postId) => api.updateInspiration(postId, { category: bulkCategory }))
       );
-      setSelectedPostIds([]);
-      await loadPosts(category);
+      setSelectedPostIds((current) => current === selectedPostIds ? [] : current);
+      await loadPosts();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "批量修改分类失败");
     } finally {
@@ -314,8 +221,8 @@ export default function InspirationPage({
     setActionError("");
     try {
       await Promise.all(selectedPostIds.map((postId) => api.deleteInspiration(postId)));
-      setSelectedPostIds([]);
-      await loadPosts(category);
+      setSelectedPostIds((current) => current === selectedPostIds ? [] : current);
+      await loadPosts();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "批量删除灵感失败");
     } finally {
@@ -351,7 +258,7 @@ export default function InspirationPage({
         })
       );
       setBulkTagsText("");
-      await loadPosts(category);
+      await loadPosts();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "批量修改标签失败");
     } finally {
@@ -389,7 +296,7 @@ export default function InspirationPage({
             </button>
           ) : null}
           {mode === "admin" ? (
-            <button type="button" className="ghost-button" disabled={isRefreshing} onClick={() => void loadPosts(category)}>
+            <button type="button" className="ghost-button" disabled={isRefreshing} onClick={() => void loadPosts()}>
               {isRefreshing ? "刷新中..." : "刷新"}
             </button>
           ) : null}
@@ -406,7 +313,7 @@ export default function InspirationPage({
           {canContribute ? (
             <button type="button" className="admin-primary-button" onClick={() => {
               setActionError("");
-              setImportDialog({ open: true, url: "", loading: false, images: [], selectedImage: "", title: "", category: category !== "全部" ? category : "建筑", tags: "", error: "", manualMode: false, uploadingFile: false });
+              openImport(category !== "全部" ? category : "建筑");
             }}>+ 导入参考</button>
           ) : null}
         </div>
@@ -549,7 +456,7 @@ export default function InspirationPage({
 
       <nav className="inspiration-categories">
         {CATEGORIES.map((cat) => (
-          <button key={cat} type="button" className={category === cat ? "active" : ""} onClick={() => { setCategory(cat); void loadPosts(cat); }}>{cat}</button>
+          <button key={cat} type="button" className={category === cat ? "active" : ""} onClick={() => selectCategory(cat)}>{cat}</button>
         ))}
       </nav>
 
@@ -638,7 +545,7 @@ export default function InspirationPage({
                       setActionError("");
                       try {
                         await api.likeInspiration(post.id);
-                        await loadPosts(category);
+                        await loadPosts();
                       } catch (err) {
                         setActionError(err instanceof Error ? err.message : "点赞失败");
                       }
@@ -646,7 +553,7 @@ export default function InspirationPage({
                   >
                     ♡ {post.like_count}
                   </button>
-                  {canContribute ? <button type="button" className="ghost-button" title="编辑" onClick={() => setEditDialog({ postId: post.id, title: post.title, image_path: post.image_path, source_url: post.source_url, uploadingFile: false, uploadError: "" })}>✎</button> : null}
+                  {canContribute ? <button type="button" className="ghost-button" title="编辑" onClick={() => openEdit(post)}>✎</button> : null}
                   {mode === "admin" ? (
                     <button
                       type="button"
@@ -749,23 +656,28 @@ export default function InspirationPage({
 
       {/* Import Dialog */}
       {importDialog.open ? (
-        <div className="media-lightbox" onClick={() => setImportDialog({ ...importDialog, open: false })}>
+        <div className="media-lightbox" onClick={closeImport}>
           <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: "12px", padding: "24px", maxWidth: "680px", width: "90vw", maxHeight: "85vh", overflow: "auto", color: "#333" }}>
             <h2 style={{ margin: "0 0 16px", fontSize: "18px" }}>导入灵感参考</h2>
+            {importDialog.createState === "unknown" ? <p role="status">导入结果待确认，可能已创建。请先刷新列表核对，本次不会重复提交。</p> : null}
+            {importDialog.createState === "accepted" ? <p role="status">已导入记录 #{importDialog.createdId}。如需另建条目，请新建另一条导入。</p> : null}
+            {importDialog.createState !== "idle" ? (
+              <button type="button" className="ghost-button" onClick={() => void checkImportResult()}>刷新列表核对</button>
+            ) : null}
+            <button type="button" className="ghost-button" onClick={() => newImport(category !== "全部" ? category : "建筑")}>新建另一条导入</button>
+            {recoverableImports.map((item) => (
+              <button key={item.id} type="button" className="ghost-button" onClick={() => resumeImport(item.id)}>
+                继续导入 {item.id} · {item.title || "未命名"} · {item.state === "pending" ? "处理中" : item.state === "unknown" ? "待确认" : item.state === "accepted" ? "已创建" : "未创建"}
+              </button>
+            ))}
             <input ref={importUploadInputRef} type="file" accept="image/*" hidden onChange={handleImportFileInputChange} />
             <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
-              <input type="text" placeholder="粘贴文章链接" value={importDialog.url} onChange={(e) => setImportDialog({ ...importDialog, url: e.target.value, error: "" })} style={{ flex: 1, padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px" }} />
-              <button type="button" className="admin-primary-button" disabled={importDialog.loading || !importDialog.url.trim()} onClick={async () => {
-                setImportDialog({ ...importDialog, loading: true, error: "", images: [] });
-                try {
-                  const result = await api.extractImages(importDialog.url.trim());
-                  setImportDialog({ ...importDialog, loading: false, images: result.images, title: result.title || importDialog.title, selectedImage: result.images[0] || "" });
-                } catch (err: any) {
-                  setImportDialog({ ...importDialog, loading: false, error: err?.message || "提取失败", manualMode: true });
-                }
-              }}>{importDialog.loading ? "提取中..." : "提取图片"}</button>
+              <input type="text" placeholder="粘贴文章链接" value={importDialog.url} onChange={(e) => setImportField("url", e.target.value)} style={{ flex: 1, padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px" }} />
+              <button type="button" className="admin-primary-button" disabled={importDialog.loading || !importDialog.url.trim()} onClick={() => void extract()}>{importDialog.loading ? "提取中..." : "提取图片"}</button>
             </div>
             {importDialog.error ? <p style={{ color: "#e53e3e", fontSize: "13px", margin: "0 0 12px" }}>{importDialog.error}</p> : null}
+            {importDialog.uploadError ? <p className="inspiration-upload-error">{importDialog.uploadError}</p> : null}
+            {importDialog.notice ? <p role="status">{importDialog.notice}</p> : null}
             <div className="inspiration-upload-panel" style={{ marginBottom: "16px" }}>
               <button
                 type="button"
@@ -803,7 +715,7 @@ export default function InspirationPage({
                 <p style={{ fontSize: "13px", color: "#666", margin: "0 0 8px" }}>选择封面图片（共 {importDialog.images.length} 张）：</p>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "8px", maxHeight: "240px", overflow: "auto" }}>
                   {importDialog.images.map((img) => (
-                    <div key={img} onClick={() => setImportDialog({ ...importDialog, selectedImage: img })} style={{ border: importDialog.selectedImage === img ? "3px solid #3b82f6" : "2px solid #eee", borderRadius: "8px", overflow: "hidden", cursor: "pointer", aspectRatio: "4/3" }}>
+                    <div key={img} onClick={() => setImportField("selectedImage", img)} style={{ border: importDialog.selectedImage === img ? "3px solid #3b82f6" : "2px solid #eee", borderRadius: "8px", overflow: "hidden", cursor: "pointer", aspectRatio: "4/3" }}>
                       <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     </div>
                   ))}
@@ -812,28 +724,17 @@ export default function InspirationPage({
             ) : null}
             {importDialog.manualMode ? (
               <div style={{ marginBottom: "12px" }}>
-                <input type="text" placeholder="手动输入图片 URL" value={importDialog.selectedImage} onChange={(e) => setImportDialog({ ...importDialog, selectedImage: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px" }} />
+                <input type="text" placeholder="手动输入图片 URL" value={importDialog.selectedImage} onChange={(e) => setImportField("selectedImage", e.target.value)} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px" }} />
               </div>
             ) : null}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
-              <div><label style={{ fontSize: "13px", color: "#666" }}>标题</label><input type="text" value={importDialog.title} onChange={(e) => setImportDialog({ ...importDialog, title: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} /></div>
-              <div><label style={{ fontSize: "13px", color: "#666" }}>分类</label><select value={importDialog.category} onChange={(e) => setImportDialog({ ...importDialog, category: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }}>{["建筑", "景观", "室内", "城市", "构图", "材质", "光影", "色彩"].map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
+              <div><label style={{ fontSize: "13px", color: "#666" }}>标题</label><input type="text" value={importDialog.title} onChange={(e) => setImportField("title", e.target.value)} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} /></div>
+              <div><label style={{ fontSize: "13px", color: "#666" }}>分类</label><select value={importDialog.category} onChange={(e) => setImportField("category", e.target.value)} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }}>{["建筑", "景观", "室内", "城市", "构图", "材质", "光影", "色彩"].map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
             </div>
-            <div style={{ marginBottom: "16px" }}><label style={{ fontSize: "13px", color: "#666" }}>标签（逗号分隔）</label><input type="text" value={importDialog.tags} onChange={(e) => setImportDialog({ ...importDialog, tags: e.target.value })} placeholder="如：住宅, 日本, 混凝土" style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} /></div>
+            <div style={{ marginBottom: "16px" }}><label style={{ fontSize: "13px", color: "#666" }}>标签（逗号分隔）</label><input type="text" value={importDialog.tags} onChange={(e) => setImportField("tags", e.target.value)} placeholder="如：住宅, 日本, 混凝土" style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} /></div>
             <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-              <button type="button" className="ghost-button" onClick={() => setImportDialog({ ...importDialog, open: false })}>取消</button>
-              <button type="button" className="admin-primary-button" disabled={!importDialog.title.trim() || !importDialog.selectedImage.trim()} onClick={async () => {
-                try {
-                  const tags = importDialog.tags.split(",").map((t) => t.trim()).filter(Boolean);
-                  let sourceName = "";
-                  try { sourceName = new URL(importDialog.url).hostname.replace(/^www\./, ""); } catch {}
-                  await api.createInspiration({ title: importDialog.title.trim(), image_path: importDialog.selectedImage.trim(), category: importDialog.category, source_type: "external", source_name: sourceName, source_url: importDialog.url.trim(), tags });
-                  setImportDialog({ ...importDialog, open: false });
-                  await loadPosts(category);
-                } catch (err) {
-                  setImportDialog({ ...importDialog, error: err instanceof Error ? err.message : "导入灵感失败" });
-                }
-              }}>确认导入</button>
+              <button type="button" className="ghost-button" onClick={closeImport}>取消</button>
+              <button type="button" className="admin-primary-button" disabled={!importDialog.title.trim() || !importDialog.selectedImage.trim() || importDialog.uploadingFile || importDialog.loading || importDialog.saving || importDialog.createState === "accepted"} onClick={() => void saveImport()}>{importDialog.createState === "unknown" ? "结果待确认" : importDialog.createState === "accepted" ? "已导入" : importDialog.saving ? "导入中..." : "确认导入"}</button>
             </div>
           </div>
         </div>
@@ -841,12 +742,14 @@ export default function InspirationPage({
 
       {/* Edit Dialog */}
       {editDialog ? (
-        <div className="media-lightbox" onClick={() => setEditDialog(null)}>
+        <div className="media-lightbox" onClick={closeEdit}>
           <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: "12px", padding: "24px", maxWidth: "480px", width: "90vw", color: "#333" }}>
             <h2 style={{ margin: "0 0 16px", fontSize: "18px" }}>编辑灵感</h2>
+            {editDialog.error ? <p className="inspiration-upload-error">{editDialog.error}</p> : null}
+            {editDialog.notice ? <p role="status">{editDialog.notice}</p> : null}
             <input ref={editUploadInputRef} type="file" accept="image/*" hidden onChange={handleEditFileInputChange} />
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <div><label style={{ fontSize: "13px", color: "#666" }}>标题</label><input type="text" value={editDialog.title} onChange={(e) => setEditDialog({ ...editDialog, title: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} /></div>
+              <div><label style={{ fontSize: "13px", color: "#666" }}>标题</label><input type="text" value={editDialog.title} onChange={(e) => setEditField("title", e.target.value)} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} /></div>
               <div className="inspiration-upload-panel">
                 <button
                   type="button"
@@ -880,20 +783,12 @@ export default function InspirationPage({
                 </div>
                 {editDialog.uploadError ? <p className="inspiration-upload-error">{editDialog.uploadError}</p> : null}
               </div>
-              <div><label style={{ fontSize: "13px", color: "#666" }}>图片 URL</label><input type="text" value={editDialog.image_path} onChange={(e) => setEditDialog({ ...editDialog, image_path: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} /></div>
-              <div><label style={{ fontSize: "13px", color: "#666" }}>原文链接</label><input type="text" value={editDialog.source_url} onChange={(e) => setEditDialog({ ...editDialog, source_url: e.target.value })} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} /></div>
+              <div><label style={{ fontSize: "13px", color: "#666" }}>图片 URL</label><input type="text" value={editDialog.image_path} onChange={(e) => setEditField("image_path", e.target.value)} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} /></div>
+              <div><label style={{ fontSize: "13px", color: "#666" }}>原文链接</label><input type="text" value={editDialog.source_url} onChange={(e) => setEditField("source_url", e.target.value)} style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "14px", marginTop: "4px" }} /></div>
             </div>
             <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", marginTop: "16px" }}>
-              <button type="button" className="ghost-button" onClick={() => setEditDialog(null)}>取消</button>
-              <button type="button" className="admin-primary-button" onClick={async () => {
-                try {
-                  await api.updateInspiration(editDialog.postId, { title: editDialog.title, image_path: editDialog.image_path, source_url: editDialog.source_url });
-                  setEditDialog(null);
-                  await loadPosts(category);
-                } catch (err) {
-                  setActionError(err instanceof Error ? err.message : "更新灵感失败");
-                }
-              }}>保存</button>
+              <button type="button" className="ghost-button" onClick={closeEdit}>取消</button>
+              <button type="button" className="admin-primary-button" disabled={editDialog.uploadingFile || editDialog.saving} onClick={() => void saveEdit()}>{editDialog.saving ? "保存中..." : "保存"}</button>
             </div>
           </div>
         </div>

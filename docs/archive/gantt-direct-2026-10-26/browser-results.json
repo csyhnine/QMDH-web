@@ -1,0 +1,25 @@
+{
+  "results": [
+    {
+      "name": "Full project and per-work dates, names and explicit edit entry render",
+      "passed": true
+    },
+    {
+      "name": "Native move and resize update inclusive dates and survive persistence",
+      "passed": true
+    },
+    {
+      "name": "Direct work add with custom month calendar and per-work people/content persists; conflict retains preview",
+      "passed": true
+    },
+    {
+      "name": "Visible row action edits assignees and content; work removal is previewed then saved",
+      "passed": true
+    },
+    {
+      "name": "Archived chart blocks additions; mobile keeps overflow inside timeline",
+      "passed": true
+    }
+  ],
+  "errors": []
+}

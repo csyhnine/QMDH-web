@@ -1,0 +1,37 @@
+{
+  "results": [
+    {
+      "name": "Compact name-only headers align with continuous vertical pillars, no percentage text",
+      "passed": true
+    },
+    {
+      "name": "Simple work form exposes only core fields and supports direct creation",
+      "passed": true
+    },
+    {
+      "name": "Handwritten previous/next week text autosaves, summarizes actual records and survives view remount",
+      "passed": true
+    },
+    {
+      "name": "Selecting part of a pillar opens prefilled reassignment and only the selected period transfers",
+      "passed": true
+    },
+    {
+      "name": "When nobody remains responsible the source period is grey and a pause warning appears",
+      "passed": true
+    },
+    {
+      "name": "Reassignment conflict preserves selected dates and target for retry",
+      "passed": true
+    },
+    {
+      "name": "Drag handle moves entire work with autosave; fixed tabs retain their positions",
+      "passed": true
+    },
+    {
+      "name": "Month, quarter, year and mobile preserve one continuous bar rather than daily copies",
+      "passed": true
+    }
+  ],
+  "errors": []
+}

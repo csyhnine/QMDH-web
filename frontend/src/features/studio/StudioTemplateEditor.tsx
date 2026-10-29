@@ -26,6 +26,7 @@ export default function StudioTemplateEditor({
       />
       <StudioTemplateEditorActions
         editingTemplateId={editingTemplateId}
+        templateFeedback={templateFeedback}
         onCancelTemplateEdit={onCancelTemplateEdit}
         onSaveCustomTemplate={onSaveCustomTemplate}
       />

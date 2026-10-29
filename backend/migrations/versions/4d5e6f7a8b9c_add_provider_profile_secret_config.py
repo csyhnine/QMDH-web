@@ -18,8 +18,9 @@ depends_on = None
 def upgrade() -> None:
     op.add_column("provider_profiles", sa.Column("api_secret", sa.Text(), nullable=False, server_default=""))
     op.add_column("provider_profiles", sa.Column("adapter_config", sa.JSON(), nullable=False, server_default="{}"))
-    op.alter_column("provider_profiles", "api_secret", server_default=None)
-    op.alter_column("provider_profiles", "adapter_config", server_default=None)
+    with op.batch_alter_table("provider_profiles") as batch:
+        batch.alter_column("api_secret", server_default=None)
+        batch.alter_column("adapter_config", server_default=None)
 
 
 def downgrade() -> None:

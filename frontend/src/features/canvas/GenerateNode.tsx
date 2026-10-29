@@ -1,5 +1,6 @@
+import { useCanvasMotion } from "./canvasMotion";
 import { Handle, Position, useUpdateNodeInternals, type Node, type NodeProps } from "@xyflow/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { resolveProviderResolutionOptions } from "../studio/studioConstants";
 import { aspectRatioOptionsFor } from "../studio/studioCanvasLinkage";
@@ -34,10 +35,13 @@ const statusLabel: Record<GenerateNodeData["status"], string> = {
 };
 
 export default function GenerateNode({ id, data, selected }: GenerateNodeProps) {
+  const motionClass = useCanvasMotion(id);
   const {
     providers,
     disabled,
     patchNode,
+    promptScopeKey,
+    isPromptScopeCurrent,
     generateNode,
     syncNodeTask,
     uploadNodeImage,
@@ -48,6 +52,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
   const updateNodeInternals = useUpdateNodeInternals();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [polishingPrompt, setPolishingPrompt] = useState(false);
+  useLayoutEffect(() => { setPolishingPrompt(false); }, [id, data.nodeKind, promptScopeKey]);
   const upstream = useMemo(() => getUpstreamDeliverables(id), [getUpstreamDeliverables, id]);
   const isUpload = data.nodeKind === "upload";
   const isUpscale = data.nodeKind === "upscale";
@@ -119,7 +124,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
 
   return (
     <div
-      className={`qmdh-canvas-node${selected ? " is-selected is-expanded" : ""}${busy ? " is-busy" : ""}${
+      className={`qmdh-canvas-node${motionClass}${selected ? " is-selected is-expanded" : ""}${busy ? " is-busy" : ""}${
         isUpload ? " is-upload" : ""
       }${isAnnotate ? " is-annotate" : ""}`}
     >
@@ -270,6 +275,9 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
             {!isUpscale ? (
               <CanvasPromptPolishField
                 nodeKind={data.nodeKind}
+                nodeId={id}
+                draftIdentity={data}
+                onApplyPrompt={(prompt, polished, isCurrent) => patchNode(id, { prompt, promptPolished: polished }, { expectedData: data, isCurrent: () => isCurrent() && (isPromptScopeCurrent?.() ?? true) })}
                 prompt={data.prompt}
                 referenceImages={data.referenceImages}
                 upstreamImages={upstream.images}
@@ -424,7 +432,7 @@ export default function GenerateNode({ id, data, selected }: GenerateNodeProps) 
               type="button"
               className="is-secondary"
               disabled={disabled || busy || !canSubmit}
-              onClick={() => generateNode(id, data)}
+              onClick={() => generateNode(id, data, {regenerate:true})}
             >
               重新生成
             </button>

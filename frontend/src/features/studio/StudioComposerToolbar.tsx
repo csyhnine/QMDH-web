@@ -1,4 +1,5 @@
 import StudioComposerSubmitActions from "./StudioComposerSubmitActions";
+import { comfyReferenceCounts } from "./comfyReferenceContract";
 import StudioComposerToolbarMenus from "./StudioComposerToolbarMenus";
 import type { StudioComposerToolbarProps } from "./studioComposerToolbarTypes";
 
@@ -25,7 +26,7 @@ export default function StudioComposerToolbar(props: StudioComposerToolbarProps)
         <StudioComposerToolbarMenus {...props} />
       </div>
       <StudioComposerSubmitActions
-        requiresTwoImages={props.selectedProvider?.adapter_kind === "comfyui" && props.studioForm.creationMode === "edit"}
+        supportedReferenceCounts={props.selectedProvider?.adapter_kind === "comfyui" && props.studioForm.creationMode === "edit" ? comfyReferenceCounts(props.selectedProvider) : undefined}
         availableProviderCount={availableProviderCount}
         creationMode={props.studioForm.creationMode}
         hasActiveProject={hasActiveProject}

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.logging import get_correlation_id
 from app.models import ChatTurnTelemetry
+from app.services.chat_model_observation import ModelCallObservation
 from app.services.chat_message_content import attachment_kind_for_path
 from app.services.media_storage import resolve_storage_path
 
@@ -101,6 +102,12 @@ class ChatTurnTracker:
     ttft_ms: int = 0
     upstream_called: bool = False
     stage_events: list[dict[str, object]] = field(default_factory=list)
+    model_observation: ModelCallObservation | None = None
+
+    def observe_agent(self) -> ModelCallObservation:
+        if self.model_observation is None:
+            self.model_observation = ModelCallObservation(self.turn_id, started_at=self.started_at)
+        return self.model_observation
 
     def note_stage(self, label: str) -> None:
         self.stage_events.append({"label": label, "elapsed_ms": _now_ms(self.started_at)})
@@ -161,6 +168,12 @@ class ChatTurnTracker:
         turn.context_tokens = context_tokens or getattr(self, "_context_tokens", 0)
         turn.context_usage_percent = context_usage_percent or getattr(self, "_context_usage_percent", 0)
         turn.stage_events_json = list(self.stage_events)
+        if self.model_observation is not None:
+            observation = self.model_observation.snapshot(close=True)
+            turn.upstream_called = observation["upstream_called"] is True
+            turn.upstream_duration_ms = observation["request_duration_ms"] or 0
+            turn.ttft_ms = 0  # Legacy column; versioned metadata explicitly records unknown.
+            turn.stage_events_json.append(observation)
         turn.completed_at = datetime.now(timezone.utc)
         db.add(turn)
         db.commit()

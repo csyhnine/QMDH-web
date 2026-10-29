@@ -17,7 +17,7 @@ function load(relative) {
   const exports = {};
   cache.set(file, exports);
   const code = ts.transpileModule(readFileSync(file, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
   }).outputText;
   vm.runInNewContext(code, { exports, console, URL, URLSearchParams, require(name) {
     if (!name.startsWith('.')) return require(name);
@@ -158,13 +158,73 @@ test('two-image editing describes the missing input and disables submission unti
   }
 });
 
-test('local waiting and recovery render truthful states without invented percent', () => {
-  const Empty = load('features/studio/StudioFeedEmptyState.tsx').default;
-  for (const [stage, label] of [['queued', '前方 2 项任务'], ['recovering', '请勿重复提交'], ['running', '本机正在生成']]) {
-    const html = renderToStaticMarkup(require('react').createElement(Empty,
-      {isRunning: true, status: 'pending', virtualProgress: 78, localStage: stage, queuePosition: 2}));
-    assert.ok(html.includes(label)); assert.doesNotMatch(html, /78%/);
-    assert.match(html, /role="progressbar"/);
-    assert.doesNotMatch(html, /aria-valuenow/);
+test('v1.1 single-image contract updates hints, validation and submit without breaking legacy two-image defaults', () => {
+  const provider = { ...image, capabilities: ['image.edit'], reference_input_count: 1 };
+  const { validateStudioTaskSubmission } = load('features/studio/studioTaskSubmissionValidation.ts');
+  const { composerReferenceHint, composerReferenceZoneLabel } = load('features/studio/studioComposerDockUtils.ts');
+  const { defaultStudioForm } = load('features/studio/studioConstants.ts');
+  const Submit = load('features/studio/StudioComposerSubmitActions.tsx').default;
+  assert.equal(composerReferenceZoneLabel('edit', provider), '编辑原图（必传 1 张）');
+  assert.match(composerReferenceHint('edit', 1, provider), /仅接收一张原图/);
+  for (const count of [0, 1, 2]) {
+    const result = validateStudioTaskSubmission({form: {...defaultStudioForm, creationMode:'edit', prompt:'fixture',
+      referenceImages: Array.from({length:count}, (_,i)=>`/media/${i}.png`)}, providerForSubmit:provider,
+      setState(){}, uploadingReference:false});
+    assert.equal(result.ok, count === 1);
+    const html = renderToStaticMarkup(require('react').createElement(Submit, {creationMode:'edit',
+      requiredReferenceCount:1, referenceUploadCount:count, availableProviderCount:1, hasActiveProject:true,
+      prompt:'fixture', submitting:false, uploadingReference:false, submissionProgress:null}));
+    assert.equal(html.includes('disabled=""'), count !== 1);
   }
+});
+
+test('verified Qwen input variants set upload capacity, live hints and submit eligibility by exact count', () => {
+  const provider = {...image,capabilities:['image.edit'],reference_input_count:1,reference_input_counts:[1,2]};
+  const contract = load('features/studio/comfyReferenceContract.ts');
+  const {validateStudioTaskSubmission}=load('features/studio/studioTaskSubmissionValidation.ts');
+  const {composerReferenceHint,composerReferenceZoneLabel}=load('features/studio/studioComposerDockUtils.ts');
+  const {defaultStudioForm}=load('features/studio/studioConstants.ts');
+  const Submit=load('features/studio/StudioComposerSubmitActions.tsx').default;
+  assert.equal(contract.comfyReferenceLimit(provider),2);
+  const {buildStudioReferenceUploadOptions}=load('features/studio/studioControllerReferenceOptions.ts');
+  assert.equal(buildStudioReferenceUploadOptions({controllerState:{studioForm:{...defaultStudioForm,creationMode:'edit'}},selectedProvider:provider}).maxReferenceCount,2);
+  assert.match(composerReferenceZoneLabel('edit',provider),/1 或 2/);
+  for(const count of [0,1,2,3,4]){
+    const state={form:{...defaultStudioForm,creationMode:'edit',prompt:'Synthetic',referenceImages:Array.from({length:count},(_,i)=>`references/${i}.png`)},providerForSubmit:provider,setState(){},uploadingReference:false};
+    assert.equal(validateStudioTaskSubmission(state).ok,count===1||count===2);
+    const html=renderToStaticMarkup(require('react').createElement(Submit,{creationMode:'edit',supportedReferenceCounts:[1,2],referenceUploadCount:count,availableProviderCount:1,hasActiveProject:true,prompt:'Synthetic',submitting:false,uploadingReference:false,submissionProgress:null}));
+    assert.equal(html.includes('disabled=""'),count!==1&&count!==2);
+  }
+  assert.match(composerReferenceHint('edit',1,provider),/单图编辑工作流/);
+  assert.match(composerReferenceHint('edit',2,provider),/2 图编辑工作流/);
+  const disabled={...provider,reference_input_counts:[]};
+  assert.equal(validateStudioTaskSubmission({form:{...defaultStudioForm,creationMode:'edit',prompt:'Synthetic',referenceImages:['a']},providerForSubmit:disabled,setState(){},uploadingReference:false}).ok,false);
+  assert.match(composerReferenceZoneLabel('edit',disabled),/暂不可用/);
+});
+
+test('all task channels use estimated percent with queue and recovery context', () => {
+  const Empty = load('features/studio/StudioFeedEmptyState.tsx').default;
+  for (const [stage, label] of [['queued', '前方 2 项任务'], ['recovering', '请勿重复提交'], ['running', '生成中'], [undefined, '生成中']]) {
+    const html = renderToStaticMarkup(require('react').createElement(Empty,
+      {isRunning: true, status: 'running', virtualProgress: 78, localStage: stage, queuePosition: 2}));
+    assert.ok(html.includes(label)); assert.match(html, /78%/); assert.match(html, /预估进度/);
+    assert.match(html, /role="progressbar"/); assert.match(html, /aria-valuenow="78"/);
+    assert.match(html, /width:78%/);
+  }
+});
+
+test('only completed tasks reach 100; invalid estimates and failed tasks never imply completion', () => {
+  const Progress = load('features/studio/StudioTaskProgress.tsx').default;
+  const Empty = load('features/studio/StudioFeedEmptyState.tsx').default;
+  const render = props => renderToStaticMarkup(require('react').createElement(Progress, props));
+  for (const percent of [95, 100, 400]) {
+    const html = render({percent, status:'running'});
+    assert.match(html, /aria-valuenow="95"/); assert.match(html, /仍在处理/);
+    assert.doesNotMatch(html, /width:100%/);
+  }
+  for (const percent of [NaN, Infinity, -5]) assert.match(render({percent,status:'running'}), /aria-valuenow="0"/);
+  assert.match(render({percent:2,status:'completed'}), /aria-valuenow="100"/);
+  assert.match(render({percent:50,status:'running',localStage:'saving'}), /正在保存结果/);
+  const failed = renderToStaticMarkup(require('react').createElement(Empty, {isRunning:false,status:'failed',virtualProgress:96}));
+  assert.doesNotMatch(failed, /role="progressbar"|已完成/);
 });

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from time import perf_counter, sleep
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -8,6 +9,7 @@ from urllib.request import Request, urlopen
 from app.core.config import ImageProviderProfile
 from app.services.model_registry import ProviderDefinition
 from app.services.provider_adapters.base import ExecutionOutcome, ProviderExecutionError, RequestDiagnostics
+from app.services.provider_adapters.async_progress import AsyncTaskProgress, UpstreamTaskFailed
 from app.services.provider_adapters.video_common import (
     calculate_video_billing,
     extract_video_urls,
@@ -25,6 +27,10 @@ class VolcengineArkVideoProviderAdapter:
     def __init__(self, definition: ProviderDefinition, profile: ImageProviderProfile):
         self.definition = definition
         self.profile = profile
+        self.task_id, self.saved_progress, self.save_progress = None, {}, None
+
+    def bind_async_progress(self, task_id, progress, save):
+        self.task_id, self.saved_progress, self.save_progress = task_id, progress, save
 
     def execute(self, capability: str, payload: dict) -> ExecutionOutcome:
         if capability != "video.generate":
@@ -53,61 +59,42 @@ class VolcengineArkVideoProviderAdapter:
             effective_capability="video.generate",
         )
 
+        request_model = str(_ark_video_request_body(self.profile, prompt, payload).get("model") or self.profile.model_name)
+        execution_profile = replace(self.profile, model_name=request_model)
+        started_at = perf_counter()
+        progress = AsyncTaskProgress(task_id=self.task_id, saved=self.saved_progress, save=self.save_progress,
+                                     definition=self.definition, profile=execution_profile, diagnostics=diagnostics,
+                                     billing=calculate_video_billing(profile=self.profile, output_count=1))
         try:
-            started_at = perf_counter()
-            submit_payload = _submit_ark_video_task(self.profile, prompt, payload)
-            upstream_task_id = _extract_task_id(submit_payload)
-            final_payload = _poll_ark_video_result(self.profile, upstream_task_id)
-            video_urls = extract_video_urls(final_payload)
-            if not video_urls:
-                raise ValueError(f"Ark async video task succeeded but returned no video outputs: {final_payload}")
-
-            storage_paths = [
-                persist_generated_video(
-                    provider_name=self.definition.provider_name,
-                    video_url=video_url,
-                    prompt=prompt,
-                    timeout_seconds=float(self.profile.timeout_seconds),
-                    output_format=self.profile.output_format,
-                )
-                for video_url in video_urls
-            ]
-            latency_ms = max(1, round((perf_counter() - started_at) * 1000))
-            billing = calculate_video_billing(profile=self.profile, output_count=len(storage_paths))
-            result = {
-                "summary": f"{self.definition.provider_name} completed a live video.generate run.",
-                "payload_keys": list(payload.keys()),
-                "adapter_mode": "volcengine_ark_video_tasks",
-                "storage_path": storage_paths[0],
-                "storage_paths": storage_paths,
-                "response_model": self.profile.model_name,
-                "response_models": [self.profile.model_name],
-                "requested_video_count": 1,
-                "output_count": len(storage_paths),
-                "billing": billing,
-                "upstream_task_id": upstream_task_id,
-                "upstream_status": _extract_task_status(final_payload),
-                "upstream_request_id": _extract_request_id(final_payload) or _extract_request_id(submit_payload),
-                "upstream_video_url_count": len(video_urls),
-                "usage": _extract_usage(final_payload),
-                "usage_records": [_extract_usage(final_payload)] if _extract_usage(final_payload) else [],
-                "request_strategy": diagnostics.strategy,
-                "request_endpoint": diagnostics.endpoint_path,
-                "request_url": diagnostics.request_url,
-                "request_timeout_seconds": diagnostics.timeout_seconds,
-                "request_adapter_mode": diagnostics.adapter_mode,
-                "effective_capability": diagnostics.effective_capability,
-            }
-            return ExecutionOutcome(
-                model_name=self.profile.model_name,
-                latency_ms=latency_ms,
-                cost=billing["cost"],
-                cost_currency=billing["currency"],
-                outbound=self.definition.outbound,
-                result=result,
-            )
+            upstream_task_id = progress.prepare()
+            if upstream_task_id is None:
+                submit_payload = _submit_ark_video_task(self.profile, prompt, payload)
+                upstream_task_id = _extract_task_id(submit_payload)
+                progress.accepted(upstream_task_id, _extract_request_id(submit_payload))
+            if progress.step["state"] != "completed":
+                if not progress.step.get("output_urls"):
+                    final_payload = _poll_ark_video_result(self.profile, upstream_task_id)
+                    video_urls = extract_video_urls(final_payload)
+                    if not video_urls:
+                        raise ValueError("Volcengine async task succeeded but returned no video outputs")
+                    progress.outputs(video_urls, status=_extract_task_status(final_payload),
+                                     usage=_extract_usage(final_payload), request_id=_extract_request_id(final_payload))
+                for video_url in progress.step["output_urls"][len(progress.step["storage_paths"]):]:
+                    progress.checkpoint()
+                    storage_path = persist_generated_video(
+                        provider_name=self.definition.provider_name, video_url=video_url, prompt=prompt,
+                        timeout_seconds=float(self.profile.timeout_seconds), output_format=self.profile.output_format,
+                    )
+                    progress.saved_output(storage_path)
+                progress.complete()
+            outcome = progress.outcome(max(1, round((perf_counter() - started_at) * 1000)))
+            outcome.result.update(summary=f"{self.definition.provider_name} completed a live video.generate run.",
+                                  payload_keys=list(payload.keys()))
+            return outcome
         except Exception as exc:
-            raise ProviderExecutionError(str(exc), diagnostics=diagnostics) from exc
+            progress.failed(exc)
+            raise ProviderExecutionError(str(exc), diagnostics=diagnostics,
+                                         partial_outcome=progress.outcome()) from exc
 
 
 def _ark_headers(profile: ImageProviderProfile) -> dict[str, str]:
@@ -191,7 +178,7 @@ def _poll_ark_video_result(profile: ImageProviderProfile, task_id: str) -> dict:
         if status in _SUCCEEDED_STATUSES:
             return last_payload
         if status in _FAILED_STATUSES:
-            raise ValueError(f"Ark async video task failed: {last_payload}")
+            raise UpstreamTaskFailed(f"Ark async video task failed: {last_payload}")
         sleep(5)
 
     raise ValueError(f"Ark async video task timed out before completion: {last_payload}")

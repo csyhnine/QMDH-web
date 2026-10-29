@@ -1,4 +1,4 @@
-import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
+import { type ChangeEvent, type Dispatch, type FormEvent, type SetStateAction, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api, type FeedbackMessage, type FeedbackRecord } from "../../api";
@@ -6,29 +6,13 @@ import { useAuth } from "../../context/AuthContext";
 import { formatChinaMonthDayTime } from "../../lib/datetime";
 import { formatUploadSize, MAX_REFERENCE_UPLOAD_BYTES, validateReferenceImageSize } from "../../utils/uploads";
 
-type FeedbackAttachment = {
-  fileName: string;
-  previewUrl: string;
-  storagePath: string;
-};
-
-type Draft = {
-  title: string;
-  message: string;
-  attachments: FeedbackAttachment[];
-};
-
-const defaultDraft: Draft = {
-  title: "",
-  message: "",
-  attachments: [],
-};
+import { FeedbackDraftSession, FeedbackPreviewOwner, type FeedbackAttachment } from "./feedbackDraftSession";
 
 export type FeedbackPageProps = {
   feedbackItems: FeedbackRecord[];
   error: string;
-  onRefresh: () => void;
-  onSetError: (error: string) => void;
+  onRefresh: (isErrorCurrent?: () => boolean) => void;
+  onSetError: Dispatch<SetStateAction<string>>;
 };
 
 function messageAuthorLabel(message: FeedbackMessage): string {
@@ -68,151 +52,177 @@ function FeedbackMessageList({ messages }: { messages: FeedbackMessage[] }) {
 
 export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetError }: FeedbackPageProps) {
   const navigate = useNavigate();
-  const { isGuest } = useAuth();
-  const [draft, setDraft] = useState<Draft>(defaultDraft);
-  const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [followUpDrafts, setFollowUpDrafts] = useState<Record<number, string>>({});
-  const [followUpSavingId, setFollowUpSavingId] = useState<number | null>(null);
+  const { isGuest, currentUser } = useAuth();
+  const [, redraw] = useState(0);
+  const scope = useMemo(() => new FeedbackDraftSession(), [currentUser?.id, currentUser?.name, isGuest]);
+  const currentScope = useRef(scope), callbacks = useRef({ onRefresh, onSetError });
+  const previews = useRef(new FeedbackPreviewOwner((url) => URL.revokeObjectURL(url)));
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const draft = scope.draft, followUpDrafts = scope.followUpDrafts;
+  const saving = Boolean(scope.main), uploading = scope.uploads.size > 0;
+  const isCurrent = () => scope.active && currentScope.current === scope;
+  function publish() { if (isCurrent()) redraw((value) => isCurrent() ? value + 1 : value); }
+  useLayoutEffect(() => {
+    currentScope.current.active = false;
+    currentScope.current = scope; scope.active = true;
+    return () => {
+      scope.active = false;
+      queueMicrotask(() => {
+        if (!scope.active) scope.cancelUploads();
+        if (!currentScope.current.active) previews.current.dispose();
+      });
+    };
+  }, [scope]);
+  useLayoutEffect(() => { callbacks.current = { onRefresh, onSetError }; }, [onRefresh, onSetError]);
+  useLayoutEffect(() => {
+    scope.syncThreads(feedbackItems.filter((item) => item.status !== "closed").map((item) => item.id));
+    previews.current.observe(draft.attachments.map((item) => item.previewUrl),
+      feedbackItems.flatMap((item) => item.messages.flatMap((message) => message.attachment_paths)));
+  }, [scope, draft, feedbackItems]);
+  function setDraft(change: SetStateAction<typeof scope.draft>) {
+    if (!isCurrent()) return;
+    scope.draft = typeof change === "function" ? change(scope.draft) : change;
+    scope.draftVersion += 1; scope.intent += 1; publish();
+  }
+  function setError(message: string, intent: number, owns: () => boolean = () => true) {
+    const allowed = () => isCurrent() && scope.intent === intent && owns();
+    if (allowed()) callbacks.current.onSetError((current) => allowed() ? message : current);
+  }
+  function refreshAfterSend(intent: number, owns: () => boolean = () => true) {
+    if (!isCurrent()) return;
+    const failed = () => setError("反馈已发送，但记录刷新失败，请刷新记录查看。", intent, owns);
+    try { void Promise.resolve(callbacks.current.onRefresh(() => isCurrent() && scope.intent === intent && owns())).catch(failed); }
+    catch { failed(); }
+  }
+  function handleFollowUpChange(id: number, value: string) {
+    if (!isCurrent() || !scope.threads.has(id)) return;
+    scope.followUpDrafts = { ...scope.followUpDrafts, [id]: { value } };
+    scope.intent += 1; publish();
+  }
 
   const repliedCount = feedbackItems.filter((item) => item.status === "replied").length;
   const openCount = feedbackItems.filter((item) => item.status === "open").length;
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (isGuest) {
-      onSetError("访客模式无法提交反馈，请先登录。");
-      return;
-    }
-    const title = draft.title.trim();
-    const message = draft.message.trim();
-    if (!title || !message) {
-      onSetError("请先填写反馈标题和详细说明。");
-      return;
-    }
-    if (uploading) {
-      onSetError("截图仍在上传，请稍后再提交。");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await api.createFeedback({
-        title,
-        message,
-        attachment_paths: draft.attachments.map((item) => item.storagePath),
-      });
-      for (const item of draft.attachments) {
-        URL.revokeObjectURL(item.previewUrl);
-      }
-      setDraft(defaultDraft);
-      onSetError("");
-      onRefresh();
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "提交反馈失败");
-    } finally {
-      setSaving(false);
-    }
+    if (!isCurrent()) return Promise.resolve();
+    if (scope.main) return scope.main.promise;
+    const intent = ++scope.intent;
+    if (isGuest) { setError("访客模式无法提交反馈，请先登录。", intent); return Promise.resolve(); }
+    const source = scope.draft, version = scope.draftVersion;
+    const title = source.title.trim(), message = source.message.trim();
+    if (!title || !message) { setError("请先填写反馈标题和详细说明。", intent); return Promise.resolve(); }
+    if (scope.uploads.size > 0) { setError("截图仍在上传，请稍后再提交。", intent); return Promise.resolve(); }
+    const payload = { title, message, attachment_paths: source.attachments.map((item) => item.storagePath) };
+    const operation = { token: {}, promise: Promise.resolve() };
+    scope.main = operation; publish();
+    operation.promise = (async () => {
+      try {
+        await api.createFeedback(payload);
+        if (!isCurrent()) return;
+        if (scope.main === operation && scope.draft === source && scope.draftVersion === version) {
+          scope.resetDraft(false);
+        }
+        setError("", intent); refreshAfterSend(intent);
+      } catch (err) { setError(err instanceof Error ? err.message : "提交反馈失败", intent); }
+      finally { if (scope.main === operation) scope.main = null; publish(); }
+    })();
+    return operation.promise;
   }
 
-  async function handleFollowUpSubmit(event: FormEvent<HTMLFormElement>, feedbackId: number) {
+  function handleFollowUpSubmit(event: FormEvent<HTMLFormElement>, feedbackId: number): Promise<void> {
     event.preventDefault();
-    if (isGuest) {
-      onSetError("访客模式无法回复反馈，请先登录。");
-      return;
-    }
-    const message = (followUpDrafts[feedbackId] || "").trim();
-    if (!message) {
-      onSetError("请先填写补充说明。");
-      return;
-    }
-
-    setFollowUpSavingId(feedbackId);
-    try {
-      await api.appendFeedbackMessage(feedbackId, { message });
-      setFollowUpDrafts((current) => ({ ...current, [feedbackId]: "" }));
-      onSetError("");
-      onRefresh();
-    } catch (err) {
-      onSetError(err instanceof Error ? err.message : "发送补充说明失败");
-    } finally {
-      setFollowUpSavingId(null);
-    }
+    if (!isCurrent()) return Promise.resolve();
+    const thread = scope.threads.get(feedbackId);
+    if (!thread) return Promise.resolve();
+    const existing = scope.followUps.get(feedbackId); if (existing) return existing.operation.promise;
+    const intent = ++scope.intent;
+    if (isGuest) { setError("访客模式无法回复反馈，请先登录。", intent); return Promise.resolve(); }
+    const source = scope.followUpDrafts[feedbackId], message = (source?.value || "").trim();
+    if (!message) { setError("请先填写补充说明。", intent); return Promise.resolve(); }
+    const operation = { token: {}, promise: Promise.resolve() };
+    const ownsThread = () => scope.threads.get(feedbackId) === thread;
+    scope.followUps.set(feedbackId, { thread, operation }); publish();
+    operation.promise = (async () => {
+      try {
+        await api.appendFeedbackMessage(feedbackId, { message });
+        if (!isCurrent()) return;
+        if (ownsThread() && scope.followUpDrafts[feedbackId] === source) {
+          scope.followUpDrafts = { ...scope.followUpDrafts, [feedbackId]: { value: "" } };
+        }
+        setError("", intent, ownsThread); refreshAfterSend(intent, ownsThread);
+      } catch (err) { setError(err instanceof Error ? err.message : "发送补充说明失败", intent, ownsThread); }
+      finally {
+        if (scope.followUps.get(feedbackId)?.operation === operation) scope.followUps.delete(feedbackId);
+        publish();
+      }
+    })();
+    return operation.promise;
   }
 
   async function handleUploadFiles(files: File[]) {
-    if (isGuest) {
-      onSetError("访客模式无法上传截图，请先登录。");
-      return;
-    }
+    if (!isCurrent()) return;
+    const intent = ++scope.intent;
+    if (isGuest) { setError("访客模式无法上传截图，请先登录。", intent); return; }
     if (files.length === 0) return;
-    const remainingSlots = 4 - draft.attachments.length;
-    if (remainingSlots <= 0) {
-      onSetError("最多只能上传 4 张截图。");
-      return;
-    }
-
+    const remainingSlots = scope.availableUploadSlots;
+    if (remainingSlots <= 0) { setError("最多只能上传 4 张截图。", intent); return; }
+    const warnings: string[] = [];
     const validFiles = files.filter((file) => file.type.startsWith("image/"));
-    if (validFiles.length !== files.length) {
-      onSetError("仅支持上传图片截图。");
-    }
-
+    if (validFiles.length !== files.length) warnings.push("仅支持上传图片截图，其他文件未上传。");
     const selectedFiles = validFiles.slice(0, remainingSlots);
+    if (validFiles.length > remainingSlots) warnings.push("最多只能上传 4 张截图，超出的文件未上传。");
+    if (warnings.length) setError(warnings.join(" "), intent);
     if (selectedFiles.length === 0) return;
-
-    setUploading(true);
+    const batch = scope.reserveUploads(selectedFiles.length);
+    const uploadCurrent = () => isCurrent() && scope.isUploadCurrent(batch);
+    publish();
     try {
-      const nextAttachments = [...draft.attachments];
-      for (const file of selectedFiles) {
+      for (let index = 0; index < selectedFiles.length; index += 1) {
+        if (!uploadCurrent()) return;
+        const file = selectedFiles[index], slot = batch.slots[index];
+        if (!slot) return;
         const sizeError = validateReferenceImageSize(file);
-        if (sizeError) {
-          throw new Error(`${file.name}: ${sizeError}`);
-        }
+        if (sizeError) throw new Error(`${file.name}: ${sizeError}`);
         const reader = new FileReader();
         const dataUrl = await new Promise<string>((resolve, reject) => {
           reader.onload = () => resolve(String(reader.result || ""));
           reader.onerror = () => reject(new Error("读取截图失败"));
           reader.readAsDataURL(file);
         });
-        const uploaded = await api.uploadReferenceImage({
-          file_name: file.name,
-          data_url: dataUrl,
-        });
-        nextAttachments.push({
-          fileName: file.name,
-          previewUrl: URL.createObjectURL(file),
-          storagePath: uploaded.storage_path,
-        });
+        if (!uploadCurrent()) return;
+        const uploaded = await api.uploadReferenceImage({ file_name: file.name, data_url: dataUrl });
+        if (!uploadCurrent()) return;
+        const storagePath = String(uploaded?.storage_path || "").trim();
+        if (!storagePath) throw new Error("上传未返回有效截图路径");
+        const previewUrl = URL.createObjectURL(file);
+        previews.current.adopt(previewUrl, () => isCurrent() && scope.draft.attachments.some((item) => item.previewUrl === previewUrl));
+        if (!scope.appendUpload(batch, slot, { fileName: file.name, previewUrl, storagePath })) {
+          previews.current.discard(previewUrl);
+          return;
+        }
+        publish();
       }
-      setDraft((current) => ({ ...current, attachments: nextAttachments }));
-      onSetError("");
+      setError(warnings.join(" "), intent);
     } catch (err) {
-      onSetError(err instanceof Error ? err.message : "上传截图失败");
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
+      if (uploadCurrent()) {
+        const kept = scope.draft.attachments.filter((item) => item.localId && batch.completed.has(item.localId)).length;
+        const detail = err instanceof Error ? err.message : "上传截图失败";
+        scope.recordUploadFailure(batch, `${kept ? `已保留 ${kept} 张成功上传的截图；` : ""}${detail}。未完成的截图请重新选择。`);
+        setError(scope.uploadIssue, intent);
       }
-    }
+    } finally { scope.finishUpload(batch); publish(); }
   }
 
   function handleFileInputChange(event: ChangeEvent<HTMLInputElement>) {
+    if (!isCurrent()) return;
     const files = event.target.files ? Array.from(event.target.files) : [];
+    event.target.value = "";
     void handleUploadFiles(files);
   }
 
-  function handleRemoveAttachment(index: number) {
-    setDraft((current) => {
-      const target = current.attachments[index];
-      if (target) {
-        URL.revokeObjectURL(target.previewUrl);
-      }
-      return {
-        ...current,
-        attachments: current.attachments.filter((_, currentIndex) => currentIndex !== index),
-      };
-    });
+  function handleRemoveAttachment(item: FeedbackAttachment) {
+    if (isCurrent() && scope.removeAttachment(item)) publish();
   }
 
   return (
@@ -255,7 +265,7 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
               <input
                 value={draft.title}
                 maxLength={150}
-                onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                onChange={(event) => { const value = event.target.value; setDraft((current) => ({ ...current, title: value })); }}
                 placeholder="例如：生成页历史卡片错位"
               />
             </label>
@@ -265,7 +275,7 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
                 className="feedback-textarea"
                 value={draft.message}
                 maxLength={4000}
-                onChange={(event) => setDraft((current) => ({ ...current, message: event.target.value }))}
+                onChange={(event) => { const value = event.target.value; setDraft((current) => ({ ...current, message: value })); }}
                 placeholder="请描述问题出现在哪个页面、用的是哪个账号、你期望看到什么结果。"
               />
             </label>
@@ -279,12 +289,12 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
               <input ref={fileInputRef} type="file" accept="image/*" multiple hidden onChange={handleFileInputChange} />
               {draft.attachments.length > 0 ? (
                 <div className="feedback-attachment-grid">
-                  {draft.attachments.map((item, index) => (
-                    <div key={item.storagePath} className="feedback-attachment-card">
+                  {draft.attachments.map((item) => (
+                    <div key={item.localId || item.storagePath} className="feedback-attachment-card">
                       <img src={item.previewUrl} alt={item.fileName} />
                       <div>
                         <strong>{item.fileName}</strong>
-                        <button type="button" onClick={() => handleRemoveAttachment(index)}>
+                        <button type="button" onClick={() => handleRemoveAttachment(item)}>
                           移除
                         </button>
                       </div>
@@ -294,6 +304,7 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
               ) : (
                 <div className="feedback-upload-empty">{`最多上传 4 张截图，单张不超过 ${formatUploadSize(MAX_REFERENCE_UPLOAD_BYTES)}。`}</div>
               )}
+              {scope.uploadIssue && scope.uploadIssue !== error ? <div className="floating-error" role="status">{scope.uploadIssue}</div> : null}
             </div>
             {error ? <div className="floating-error">{error}</div> : null}
             <div className="template-editor-actions">
@@ -305,7 +316,7 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
                 {isGuest ? "登录后发送反馈" : saving ? "提交中..." : uploading ? "上传截图中..." : "发送反馈"}
               </button>
               {!isGuest ? (
-                <button type="button" className="ghost-button" onClick={onRefresh}>
+                <button type="button" className="ghost-button" onClick={() => onRefresh()}>
                   刷新记录
                 </button>
               ) : (
@@ -356,20 +367,15 @@ export default function FeedbackPage({ feedbackItems, error, onRefresh, onSetErr
                         <span>继续补充</span>
                         <textarea
                           className="feedback-textarea"
-                          value={followUpDrafts[item.id] || ""}
+                          value={followUpDrafts[item.id]?.value || ""}
                           maxLength={4000}
-                          onChange={(event) =>
-                            setFollowUpDrafts((current) => ({
-                              ...current,
-                              [item.id]: event.target.value,
-                            }))
-                          }
+                          onChange={(event) => handleFollowUpChange(item.id, event.target.value)}
                           placeholder="管理员回复后，你可以在这里继续补充现象、截图说明或新的复现步骤。"
                         />
                       </label>
                       <div className="template-editor-actions">
-                        <button type="submit" className="ghost-button" disabled={followUpSavingId === item.id}>
-                          {followUpSavingId === item.id ? "发送中..." : "发送补充说明"}
+                        <button type="submit" className="ghost-button" disabled={scope.followUps.has(item.id)}>
+                          {scope.followUps.has(item.id) ? "发送中..." : "发送补充说明"}
                         </button>
                       </div>
                     </form>

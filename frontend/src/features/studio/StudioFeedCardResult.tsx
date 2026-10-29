@@ -1,3 +1,7 @@
+import { useContext, useLayoutEffect } from "react";
+import { StudioResultRevealContext } from "./StudioResultRevealContext";
+import { observeResultTask } from "./studioResultReveals";
+import StudioTaskProgress from "./StudioTaskProgress";
 import StudioFeedEmptyState from "./StudioFeedEmptyState";
 import StudioFeedGallery from "./StudioFeedGallery";
 import type { StudioFeedCardResultProps } from "./studioFeedCardTypes";
@@ -15,24 +19,43 @@ export default function StudioFeedCardResult({
   upscalingAssetKey,
   virtualProgress,
 }: StudioFeedCardResultProps) {
+  const revealScope = useContext(StudioResultRevealContext);
+  useLayoutEffect(() => { observeResultTask(revealScope, task.id, task.status); }, [revealScope, task.id, task.status]);
+  const localStage =
+    task.result["adapter_mode"] === "comfyui" ? String(task.result["queued_stage"] || "queued") : undefined;
+  const checkpoint = task.result["comfyui"] as Record<string, unknown> | undefined;
+  const displayStage =
+    localStage === "running" && ["downloading", "downloaded"].includes(String(checkpoint?.stage))
+      ? "saving"
+      : localStage;
   return galleryAssets.length > 0 ? (
-    <StudioFeedGallery
-      assets={galleryAssets}
-      task={task}
-      onAssetPreview={onAssetPreview}
-      onReuse={onReuse}
-      onUpscaleAsset={onUpscaleAsset}
-      onUseAssetAsReference={onUseAssetAsReference}
-      upscaleDisabled={upscaleDisabled}
-      upscaleEnabled={upscaleEnabled}
-      upscalingAssetKey={upscalingAssetKey}
-    />
+    <>
+      {(showRunningState || task.status === "completed") && (
+        <StudioTaskProgress
+          percent={virtualProgress}
+          status={task.status}
+          localStage={displayStage}
+          queuePosition={Number(task.result["queue_position"] || 0)}
+        />
+      )}
+      <StudioFeedGallery
+        assets={galleryAssets}
+        task={task}
+        onAssetPreview={onAssetPreview}
+        onReuse={onReuse}
+        onUpscaleAsset={onUpscaleAsset}
+        onUseAssetAsReference={onUseAssetAsReference}
+        upscaleDisabled={upscaleDisabled}
+        upscaleEnabled={upscaleEnabled}
+        upscalingAssetKey={upscalingAssetKey}
+      />
+    </>
   ) : (
     <StudioFeedEmptyState
       isRunning={showRunningState}
       status={task.status}
       virtualProgress={virtualProgress}
-      localStage={task.result["adapter_mode"] === "comfyui" ? String(task.result["queued_stage"] || "queued") : undefined}
+      localStage={displayStage}
       queuePosition={Number(task.result["queue_position"] || 0)}
     />
   );

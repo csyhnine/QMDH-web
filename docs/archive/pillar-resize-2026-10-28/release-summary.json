@@ -1,0 +1,73 @@
+{
+  "source_commit": "98c5735741addb62bbfe40ba9a99b4583c5c3e36",
+  "frontend_sha256": "93018db6d6b6db47173e2b40e5e3147cca4cd3334db80179b8f2135f308a90c3",
+  "frontend_file_count": 52,
+  "expected_frontend_image": "sha256:e678de9b906fe053cd840d5b3e03d087ca8f4c5fa4ce0b34c324265a81a6202d",
+  "database_media_recovery_baseline": "/www/backup/qmdh-release-20261028-work-card-close",
+  "new_database_snapshot_created": false,
+  "status": "DEPLOYED_VERIFIED",
+  "release_date": "2026-10-28",
+  "frontend_image": "sha256:2ebc0b0b4992e391b8c7bbcf94fab177ccadf9bf3ee1f0829e5deef91bf40414",
+  "backend_worker_unchanged": true,
+  "non_frontend_containers_unchanged": true,
+  "frontend_files_checked": 52,
+  "public_assets": [
+    {
+      "file": "index.html",
+      "sha256": "e2e005a65d84e9295eb6a6142ba9fa32f6dc2987c3f369f5462432efc40fb01b"
+    },
+    {
+      "file": "assets/ManagementProjectsPage-BB-4FaQu.css",
+      "sha256": "28ddb59bea4ec9b15c6e7a2f38289de80a6da8c6ef6040a750f03c9f22e0d25a"
+    },
+    {
+      "file": "assets/ManagementProjectsPage-D6OavOBy.js",
+      "sha256": "b87266bac05d381d3bf59929bbbe73a9e62b158f115f5c736e664cfa6c4b256b"
+    },
+    {
+      "file": "assets/OtherToolsPage-oKx0VUyK.js",
+      "sha256": "fbe0334e7a1e59d560dfff425610da247bbf1f6e6952e257ed75e048ddf7cbce"
+    },
+    {
+      "file": "assets/OtherToolsPage-CRy8uIVh.css",
+      "sha256": "53a81fd3916a8ca46ab61eee0dd57f8da9cd3c077882e9a45aa3deb0764941b3"
+    },
+    {
+      "file": "assets/GeneratePage-B_1E4J5J.js",
+      "sha256": "8cb588f8d802d73f946234cc27324c335ceb0298c5908e563da50dbf8d5b72ca"
+    },
+    {
+      "file": "assets/GeneratePage-D-xJ1U-d.css",
+      "sha256": "2f2d2ec947020a4d0695762b6f148d6ea6d6915a21611d559977cdd9f99165b0"
+    },
+    {
+      "file": "assets/reportWorkbook-BEnxy9qs.js",
+      "sha256": "b737b2fd40f0cc7cc18e7cc0584c4e21b25313829563aec77aff7c81f78a4bd8"
+    },
+    {
+      "file": "assets/index-BYO5FHS-.css",
+      "sha256": "4607f17ab7be1714c9083b880fa38bea2930a29caf3d019f54011b3ba3d8c0aa"
+    },
+    {
+      "file": "assets/index-btK0f_E4.js",
+      "sha256": "e24e5acdaff428bad1b6a8fd5befcfc0ef763570129a966fcce1772386051990"
+    }
+  ],
+  "migration_executed": false,
+  "business_data_written": false,
+  "public_routes_checked": 25,
+  "qwen_reference_counts": [
+    1,
+    2
+  ],
+  "migration": "b94de295f179",
+  "workflow_hashes_preserved": true,
+  "compose_files": [
+    "/www/wwwroot/qmdh-web/docker-compose.yml",
+    "/opt/qmdh-frp/compose.frp.yml",
+    "/opt/qmdh-frp/releases/pillar-resize-20261028/compose.release.yml"
+  ],
+  "workflow_root_preserved": "/opt/qmdh-frp/releases/management-categories-20261026/workflows",
+  "disk_free_GiB": 8.31097412109375,
+  "paired_backup_files": 26
+}

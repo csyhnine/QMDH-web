@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 
-from sqlalchemy import JSON, Boolean, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import JSON, BigInteger, Boolean, Date, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -1072,8 +1072,11 @@ class ManagementStaff(Base):
     unit: Mapped[str] = mapped_column(String(120), index=True)
     name: Mapped[str] = mapped_column(String(150))
     position: Mapped[str] = mapped_column(String(120), default="")
+    employment_type: Mapped[str] = mapped_column(String(20), default="unknown", server_default="unknown")
+    employer: Mapped[str] = mapped_column(String(150), default="", server_default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    source_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, unique=True)
 
 
 class ManagementProject(Base):
@@ -1084,6 +1087,7 @@ class ManagementProject(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     document: Mapped[dict] = mapped_column(JSON, default=dict)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     updated_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -1096,3 +1100,46 @@ class ManagementRevision(Base):
     actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     snapshot: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ManagementWeeklySnapshot(Base):
+    __tablename__ = "management_weekly_snapshots"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    unit: Mapped[str] = mapped_column(String(120), index=True)
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    week_start: Mapped[date] = mapped_column(Date)
+    document: Mapped[dict] = mapped_column(JSON)
+    actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SearchIndexDomain(Base):
+    __tablename__ = "search_index_domains"
+
+    domain: Mapped[str] = mapped_column(String(32), primary_key=True)
+    revision: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    active_index: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    active_target_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ready: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    uncertain: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    submission_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    task_uid: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    task_entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    task_revision: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    task_operation: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    task_index: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    task_target_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_code: Mapped[str] = mapped_column(String(80), default="", server_default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class SearchIndexIntent(Base):
+    __tablename__ = "search_index_intents"
+
+    domain: Mapped[str] = mapped_column(String(32), ForeignKey("search_index_domains.domain"), primary_key=True)
+    entity_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    revision: Mapped[int] = mapped_column(BigInteger)
+    operation: Mapped[str] = mapped_column(String(16))
+    applied_revision: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    error_code: Mapped[str] = mapped_column(String(80), default="", server_default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

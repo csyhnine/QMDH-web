@@ -1,6 +1,7 @@
 import StudioComposerOptionGroup from "./StudioComposerOptionGroup";
 import ComfySizeControls from "./ComfySizeControls";
 import ComfyRuntimeNotice from "./ComfyRuntimeNotice";
+import { comfyReferenceCount, comfyReferenceCounts } from "./comfyReferenceContract";
 import {
   SOURCE_ASPECT_RATIO_LABEL,
   normalizeStudioResolution,
@@ -72,7 +73,7 @@ export default function StudioComposerDisplayMenuPanel({
       {!isVideoMode && selectedProvider?.adapter_kind === "comfyui" ? (
         <div className="composer-menu-field composer-menu-field-full">
           <ComfySizeControls ratio={studioForm.aspectRatio} onChange={onAspectRatioSelect} />
-          <ComfyRuntimeNotice editing={isEditMode} />
+          <ComfyRuntimeNotice editing={isEditMode} referenceCount={comfyReferenceCount(selectedProvider)} referenceCounts={comfyReferenceCounts(selectedProvider)} />
         </div>
       ) : null}
     </div>

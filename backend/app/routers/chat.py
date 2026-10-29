@@ -6,6 +6,8 @@ import json
 import logging
 from datetime import datetime, timezone
 
+from anyio import CancelScope
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import delete, select
@@ -191,7 +193,18 @@ def _persist_chat_assistant_reply(
     last_usage_payload: dict[str, object],
     user_message: str,
     record_memory: bool = True,
-) -> ChatMessage:
+    call_receipt_id: int | None = None,
+    usage_known: bool = False,
+    allow_delivery: bool = True,
+    completion_outcome: str = "completed",
+) -> ChatMessage | None:
+    if call_receipt_id is not None:
+        from app.services.chat_reply_completion_service import finish_reply
+        return finish_reply(
+            db, call_receipt_id, content=content, usage_payload=last_usage_payload, usage_known=usage_known,
+            allow_delivery=allow_delivery, user_id=auth_user.user_id, user_message=user_message,
+            record_memory=record_memory, memory_writer=record_chat_turn_memory, outcome=completion_outcome,
+        )
     assistant_message = ChatMessage(
         conversation_id=conversation_id,
         role="assistant",
@@ -218,16 +231,18 @@ def _persist_chat_assistant_reply(
         total_tokens=int(last_usage_payload.get("total_tokens") or 0),
         usage_payload=last_usage_payload,
     )
-    if record_memory and not content.startswith("对话失败"):
-        record_chat_turn_memory(
-            db,
-            user_id=auth_user.user_id,
-            conversation_id=conversation_id,
-            user_message=user_message,
-            assistant_reply=content,
-            route="chat",
-        )
     db.commit()
+    if record_memory and not content.startswith("对话失败"):
+        try:
+            bind = db.get_bind()
+            with Session(bind=getattr(bind, "engine", bind)) as memory_db:
+                record_chat_turn_memory(
+                    memory_db, user_id=auth_user.user_id, conversation_id=conversation_id,
+                    user_message=user_message, assistant_reply=content, route="chat",
+                )
+                memory_db.commit()
+        except Exception:
+            pass  # The reply and known ledger were already committed.
     return assistant_message
 
 
@@ -601,10 +616,6 @@ def confirm_chat_agent_task(
     if auth_user.user_id is None:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    current_user = db.get(User, auth_user.user_id)
-    if current_user is not None:
-        enforce_user_quota(db, user=current_user)
-
     policy = resolve_effective_chat_policy(
         db,
         environment="prod",
@@ -816,6 +827,7 @@ async def send_message(
         policy_version = (payload.policy_version or "").strip() or None
 
         async def generate_agent():
+            model_observation = turn_tracker.observe_agent()
             assistant_message_id: int | None = None
             try:
                 yield f"data: {json.dumps({'correlation_id': get_correlation_id()}, ensure_ascii=False)}\n\n"
@@ -835,12 +847,17 @@ async def send_message(
 
                 def thinking_callback(step: ChatAgentThinkingStep) -> None:
                     payload_dict = step.to_dict()
-                    loop.call_soon_threadsafe(thinking_queue.put_nowait, payload_dict)
+                    if not loop.is_closed():
+                        try:
+                            loop.call_soon_threadsafe(thinking_queue.put_nowait, payload_dict)
+                        except RuntimeError:
+                            pass  # Disconnect/loop close must not abort receipt persistence.
 
                 async def run_agent() -> StudioAgentReply:
                     try:
                         harness_result = await asyncio.to_thread(
-                            run_chat_agent_harness_isolated,
+                            model_observation.run,
+                            function=run_chat_agent_harness_isolated,
                             recent_messages=recent,
                             new_content=content,
                             user_name=auth_user.name,
@@ -855,7 +872,11 @@ async def send_message(
                         harness_audit_holder.update(harness_result.audit_details)
                         return harness_result.reply
                     finally:
-                        loop.call_soon_threadsafe(thinking_queue.put_nowait, None)
+                        if not loop.is_closed():
+                            try:
+                                loop.call_soon_threadsafe(thinking_queue.put_nowait, None)
+                            except RuntimeError:
+                                pass
 
                 yield format_agent_thinking_sse()
                 agent_task = asyncio.create_task(run_agent())
@@ -936,6 +957,36 @@ async def send_message(
                     return
 
                 assert agent_reply is not None
+                if harness_audit_holder.get("delivery_status") in {"revoked", "unverified"}:
+                    # A deleted/unverified turn must not write reply previews,
+                    # messages or a replacement conversation. Do not finalize a
+                    # possibly cached/deleted telemetry ORM row either.
+                    telemetry_finalized["done"] = True
+                    summary = (
+                        "会话已删除或不可用，本次回复已停止。请先刷新会话列表。"
+                        if harness_audit_holder["delivery_status"] == "revoked"
+                        else "会话状态暂时无法确认，本次回复已停止。请先核对历史记录，勿直接重发。"
+                    )
+                    yield _chat_error_sse(chat_error_payload(
+                        code="chat_conversation_unavailable", summary=summary, detail="",
+                    ))
+                    yield "data: [DONE]\n\n"
+                    return
+                completed_message_id = harness_audit_holder.get("completed_message_id")
+                completed_message = None
+                if harness_audit_holder.get("call_receipt_id"):
+                    from app.services.chat_agent_completion_service import load_agent_completion_message
+                    completed_message = load_agent_completion_message(
+                        db, receipt_id=int(harness_audit_holder["call_receipt_id"]),
+                        call_id=str(harness_audit_holder.get("call_id") or ""), conversation_id=conversation_id,
+                    )
+                    if completed_message is None:
+                        telemetry_finalized["done"] = True
+                        yield _chat_error_sse(chat_error_payload(
+                            code="chat_conversation_unavailable", summary="会话回复已不可用，请先核对历史记录，勿直接重发。", detail="",
+                        ))
+                        yield "data: [DONE]\n\n"
+                        return
                 compose_done = ChatAgentThinkingStep(
                     key="agent_compose",
                     label="整理回复",
@@ -945,67 +996,70 @@ async def send_message(
                 upsert_thinking_step(compose_done)
                 yield format_agent_thinking_step_sse(compose_done)
 
-                audit_details: dict[str, object] = {
-                    "model_name": agent_reply.model_name,
-                    "conversation_id": conversation_id,
-                    "message_preview": content[:120],
-                    "reply_preview": agent_reply.text[:240],
-                    "tool_calls": [call.name for call in agent_reply.tool_calls],
-                    "task_proposals": [item.get("proposal_id") for item in agent_reply.task_proposals],
-                    "thinking_steps": [step.get("key") for step in collected_thinking_steps],
-                    "policy_version": agent_reply.policy_version,
-                }
-                harness_audit = harness_audit_holder
-                if isinstance(harness_audit, dict):
-                    audit_details.update(harness_audit)
+                if not harness_audit_holder.get("call_receipt_id"):
+                    audit_details: dict[str, object] = {
+                        "model_name": agent_reply.model_name,
+                        "conversation_id": conversation_id,
+                        "message_preview": content[:120],
+                        "reply_preview": agent_reply.text[:240],
+                        "tool_calls": [call.name for call in agent_reply.tool_calls],
+                        "task_proposals": [item.get("proposal_id") for item in agent_reply.task_proposals],
+                        "thinking_steps": [step.get("key") for step in collected_thinking_steps],
+                        "policy_version": agent_reply.policy_version,
+                    }
+                    harness_audit = harness_audit_holder
+                    if isinstance(harness_audit, dict):
+                        audit_details.update(harness_audit)
 
-                write_audit_log(
-                    db,
-                    event_type=AuditEventType.STUDIO_AGENT_ASSIST,
-                    actor_name=auth_user.name,
-                    actor_id=auth_user.user_id,
-                    target_type="chat_agent",
-                    provider_name=agent_reply.provider_name,
-                    details=audit_details,
-                )
+                    write_audit_log(
+                        db,
+                        event_type=AuditEventType.STUDIO_AGENT_ASSIST,
+                        actor_name=auth_user.name,
+                        actor_id=auth_user.user_id,
+                        target_type="chat_agent",
+                        provider_name=agent_reply.provider_name,
+                        details=audit_details,
+                    )
 
                 full_content = agent_reply.text.strip() or "助手未返回内容，请重试。"
-                assistant_message = _persist_agent_assistant_message(
-                    db,
-                    conversation,
-                    conversation_id,
-                    full_content,
-                    tool_calls=agent_reply.tool_calls,
-                    task_proposals=agent_reply.task_proposals,
-                    thinking_steps=collected_thinking_steps,
-                    policy_version=agent_reply.policy_version,
-                    token_count=agent_reply.total_tokens,
-                )
-                provider_for_ledger = db.get(ProviderProfile, provider_profile_id)
-                if provider_for_ledger is not None:
-                    usage_payload = dict(agent_reply.usage_payload or {"source": "chat_agent"})
-                    usage_payload.setdefault("prompt_tokens", agent_reply.prompt_tokens)
-                    usage_payload.setdefault("completion_tokens", agent_reply.completion_tokens)
-                    usage_payload.setdefault("total_tokens", agent_reply.total_tokens)
-                    usage_payload.setdefault("input_tokens", agent_reply.prompt_tokens)
-                    usage_payload.setdefault("output_tokens", agent_reply.completion_tokens)
-                    usage_payload.setdefault("cached_input_tokens", agent_reply.cached_input_tokens)
-                    record_chat_usage_ledger(
+                assistant_message = completed_message
+                if not harness_audit_holder.get("call_receipt_id"):
+                    assistant_message = _persist_agent_assistant_message(
                         db,
-                        message=assistant_message,
-                        conversation=conversation,
-                        provider=provider_for_ledger,
-                        provider_profile_id=provider_profile_id,
-                        user_id=auth_user.user_id,
-                        user_name=auth_user.name,
-                        provider_name=agent_reply.provider_name or provider_for_ledger.provider_name,
-                        model_name=agent_reply.model_name or provider_for_ledger.model_name,
-                        prompt_tokens=agent_reply.prompt_tokens,
-                        completion_tokens=agent_reply.completion_tokens,
-                        total_tokens=agent_reply.total_tokens,
-                        usage_payload=usage_payload,
+                        conversation,
+                        conversation_id,
+                        full_content,
+                        tool_calls=agent_reply.tool_calls,
+                        task_proposals=agent_reply.task_proposals,
+                        thinking_steps=collected_thinking_steps,
+                        policy_version=agent_reply.policy_version,
+                        token_count=agent_reply.total_tokens,
                     )
-                    db.commit()
+                    provider_for_ledger = db.get(ProviderProfile, provider_profile_id)
+                    if provider_for_ledger is not None:
+                        usage_payload = dict(agent_reply.usage_payload or {"source": "chat_agent"})
+                        usage_payload.setdefault("prompt_tokens", agent_reply.prompt_tokens)
+                        usage_payload.setdefault("completion_tokens", agent_reply.completion_tokens)
+                        usage_payload.setdefault("total_tokens", agent_reply.total_tokens)
+                        usage_payload.setdefault("input_tokens", agent_reply.prompt_tokens)
+                        usage_payload.setdefault("output_tokens", agent_reply.completion_tokens)
+                        usage_payload.setdefault("cached_input_tokens", agent_reply.cached_input_tokens)
+                        record_chat_usage_ledger(
+                            db,
+                            message=assistant_message,
+                            conversation=conversation,
+                            provider=provider_for_ledger,
+                            provider_profile_id=provider_profile_id,
+                            user_id=auth_user.user_id,
+                            user_name=auth_user.name,
+                            provider_name=agent_reply.provider_name or provider_for_ledger.provider_name,
+                            model_name=agent_reply.model_name or provider_for_ledger.model_name,
+                            prompt_tokens=agent_reply.prompt_tokens,
+                            completion_tokens=agent_reply.completion_tokens,
+                            total_tokens=agent_reply.total_tokens,
+                            usage_payload=usage_payload,
+                        )
+                        db.commit()
 
                 _finish_chat_turn_telemetry(
                     db,
@@ -1039,6 +1093,12 @@ async def send_message(
                         summary=summary,
                         detail="",
                     )
+                    if harness_audit_holder.get("call_receipt_id"):
+                        db.rollback()
+                        telemetry_finalized["done"] = True
+                        yield _chat_error_sse(error_payload)
+                        yield "data: [DONE]\n\n"
+                        return
                     try:
                         error_text = format_chat_error_message(error_payload)
                         agent_msg = _persist_agent_assistant_message(
@@ -1079,6 +1139,8 @@ async def send_message(
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
+                "X-QMDH-Chat-User-Message-ID": str(user_message.id),
+                "X-QMDH-Chat-Turn-ID": str(chat_turn.id),
             },
         )
 
@@ -1098,7 +1160,12 @@ async def send_message(
         nonlocal last_error_payload, last_usage_payload, packed_context_tokens, packed_context_usage_percent
 
         assistant_persisted = False
+        assistant_persistence_attempted = False
         assistant_message_id: int | None = None
+        call_receipt_id: int | None = None
+        usage_received = False
+        reported_usage: dict[str, int] = {}
+        delivery_stopped = False
         status_pending: list[str] = []
 
         def queue_status(label: str) -> None:
@@ -1112,12 +1179,15 @@ async def send_message(
             return events
 
         async def persist_outcome(*, full_content: str, record_memory: bool = True) -> int | None:
-            nonlocal assistant_persisted, assistant_message_id
-            if assistant_persisted:
+            nonlocal assistant_persisted, assistant_persistence_attempted, assistant_message_id
+            if assistant_persisted or assistant_persistence_attempted:
                 return assistant_message_id
-            conversation_row = db.get(Conversation, conversation_id)
-            provider_for_ledger = db.get(ProviderProfile, provider_profile_id)
-            if conversation_row is None or provider_for_ledger is None:
+            # The existing helper commits the message before the ledger. Never retry
+            # this turn blindly if a later persistence step raises.
+            assistant_persistence_attempted = True
+            conversation_row = None if call_receipt_id is not None else db.get(Conversation, conversation_id)
+            provider_for_ledger = None if call_receipt_id is not None else db.get(ProviderProfile, provider_profile_id)
+            if call_receipt_id is None and (conversation_row is None or provider_for_ledger is None):
                 return None
             assistant_message = _persist_chat_assistant_reply(
                 db,
@@ -1132,10 +1202,40 @@ async def send_message(
                 last_usage_payload=last_usage_payload,
                 user_message=content,
                 record_memory=record_memory,
+                call_receipt_id=call_receipt_id, usage_known=usage_received, allow_delivery=not delivery_stopped,
+                completion_outcome="success" if record_memory else "interrupted_or_error",
             )
+            if assistant_message is None:
+                telemetry_finalized["done"] = True
+                return None
             assistant_persisted = True
             assistant_message_id = assistant_message.id
             return assistant_message.id
+
+        async def persist_failure(error_payload: dict[str, object], *, error_summary: str | None = None) -> None:
+            nonlocal assistant_message_id
+            # Starlette/AnyIO can keep cancelling at every checkpoint after a disconnect.
+            # Finish local history/telemetry inside a shield, then propagate cancellation.
+            with CancelScope(shield=True):
+                partial_content = "".join(full_content_parts)
+                error_text = format_chat_error_message(error_payload)
+                failed_content = f"{partial_content}\n\n{error_text}" if partial_content else error_text
+                try:
+                    assistant_message_id = await persist_outcome(full_content=failed_content, record_memory=False)
+                except Exception:
+                    db.rollback()
+                    logger.exception("failed to persist interrupted chat message", extra={"conversation_id": conversation_id})
+                _finish_chat_turn_telemetry(
+                    db,
+                    turn_tracker,
+                    outcome=resolve_outcome_from_error_code(str(error_payload.get("code") or "")),
+                    error_code=str(error_payload.get("code") or ""),
+                    error_summary=error_summary if error_summary is not None else str(error_payload.get("summary") or ""),
+                    assistant_message_id=assistant_message_id,
+                    context_tokens=packed_context_tokens,
+                    context_usage_percent=packed_context_usage_percent,
+                    finalized_holder=telemetry_finalized,
+                )
 
         try:
             yield f"data: {json.dumps({'correlation_id': get_correlation_id()}, ensure_ascii=False)}\n\n"
@@ -1199,6 +1299,15 @@ async def send_message(
             try:
                 packed = pack_task.result()
             except HTTPException as exc:
+                if isinstance(exc.detail, dict) and exc.detail.get("code") == "chat_context_unavailable":
+                    db.rollback()
+                    telemetry_finalized["done"] = True
+                    last_error_payload = chat_error_payload(
+                        code="chat_context_unavailable", summary="会话上下文已变更或暂不可用，本次回复已停止。请先核对历史记录。", detail="",
+                    )
+                    yield _chat_error_sse(last_error_payload)
+                    yield "data: [DONE]\n\n"
+                    return
                 detail = str(exc.detail or "Attachment processing failed.")
                 last_error_payload = chat_error_payload(
                     code="chat_attachment_error",
@@ -1207,19 +1316,7 @@ async def send_message(
                     status_code=exc.status_code,
                 )
                 yield _chat_error_sse(last_error_payload)
-                assistant_message_id = await persist_outcome(
-                    full_content=format_chat_error_message(last_error_payload),
-                    record_memory=False,
-                )
-                _finish_chat_turn_telemetry(
-                    db,
-                    turn_tracker,
-                    outcome="attachment_error",
-                    error_code=str(last_error_payload.get("code") or "chat_attachment_error"),
-                    error_summary=str(last_error_payload.get("summary") or ""),
-                    assistant_message_id=assistant_message_id,
-                    finalized_holder=telemetry_finalized,
-                )
+                await persist_failure(last_error_payload)
                 yield "data: [DONE]\n\n"
                 return
 
@@ -1232,17 +1329,41 @@ async def send_message(
             )
             yield f"data: {json.dumps({'context': context_payload}, ensure_ascii=False)}\n\n"
             yield _chat_status_sse("正在连接模型并生成回复…", status="generating")
+            from app.services.chat_reply_completion_service import begin_reply, reply_conversation_live, reported_reply_usage
+            try:
+                call_receipt_id = begin_reply(
+                    db, conversation_id=conversation_id, user_id=auth_user.user_id, user_name=auth_user.name,
+                    provider_id=provider_profile_id, provider_name=provider_name, model_name=provider_model_name,
+                )
+            except Exception:
+                db.rollback()
+                telemetry_finalized["done"] = True
+                yield _chat_error_sse(chat_error_payload(
+                    code="chat_conversation_unavailable", summary="会话已不可用或状态暂无法确认，本次回复已停止。请先核对历史记录。", detail="",
+                ))
+                yield "data: [DONE]\n\n"
+                return
             turn_tracker.mark_upstream_start()
 
             async for chunk in stream_chat_completion(provider_config, packed.api_messages):
+                if not delivery_stopped and reply_conversation_live(
+                    db, conversation_id=conversation_id, user_id=auth_user.user_id,
+                ) is not True:
+                    delivery_stopped = True
+                    full_content_parts.clear()
                 if chunk.startswith("data: ") and "[DONE]" not in chunk:
                     try:
                         data = json.loads(chunk[6:])
                         if "delta" in data:
                             turn_tracker.mark_first_token()
-                            full_content_parts.append(str(data["delta"]))
+                            if not delivery_stopped:
+                                full_content_parts.append(str(data["delta"]))
                         if "usage" in data and isinstance(data["usage"], dict):
-                            usage = normalize_chat_usage(data["usage"])
+                            reported = reported_reply_usage(data["usage"])
+                            usage_received = usage_received or bool(reported)
+                            for key, value in reported.items():
+                                reported_usage[key] = max(reported_usage.get(key, 0), value)
+                            usage = normalize_chat_usage(reported_usage)
                             last_usage_payload = {
                                 "prompt_tokens": usage.prompt_tokens,
                                 "completion_tokens": usage.completion_tokens,
@@ -1265,31 +1386,31 @@ async def send_message(
                                 }
                     except (json.JSONDecodeError, TypeError, ValueError):
                         pass
-                yield chunk
+                if not delivery_stopped:
+                    yield chunk
 
+            if delivery_stopped:
+                await persist_outcome(full_content="", record_memory=False)
+                telemetry_finalized["done"] = True
+                yield _chat_error_sse(chat_error_payload(
+                    code="chat_conversation_unavailable", summary="会话已不可用，本次回复已停止。请先核对历史记录。", detail="",
+                ))
+                yield "data: [DONE]\n\n"
+                return
             full_content = "".join(full_content_parts)
-            if full_content:
+            if last_error_payload is not None:
+                await persist_failure(last_error_payload)
+            elif full_content:
                 assistant_message_id = await persist_outcome(full_content=full_content, record_memory=True)
+                if telemetry_finalized.get("done"):
+                    yield _chat_error_sse(chat_error_payload(
+                        code="chat_conversation_unavailable", summary="回复保存状态暂无法确认，请先核对历史记录，勿直接重发。", detail="",
+                    ))
+                    return
                 _finish_chat_turn_telemetry(
                     db,
                     turn_tracker,
                     outcome="success",
-                    assistant_message_id=assistant_message_id,
-                    context_tokens=packed_context_tokens,
-                    context_usage_percent=packed_context_usage_percent,
-                    finalized_holder=telemetry_finalized,
-                )
-            elif last_error_payload:
-                assistant_message_id = await persist_outcome(
-                    full_content=format_chat_error_message(last_error_payload),
-                    record_memory=False,
-                )
-                _finish_chat_turn_telemetry(
-                    db,
-                    turn_tracker,
-                    outcome=resolve_outcome_from_error_code(str(last_error_payload.get("code") or "")),
-                    error_code=str(last_error_payload.get("code") or ""),
-                    error_summary=str(last_error_payload.get("summary") or ""),
                     assistant_message_id=assistant_message_id,
                     context_tokens=packed_context_tokens,
                     context_usage_percent=packed_context_usage_percent,
@@ -1301,96 +1422,38 @@ async def send_message(
                     summary="对话中断：回复未完成。",
                     detail="连接可能在模型回复前断开。请勿重复发送，稍等片刻后重试；若仍失败请联系管理员。",
                 )
+                await persist_failure(last_error_payload)
                 yield _chat_error_sse(last_error_payload)
-                assistant_message_id = await persist_outcome(
-                    full_content=format_chat_error_message(last_error_payload),
-                    record_memory=False,
-                )
-                _finish_chat_turn_telemetry(
-                    db,
-                    turn_tracker,
-                    outcome="interrupted",
-                    error_code="chat_stream_interrupted",
-                    error_summary=str(last_error_payload.get("summary") or ""),
-                    assistant_message_id=assistant_message_id,
-                    context_tokens=packed_context_tokens,
-                    context_usage_percent=packed_context_usage_percent,
-                    finalized_holder=telemetry_finalized,
-                )
         except asyncio.CancelledError:
-            if not assistant_persisted and not full_content_parts:
+            if last_error_payload is None:
                 last_error_payload = chat_error_payload(
                     code="chat_stream_interrupted",
                     summary="对话中断：回复未完成。",
                     detail="请求连接已断开（可能因重复发送或网络波动）。请等待当前处理结束后再试，不要连续点击发送。",
                 )
-                try:
-                    assistant_message_id = await persist_outcome(
-                        full_content=format_chat_error_message(last_error_payload),
-                        record_memory=False,
-                    )
-                except Exception:
-                    logger.exception(
-                        "failed to persist interrupted chat message",
-                        extra={"conversation_id": conversation_id},
-                    )
-                    assistant_message_id = None
-            _finish_chat_turn_telemetry(
-                db,
-                turn_tracker,
-                outcome="interrupted",
-                error_code="chat_stream_interrupted",
-                error_summary="请求连接已断开",
-                assistant_message_id=assistant_message_id,
-                context_tokens=packed_context_tokens,
-                context_usage_percent=packed_context_usage_percent,
-                finalized_holder=telemetry_finalized,
-            )
+            await persist_failure(last_error_payload)
             raise
         except Exception as exc:
             logger.exception("chat stream failed", extra={"conversation_id": conversation_id})
-            if not assistant_persisted and not full_content_parts:
+            error_summary = None
+            if last_error_payload is None:
                 last_error_payload = chat_error_payload(
                     code="chat_stream_error",
                     summary="对话失败：请求过程中出现异常。",
                     detail="",
                 )
-                yield _chat_error_sse(last_error_payload)
-                try:
-                    assistant_message_id = await persist_outcome(
-                        full_content=format_chat_error_message(last_error_payload),
-                        record_memory=False,
-                    )
-                except Exception:
-                    logger.exception(
-                        "failed to persist chat error message",
-                        extra={"conversation_id": conversation_id},
-                    )
-                    assistant_message_id = None
-            _finish_chat_turn_telemetry(
-                db,
-                turn_tracker,
-                outcome="stream_error",
-                error_code="chat_stream_error",
-                error_summary=_sanitize_error_text(str(exc), limit=255),
-                assistant_message_id=assistant_message_id,
-                context_tokens=packed_context_tokens,
-                context_usage_percent=packed_context_usage_percent,
-                finalized_holder=telemetry_finalized,
-            )
+                error_summary = _sanitize_error_text(str(exc), limit=255)
+            await persist_failure(last_error_payload, error_summary=error_summary)
+            yield _chat_error_sse(last_error_payload)
         finally:
             if not telemetry_finalized.get("done"):
-                _finish_chat_turn_telemetry(
-                    db,
-                    turn_tracker,
-                    outcome="interrupted",
-                    error_code="chat_stream_interrupted",
-                    error_summary="流式响应提前结束",
-                    assistant_message_id=assistant_message_id,
-                    context_tokens=packed_context_tokens,
-                    context_usage_percent=packed_context_usage_percent,
-                    finalized_holder=telemetry_finalized,
-                )
+                if last_error_payload is None:
+                    last_error_payload = chat_error_payload(
+                        code="chat_stream_interrupted",
+                        summary="对话中断：回复未完成。",
+                        detail="流式响应提前结束",
+                    )
+                await persist_failure(last_error_payload)
 
     return StreamingResponse(
         generate(),
@@ -1399,5 +1462,7 @@ async def send_message(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "X-QMDH-Chat-User-Message-ID": str(user_message.id),
+            "X-QMDH-Chat-Turn-ID": str(chat_turn.id),
         },
     )

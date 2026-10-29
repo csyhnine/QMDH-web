@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from time import perf_counter, sleep
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.core.config import ImageProviderProfile
+from app.services.generated_media_validation import validate_generated_media
 from app.services.model_registry import ProviderDefinition
 from app.services.provider_adapters.base import ExecutionOutcome, ProviderExecutionError, RequestDiagnostics
+from app.services.provider_adapters.async_progress import AsyncTaskProgress, UpstreamTaskFailed
 from app.services.provider_adapters.video_common import (
     persist_generated_video_bytes,
     resolve_public_media_url,
@@ -114,6 +117,10 @@ class HaodeyaGrokVideoProviderAdapter:
     def __init__(self, definition: ProviderDefinition, profile: ImageProviderProfile):
         self.definition = definition
         self.profile = profile
+        self.task_id, self.saved_progress, self.save_progress = None, {}, None
+
+    def bind_async_progress(self, task_id, progress, save):
+        self.task_id, self.saved_progress, self.save_progress = task_id, progress, save
 
     def execute(self, capability: str, payload: dict) -> ExecutionOutcome:
         if capability != "video.generate":
@@ -133,7 +140,6 @@ class HaodeyaGrokVideoProviderAdapter:
         if not prompt:
             raise ValueError("Video task payload is missing prompt")
 
-        sku = _resolve_grok_sku(self.profile, payload)
         diagnostics = RequestDiagnostics(
             strategy=HAODEYA_GROK_VIDEO_STRATEGY,
             endpoint_path=HAODEYA_VIDEO_ENDPOINT_PATH,
@@ -143,75 +149,63 @@ class HaodeyaGrokVideoProviderAdapter:
             effective_capability="video.generate",
         )
 
+        started_at = perf_counter()
+        progress = None
         try:
-            started_at = perf_counter()
+            sku = _resolve_grok_sku(self.profile, payload)
             request_body = _build_haodeya_grok_request_body(sku, prompt, payload, profile=self.profile)
-            submit_payload = _submit_haodeya_grok_video_task(self.profile, request_body)
-            upstream_task_id = _extract_task_id(submit_payload)
-            polling_url = _extract_polling_url(submit_payload)
-            final_payload = _poll_haodeya_grok_video_result(
-                self.profile,
-                upstream_task_id,
-                polling_url=polling_url,
-            )
-            content_task_id = upstream_task_id or _extract_task_id(final_payload)
-            if not content_task_id:
-                raise ValueError(
-                    f"Haodeya Grok video task completed but returned no task id: {final_payload}"
-                )
-
-            video_bytes = _download_haodeya_grok_video_content(self.profile, content_task_id)
-            storage_path = persist_generated_video_bytes(
-                provider_name=self.definition.provider_name,
-                video_bytes=video_bytes,
-                prompt=prompt,
-                output_format=self.profile.output_format,
-            )
-            latency_ms = max(1, round((perf_counter() - started_at) * 1000))
-            billing = calculate_tiered_media_billing(
-                profile=self.profile,
-                output_count=1,
-                tier=_grok_sku_billing_tier(sku),
-                pricing_unit="per_video",
-            )
-            billing = {
-                **billing,
-                "video_sku": sku,
-                "source": "provider_profile",
-            }
-            result = {
-                "summary": f"{self.definition.provider_name} completed a live video.generate run.",
-                "payload_keys": list(payload.keys()),
-                "adapter_mode": "haodeya_grok_video",
-                "storage_path": storage_path,
-                "storage_paths": [storage_path],
-                "response_model": sku,
-                "response_models": [sku],
-                "requested_video_count": 1,
-                "output_count": 1,
-                "billing": billing,
-                "upstream_task_id": upstream_task_id,
-                "upstream_status": _extract_task_status(final_payload),
-                "upstream_download": "content",
-                "video_sku": sku,
-                "grok_video_mode": HAODEYA_VIDEO_SKUS[sku]["mode"],
-                "request_strategy": diagnostics.strategy,
-                "request_endpoint": diagnostics.endpoint_path,
-                "request_url": diagnostics.request_url,
-                "request_timeout_seconds": diagnostics.timeout_seconds,
-                "request_adapter_mode": diagnostics.adapter_mode,
-                "effective_capability": diagnostics.effective_capability,
-            }
-            return ExecutionOutcome(
-                model_name=sku,
-                latency_ms=latency_ms,
-                cost=billing["cost"],
-                cost_currency=billing["currency"],
-                outbound=self.definition.outbound,
-                result=result,
-            )
+            billing = {**calculate_tiered_media_billing(profile=self.profile, output_count=1,
+                                                       tier=_grok_sku_billing_tier(sku), pricing_unit="per_video"),
+                       "video_sku": sku, "source": "provider_profile"}
+            progress = AsyncTaskProgress(task_id=self.task_id, saved=self.saved_progress, save=self.save_progress,
+                                         definition=self.definition, profile=replace(self.profile, model_name=sku),
+                                         diagnostics=diagnostics, billing=billing,
+                                         result_fields={"video_sku": sku, "grok_video_mode": HAODEYA_VIDEO_SKUS[sku]["mode"],
+                                                        "upstream_download": "content"})
+            upstream_task_id = progress.prepare()
+            if upstream_task_id is None:
+                submit_payload = _submit_haodeya_grok_video_task(self.profile, request_body)
+                if isinstance(submit_payload.get("usage"), dict):
+                    progress.step["usage"] = submit_payload["usage"]
+                progress.accepted(_extract_task_id(submit_payload), str(submit_payload.get("request_id") or ""),
+                                  polling_url=_extract_polling_url(submit_payload))
+            if progress.step["state"] != "completed":
+                if not progress.step.get("output_urls"):
+                    final_payload = _poll_haodeya_grok_video_result(
+                        self.profile, progress.step.get("upstream_task_id", ""),
+                        polling_url=progress.step.get("polling_url"),
+                    )
+                    content_task_id = progress.step.get("upstream_task_id") or _extract_task_id(final_payload)
+                    if not content_task_id:
+                        raise ValueError("Haodeya Grok completed but returned no content task id")
+                    progress.step["content_task_id"] = content_task_id
+                    progress.step["upstream_task_id"] = content_task_id
+                    content_url = f"{self.profile.base_url.rstrip('/')}{HAODEYA_VIDEO_ENDPOINT_PATH}/{content_task_id}/content"
+                    usage = final_payload.get("usage") if isinstance(final_payload.get("usage"), dict) else progress.step.get("usage", {})
+                    progress.outputs([content_url], status=_extract_task_status(final_payload), usage=usage,
+                                     request_id=str(final_payload.get("request_id") or ""))
+                if not progress.step["storage_paths"]:
+                    progress.checkpoint()
+                    video_bytes = _download_haodeya_grok_video_content(self.profile, progress.step["content_task_id"])
+                    storage_path = persist_generated_video_bytes(provider_name=self.definition.provider_name,
+                                                                 video_bytes=video_bytes, prompt=prompt,
+                                                                 output_format=self.profile.output_format)
+                    progress.saved_output(storage_path)
+                progress.complete()
+            outcome = progress.outcome(max(1, round((perf_counter() - started_at) * 1000)))
+            outcome.result.update(summary=f"{self.definition.provider_name} completed a live video.generate run.", payload_keys=list(payload.keys()))
+            return outcome
         except Exception as exc:
-            raise ProviderExecutionError(str(exc), diagnostics=diagnostics) from exc
+            if progress is None and self.saved_progress:
+                # A changed/invalid SKU must not erase an already accepted run.
+                progress = AsyncTaskProgress(task_id=self.task_id, saved=self.saved_progress, save=self.save_progress,
+                                             definition=self.definition, profile=self.profile, diagnostics=diagnostics,
+                                             billing=self.saved_progress["billing_template"])
+            if progress is not None:
+                progress.failed(exc)
+            raise ProviderExecutionError(str(exc), diagnostics=diagnostics,
+                                         partial_outcome=progress.outcome() if progress is not None else None) from exc
+
 
 
 def _grok_sku_billing_tier(sku: str) -> str:
@@ -525,7 +519,7 @@ def _poll_haodeya_grok_video_result(
             return last_payload
         if status in _FAILED_STATUSES:
             error_detail = last_payload.get("error") or last_payload.get("message") or last_payload
-            raise ValueError(f"Haodeya video task failed with status={status}: {error_detail}")
+            raise UpstreamTaskFailed(f"Haodeya video task failed with status={status}: {error_detail}")
 
         sleep(_POLL_INTERVAL_SECONDS)
 
@@ -560,7 +554,10 @@ def _download_haodeya_grok_video_content(profile: ImageProviderProfile, task_id:
     )
     try:
         with urlopen(request, timeout=profile.timeout_seconds) as response:
-            return response.read()
+            video_bytes = response.read()
+            content_type = response.headers.get("Content-Type", "")
+            validate_generated_media(video_bytes, kind="video", content_type=content_type)
+            return video_bytes
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")
         raise ValueError(f"Haodeya video content download failed with HTTP {exc.code}: {detail}") from exc

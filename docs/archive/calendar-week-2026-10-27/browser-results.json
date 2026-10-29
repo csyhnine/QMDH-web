@@ -1,0 +1,34 @@
+{
+  "results": [
+    {
+      "name": "Delivery inserts with empty optional deliverable and retains a one-day milestone",
+      "passed": true
+    },
+    {
+      "name": "Gantt week uses Monday-Sunday, seven day cells, previous/next whole weeks and persists after remount",
+      "passed": true
+    },
+    {
+      "name": "Node insertion preserves the selected week rather than expanding back to all work",
+      "passed": true
+    },
+    {
+      "name": "Custom calendar in quick actions is visible above clipping, enforces range, restores focus and Escape keeps quick card",
+      "passed": true
+    },
+    {
+      "name": "Calendar year/month controls and bounded Today work consistently in quick delivery and quick work",
+      "passed": true
+    },
+    {
+      "name": "Header, project creation and report information use the same calendar; optional dates can clear",
+      "passed": true
+    },
+    {
+      "name": "390px quick calendar fits the viewport, stays clickable and shares the desktop style",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "nativePrompts": []
+}

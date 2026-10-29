@@ -40,6 +40,7 @@ export type StudioFormState = {
 };
 
 export type ReferenceUploadItem = {
+  localId?: string;
   fileName: string;
   previewUrl: string;
   /** Local /media path or asset:// when Seedance private-avatar is active. */
@@ -82,8 +83,9 @@ export type SubmissionTracker = {
 };
 
 export type TemplateFeedback = {
-  type: "success" | "error";
+  type: "success" | "error" | "info";
   message: string;
+  saveState?: "pending" | "uncertain";
 };
 
 export type HistoryActionKey =

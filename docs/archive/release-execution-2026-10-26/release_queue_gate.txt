@@ -1,0 +1,4 @@
+REDIS_GATE {"task_queue_length": 0, "gpu_lock_present": false}
+UPSTREAM_GATE {"running": 0, "pending": 0, "verified": true}
+
+exit 0

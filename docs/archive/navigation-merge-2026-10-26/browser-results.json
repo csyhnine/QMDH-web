@@ -1,0 +1,21 @@
+{
+  "results": [
+    {
+      "name": "Other home contains all five entry cards and primary rail is collapsed",
+      "passed": true
+    },
+    {
+      "name": "Inspiration feedback and navigation open from Other and highlight parent; tabs preserve direct URLs",
+      "passed": true
+    },
+    {
+      "name": "Generation has canvas child tab; canvas activates Generate and retains usable viewport",
+      "passed": true
+    },
+    {
+      "name": "Other sections remain reachable and contained on a narrow viewport",
+      "passed": true
+    }
+  ],
+  "errors": []
+}

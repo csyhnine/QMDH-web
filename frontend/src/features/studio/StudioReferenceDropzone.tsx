@@ -1,13 +1,17 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { seedanceAvatarStatusLabel } from "./seedancePrivateAvatar";
 import type { StudioReferenceDropzoneProps } from "./studioComposerExpandedContentTypes";
+import { referenceItemIdentity, referenceItemContent } from "./studioReferenceUploadSession";
+import type { ReferenceUploadItem } from "./studioTypes";
 import StudioReferenceAnnotateLightbox from "./StudioReferenceAnnotateLightbox";
 
 const DEFAULT_MAX_REFERENCE_COUNT = 4;
 
 type RealVerifySession = {
-  index: number;
+  itemId: string;
+  content: string;
+  serial: number;
   taskId: string;
   h5Link: string;
 };
@@ -25,14 +29,30 @@ export default function StudioReferenceDropzone({
   onStartSeedanceRealAvatar,
   onCompleteSeedanceRealAvatar,
 }: StudioReferenceDropzoneProps) {
-  const [annotateIndex, setAnnotateIndex] = useState<number | null>(null);
-  const [menuIndex, setMenuIndex] = useState<number | null>(null);
+  const [annotation, setAnnotation] = useState<{ itemId: string; content: string; serial: number } | null>(null);
+  const [menuIndex, setMenuIndex] = useState<string | null>(null);
   const [realSession, setRealSession] = useState<RealVerifySession | null>(null);
   const [realBusy, setRealBusy] = useState(false);
   const [realError, setRealError] = useState<string | null>(null);
-  const annotateItem =
-    annotateIndex !== null ? referenceUploads[annotateIndex] ?? null : null;
-  const cappedMax = Math.max(1, Math.min(4, maxReferenceCount));
+  const mounted = useRef(true), serial = useRef(0), realBusyRef = useRef(false);
+  const itemsRef = useRef(referenceUploads); itemsRef.current = referenceUploads;
+  const callbacks = useRef({ onRemoveReferenceUpload, onReplaceReferenceUpload, onStartSeedanceRealAvatar, onCompleteSeedanceRealAvatar });
+  callbacks.current = { onRemoveReferenceUpload, onReplaceReferenceUpload, onStartSeedanceRealAvatar, onCompleteSeedanceRealAvatar };
+  const annotationRef = useRef(annotation); annotationRef.current = annotation;
+  const realControl = useRef<{ itemId: string; content: string; serial: number; taskId?: string; controller: AbortController } | null>(null);
+  const annotateItem = annotation ? referenceUploads.find(item => referenceItemIdentity(item) === annotation.itemId && referenceItemContent(item) === annotation.content) : null;
+  function closeAnnotation(expected: number) { if (mounted.current && annotationRef.current?.serial === expected) { annotationRef.current = null; setAnnotation(null); } }
+  function openAnnotation(item: ReferenceUploadItem) { const next = { itemId: referenceItemIdentity(item), content: referenceItemContent(item), serial: ++serial.current }; annotationRef.current = next; setAnnotation(next); }
+  function cancelReal() { realBusyRef.current = false; const old = realControl.current; realControl.current = null; old?.controller.abort(); if (mounted.current) { setRealSession(null); setRealError(null); setRealBusy(false); } }
+  function realCurrent(request: NonNullable<typeof realControl.current>) { return mounted.current && realControl.current === request && !request.controller.signal.aborted && itemsRef.current.some(item => referenceItemIdentity(item) === request.itemId && referenceItemContent(item) === request.content && (!request.taskId || item.verifyTaskId === request.taskId)); }
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; realControl.current?.controller.abort(); realControl.current = null; annotationRef.current = null; }; }, []);
+  useEffect(() => {
+    if (annotation && !annotateItem) closeAnnotation(annotation.serial);
+    if (realControl.current && (!enableSeedanceAvatar || !realCurrent(realControl.current))) cancelReal();
+  }, [referenceUploads, enableSeedanceAvatar]);
+  const cappedMax = Number.isFinite(maxReferenceCount)
+    ? Math.max(0, Math.floor(maxReferenceCount))
+    : DEFAULT_MAX_REFERENCE_COUNT;
   const canAddMore = referenceUploads.length < cappedMax;
 
   const isEditMode = creationMode === "edit";
@@ -49,45 +69,47 @@ export default function StudioReferenceDropzone({
         ]
           .filter(Boolean)
           .join(" ")}
+        disabled={cappedMax === 0}
         onClick={onOpenReferencePicker}
         onDrop={onReferenceDrop}
         onDragOver={(event) => event.preventDefault()}
       >
         <span className="reference-dropzone-plus">+</span>
         <span className="reference-dropzone-empty-copy">
-          {isEditMode ? "上传要编辑的参考图" : "添加可选参考图"}
+          {cappedMax === 0 ? "当前档位无需参考图" : isEditMode ? "上传要编辑的参考图" : "添加可选参考图"}
         </span>
       </button>
     );
   }
 
   async function handleStartReal(index: number) {
-    if (!onStartSeedanceRealAvatar) return;
-    setMenuIndex(null);
-    setRealError(null);
-    setRealBusy(true);
+    const item = referenceUploads[index]; if (realBusyRef.current || !item || !callbacks.current.onStartSeedanceRealAvatar) return;
+    cancelReal();
+    const request: NonNullable<typeof realControl.current> = { itemId: referenceItemIdentity(item), content: referenceItemContent(item), serial: ++serial.current, controller: new AbortController() };
+    realControl.current = request; realBusyRef.current = true; setMenuIndex(null); setRealError(null); setRealBusy(true);
     try {
-      const started = await onStartSeedanceRealAvatar(index);
-      setRealSession({ index, taskId: started.taskId, h5Link: started.h5Link });
+      const liveIndex = itemsRef.current.findIndex(entry => referenceItemIdentity(entry) === request.itemId);
+      const started = await callbacks.current.onStartSeedanceRealAvatar(liveIndex, request.controller.signal);
+      if (realCurrent(request)) {
+        setRealSession({ itemId: request.itemId, content: request.content, serial: request.serial, taskId: started.taskId, h5Link: started.h5Link });
+        request.taskId = started.taskId;
+      }
     } catch (error) {
-      setRealError(error instanceof Error ? error.message : "发起真人认证失败");
-    } finally {
-      setRealBusy(false);
+      if (mounted.current && realControl.current === request && error instanceof DOMException && error.name === "AbortError") cancelReal();
+      else if (realCurrent(request)) setRealError(error instanceof Error ? error.message : "发起真人认证失败");
     }
+    finally { if (mounted.current && realControl.current === request && !request.controller.signal.aborted) { realBusyRef.current = false; setRealBusy(false); } }
   }
-
   async function handleCompleteReal() {
-    if (!realSession || !onCompleteSeedanceRealAvatar) return;
-    setRealBusy(true);
-    setRealError(null);
+    const request = realControl.current;
+    if (realBusyRef.current || !request || !realSession || request.serial !== realSession.serial || !realCurrent(request) || !callbacks.current.onCompleteSeedanceRealAvatar) return;
+    realBusyRef.current = true; setRealBusy(true); setRealError(null);
     try {
-      await onCompleteSeedanceRealAvatar(realSession.index, realSession.taskId);
-      setRealSession(null);
-    } catch (error) {
-      setRealError(error instanceof Error ? error.message : "真人入库失败");
-    } finally {
-      setRealBusy(false);
-    }
+      const index = itemsRef.current.findIndex(item => referenceItemIdentity(item) === request.itemId);
+      await callbacks.current.onCompleteSeedanceRealAvatar(index, realSession.taskId, request.controller.signal);
+      if (realCurrent(request)) cancelReal();
+    } catch (error) { if (realCurrent(request)) setRealError(error instanceof Error ? error.message : "真人入库失败"); }
+    finally { if (mounted.current && realControl.current === request && !request.controller.signal.aborted) { realBusyRef.current = false; setRealBusy(false); } }
   }
 
   return (
@@ -98,7 +120,7 @@ export default function StudioReferenceDropzone({
         onDragOver={(event) => event.preventDefault()}
       >
         <div className="reference-preview-grid">
-          {referenceUploads.slice(0, cappedMax).map((item, index) => {
+          {referenceUploads.map((item, index) => {
             const effectiveStatus =
               item.avatarStatus ||
               (enableSeedanceAvatar && !item.storagePath.startsWith("asset://") ? "idle" : undefined);
@@ -117,7 +139,7 @@ export default function StudioReferenceDropzone({
                 : item.previewUrl;
             return (
               <div
-                key={`${item.mediaPath || item.storagePath}-${index}`}
+                key={referenceItemIdentity(item)}
                 className={
                   effectiveStatus === "failed"
                     ? "reference-preview-item is-avatar-failed"
@@ -145,11 +167,11 @@ export default function StudioReferenceDropzone({
                     <button
                       type="button"
                       className="reference-preview-avatar-entry"
-                      onClick={() => setMenuIndex(menuIndex === index ? null : index)}
+                      onClick={() => setMenuIndex(menuIndex === referenceItemIdentity(item) ? null : referenceItemIdentity(item))}
                     >
                       入库
                     </button>
-                    {menuIndex === index ? (
+                    {menuIndex === referenceItemIdentity(item) ? (
                       <div className="reference-preview-avatar-menu">
                         <button
                           type="button"
@@ -173,7 +195,7 @@ export default function StudioReferenceDropzone({
                     className="reference-preview-annotate"
                     aria-label={`标注 ${item.fileName}`}
                     title="标注参考图"
-                    onClick={() => setAnnotateIndex(index)}
+                    onClick={() => openAnnotation(item)}
                   >
                     标注
                   </button>
@@ -182,7 +204,7 @@ export default function StudioReferenceDropzone({
                   type="button"
                   className="reference-preview-remove"
                   aria-label={`移除 ${item.fileName}`}
-                  onClick={() => onRemoveReferenceUpload(index)}
+                  onClick={() => { const currentIndex = itemsRef.current.findIndex(entry => referenceItemIdentity(entry) === referenceItemIdentity(item)); if (currentIndex >= 0) callbacks.current.onRemoveReferenceUpload(currentIndex); }}
                 >
                   ×
                 </button>
@@ -202,15 +224,20 @@ export default function StudioReferenceDropzone({
           ) : null}
         </div>
       </div>
-      {annotateItem && annotateIndex !== null && onReplaceReferenceUpload ? (
+      {annotateItem && annotation && onReplaceReferenceUpload ? (
         <StudioReferenceAnnotateLightbox
+          key={`${annotation.itemId}:${annotation.serial}`}
           item={annotateItem}
-          index={annotateIndex}
-          onClose={() => setAnnotateIndex(null)}
-          onReplace={onReplaceReferenceUpload}
+          index={referenceUploads.indexOf(annotateItem)}
+          onClose={() => closeAnnotation(annotation.serial)}
+          onReplace={(_index, next) => {
+            if (!mounted.current || annotationRef.current?.serial !== annotation.serial) return;
+            const index = itemsRef.current.findIndex(item => referenceItemIdentity(item) === annotation.itemId && referenceItemContent(item) === annotation.content);
+            if (index >= 0) callbacks.current.onReplaceReferenceUpload?.(index, { ...next, localId: itemsRef.current[index].localId });
+          }}
         />
       ) : null}
-      {realSession || realError ? (
+      {realControl.current || realSession || realError ? (
         <div className="seedance-real-avatar-modal" role="dialog" aria-modal="true">
           <div className="seedance-real-avatar-dialog">
             <h3>真人入库认证</h3>
@@ -222,7 +249,7 @@ export default function StudioReferenceDropzone({
             ) : null}
             {realError ? <p className="seedance-real-avatar-error">{realError}</p> : null}
             <div className="seedance-real-avatar-actions">
-              <button type="button" disabled={realBusy} onClick={() => { setRealSession(null); setRealError(null); }}>
+              <button type="button" onClick={cancelReal}>
                 取消
               </button>
               <button type="button" disabled={realBusy || !realSession} onClick={() => void handleCompleteReal()}>

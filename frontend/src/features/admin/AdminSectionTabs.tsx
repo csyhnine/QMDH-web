@@ -4,6 +4,7 @@ export type AdminSectionTab = {
   key: string;
   label: string;
   path: string;
+  badge?: number;
 };
 
 export default function AdminSectionTabs({
@@ -15,31 +16,19 @@ export default function AdminSectionTabs({
 }) {
   const navigate = useNavigate();
   return (
-    <div className="admin-section-tabs" role="tablist">
+    <nav className="admin-section-tabs admin-workspace-nav" aria-label="后台当前分组">
       {tabs.map((tab) => (
         <button
           key={tab.key}
           type="button"
-          role="tab"
-          aria-selected={tab.key === active}
+          aria-current={tab.key === active ? "page" : undefined}
           className={tab.key === active ? "is-active" : undefined}
           onClick={() => navigate(tab.path)}
         >
           {tab.label}
+          {Boolean(tab.badge) && <em className="admin-tab-badge" aria-label={`${tab.badge} 条待处理反馈`}>{tab.badge}</em>}
         </button>
       ))}
-    </div>
+    </nav>
   );
 }
-
-export const INSIGHT_TABS: AdminSectionTab[] = [
-  { key: "generation-analytics", label: "生成分析", path: "/admin/generation-analytics" },
-  { key: "chat-experience", label: "Chat 体验", path: "/admin/chat-experience" },
-  { key: "usage-logs", label: "日志", path: "/admin/usage-logs" },
-  { key: "cad-usage", label: "图纸解析", path: "/admin/cad-usage" },
-];
-
-export const TEMPLATE_TABS: AdminSectionTab[] = [
-  { key: "templates", label: "生成模板", path: "/admin/templates" },
-  { key: "canvas-templates", label: "画布模板", path: "/admin/canvas-templates" },
-];

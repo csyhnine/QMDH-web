@@ -70,19 +70,22 @@ def upgrade() -> None:
     op.create_index(op.f("ix_provider_pricing_rules_metric"), "provider_pricing_rules", ["metric"], unique=False)
     op.create_index(op.f("ix_provider_pricing_rules_is_active"), "provider_pricing_rules", ["is_active"], unique=False)
 
-    op.alter_column("users", "billing_plan", server_default=None)
-    op.alter_column("users", "billing_status", server_default=None)
-    op.alter_column("users", "quota_policy", server_default=None)
-    op.alter_column("users", "quota_reset_cycle", server_default=None)
-    op.alter_column("usage_ledgers", "input_tokens", server_default=None)
-    op.alter_column("usage_ledgers", "output_tokens", server_default=None)
-    op.alter_column("usage_ledgers", "cached_input_tokens", server_default=None)
-    op.alter_column("usage_ledgers", "uncached_input_tokens", server_default=None)
-    op.alter_column("usage_ledgers", "usage_payload", server_default=None)
-    op.alter_column("provider_pricing_rules", "unit_size", server_default=None)
-    op.alter_column("provider_pricing_rules", "unit_price", server_default=None)
-    op.alter_column("provider_pricing_rules", "currency", server_default=None)
-    op.alter_column("provider_pricing_rules", "is_active", server_default=None)
+    with op.batch_alter_table("users") as batch:
+        batch.alter_column("billing_plan", server_default=None)
+        batch.alter_column("billing_status", server_default=None)
+        batch.alter_column("quota_policy", server_default=None)
+        batch.alter_column("quota_reset_cycle", server_default=None)
+    with op.batch_alter_table("usage_ledgers") as batch:
+        batch.alter_column("input_tokens", server_default=None)
+        batch.alter_column("output_tokens", server_default=None)
+        batch.alter_column("cached_input_tokens", server_default=None)
+        batch.alter_column("uncached_input_tokens", server_default=None)
+        batch.alter_column("usage_payload", server_default=None)
+    with op.batch_alter_table("provider_pricing_rules") as batch:
+        batch.alter_column("unit_size", server_default=None)
+        batch.alter_column("unit_price", server_default=None)
+        batch.alter_column("currency", server_default=None)
+        batch.alter_column("is_active", server_default=None)
 
 
 def downgrade() -> None:

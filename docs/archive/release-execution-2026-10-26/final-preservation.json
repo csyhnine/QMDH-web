@@ -1,0 +1,33 @@
+{
+  "checks": [
+    {
+      "service": "worker",
+      "tools_present": true,
+      "restart_count": 0,
+      "env_mounts_networks_match": true
+    },
+    {
+      "service": "worker",
+      "tools_present": true,
+      "restart_count": 0,
+      "env_mounts_networks_match": true
+    },
+    {
+      "service": "worker",
+      "tools_present": true,
+      "restart_count": 0,
+      "env_mounts_networks_match": true
+    },
+    {
+      "service": "backend",
+      "tools_present": true,
+      "restart_count": 0,
+      "env_mounts_networks_match": true
+    }
+  ],
+  "workflow_files_backed_up": 7,
+  "temporary_test_resources_remaining": 0,
+  "active_release_directory": "/opt/qmdh-release-candidate-20261025",
+  "active_release_directory_must_be_preserved": true,
+  "disk_free_GiB": 8.897842407226562
+}

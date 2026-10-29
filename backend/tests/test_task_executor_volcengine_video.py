@@ -1,3 +1,4 @@
+from tests.review_media_fixtures import MP4_BYTES
 import json
 import os
 import shutil
@@ -81,7 +82,7 @@ class VolcengineArkVideoAdapterTests(unittest.TestCase):
                         "content": [{"type": "video_url", "video_url": "https://media.example.test/seedance.mp4"}],
                     }
                 )
-            return _FakeBinaryResponse(b"seedance-video")
+            return _FakeBinaryResponse(MP4_BYTES)
 
         with patch("app.services.provider_adapters.volcengine_ark_video.urlopen", side_effect=fake_urlopen):
             with patch("app.services.provider_adapters.video_common.urlopen", side_effect=fake_urlopen):
@@ -96,7 +97,7 @@ class VolcengineArkVideoAdapterTests(unittest.TestCase):
         self.assertEqual(outcome.result["upstream_task_id"], "ark-task-1")
         self.assertTrue(outcome.result["storage_path"].startswith("generated/seedance_ark/"))
         saved_path = os.path.join(self.tempdir, outcome.result["storage_path"].replace("/", os.sep))
-        self.assertEqual(open(saved_path, "rb").read(), b"seedance-video")
+        self.assertEqual(open(saved_path, "rb").read(), MP4_BYTES)
 
 
 class VolcengineJimengVideoAdapterTests(unittest.TestCase):
@@ -151,7 +152,7 @@ class VolcengineJimengVideoAdapterTests(unittest.TestCase):
                         }
                     }
                 )
-            return _FakeBinaryResponse(b"jimeng-video")
+            return _FakeBinaryResponse(MP4_BYTES)
 
         with patch("app.services.provider_adapters.volcengine_jimeng_video.urlopen", side_effect=fake_urlopen):
             with patch("app.services.provider_adapters.video_common.urlopen", side_effect=fake_urlopen):
@@ -167,7 +168,7 @@ class VolcengineJimengVideoAdapterTests(unittest.TestCase):
         self.assertEqual(outcome.result["request_strategy"], "volcengine_cv_jimeng_video")
         self.assertEqual(outcome.result["upstream_task_id"], "jimeng-task-1")
         saved_path = os.path.join(self.tempdir, outcome.result["storage_path"].replace("/", os.sep))
-        self.assertEqual(open(saved_path, "rb").read(), b"jimeng-video")
+        self.assertEqual(open(saved_path, "rb").read(), MP4_BYTES)
 
 
 if __name__ == "__main__":

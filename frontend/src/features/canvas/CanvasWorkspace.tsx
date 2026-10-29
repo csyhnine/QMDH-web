@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CanvasMotionContext, CanvasMotionStore } from "./canvasMotion";
+import "./canvasMotion.css";
+import { inheritPromptDraft } from "../../lib/promptPolishOwnership";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   applyEdgeChanges,
@@ -54,9 +57,11 @@ import {
   useCanvasNodeGenerate,
   isResumableCanvasNodeTask,
   type PatchNodeOptions,
+  type CanvasGenerateOptions,
 } from "./useCanvasNodeGenerate";
+import { CanvasAsyncScope, canvasNodeInput, subscribeCanvasAsync, type CanvasAsyncRecord } from "./canvasAsyncScope";
 import { cloneCanvasSnapshot, useCanvasHistory } from "./useCanvasHistory";
-import PublishCanvasTemplateDialog from "./PublishCanvasTemplateDialog";
+import PublishCanvasTemplateDialog, { createCanvasPublishSession, type CanvasPublishSession } from "./PublishCanvasTemplateDialog";
 
 const CONTENT_HISTORY_DEBOUNCE_MS = 400;
 
@@ -98,10 +103,10 @@ type CanvasWorkspaceProps = {
 export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorkspaceProps = {}) {
   const isTemplateMode = editTemplateId != null;
   const navigate = useNavigate();
-  const { isGuest, canUseOpsViews } = useAuth();
+  const { isGuest, canUseOpsViews, currentUser } = useAuth();
   const promptPolishEnabled = usePromptPolishEnabled();
-  const canvas = useCanvasProject(!isTemplateMode);
-  const templateEditor = useCanvasTemplateEditor(isTemplateMode ? editTemplateId : null);
+  const canvas = useCanvasProject(!isTemplateMode && currentUser != null, currentUser?.id);
+  const templateEditor = useCanvasTemplateEditor(isTemplateMode ? editTemplateId : null, currentUser?.id);
   const [nodes, setNodes] = useState<CanvasFlowNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
@@ -111,6 +116,21 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [applyingTemplateId, setApplyingTemplateId] = useState<number | null>(null);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [publishSession,setPublishSession]=useState<CanvasPublishSession | null>(null);
+  const publishSessionRef=useRef<CanvasPublishSession | null>(null),publishOpenRef=useRef(false);
+  const copyRunRef=useRef<{ownerId:number;viewKey:string;stage:"get"|"creating";activated:boolean} | null>(null);
+  const copyNavigationRef=useRef({ownerId:currentUser?.id,viewKey:canvas.viewKey,mounted:false});
+  useLayoutEffect(()=>{
+    copyNavigationRef.current={ownerId:currentUser?.id,viewKey:canvas.viewKey,mounted:true};
+    return()=>{copyNavigationRef.current.mounted=false;};
+  },[currentUser?.id,canvas.viewKey]);
+  useLayoutEffect(()=>{publishOpenRef.current=publishDialogOpen;},[publishDialogOpen]);
+  useLayoutEffect(()=>{
+    if(publishSessionRef.current && publishSessionRef.current.source.ownerId!==currentUser?.id){
+      publishSessionRef.current.phase="abandoned";publishSessionRef.current=null;setPublishSession(null);setPublishDialogOpen(false);
+    }
+    copyRunRef.current=null;setApplyingTemplateId(null);
+  },[currentUser?.id]);
   const [bannerOk, setBannerOk] = useState("");
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [bannerError, setBannerError] = useState("");
@@ -123,6 +143,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   const [runningAll, setRunningAll] = useState(false);
   const clipboardRef = useRef<{ nodes: CanvasFlowNode[]; edges: Edge[] } | null>(null);
   const runningAllRef = useRef(false);
+  const workflowRunRef = useRef<object | null>(null);
   const history = useCanvasHistory();
   const interactionBaselineRef = useRef<ReturnType<typeof cloneCanvasSnapshot> | null>(null);
   const contentHistoryArmedRef = useRef(false);
@@ -135,13 +156,24 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   const sessionSaving = isTemplateMode ? templateEditor.saving : canvas.saving;
   const sessionError = isTemplateMode ? templateEditor.error : canvas.error;
   const boardKey = isTemplateMode
-    ? templateEditor.template?.id ?? "template"
+    ? templateEditor.viewKey
     : canvas.activeProject?.id ?? "empty";
+  const motion = useMemo(() => new CanvasMotionStore(), [boardKey, currentUser?.id, canvas.viewKey, templateEditor.viewKey]);
+  useEffect(() => { motion.active = true; return () => { motion.active = false; motion.clear(); }; }, [motion]);
   const boardTitle = isTemplateMode
     ? templateEditor.template?.title || "模板工作流"
     : canvas.activeProject?.title || "无限画布";
 
-  useEffect(() => {
+  const asyncBoard = isTemplateMode ? `template:${editTemplateId}` : `project:${canvas.activeProject?.id ?? "none"}`;
+  const asyncScope = useMemo(() => new CanvasAsyncScope(currentUser?.id, asyncBoard,
+    !sessionLoading && currentUser != null && (isTemplateMode ? !templateEditor.blocked : (canvas.activeProject != null && canvas.activeOwnerId === currentUser.id)), () => nodesRef.current, () => edgesRef.current),
+    [currentUser?.id, asyncBoard, boardKey, sessionLoading, canvas.activeOwnerId, canvas.viewKey, templateEditor.blocked]);
+  const [, refreshAsync] = useState(0);
+  useLayoutEffect(() => { asyncScope.activate(); return () => asyncScope.dispose(); }, [asyncScope]);
+  useLayoutEffect(() => { workflowRunRef.current=null;runningAllRef.current=false;setRunningAll(false); },[asyncScope]);
+  useEffect(() => subscribeCanvasAsync(currentUser?.id, asyncBoard, () => refreshAsync(n => n + 1)), [currentUser?.id, asyncBoard]);
+
+  useLayoutEffect(() => {
     if (contentHistoryTimerRef.current != null) {
       window.clearTimeout(contentHistoryTimerRef.current);
       contentHistoryTimerRef.current = null;
@@ -169,7 +201,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     setEdges(graph.edges);
     setViewport(graph.viewport);
     setSelectedNodeIds([]);
-  }, [isTemplateMode, canvas.activeProject?.id, templateEditor.template?.id, history.clear]);
+  }, [isTemplateMode, canvas.activeProject?.id, isTemplateMode ? templateEditor.viewKey : canvas.viewKey, history.clear]);
 
   useEffect(() => {
     if (isGuest) return;
@@ -263,6 +295,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
 
   const restoreGraph = useCallback(
     (snapshot: { nodes: CanvasFlowNode[]; edges: Edge[] }) => {
+      motion.clear();
       history.isRestoringRef.current = true;
       flushContentHistorySession();
       interactionBaselineRef.current = null;
@@ -275,7 +308,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
         history.isRestoringRef.current = false;
       });
     },
-    [flushContentHistorySession, history, persistGraph]
+    [motion, flushContentHistorySession, history, persistGraph]
   );
 
   const onUndo = useCallback(() => {
@@ -380,10 +413,11 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
 
   const onAddNode = useCallback(
     (node: CanvasFlowNode) => {
+      motion.emit([node.id], "created");
       applyGraph(nodesRef.current.concat(node), edgesRef.current);
       setSelectedNodeIds([node.id]);
     },
-    [applyGraph]
+    [motion, applyGraph]
   );
 
   const onAddConnectedNode = useCallback(
@@ -396,10 +430,11 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
         },
         edgesRef.current
       );
+      motion.emit([node.id], "created");
       applyGraph(nextNodes, nextEdges);
       setSelectedNodeIds([node.id]);
     },
-    [applyGraph]
+    [motion, applyGraph]
   );
 
   const onViewportChange = useCallback(
@@ -413,38 +448,40 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
 
   const patchNode = useCallback(
     (nodeId: string, patch: Partial<GenerateNodeData>, options?: PatchNodeOptions) => {
-      const recordHistory = options?.recordHistory !== false;
-      if (recordHistory) {
-        if (isDebouncedGeneratePatch(patch)) {
-          armContentHistory();
-        } else if (!isStatusOnlyGeneratePatch(patch)) {
-          flushContentHistorySession();
-          history.push(nodesRef.current, edgesRef.current);
+      const allowed=()=>options?.isCurrent?.() ?? true;
+      const matches=(items:CanvasFlowNode[])=>!options?.expectedData || items.some(node=>node.id===nodeId && isGenerateNode(node) && node.data===options.expectedData);
+      if(!allowed() || !matches(nodesRef.current))return;
+      const prior = nodesRef.current.find(node => node.id === nodeId);
+      if (!options?.expectedData && prior && isGenerateNode(prior) &&
+          ["pending", "running", "awaiting_result"].includes(prior.data.status) &&
+          patch.status === "completed" && typeof patch.taskId === "number" && patch.taskId === prior.data.taskId &&
+          patch.assetUrls?.some(url => Boolean(url))) motion.emit([nodeId], "completed", patch.taskId);
+      const recordChange=()=>{
+        if(options?.recordHistory!==false){
+          if(isDebouncedGeneratePatch(patch))armContentHistory();
+          else if(!isStatusOnlyGeneratePatch(patch)){flushContentHistorySession();history.push(nodesRef.current,edgesRef.current);}
         }
+      };
+      const apply=(items:CanvasFlowNode[])=>items.map(node=>node.id===nodeId && isGenerateNode(node)
+        ? {...node,data:inheritPromptDraft(node.data,{...node.data,...patch},Boolean(options?.expectedData))} : node);
+      if(options?.expectedData){
+        setNodes(current=>{
+          if(!allowed() || !matches(current))return current;
+          recordChange();const next=apply(current);nodesRef.current=next;
+          persistGraph(next,edgesRef.current,viewportRef.current);return next;
+        });return;
       }
-
-      setNodes((current) => {
-        const next = current.map((node) =>
-          node.id === nodeId && isGenerateNode(node)
-            ? { ...node, data: { ...node.data, ...patch } }
-            : node
-        );
-        nodesRef.current = next;
-        persistGraph(next, edgesRef.current, viewportRef.current);
-        return next;
-      });
+      recordChange();const next=apply(nodesRef.current);nodesRef.current=next;
+      setNodes(current=>allowed() ? next : current);
+      persistGraph(next,edgesRef.current,viewportRef.current);
     },
-    [armContentHistory, flushContentHistorySession, history, persistGraph]
+    [motion, armContentHistory, flushContentHistorySession, history, persistGraph]
   );
 
-  const patchNodeRef = useRef(patchNode);
-  useEffect(() => {
-    patchNodeRef.current = patchNode;
-  }, [patchNode]);
-
-  const patchNodeSilent = useCallback((nodeId: string, patch: Partial<GenerateNodeData>) => {
-    patchNodeRef.current(nodeId, patch, { recordHistory: false });
-  }, []);
+  const patchNodeSilent = useCallback((nodeId: string, patch: Partial<GenerateNodeData>, options?: PatchNodeOptions) => {
+    const current = () => asyncScope.active && (options?.isCurrent?.() ?? true);
+    if(current()) patchNode(nodeId, patch, {recordHistory:false,isCurrent:current});
+  }, [asyncScope, patchNode]);
 
   const pendingTaskFingerprint = useMemo(
     () =>
@@ -457,11 +494,11 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     [nodes]
   );
 
-  // Leaving canvas unmounts the page and kills in-flight pollers; resume any stuck tasks.
+  // Each committed view owns its observers; returning attaches to the original task ids.
   useEffect(() => {
     if (sessionLoading) return;
-    resumeCanvasNodeTaskPolls(nodesRef.current, patchNodeSilent);
-  }, [boardKey, sessionLoading, pendingTaskFingerprint, patchNodeSilent]);
+    resumeCanvasNodeTaskPolls(nodesRef.current, patchNodeSilent, asyncScope);
+  }, [boardKey, sessionLoading, pendingTaskFingerprint, patchNodeSilent, asyncScope]);
 
   const patchNoteNode = useCallback(
     (nodeId: string, patch: Partial<NoteNodeData>, options?: PatchNodeOptions) => {
@@ -507,8 +544,8 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     if (!next) return;
     applyGraph(next, edgesRef.current);
     const group = next.find((node) => isGroupNode(node) && !current.some((item) => item.id === node.id));
-    if (group) setSelectedNodeIds([group.id]);
-  }, [applyGraph, selectedNodeIds]);
+    if (group) { motion.emit([group.id], "created"); setSelectedNodeIds([group.id]); }
+  }, [motion, applyGraph, selectedNodeIds]);
 
   const onUngroupSelection = useCallback(() => {
     const next = ungroupSelectedNodes(nodesRef.current, selectedNodeIds);
@@ -523,10 +560,11 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     const result = duplicateCanvasSelection(nodesRef.current, edgesRef.current, selectedNodeIds);
     if (!result) return;
     applyGraph(result.nodes, result.edges);
+    motion.emit(result.createdIds, "created");
     setSelectedNodeIds(result.createdIds);
     setBannerError("");
     setBannerOk(`已复制 ${result.createdIds.length} 个节点`);
-  }, [applyGraph, selectedNodeIds, sessionLoading]);
+  }, [motion, applyGraph, selectedNodeIds, sessionLoading]);
 
   const onCopySelection = useCallback(() => {
     if (selectedNodeIds.length === 0) return;
@@ -542,10 +580,11 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     const result = pasteCanvasSnapshot(nodesRef.current, edgesRef.current, clipboardRef.current);
     if (!result) return;
     applyGraph(result.nodes, result.edges);
+    motion.emit(result.createdIds, "created");
     setSelectedNodeIds(result.createdIds);
     setBannerError("");
     setBannerOk(`已粘贴 ${result.createdIds.length} 个节点`);
-  }, [applyGraph, sessionLoading]);
+  }, [motion, applyGraph, sessionLoading]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -596,135 +635,109 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     onUngroupSelection,
   ]);
 
-  const uploadNodeImage = useCallback(
-    async (nodeId: string, file: File) => {
-      const { acceptedFiles, errors } = prepareReferenceUploadFiles([file], 0, 1);
-      if (errors[0]) {
-        patchNode(nodeId, { status: "failed", errorMessage: errors[0] });
-        return;
-      }
-      const accepted = acceptedFiles[0];
-      if (!accepted) return;
-      flushContentHistorySession();
-      history.push(nodesRef.current, edgesRef.current);
-      patchNode(nodeId, { status: "submitting", errorMessage: undefined }, { recordHistory: false });
-      try {
-        const uploaded = await uploadReferenceFiles([accepted], api.uploadReferenceImage);
-        const path = uploaded[0]?.storagePath;
-        if (!path) throw new Error("上传失败");
-        patchNode(
-          nodeId,
-          {
-            status: "completed",
-            referenceImages: [path],
-            assetUrls: [path],
-            previewImagePath: path,
-            errorMessage: undefined,
-            ...(uploaded[0]?.fileName ? { label: `上传 · ${uploaded[0].fileName}` } : {}),
-          },
-          { recordHistory: false }
-        );
-        setBannerError("");
-      } catch (err) {
-        patchNode(
-          nodeId,
-          {
-            status: "failed",
-            errorMessage: err instanceof Error ? err.message : "上传失败",
-          },
-          { recordHistory: false }
-        );
-      }
-    },
-    [flushContentHistorySession, history, patchNode]
-  );
+  const nodeAsyncInput = useCallback((nodeId: string) => {
+    const node=nodesRef.current.find(row=>row.id===nodeId);
+    const upstream=node && isGenerateNode(node) && node.data.nodeKind === "annotate"
+      ? collectUpstreamDeliverables(nodeId,nodesRef.current,edgesRef.current).images[0] || null : null;
+    return JSON.stringify([canvasNodeInput(node),upstream]);
+  }, []);
+  const uploadNodeImage = useCallback(async (nodeId: string, file: File) => {
+    const operation=asyncScope.begin("upload",nodeId,()=>nodeAsyncInput(nodeId)); if(!operation)return;
+    const guard=asyncScope.guard(operation);
+    const {acceptedFiles,errors}=prepareReferenceUploadFiles([file],0,1);
+    if(errors[0] || !acceptedFiles[0]) {
+      const message=errors[0] || "没有可上传的图片";
+      asyncScope.complete(operation,{error:message});
+      if(asyncScope.current(operation)) { patchNode(nodeId,{status:"failed",errorMessage:message},{isCurrent:guard}); asyncScope.finish(operation); }
+      return;
+    }
+    flushContentHistorySession();history.push(nodesRef.current,edgesRef.current);
+    patchNode(nodeId,{status:"submitting",errorMessage:undefined},{recordHistory:false,isCurrent:guard});
+    try {
+      const uploaded=await uploadReferenceFiles([acceptedFiles[0]],api.uploadReferenceImage),path=uploaded[0]?.storagePath;
+      if(!path)throw new Error("上传失败");
+      const patch: Partial<GenerateNodeData>={status:"completed",referenceImages:[path],assetUrls:[path],previewImagePath:path,errorMessage:undefined,
+        ...(uploaded[0]?.fileName ? {label:`上传 · ${uploaded[0].fileName}`} : {})};
+      asyncScope.complete(operation,{patch});
+      if(!asyncScope.current(operation))return;
+      patchNode(nodeId,patch,{recordHistory:false,isCurrent:guard});asyncScope.finish(operation);setBannerError("");
+    } catch(err) {
+      const message=err instanceof Error ? err.message : "上传失败";asyncScope.complete(operation,{error:message});
+      if(asyncScope.current(operation)) { patchNode(nodeId,{status:"failed",errorMessage:message},{recordHistory:false,isCurrent:guard});asyncScope.finish(operation); }
+    }
+  },[asyncScope,nodeAsyncInput,flushContentHistorySession,history,patchNode]);
 
-  const saveAnnotation = useCallback(
-    async (nodeId: string) => {
-      const node = nodesRef.current.find((item) => item.id === nodeId);
-      if (!node || !isGenerateNode(node) || node.data.nodeKind !== "annotate") return;
-      const upstream = collectUpstreamDeliverables(nodeId, nodesRef.current, edgesRef.current);
-      const baseUrl =
-        upstream.images[0] ||
-        node.data.referenceImages[0] ||
-        node.data.previewImagePath ||
-        node.data.assetUrls[0] ||
-        "";
-      if (!baseUrl) {
-        patchNode(nodeId, { status: "failed", errorMessage: "请先连接上游图片作为标注底图。" });
-        return;
-      }
-      if (node.data.annotationStrokes.length === 0) {
-        patchNode(nodeId, { status: "failed", errorMessage: "请先在图上添加标注。" });
-        return;
-      }
-      flushContentHistorySession();
-      history.push(nodesRef.current, edgesRef.current);
-      patchNode(nodeId, { status: "submitting", errorMessage: undefined }, { recordHistory: false });
-      try {
-        const dataUrlResult = await exportAnnotatedDataUrl(baseUrl, node.data.annotationStrokes);
-        const uploaded = await api.uploadReferenceImage({
-          file_name: dataUrlResult.fileName,
-          data_url: dataUrlResult.dataUrl,
-        });
-        patchNode(
-          nodeId,
-          {
-            status: "completed",
-            assetUrls: [uploaded.storage_path],
-            previewImagePath: uploaded.storage_path,
-            errorMessage: undefined,
-          },
-          { recordHistory: false }
-        );
-        setBannerError("");
-      } catch (err) {
-        patchNode(
-          nodeId,
-          {
-            status: "failed",
-            errorMessage: err instanceof Error ? err.message : "保存标注失败",
-          },
-          { recordHistory: false }
-        );
-      }
-    },
-    [flushContentHistorySession, history, patchNode]
-  );
+  const saveAnnotation = useCallback(async (nodeId: string) => {
+    if(!asyncScope.active)return;
+    const node=nodesRef.current.find(item=>item.id===nodeId);
+    if(!node || !isGenerateNode(node) || node.data.nodeKind!=="annotate")return;
+    const upstream=collectUpstreamDeliverables(nodeId,nodesRef.current,edgesRef.current);
+    const baseUrl=upstream.images[0] || node.data.referenceImages[0] || node.data.previewImagePath || node.data.assetUrls[0] || "";
+    if(!baseUrl || node.data.annotationStrokes.length===0) {
+      patchNode(nodeId,{status:"failed",errorMessage:!baseUrl ? "请先连接上游图片作为标注底图。" : "请先在图上添加标注。"},{isCurrent:()=>asyncScope.active});return;
+    }
+    const operation=asyncScope.begin("annotate",nodeId,()=>nodeAsyncInput(nodeId));if(!operation)return;
+    const guard=asyncScope.guard(operation),strokes=JSON.parse(JSON.stringify(node.data.annotationStrokes));
+    flushContentHistorySession();history.push(nodesRef.current,edgesRef.current);
+    patchNode(nodeId,{status:"submitting",errorMessage:undefined},{recordHistory:false,isCurrent:guard});
+    try {
+      const output=await exportAnnotatedDataUrl(baseUrl,strokes);
+      // Preserve an export already in progress, but never start another upload after leaving its source view.
+      if(!asyncScope.current(operation)) { asyncScope.complete(operation,{error:"标注导出后来源已变化，未上传；原笔画仍保留，请回原节点核对。"});return; }
+      const uploaded=await api.uploadReferenceImage({file_name:output.fileName,data_url:output.dataUrl});
+      const patch: Partial<GenerateNodeData>={status:"completed",assetUrls:[uploaded.storage_path],previewImagePath:uploaded.storage_path,errorMessage:undefined};
+      asyncScope.complete(operation,{patch});if(!asyncScope.current(operation))return;
+      patchNode(nodeId,patch,{recordHistory:false,isCurrent:guard});asyncScope.finish(operation);setBannerError("");
+    } catch(err) {
+      const message=err instanceof Error ? err.message : "保存标注失败";asyncScope.complete(operation,{error:message});
+      if(asyncScope.current(operation)) { patchNode(nodeId,{status:"failed",errorMessage:message},{recordHistory:false,isCurrent:guard});asyncScope.finish(operation); }
+    }
+  },[asyncScope,nodeAsyncInput,flushContentHistorySession,history,patchNode]);
 
-  const onDropImages = useCallback(
-    async (files: File[], position: { x: number; y: number }) => {
-      const { acceptedFiles, errors } = prepareReferenceUploadFiles(files, 0, 8);
-      for (const message of errors) setBannerError(message);
-      if (acceptedFiles.length === 0) return;
+  const onDropImages = useCallback(async (files: File[], position: {x:number;y:number}) => {
+    if(!asyncScope.active)return;
+    const {acceptedFiles,errors}=prepareReferenceUploadFiles(files,0,8);
+    for(const message of errors)setBannerError(message);
+    if(!acceptedFiles.length)return;
+    const operation=asyncScope.begin("drop");if(!operation)return;
+    try {
+      const uploaded=await uploadReferenceFiles(acceptedFiles,api.uploadReferenceImage);
+      const created=uploaded.map((item,index)=>createUploadImageNode({x:position.x+index*36,y:position.y+index*36},nodeDefaults,item.storagePath,item.fileName));
+      asyncScope.complete(operation,{nodes:created});if(!asyncScope.current(operation))return;
+      motion.emit(created.map(node => node.id), "created");
+      applyGraph(nodesRef.current.concat(created),edgesRef.current);if(created[0])setSelectedNodeIds([created[0].id]);
+      asyncScope.finish(operation);setBannerError("");
+    } catch(err) {
+      const message=err instanceof Error ? err.message : "图片上传失败";asyncScope.complete(operation,{error:message});
+      if(asyncScope.current(operation)) { setBannerError(message);asyncScope.finish(operation); }
+    }
+  },[motion,asyncScope,applyGraph,nodeDefaults]);
 
-      try {
-        const uploaded = await uploadReferenceFiles(acceptedFiles, api.uploadReferenceImage);
-        const created: CanvasGenerateNode[] = [];
-        uploaded.forEach((item, index) => {
-          created.push(
-            createUploadImageNode(
-              { x: position.x + index * 36, y: position.y + index * 36 },
-              nodeDefaults,
-              item.storagePath,
-              item.fileName
-            )
-          );
-        });
-        applyGraph(nodesRef.current.concat(created), edgesRef.current);
-        if (created[0]) setSelectedNodeIds([created[0].id]);
-        setBannerError("");
-      } catch (err) {
-        setBannerError(err instanceof Error ? err.message : "图片上传失败");
+  const recoverAsyncResult = useCallback((record: CanvasAsyncRecord) => {
+    if(!asyncScope.active || record.ownerId!==currentUser?.id || record.board!==asyncBoard || record.phase!=="ready")return;
+    if(record.kind==="drop" && record.nodes) {
+      const existing=new Set(nodesRef.current.map(node=>node.id)),add=record.nodes.filter(node=>!existing.has(node.id));
+      applyGraph(nodesRef.current.concat(add),edgesRef.current);
+    } else if(record.nodeId && record.patch) {
+      const node=nodesRef.current.find(node=>node.id===record.nodeId);
+      const input=record.kind==="task" && node && isGenerateNode(node) ? JSON.stringify([node.data.nodeKind,node.data.taskId ?? null]) : nodeAsyncInput(record.nodeId);
+      if(!node || !isGenerateNode(node) || node.data.nodeKind!==record.nodeKind || input!==record.input) {
+        setBannerError("原节点或输入已变化，未覆盖当前内容；恢复记录中的路径和任务号已保留，请先核对。");return;
       }
-    },
-    [applyGraph, nodeDefaults]
-  );
+      const guard=()=>asyncScope.active;
+      patchNode(record.nodeId,{...record.patch,errorMessage:record.patch.errorMessage},{isCurrent:guard});
+    } else { setBannerError("恢复记录内容不完整，已保留供核对。");return; }
+    asyncScope.discard(record);setBannerError("");
+  },[asyncScope,asyncBoard,currentUser?.id,applyGraph,nodeAsyncInput,patchNode]);
+  const discardAsyncResult = useCallback((record: CanvasAsyncRecord) => {
+    if(asyncScope.active && record.ownerId===currentUser?.id && record.board===asyncBoard &&
+      window.confirm("只放弃这条本地恢复记录？不会取消服务器任务或删除已上传图片；在途结果仍可能稍后返回。"))asyncScope.discard(record);
+  },[asyncScope,asyncBoard,currentUser?.id]);
 
-  const runGenerate = useCanvasNodeGenerate(providers, nodes, edges, patchNodeSilent);
+  const runGenerate = useCanvasNodeGenerate(providers, nodes, edges, patchNodeSilent, asyncScope);
 
   const handleGenerate = useCallback(
-    async (nodeId: string, data: GenerateNodeData) => {
+    async (nodeId: string, data: GenerateNodeData, options?: CanvasGenerateOptions) => {
       await runGenerate(nodeId, {
         ...data,
         projectCode: data.projectCode || projectCode,
@@ -735,16 +748,16 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
             : data.nodeKind === "upscale"
               ? nodeDefaults.upscaleProvider
               : nodeDefaults.imageProvider),
-      });
+      }, options);
     },
     [nodeDefaults, projectCode, runGenerate]
   );
 
   const handleSyncNodeTask = useCallback(
     (nodeId: string, data: GenerateNodeData) => {
-      void syncCanvasNodeTask(nodeId, data, patchNodeSilent);
+      void syncCanvasNodeTask(nodeId, data, patchNodeSilent, asyncScope).catch(() => undefined);
     },
-    [patchNodeSilent]
+    [patchNodeSilent, asyncScope]
   );
 
   const runnableCount = useMemo(
@@ -773,7 +786,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
 
   const runWorkflow = useCallback(
     async (mode: "all" | "selection") => {
-      if (sessionLoading || runningAllRef.current || isTemplateMode) return;
+      if (!asyncScope.active || sessionLoading || runningAllRef.current || isTemplateMode) return;
 
       const label = mode === "all" ? "全局运行" : "批量运行";
       const scoped =
@@ -804,6 +817,8 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
         return;
       }
 
+      const token={};workflowRunRef.current=token;
+      const current=()=>asyncScope.active && workflowRunRef.current===token;
       runningAllRef.current = true;
       setRunningAll(true);
       setBannerError("");
@@ -812,6 +827,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
       try {
         let finished = 0;
         for (const nodeId of order) {
+          if(!current())return;
           const latest = nodesRef.current.find((node) => node.id === nodeId);
           if (!latest || !isGenerateNode(latest) || !isRunnableCanvasNode(latest)) {
             finished += 1;
@@ -827,6 +843,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
 
           setBannerOk(`${label} ${finished + 1}/${order.length}：${latest.data.label || nodeId}`);
           await handleGenerate(nodeId, latest.data);
+          if(!current())return;
 
           const after = nodesRef.current.find((node) => node.id === nodeId);
           if (after && isGenerateNode(after) && after.data.status === "failed") {
@@ -836,16 +853,21 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
             setBannerOk("");
             return;
           }
+          if(!after || !isGenerateNode(after) || after.data.status!=="completed" || !after.data.assetUrls.some(Boolean)) {
+            setBannerError("上游结果尚未确认或没有可用产物，已停止后续节点；请核对原任务后继续。");setBannerOk("");return;
+          }
           finished += 1;
           setBannerOk(`${label} ${finished}/${order.length}`);
         }
         setBannerOk(`${label}完成：${finished}/${order.length}`);
       } finally {
-        runningAllRef.current = false;
-        setRunningAll(false);
+        if(workflowRunRef.current===token) {
+          workflowRunRef.current=null;runningAllRef.current=false;
+          if(asyncScope.active)setRunningAll(false);
+        }
       }
     },
-    [edges, handleGenerate, isTemplateMode, selectedNodeIds, sessionLoading]
+    [edges, handleGenerate, isTemplateMode, selectedNodeIds, sessionLoading, asyncScope]
   );
 
   const handleRunAll = useCallback(() => void runWorkflow("all"), [runWorkflow]);
@@ -877,6 +899,8 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
       providers,
       disabled: sessionLoading || runningAll,
       promptPolishEnabled,
+      promptScopeKey:asyncScope,
+      isPromptScopeCurrent:()=>asyncScope.active && (isTemplateMode || canvas.isCurrentView()),
       patchNode,
       patchNoteNode,
       generateNode: handleGenerate,
@@ -897,6 +921,9 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
       sessionLoading,
       runningAll,
       promptPolishEnabled,
+      asyncScope,
+      isTemplateMode,
+      canvas.isCurrentView,
       getUpstreamDeliverables,
       handleGenerate,
       handleSyncNodeTask,
@@ -916,9 +943,6 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
       await api.deleteCanvasProject(projectId);
       await canvas.reloadList();
     }
-    const rows = await api.canvasProjects();
-    if (rows[0]) await canvas.openProject(rows[0].id);
-    else await canvas.createProject("我的工作流");
   }
 
   const refreshTemplates = useCallback(async () => {
@@ -933,34 +957,40 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
     }
   }, []);
 
-  async function handleUseTemplate(templateId: number) {
-    setApplyingTemplateId(templateId);
-    setBannerOk("");
+  function cancelCopyIntent() { copyRunRef.current=null;setApplyingTemplateId(null); }
+  async function handleOpenProject(projectId:number) { cancelCopyIntent();await canvas.openProject(projectId); }
+  async function handleCreateProject() { cancelCopyIntent();await canvas.createProject("未命名工作流"); }
+  async function handleUseTemplate(templateId:number) {
+    const navigation=copyNavigationRef.current;
+    if(!navigation.mounted || navigation.ownerId==null)return;
+    const operation={ownerId:navigation.ownerId,viewKey:navigation.viewKey,stage:"get" as "get"|"creating",activated:false};
+    copyRunRef.current=operation;setApplyingTemplateId(templateId);setBannerOk("");
+    const current=()=>copyNavigationRef.current.mounted && copyNavigationRef.current.ownerId===operation.ownerId && copyRunRef.current===operation &&
+      (operation.stage!=="get" || copyNavigationRef.current.viewKey===operation.viewKey);
     try {
-      const template = await api.getCanvasTemplate(templateId);
-      const title = `${template.title}（副本）`;
-      await canvas.createProject(title, template.graph_json);
-      setBannerOk(`已从模板「${template.title}」创建私有项目`);
-      setBannerError("");
-    } catch (err) {
-      setBannerError(err instanceof Error ? err.message : "使用模板失败");
-    } finally {
-      setApplyingTemplateId(null);
-    }
+      const template=await api.getCanvasTemplate(templateId);if(!current())return;
+      const title=`${template.title}（副本）`,graph=JSON.parse(JSON.stringify(template.graph_json)) as CanvasGraphJson;
+      operation.stage="creating";
+      await canvas.createProject(title,graph,{isCurrent:current,onActivated:()=>{
+        if(!current())return;operation.activated=true;
+        setBannerOk(`已从模板「${template.title}」创建私有项目`);setBannerError("");
+      }});
+    } catch(error) {if(current() && !operation.activated)setBannerError(error instanceof Error ? error.message : "使用模板失败");}
+    finally {if(copyRunRef.current===operation){copyRunRef.current=null;if(copyNavigationRef.current.mounted && copyNavigationRef.current.ownerId===operation.ownerId)setApplyingTemplateId(null);}}
   }
-
   async function handlePublishAsTemplate() {
-    if (!canvas.activeProject) return;
-    setBannerOk("");
-    setBannerError("");
-    setPublishDialogOpen(true);
+    if(!canvas.activeProject || currentUser?.id==null || canvas.activeOwnerId!==currentUser.id)return;
+    cancelCopyIntent();
+    const retained=publishSessionRef.current;
+    if(retained && retained.source.ownerId===currentUser.id && !["succeeded","abandoned"].includes(retained.phase)){
+      setPublishDialogOpen(true);return;
+    }
+    const session=createCanvasPublishSession(currentUser.id,canvas.activeProject.id,canvas.viewKey,canvas.activeProject.title || "未命名工作流",
+      serializeCanvasGraph(nodesRef.current,edgesRef.current,viewportRef.current) as CanvasGraphJson);
+    publishSessionRef.current=session;setPublishSession(session);setBannerOk("");setBannerError("");setPublishDialogOpen(true);
   }
 
-  const publishGraphJson = useMemo(
-    () => serializeCanvasGraph(nodes, edges, viewport) as CanvasGraphJson,
-    [edges, nodes, viewport]
-  );
-
+  const asyncRecoveries = asyncScope.recoveries();
   if (isGuest) {
     return (
       <div className="qmdh-canvas-guest">
@@ -971,12 +1001,13 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
   }
 
   return (
-    <CanvasNodeActionsProvider value={nodeActions}>
+    <CanvasMotionContext.Provider value={motion}>
+      <CanvasNodeActionsProvider value={nodeActions}>
       <div className="qmdh-canvas-workspace">
         <header className="qmdh-canvas-toolbar">
           <div className="qmdh-canvas-toolbar-left">
             {isTemplateMode && onExit ? (
-              <button type="button" className="qmdh-canvas-toolbar-back" onClick={onExit}>
+              <button type="button" className="qmdh-canvas-toolbar-back" disabled={templateEditor.leaving} onClick={() => void templateEditor.leave(onExit)}>
                 返回
               </button>
             ) : null}
@@ -1042,12 +1073,48 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
               解散
             </button>
             <span>{providerHint}</span>
-            <span>{sessionSaving ? "保存中…" : sessionLoading ? "加载中…" : "已同步"}</span>
+            <span>{isTemplateMode ? templateEditor.statusLabel : sessionSaving ? "保存中…" : sessionLoading ? "加载中…" : "已同步"}</span>
           </div>
         </header>
         {bannerOk ? <p className="qmdh-canvas-banner-ok">{bannerOk}</p> : null}
         {sessionError || bannerError ? (
           <p className="qmdh-canvas-banner-error">{sessionError || bannerError}</p>
+        ) : null}
+        {asyncScope.backupError ? <p className="qmdh-canvas-banner-error" role="status">{asyncScope.backupError}</p> : null}
+        {asyncRecoveries.length ? <section className="qmdh-canvas-template-recovery" aria-label="画布异步结果恢复">
+          {asyncRecoveries.map(record=><div key={record.id}>
+            <p>{record.kind === "task" ? "生成任务" : record.kind === "drop" ? "拖放图片" : record.kind === "annotate" ? "标注图片" : "节点上传"} · {record.nodeId || "原画布"} · {record.phase === "ready" ? "结果待核对恢复" : record.phase === "failed" ? record.error : "结果尚未返回，不会自动重发"}</p>
+            {record.patch?.taskId ? <p>已受理任务 #{record.patch.taskId}</p> : null}
+            {record.patch?.assetUrls?.length ? <p>{record.patch.assetUrls.join(" · ")}</p> : null}
+            {record.nodes?.map(node=>isGenerateNode(node) ? <p key={node.id}>{node.data.assetUrls.join(" · ")}</p> : null)}
+            <button type="button" disabled={record.phase!=="ready" || sessionLoading} onClick={()=>recoverAsyncResult(record)}>核对后恢复到原画布</button>
+            <button type="button" onClick={()=>discardAsyncResult(record)}>放弃这条本地恢复记录</button>
+          </div>)}
+        </section> : null}
+        {isTemplateMode ? <section className="qmdh-canvas-template-recovery" aria-label="模板保存与恢复">
+          {templateEditor.backupError && templateEditor.backupError !== sessionError ? <p role="status">{templateEditor.backupError}</p> : null}
+          {templateEditor.recoveryDrafts.map(draft => <div key={draft.draftId}>
+            <p>本地草稿 · {draft.title || "图内容变更"} · {new Date(draft.updatedAt).toLocaleString("zh-CN")} · 版本 {draft.revision}。恢复不会自动提交。</p>
+            <button type="button" disabled={sessionLoading || !templateEditor.template} onClick={() => templateEditor.restoreDraft(draft.draftId)}>恢复这份本地草稿</button>
+            <button type="button" onClick={() => templateEditor.discardRecovery(draft.draftId)}>放弃这份本地备份</button>
+          </div>)}
+          {templateEditor.hasUnsavedChanges && !templateEditor.blocked ? <>
+            {["dirty", "rejected"].includes(templateEditor.phase) ? <button type="button" disabled={templateEditor.saving || sessionLoading} onClick={() => void templateEditor.flushSave().catch(() => undefined)}>保存当前模板草稿</button> : <>
+              <p>当前草稿未提交；核对快照不能证明原请求未受理。请确认原请求已结束，再明确保存。</p>
+              <button type="button" disabled={templateEditor.saving || sessionLoading} onClick={() => void templateEditor.inspectServer()}>只读核对服务器模板</button>
+              {templateEditor.inspection ? <>
+                <p>服务器标题：{templateEditor.inspection.title}；节点 {templateEditor.inspection.graph_json.nodes?.length ?? 0}；更新时间 {templateEditor.inspection.updated_at}。本地内容仍保留。</p>
+                <button type="button" disabled={templateEditor.saving} onClick={() => void templateEditor.confirmInspectedSave().catch(() => undefined)}>我已核对并确认原请求结束，保存当前草稿</button>
+              </> : null}
+            </>}
+            {onExit ? <button type="button" onClick={() => templateEditor.discardAndLeave(onExit)}>放弃本地草稿并返回</button> : null}
+          </> : null}
+          {templateEditor.hasUnsavedChanges && onExit ? <button type="button" onClick={() => templateEditor.leaveWithDraft(onExit)}>保留本地草稿并离开</button> : null}
+        </section> : null}
+        {!isTemplateMode && canvas.hasUnsavedChanges && canvas.error ? (
+          <button type="button" disabled={canvas.loading || canvas.saving} onClick={() => void canvas.retrySave().catch(() => undefined)}>
+            重试保存
+          </button>
         ) : null}
         <div className="qmdh-canvas-main has-inspector">
           {isTemplateMode ? (
@@ -1059,21 +1126,21 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
                 </div>
               </header>
               <p className="qmdh-canvas-project-library-status">
-                {sessionLoading ? "加载中…" : sessionSaving ? "保存中…" : "自动保存已开启"}
+                {templateEditor.statusLabel}
               </p>
               <div className="qmdh-canvas-template-editor-meta">
                 <button
                   type="button"
-                  disabled={sessionLoading || !templateEditor.template}
+                  disabled={sessionLoading || templateEditor.blocked || !templateEditor.template}
                   onClick={() => {
                     const next = window.prompt("模板标题", templateEditor.template?.title || "");
-                    if (next && next.trim()) void templateEditor.renameTitle(next.trim());
+                    if (next && next.trim()) void templateEditor.renameTitle(next.trim()).catch(() => undefined);
                   }}
                 >
                   重命名标题
                 </button>
                 {onExit ? (
-                  <button type="button" onClick={onExit}>
+                  <button type="button" disabled={templateEditor.leaving} onClick={() => void templateEditor.leave(onExit)}>
                     返回模板库
                   </button>
                 ) : null}
@@ -1086,8 +1153,8 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
               loading={canvas.loading}
               saving={canvas.saving}
               disabled={canvas.loading}
-              onSelect={(id) => void canvas.openProject(id)}
-              onCreate={() => void canvas.createProject("未命名工作流")}
+              onSelect={(id) => void handleOpenProject(id).catch(() => undefined)}
+              onCreate={() => void handleCreateProject().catch(() => undefined)}
               onRename={(id, title) => {
                 if (canvas.activeProject?.id === id) {
                   void canvas.renameProject(title);
@@ -1095,7 +1162,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
                   void api.updateCanvasProject(id, { title }).then(() => canvas.reloadList());
                 }
               }}
-              onDelete={(id) => void handleDeleteProject(id)}
+              onDelete={(id) => { if(canvas.activeProject?.id===id)cancelCopyIntent();void handleDeleteProject(id).catch((err) => setBannerError(err instanceof Error ? err.message : "删除画布失败")); }}
               templates={templates}
               templatesLoading={templatesLoading}
               applyingTemplateId={applyingTemplateId}
@@ -1111,7 +1178,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
             nodeDefaults={nodeDefaults}
             canGroup={canGroup}
             canUngroup={canUngroup}
-            disabled={sessionLoading || runningAll}
+            disabled={sessionLoading || (isTemplateMode && templateEditor.blocked) || runningAll}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onEdgesReplace={onEdgesReplace}
@@ -1127,7 +1194,7 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
             node={selectedNode}
             providers={providers}
             upstream={selectedUpstream}
-            disabled={sessionLoading || runningAll}
+            disabled={sessionLoading || (isTemplateMode && templateEditor.blocked) || runningAll}
             selectionCount={selectedNodeIds.length}
             selectedRunnableCount={selectedRunnableCount}
             onChange={patchNode}
@@ -1209,27 +1276,31 @@ export default function CanvasWorkspace({ editTemplateId, onExit }: CanvasWorksp
           </div>
         </div>
       ) : null}
-      {!isTemplateMode && canUseOpsViews && canvas.activeProject ? (
+      {!isTemplateMode && canUseOpsViews && publishSession && publishSession.source.ownerId===currentUser?.id ? (
         <PublishCanvasTemplateDialog
+          key={publishSession.id}
           open={publishDialogOpen}
-          defaultTitle={canvas.activeProject.title || "未命名工作流"}
-          graphJson={publishGraphJson}
-          onClose={() => setPublishDialogOpen(false)}
-          onCreated={(template) => {
-            setBannerOk(`已发布模板「${template.title}」，正在打开模板画布…`);
-            setBannerError("");
-            navigate(`/admin/canvas-templates/${template.id}/edit`);
+          session={publishSession}
+          onClose={()=>{if(publishSessionRef.current===publishSession)setPublishDialogOpen(false);}}
+          onAbandon={()=>{if(publishSessionRef.current===publishSession){publishSessionRef.current=null;setPublishSession(null);setPublishDialogOpen(false);}}}
+          onCreated={template=>{
+            const navigation=copyNavigationRef.current;
+            if(publishSessionRef.current!==publishSession || !publishOpenRef.current || !navigation.mounted || navigation.ownerId!==publishSession.source.ownerId || navigation.viewKey!==publishSession.source.viewKey)return;
+            setBannerOk(`已发布模板「${template.title}」，正在打开模板画布…`);setBannerError("");navigate(`/admin/canvas-templates/${template.id}/edit`);
           }}
-          onUpdated={(template) => {
-            setBannerOk(`已覆盖更新模板「${template.title}」`);
-            setBannerError("");
+          onUpdated={template=>{
+            const navigation=copyNavigationRef.current;
+            if(publishSessionRef.current!==publishSession || !publishOpenRef.current || !navigation.mounted || navigation.ownerId!==publishSession.source.ownerId || navigation.viewKey!==publishSession.source.viewKey)return;
+            setBannerOk(`已覆盖更新模板「${template.title}」`);setBannerError("");
           }}
-          onError={(message) => {
-            setBannerError(message);
-            setBannerOk("");
+          onError={message=>{
+            const navigation=copyNavigationRef.current;
+            if(publishSessionRef.current!==publishSession || !publishOpenRef.current || !navigation.mounted || navigation.ownerId!==publishSession.source.ownerId || navigation.viewKey!==publishSession.source.viewKey)return;
+            setBannerError(message);setBannerOk("");
           }}
         />
       ) : null}
     </CanvasNodeActionsProvider>
+    </CanvasMotionContext.Provider>
   );
 }

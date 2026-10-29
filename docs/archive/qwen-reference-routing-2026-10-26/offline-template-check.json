@@ -1,0 +1,38 @@
+{
+  "qwen_image_2_1_image_edit": {
+    "filename": "qwen_image_2_1_image_edit-v1.1-api.json",
+    "sha256": "f0842f769bc97773b22b8852993b4e6b8ab3c8b1fe0ade15a6752d3cb4c2d504",
+    "version": "1.1",
+    "reference_input_count": 1,
+    "output_node": "461",
+    "offline_contract": "passed",
+    "gpu_tested": false
+  },
+  "qwen_image_2_1_t2i": {
+    "filename": "qwen_image_2_1_t2i-v1.1-api.json",
+    "sha256": "129bef5c6f44c846b65df46b72f64c8ca95f8a41543475d2eaea530e82c1c29d",
+    "version": "1.1",
+    "reference_input_count": 0,
+    "output_node": "461",
+    "offline_contract": "passed",
+    "gpu_tested": false
+  },
+  "z_image_turbo": {
+    "filename": "z_image_turbo-api.json",
+    "sha256": "1c085f5e3db6acf2cc9dfdb550801601e68be259797b54153257572ec2ee0516",
+    "version": "legacy",
+    "reference_input_count": 0,
+    "output_node": "9",
+    "offline_contract": "passed",
+    "gpu_tested": false
+  },
+  "qwen_image_2_1_image_edit:2ref": {
+    "filename": "qwen_image_2_1_image_edit-v1.1-2ref-api.json",
+    "sha256": "f18ba1fb2368895d520b4de758716cb143131ef785d500793909da92af1d9c3d",
+    "version": "1.1",
+    "reference_input_count": 2,
+    "output_node": "461",
+    "offline_contract": "passed",
+    "gpu_tested": false
+  }
+}

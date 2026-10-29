@@ -1,8 +1,14 @@
 from datetime import datetime, timezone
 
+import hashlib
+import json
+import re
+import sqlite3
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditEventType, write_audit_log
@@ -16,10 +22,11 @@ from app.core.encryption import (
     normalize_provider_api_key,
 )
 from app.database import get_db
-from app.models import ProviderPricingRule, ProviderProfile
+from app.models import Conversation, ProviderPricingRule, ProviderProfile
 from app.schemas import (
     DiscoveredModel,
     ProviderBulkImportIn,
+    ProviderBulkImportItemOut,
     ProviderBulkImportOut,
     ProviderCapability,
     ProviderDiscoverIn,
@@ -105,9 +112,35 @@ def get_providers(db: Session = Depends(get_db)) -> list[ProviderCapability]:
             outbound=item.outbound,
             adapter_kind=item.adapter_kind,
             supported_resolutions=list(item.supported_resolutions or ()),
+            reference_input_count=_comfy_reference_count(item),
+            reference_input_counts=_comfy_reference_counts(item),
         )
         for item in list_provider_capabilities(db, include_static=False)
     ]
+
+
+def _comfy_reference_count(item) -> int | None:
+    if item.adapter_kind != "comfyui" or "image.edit" not in item.capabilities:
+        return None
+    from pathlib import Path
+    from app.services.provider_adapters.comfyui import load_workflow, reference_input_count
+    try:
+        _, mapping = load_workflow(Path(settings.comfyui_workflow_root), item.model_name)
+        return reference_input_count(mapping)
+    except (OSError, ValueError, KeyError):
+        # An invalid admin template still fails closed in submission validation.
+        return None
+
+
+def _comfy_reference_counts(item) -> list[int] | None:
+    if item.adapter_kind != "comfyui" or "image.edit" not in item.capabilities:
+        return None
+    from pathlib import Path
+    from app.services.provider_adapters.comfyui import supported_reference_counts
+    try:
+        return supported_reference_counts(Path(settings.comfyui_workflow_root), item.model_name)
+    except (OSError, ValueError, KeyError, TypeError):
+        return []  # Do not advertise unverified or missing variants.
 
 
 def _mask_api_key(api_key: str) -> str:
@@ -955,6 +988,18 @@ def delete_provider_pricing_rule(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+def _provider_delete_reference_conflict(exc: IntegrityError) -> bool:
+    statement = " ".join(str(exc.statement or "").replace('"', "").lower().split())
+    if not statement.startswith("delete from provider_profiles "):
+        return False
+    original = exc.orig
+    return (
+        getattr(original, "sqlite_errorcode", None) == sqlite3.SQLITE_CONSTRAINT_FOREIGNKEY
+        or getattr(original, "sqlstate", None) == "23503"
+        or getattr(original, "pgcode", None) == "23503"
+    )
+
+
 @router.delete("/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_provider_profile(
     profile_id: int,
@@ -966,20 +1011,33 @@ def delete_provider_profile(
     if not profile:
         raise HTTPException(status_code=404, detail="Provider profile not found")
 
+    conflict_detail = "该模型仍被聊天会话或其他配置引用，不能删除。请先停用模型，或处理引用后再删除。"
+    if db.scalar(select(Conversation.id).where(Conversation.model_provider_id == profile_id).limit(1)) is not None:
+        raise HTTPException(status_code=409, detail=conflict_detail)
+
     provider_name = profile.provider_name
     provider_id = profile.id
 
-    write_audit_log(
-        db,
-        event_type=AuditEventType.PROVIDER_DELETED,
-        actor_name=auth_user.name,
-        actor_id=auth_user.user_id,
-        target_type="provider",
-        target_id=provider_id,
-        target_name=provider_name,
-    )
-    db.delete(profile)
-    db.commit()
+    try:
+        write_audit_log(
+            db,
+            event_type=AuditEventType.PROVIDER_DELETED,
+            actor_name=auth_user.name,
+            actor_id=auth_user.user_id,
+            target_type="provider",
+            target_id=provider_id,
+            target_name=provider_name,
+        )
+        db.delete(profile)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if _provider_delete_reference_conflict(exc):
+            raise HTTPException(status_code=409, detail=conflict_detail) from exc
+        raise
+    except Exception:
+        db.rollback()
+        raise
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -1039,6 +1097,38 @@ async def discover_provider_models(
     return ProviderDiscoverOut(base_url=base_url, models=models)
 
 
+def _bulk_import_same_identity(profile: ProviderProfile, base_url: str, model_id: str) -> bool:
+    try:
+        return normalize_provider_base_url(profile.base_url) == base_url and profile.model_name == model_id
+    except ValueError:
+        return False
+
+
+def _bulk_import_identity_name(base_url: str, model_id: str) -> str:
+    identity = json.dumps([base_url, model_id], ensure_ascii=False, separators=(",", ":"))
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    slug = re.sub(r"[^a-zA-Z0-9._-]+", "_", model_id).strip("_").lower() or "model"
+    return f"model_{slug[:28]}_{digest}"
+
+
+def _bulk_import_find_identity(db: Session, base_url: str, model_id: str) -> ProviderProfile | None:
+    candidates = db.scalars(select(ProviderProfile).where(ProviderProfile.model_name == model_id).order_by(ProviderProfile.id)).all()
+    return next((profile for profile in candidates if _bulk_import_same_identity(profile, base_url, model_id)), None)
+
+
+def _bulk_import_existing_result(db: Session, item, existing: ProviderProfile, base_url: str) -> ProviderBulkImportItemOut:
+    same_model = _bulk_import_same_identity(existing, base_url, item.model_id)
+    suggested = None if same_model else _bulk_import_identity_name(base_url, item.model_id)
+    if suggested:
+        occupant = db.scalar(select(ProviderProfile).where(ProviderProfile.provider_name == suggested))
+        if occupant is not None and not _bulk_import_same_identity(occupant, base_url, item.model_id):
+            suggested = None
+    return ProviderBulkImportItemOut(model_id=item.model_id, provider_name=item.provider_name,
+                                     status="already_same" if same_model else "conflict",
+                                     resolved_provider_name=existing.provider_name if same_model else None,
+                                     suggested_provider_name=suggested)
+
+
 @router.post("/bulk-import", response_model=ProviderBulkImportOut, status_code=status.HTTP_201_CREATED)
 def bulk_import_provider_profiles(
     payload: ProviderBulkImportIn,
@@ -1054,11 +1144,17 @@ def bulk_import_provider_profiles(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     created: list[str] = []
     skipped: list[str] = []
+    items: list[ProviderBulkImportItemOut] = []
 
     for item in payload.models:
-        existing = db.scalar(select(ProviderProfile).where(ProviderProfile.provider_name == item.provider_name))
-        if existing:
-            skipped.append(item.provider_name)
+        existing = _bulk_import_find_identity(db, base_url, item.model_id)
+        provider_name = _bulk_import_identity_name(base_url, item.model_id) if item.name_mode == "identity" else item.provider_name
+        if existing is None:
+            existing = db.scalar(select(ProviderProfile).where(ProviderProfile.provider_name == provider_name))
+        if existing is not None:
+            result = _bulk_import_existing_result(db, item, existing, base_url)
+            skipped.append(result.resolved_provider_name or item.provider_name)
+            items.append(result)
             continue
 
         reference_mode = item.reference_mode
@@ -1070,7 +1166,7 @@ def bulk_import_provider_profiles(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         profile = ProviderProfile(
-            provider_name=item.provider_name,
+            provider_name=provider_name,
             display_name=(item.display_name or item.model_id).strip() or item.model_id,
             api_key=encrypt_value(payload.api_key),
             base_url=base_url,
@@ -1088,8 +1184,21 @@ def bulk_import_provider_profiles(
             reference_mode=reference_mode,
             reference_caption_model=None,
         )
-        db.add(profile)
-        created.append(item.provider_name)
+        try:
+            with db.begin_nested():
+                db.add(profile)
+                db.flush()
+        except IntegrityError:
+            winner = db.scalar(select(ProviderProfile).where(ProviderProfile.provider_name == provider_name))
+            if winner is None:
+                raise
+            result = _bulk_import_existing_result(db, item, winner, base_url)
+            skipped.append(result.resolved_provider_name or item.provider_name)
+            items.append(result)
+        else:
+            created.append(provider_name)
+            items.append(ProviderBulkImportItemOut(model_id=item.model_id, provider_name=item.provider_name,
+                                                   status="created", resolved_provider_name=provider_name))
 
     db.commit()
-    return ProviderBulkImportOut(created=created, skipped=skipped)
+    return ProviderBulkImportOut(created=created, skipped=skipped, items=items)

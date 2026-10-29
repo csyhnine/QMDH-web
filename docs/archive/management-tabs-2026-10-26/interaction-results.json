@@ -1,0 +1,49 @@
+{
+  "results": [
+    {
+      "name": "Week defaults to seven real date rows with 26 name columns; removed panels and wide layout",
+      "passed": true
+    },
+    {
+      "name": "Random color on minimal creation with no color picker",
+      "passed": true
+    },
+    {
+      "name": "Empty cell opens prefilled work card; project choice, people, dates and allocation persist",
+      "passed": true
+    },
+    {
+      "name": "Card save conflicts keep entered work name for retry",
+      "passed": true
+    },
+    {
+      "name": "Add employee to existing work from an empty cell preserves stage dates",
+      "passed": true
+    },
+    {
+      "name": "Native drag along time rows and employee columns moves dates and transfers only selected person; autosave",
+      "passed": true
+    },
+    {
+      "name": "Autosave failure preserves drag preview, halts automatic retries and supports manual retry",
+      "passed": true
+    },
+    {
+      "name": "Calendar month/quarter/year boundaries, leap year, navigation and fixed headers",
+      "passed": true
+    },
+    {
+      "name": "Personal pause stripe retains dates and other employee load; card resumes work",
+      "passed": true
+    },
+    {
+      "name": "Shared brief, delivery card and native project Gantt remain available",
+      "passed": true
+    },
+    {
+      "name": "Mobile 390px keeps the horizontal scroll inside personnel board",
+      "passed": true
+    }
+  ],
+  "errors": []
+}

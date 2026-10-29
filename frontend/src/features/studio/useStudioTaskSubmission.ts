@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 
 import { api } from "../../api";
-import type { StudioFormState } from "./studioTypes";
 import { resolveStudioProviderForForm } from "./studioTaskActionUtils";
 import {
   buildCreatedSubmissionTracker,
@@ -15,7 +14,9 @@ import {
   markTaskSubmissionFailed,
   syncRequestedProviderForSubmission,
 } from "./studioTaskSubmissionState";
-import type { UseStudioTaskSubmissionOptions } from "./studioTaskSubmissionTypes";
+import type { StudioTaskSubmissionInput, UseStudioTaskSubmissionOptions } from "./studioTaskSubmissionTypes";
+import { resolveReferencePathsForProvider } from "./studioReferenceUtils";
+import { isSeedance2Provider } from "./seedanceVideoUtils";
 import { validateStudioTaskSubmission } from "./studioTaskSubmissionValidation";
 
 export function useStudioTaskSubmission({
@@ -29,14 +30,21 @@ export function useStudioTaskSubmission({
   setSubmitting,
   studioTemplates,
   submissionInFlightRef,
-  uploadingReference,
-  referenceUploads = [],
 }: UseStudioTaskSubmissionOptions) {
-  const submitStudioTask = useCallback(async (form: StudioFormState): Promise<boolean> => {
+  const submitStudioTask = useCallback(async (input: StudioTaskSubmissionInput): Promise<boolean> => {
+    const sourceForm = input.form;
+    const form = { ...sourceForm, referenceImages: [...sourceForm.referenceImages] };
+    const referenceUploads = input.referenceUploads.map((item) => ({ ...item }));
+    const { uploadingReference, updateComposer } = input;
     setActiveComposerMenu(null);
     studioTemplates.clearFeedback();
 
     const providerForSubmit = resolveStudioProviderForForm(providers, form);
+    if (form.creationMode === "video" && referenceUploads.length > 0) {
+      form.referenceImages = resolveReferencePathsForProvider(referenceUploads, {
+        allowAssetProtocol: isSeedance2Provider(providerForSubmit),
+      });
+    }
     const validation = validateStudioTaskSubmission({
       form,
       providerForSubmit,
@@ -46,11 +54,13 @@ export function useStudioTaskSubmission({
     });
     if (!validation.ok || !providerForSubmit) return false;
 
-    syncRequestedProviderForSubmission({
-      form,
-      provider: providerForSubmit,
-      setStudioForm,
-    });
+    const composerForm = updateComposer
+      ? syncRequestedProviderForSubmission({
+          form: sourceForm,
+          provider: providerForSubmit,
+          setStudioForm,
+        })
+      : null;
     if (!beginTaskSubmission({ setSubmitting, submissionInFlightRef })) {
       return false;
     }
@@ -73,7 +83,11 @@ export function useStudioTaskSubmission({
 
     try {
       const createdTask = await api.createTask(submissionDraft.payload);
-      setStudioForm((current) => ({ ...current, promptPolished: false }));
+      if (composerForm) {
+        setStudioForm((current) =>
+          current === composerForm ? { ...current, promptPolished: false } : current
+        );
+      }
       setSubmissionTracker(
         buildCreatedSubmissionTracker({
           form,
@@ -104,8 +118,6 @@ export function useStudioTaskSubmission({
     setSubmitting,
     studioTemplates,
     submissionInFlightRef,
-    uploadingReference,
-    referenceUploads,
   ]);
 
   return {

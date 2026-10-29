@@ -20,9 +20,12 @@ def upgrade() -> None:
     op.add_column("usage_ledgers", sa.Column("prompt_tokens", sa.Integer(), nullable=False, server_default="0"))
     op.add_column("usage_ledgers", sa.Column("completion_tokens", sa.Integer(), nullable=False, server_default="0"))
     op.add_column("usage_ledgers", sa.Column("total_tokens", sa.Integer(), nullable=False, server_default="0"))
-    op.alter_column("usage_ledgers", "prompt_tokens", server_default=None)
-    op.alter_column("usage_ledgers", "completion_tokens", server_default=None)
-    op.alter_column("usage_ledgers", "total_tokens", server_default=None)
+    # SQLite requires a table rebuild to remove a default; PostgreSQL keeps
+    # its existing ALTER COLUMN behavior through the same batch interface.
+    with op.batch_alter_table("usage_ledgers") as batch:
+        batch.alter_column("prompt_tokens", server_default=None)
+        batch.alter_column("completion_tokens", server_default=None)
+        batch.alter_column("total_tokens", server_default=None)
 
 
 def downgrade() -> None:

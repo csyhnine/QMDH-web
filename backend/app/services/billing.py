@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -144,21 +144,41 @@ def _current_month_start_utc(now: datetime | None = None) -> datetime:
     return datetime.combine(month_start_local.date(), time.min, tzinfo=SHANGHAI_TZ).astimezone(timezone.utc)
 
 
-def current_month_cost_for_user(
+def current_month_cost_by_currency_for_user(
     db: Session,
     *,
     user_id: int,
     now: datetime | None = None,
-) -> float:
+) -> dict[str, float]:
     since = _current_month_start_utc(now)
+    next_month_local = (since.astimezone(SHANGHAI_TZ).replace(day=28) + timedelta(days=4)).replace(day=1)
+    until = next_month_local.astimezone(timezone.utc)
     entries = db.scalars(
         select(UsageLedger).where(
             UsageLedger.user_id == user_id,
             UsageLedger.entry_type.in_(("task.finalized", "chat.message.completed")),
             UsageLedger.recorded_at >= since,
+            UsageLedger.recorded_at < until,
         )
     ).all()
-    return round(sum(float(entry.cost or 0.0) for entry in entries), 4)
+    totals: dict[str, float] = {}
+    for entry in entries:
+        currency = str(entry.cost_currency or "CNY").strip().upper() or "CNY"
+        totals[currency] = totals.get(currency, 0.0) + float(entry.cost or 0.0)
+    return {currency: round(amount, 4) for currency, amount in totals.items()}
+
+
+def current_month_cost_for_user(
+    db: Session,
+    *,
+    user_id: int,
+    now: datetime | None = None,
+) -> float | None:
+    """CNY quota usage; None means the account's month cannot be compared in CNY."""
+    totals = current_month_cost_by_currency_for_user(db, user_id=user_id, now=now)
+    if any(currency != "CNY" for currency in totals):
+        return None
+    return totals.get("CNY", 0.0)
 
 
 def enforce_user_quota(db: Session, *, user: User, now: datetime | None = None) -> None:
@@ -176,8 +196,13 @@ def enforce_user_quota(db: Session, *, user: User, now: datetime | None = None) 
         return
 
     used_cost = current_month_cost_for_user(db, user_id=user.id, now=now)
+    if used_cost is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="当前账号本月存在非CNY账目，额度无法按CNY比较，请联系管理员核定后再试。",
+        )
     if used_cost >= float(quota_limit):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"当前账号本月额度已用尽（已用 {used_cost:.2f} / 上限 {float(quota_limit):.2f}），请联系管理员。",
+            detail=f"当前账号本月额度已用尽（已用 {used_cost:.2f} CNY / 上限 {float(quota_limit):.2f} CNY），请联系管理员。",
         )

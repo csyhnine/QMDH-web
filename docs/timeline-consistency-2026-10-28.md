@@ -1,0 +1,17 @@
+# 结束端短拖响应、日格对齐与项目计划统一反馈
+
+用户进一步明确：人员排期结束端有日期浮签，但日期或长度不变。使用上一轮实际Vite发布包（含真实AppRouter/AuthProvider、以合成API登录并通过项目管理导航进入）复现：完整日高拖动可保存；屏幕内12px拖动，结束仍为10/29、写入0。原Math.round需要先拖过半个日格，按周80px日高意味着40px；底端贴屏幕下沿又缺少后续日期滚动空间。实际发布样式还把80px日格撑到86.59375px，今天87.59375px，绝对定位泳道因而与日期格错位。此前只用组件打包/整日位移的检查未覆盖这些问题。
+
+人员端点改为共用dragDateOffset：6px以内不改，明确短拖即可按一天响应，后续按日格间距递增，另一端仍固定、点击不写。拖结束端时临时补出后续日期行，边缘可自动滚动；松手/取消移除预览行，不写其他日期/项目。虚线裁切端仍按真实日期相对改动，预览cap跟随可见边界。修正空格按钮的inline基线、首列padding优先级、表头行高和今天边框：使用block按钮及内描边，实际行高/表头/柱底严格一致，不只调整灵敏度。
+
+项目计划之前共用数据与项目颜色，但仍用旧甘特手柄。本轮左右手柄移入条内并常显，短条保留中央点击区；与人员排期共用短拖规则，拖左右端只改对应日期。同步日期浮签、固定端提示、拖动描边/阴影、松手反馈与减少动态效果支持；保留项目颜色、暂停纹理和交付菱形。Esc/失焦可恢复原起止与工期，拖动期间暂停自动保存、松手后进入原CAS队列，销毁时清理浮签/事件/计时器。两页切换仍共用已保存项目日期。
+
+验证：24管理定向、23目标strict零新增、Vite构建884模块/52文件通过（仅既有大块提示）。9个新场景直接加载候选Vite文件、实际AuthProvider/API transport/AppRouter/DHTMLX，以回环合成API验证；所有鼠标坐标明确限制在真实viewport内。包含12px端拖增长/缩短/开始调整、6px防误触、每一行/表头的实测几何及柱底对应日期、屏幕下沿补行/滚动、取消、甘特条内命中/左右固定端/浮签、两页日期同步、Esc后继续移动仍不写、失败重试、手机真实触摸与减动偏好。10项交互回归通过，无页面错误或生产测试写入。证据：`docs/archive/timeline-consistency-2026-10-28/`，含旧发布包的修前诊断。
+
+私有候选/测试/截图：ignored 的 `local/timeline-consistency-20261028/`，实际发布格式浏览器入口 `suite.mjs`，旧发布包诊断 `production-browser.mjs`/`before-production-probe.json`。一次性发布脚本：`local/timeline_runner.py`、`timeline_preflight.py`、`timeline_backup.py`、`timeline_deploy.py`，不对历史路径或清理脚本重跑。只改前端，保留既有WIP、分院鉴权、草稿PR及冻结状态。
+
+发布前核对前端f3cf6526e97e、后端dad05b8dc047、三worker fa3f8984f8a4、迁移b94de295f179、配置/8工作流/恢复链，任务/派发/Redis/上游队列与GPU锁为空，盘余约8.253GiB。无清理；部署情况见下。
+
+2026-10-28 已部署前端源码 `dcce45a54104434483eb62b02b9f59622e4e9308`，镜像 `5c627d5ca11a`。52文件逐字节、10公网资源、26页面地址（含实际项目管理入口 `/management/projects`）、健康、Qwen输入数[1,2]及管理鉴权通过。旧hash资源、后端/三worker/其他容器ID和启动时间、env/挂载/网络/8工作流保持，无迁移或生产测试写入。
+
+第三Compose：`/opt/qmdh-frp/releases/timeline-consistency-20261028/compose.release.yml`；服务器 `/www/backup/qmdh-release-20261028-timeline-consistency` ↔ 本机 `E:/backups/QMDH-web/release-20261028-timeline-consistency` 的26文件SHA一致。DB/媒体经pillar-handles及此前纯前端轮继承unit-access独立恢复链，非本轮新快照；回滚只切前端，不覆盖新业务数据。盘余约8.231GiB，后续仍复测8GiB门槛，本轮无清理。

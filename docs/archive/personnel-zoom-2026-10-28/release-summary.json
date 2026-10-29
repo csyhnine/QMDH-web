@@ -1,0 +1,73 @@
+{
+  "source_commit": "050053fcf9347856580d49f83c130e2945c79918",
+  "frontend_sha256": "1b247c26345d1c5bb4340bdd0005c5f10756130251ed4304964e4d9210503f3b",
+  "frontend_file_count": 52,
+  "expected_frontend_image": "sha256:746b3bff23e3d9a0380eff7db9a7476d0525ce61b5593bf471bde030e2f477da",
+  "database_media_recovery_baseline": "/www/backup/qmdh-release-20261028-navigation-fixed",
+  "new_database_snapshot_created": false,
+  "status": "DEPLOYED_VERIFIED",
+  "release_date": "2026-10-28",
+  "frontend_image": "sha256:d15c5aebca10f1f75b8a622d7a88f564f40049762c6e8ba7aef9720132dc13a7",
+  "backend_worker_unchanged": true,
+  "non_frontend_containers_unchanged": true,
+  "frontend_files_checked": 52,
+  "public_assets": [
+    {
+      "file": "index.html",
+      "sha256": "3e8f0454b818073f69c5ccc988a0cfae57a42ef33cdb426059f023f74ee75b65"
+    },
+    {
+      "file": "assets/ManagementProjectsPage-DwxlOgFs.css",
+      "sha256": "9a541845d87cf7227cb56ae00298a62b4d010638c89b2940e372d125162837df"
+    },
+    {
+      "file": "assets/ManagementProjectsPage-6pQ-ZWDo.js",
+      "sha256": "d4f8d1658f2a39dd548c1d9e1e5c6bc6772d715f3c9547b0a2eca1c9ed3099c9"
+    },
+    {
+      "file": "assets/OtherToolsPage-ccMzVA40.js",
+      "sha256": "5e6d0d95075663d360eda1534d3873c79d52993dbd9ba9c5cbc104dbec0a9fea"
+    },
+    {
+      "file": "assets/OtherToolsPage-CRy8uIVh.css",
+      "sha256": "53a81fd3916a8ca46ab61eee0dd57f8da9cd3c077882e9a45aa3deb0764941b3"
+    },
+    {
+      "file": "assets/GeneratePage-D-xJ1U-d.css",
+      "sha256": "2f2d2ec947020a4d0695762b6f148d6ea6d6915a21611d559977cdd9f99165b0"
+    },
+    {
+      "file": "assets/GeneratePage-D8OYipcq.js",
+      "sha256": "e70e684cd75715e63950988335c0cc4645ae97d45a5b0596e3620ed354edb966"
+    },
+    {
+      "file": "assets/reportWorkbook-DWlPH-5Y.js",
+      "sha256": "0966bc99dcccdfecc8ea0c035fbaba8afe78ae7702d1a7030085c3064c1c8425"
+    },
+    {
+      "file": "assets/index-BYO5FHS-.css",
+      "sha256": "4607f17ab7be1714c9083b880fa38bea2930a29caf3d019f54011b3ba3d8c0aa"
+    },
+    {
+      "file": "assets/index-Cls6sEtp.js",
+      "sha256": "f7e651ed8e27d4d783165999185754087110a022ab0eb9ee5fa0dc803e166a52"
+    }
+  ],
+  "migration_executed": false,
+  "business_data_written": false,
+  "public_routes_checked": 25,
+  "qwen_reference_counts": [
+    1,
+    2
+  ],
+  "migration": "b94de295f179",
+  "workflow_hashes_preserved": true,
+  "compose_files": [
+    "/www/wwwroot/qmdh-web/docker-compose.yml",
+    "/opt/qmdh-frp/compose.frp.yml",
+    "/opt/qmdh-frp/releases/personnel-zoom-20261028/compose.release.yml"
+  ],
+  "workflow_root_preserved": "/opt/qmdh-frp/releases/management-categories-20261026/workflows",
+  "disk_free_GiB": 8.354312896728516,
+  "paired_backup_files": 26
+}

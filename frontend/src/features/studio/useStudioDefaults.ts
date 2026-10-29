@@ -67,10 +67,9 @@ export function useStudioDefaults({
     if (projects.some((project) => project.code === studioForm.projectCode)) return;
     const nextProject = projects[0];
 
-    setStudioForm((current) => ({
-      ...current,
-      projectCode: nextProject.code,
-      classification: nextProject.classification
-    }));
+    setStudioForm((current) => {
+      if (current.projectCode !== studioForm.projectCode || projects.some((project) => project.code === current.projectCode)) return current;
+      return { ...current, projectCode: nextProject.code, classification: nextProject.classification };
+    });
   }, [projects, setStudioForm, studioForm.projectCode]);
 }

@@ -1,5 +1,6 @@
+import { promptDraftFamily } from "../../lib/promptPolishOwnership";
 import type { TextareaHTMLAttributes } from "react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 import PromptPolishButton from "../../components/shared/PromptPolishButton";
 import PromptPolishHistoryPanel from "../../components/shared/PromptPolishHistoryPanel";
@@ -12,6 +13,9 @@ import { resolveCanvasInputReferenceImages } from "./canvasGraphUtils";
 
 type CanvasPromptPolishFieldProps = {
   nodeKind: CanvasNodeKind;
+  nodeId?: string;
+  draftIdentity?: object;
+  onApplyPrompt?: (value: string, polished: boolean, isCurrent: () => boolean) => void;
   prompt: string;
   referenceImages: string[];
   upstreamImages: string[];
@@ -28,6 +32,9 @@ type CanvasPromptPolishFieldProps = {
 
 export default function CanvasPromptPolishField({
   nodeKind,
+  nodeId,
+  draftIdentity,
+  onApplyPrompt,
   prompt,
   referenceImages,
   upstreamImages,
@@ -41,7 +48,9 @@ export default function CanvasPromptPolishField({
   onPolishingChange,
   sourceSurface = "canvas",
 }: CanvasPromptPolishFieldProps) {
-  const { promptPolishEnabled } = useCanvasNodeActions();
+  const { promptPolishEnabled, promptScopeKey } = useCanvasNodeActions();
+  const family = draftIdentity ? promptDraftFamily(draftIdentity) : undefined;
+  const sourceKey = useMemo(() => ({ scope: promptScopeKey, nodeId, family }), [promptScopeKey, nodeId, family]);
   const refs = resolveCanvasInputReferenceImages(referenceImages, upstreamImages);
   const {
     polishing,
@@ -58,6 +67,9 @@ export default function CanvasPromptPolishField({
     sourceSurface,
     onPromptChange,
     onPolished,
+    onApply: onApplyPrompt,
+    draftIdentity,
+    sourceKey,
   });
   const fieldDisabled = disabled || busy || polishing;
   const canPolish = promptPolishEnabled === true && prompt.trim().length > 0 && !busy;

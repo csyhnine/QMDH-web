@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { CanvasAsyncScope, canvasNodeInput, waitCanvasObservation, type CanvasTaskObservation, type CanvasAsyncOperation } from "./canvasAsyncScope";
 import type { Edge } from "@xyflow/react";
 
 import { api, type Provider, type Task } from "../../api";
@@ -16,7 +17,9 @@ import { collectUpstreamDeliverables, resolveCanvasInputReferenceImages } from "
 import type { CanvasFlowNode, GenerateNodeData } from "./canvasTypes";
 import { isGenerateNode } from "./canvasTypes";
 
-export type PatchNodeOptions = { recordHistory?: boolean };
+export type CanvasGenerateOptions = { regenerate?: boolean };
+
+export type PatchNodeOptions = { recordHistory?: boolean; isCurrent?: () => boolean; expectedData?: GenerateNodeData };
 
 export type PatchNode = (
   nodeId: string,
@@ -24,7 +27,12 @@ export type PatchNode = (
   options?: PatchNodeOptions
 ) => void;
 
-const activePollKeys = new Set<string>();
+function observedPatch(patchNode: PatchNode, observation?: CanvasTaskObservation): PatchNode {
+  return (nodeId, patch, options) => {
+    const current = () => (observation?.current() ?? true) && (options?.isCurrent?.() ?? true);
+    if (current()) patchNode(nodeId, patch, { ...options, isCurrent: current });
+  };
+}
 
 /** Soft client wait budget before surfacing「拉取结果」. */
 const POLL_DEADLINE_MS = 15 * 60 * 1000;
@@ -34,10 +42,6 @@ const POLL_SLOW_INTERVAL_MS = 5000;
 
 const WAIT_TIMEOUT_MESSAGE = "等待较久，可点击「拉取结果」同步；也可在生成页查看任务。";
 const LEGACY_WAIT_TIMEOUT_HINT = "等待超时";
-
-async function sleep(ms: number) {
-  await new Promise((resolve) => window.setTimeout(resolve, ms));
-}
 
 function collectResultUrls(result: Record<string, unknown> | null | undefined): string[] {
   if (!result) return [];
@@ -102,12 +106,14 @@ export function isResumableCanvasNodeTask(
   return data.status === "failed" && isClientWaitTimeoutMessage(data.errorMessage);
 }
 
-async function resolveCompletedUrls(task: Task, wantedType: "image" | "video"): Promise<string[]> {
+async function resolveCompletedUrls(task: Task, wantedType: "image" | "video", observation?: CanvasTaskObservation): Promise<string[]> {
+  if (observation && !observation.current()) return [];
   const fromResult = collectResultUrls(task.result);
   if (fromResult.length > 0) return fromResult;
 
   try {
     const assets = await api.assets();
+    if (observation && !observation.current()) return [];
     return assets
       .filter(
         (asset) =>
@@ -122,184 +128,86 @@ async function resolveCompletedUrls(task: Task, wantedType: "image" | "video"): 
 }
 
 export async function pollTaskUntilDone(
-  taskId: number,
-  nodeId: string,
-  patchNode: PatchNode,
-  wantedType: "image" | "video"
+  taskId: number, nodeId: string, patchNode: PatchNode, wantedType: "image" | "video", observation?: CanvasTaskObservation
 ) {
-  const pollKey = `${nodeId}:${taskId}`;
-  if (activePollKeys.has(pollKey)) return;
-  activePollKeys.add(pollKey);
-
+  const current = () => observation?.current() ?? true;
+  patchNode = observedPatch(patchNode, observation);
+  if (!current()) return;
+  let lastBusyStatus: GenerateNodeData["status"] | "" = "";
+  let startedAt = Date.now(), attempt = 0, softNotified = false;
   try {
-    let lastBusyStatus: GenerateNodeData["status"] | "" = "";
-    let startedAt = Date.now();
-    let attempt = 0;
-    let softNotified = false;
-
-    try {
-      const initial = await api.getTask(taskId);
-      const createdAtMs = new Date(initial.created_at).getTime();
-      if (!Number.isNaN(createdAtMs)) {
-        startedAt = createdAtMs;
-        patchNode(nodeId, { taskStartedAt: createdAtMs, taskId });
-      }
-    } catch {
-      patchNode(nodeId, { taskStartedAt: startedAt, taskId });
+    const initial = await api.getTask(taskId);
+    if (!current() || initial.id !== taskId) return;
+    const createdAtMs = new Date(initial.created_at).getTime();
+    if (!Number.isNaN(createdAtMs)) { startedAt = createdAtMs; patchNode(nodeId, { taskStartedAt: createdAtMs, taskId }); }
+  } catch { if (!current()) return; patchNode(nodeId, { taskStartedAt: startedAt, taskId }); }
+  // Stopping this observer never cancels the already accepted server task.
+  while (current()) {
+    if (attempt > 0 && !await waitCanvasObservation(Date.now() - startedAt < POLL_FAST_WINDOW_MS ? POLL_FAST_INTERVAL_MS : POLL_SLOW_INTERVAL_MS, observation)) return;
+    if (!current()) return;
+    attempt += 1;
+    if (!softNotified && Date.now() - startedAt >= POLL_DEADLINE_MS) {
+      softNotified = true; lastBusyStatus = "awaiting_result";
+      patchNode(nodeId, { status: "awaiting_result", errorMessage: WAIT_TIMEOUT_MESSAGE, taskId });
     }
-
-    // Keep polling until the Studio task finishes. After POLL_DEADLINE_MS surface
-    // awaiting_result so the user can sync / regenerate, but do not abandon the taskId.
-    for (;;) {
-      if (attempt > 0) {
-        const elapsed = Date.now() - startedAt;
-        await sleep(elapsed < POLL_FAST_WINDOW_MS ? POLL_FAST_INTERVAL_MS : POLL_SLOW_INTERVAL_MS);
-      }
-      attempt += 1;
-
-      const elapsed = Date.now() - startedAt;
-      if (!softNotified && elapsed >= POLL_DEADLINE_MS) {
-        softNotified = true;
-        lastBusyStatus = "awaiting_result";
-        patchNode(nodeId, {
-          status: "awaiting_result",
-          errorMessage: WAIT_TIMEOUT_MESSAGE,
-          taskId,
-        });
-      }
-
-      let latest: Task;
-      try {
-        latest = await api.getTask(taskId);
-      } catch {
-        // Fall back to list when single-task fetch fails (auth/network blip).
-        try {
-          const tasks = await api.tasks();
-          const found = tasks.find((item) => item.id === taskId);
-          if (!found) continue;
-          latest = found;
-        } catch {
-          continue;
-        }
-      }
-
-      if (latest.status === "failed") {
-        patchNode(nodeId, {
-          status: "failed",
-          errorMessage: failureMessage(latest),
-          taskId,
-          taskDurationMs: Math.max(0, Date.now() - startedAt),
-        });
-        return;
-      }
-
-      if (latest.status === "completed") {
-        let urls = await resolveCompletedUrls(latest, wantedType);
-        // Asset rows can lag result slightly; give them a couple more ticks.
-        for (let retry = 0; retry < 3 && urls.length === 0; retry += 1) {
-          await sleep(1000);
-          try {
-            latest = await api.getTask(taskId);
-          } catch {
-            break;
-          }
-          urls = await resolveCompletedUrls(latest, wantedType);
-        }
-        patchNode(nodeId, {
-          status: "completed",
-          assetUrls: urls,
-          errorMessage: undefined,
-          taskId,
-          taskDurationMs: Math.max(0, Date.now() - startedAt),
-        });
-        return;
-      }
-
-      if (softNotified) {
-        // Stay on awaiting_result so「拉取结果」remains available while we keep polling.
-        continue;
-      }
-
-      const nextStatus: GenerateNodeData["status"] =
-        latest.status === "running" ? "running" : "pending";
-      if (nextStatus !== lastBusyStatus) {
-        lastBusyStatus = nextStatus;
-        patchNode(nodeId, {
-          status: nextStatus,
-          errorMessage: undefined,
-          taskId,
-        });
-      }
+    let latest: Task;
+    try { latest = await api.getTask(taskId); }
+    catch {
+      if (!current()) return;
+      try { const tasks = await api.tasks(); if (!current()) return; const found = tasks.find(item => item.id === taskId); if (!found) continue; latest = found; }
+      catch { if (!current()) return; continue; }
     }
-  } finally {
-    activePollKeys.delete(pollKey);
-  }
-}
-
-export async function syncCanvasNodeTask(
-  nodeId: string,
-  data: GenerateNodeData,
-  patchNode: PatchNode
-): Promise<void> {
-  if (typeof data.taskId !== "number") return;
-  const taskId = data.taskId;
-  const wantedType = data.nodeKind === "video" ? "video" : "image";
-
-  // One-shot fetch so「拉取结果」works even when a background poller is already attached.
-  try {
-    const latest = await api.getTask(taskId);
+    if (!current() || latest.id !== taskId) return;
     if (latest.status === "failed") {
-      patchNode(nodeId, {
-        status: "failed",
-        errorMessage: failureMessage(latest),
-        taskId,
-        taskDurationMs: resolveTaskDurationMs(data, latest),
-      });
-      return;
+      patchNode(nodeId, { status: "failed", errorMessage: failureMessage(latest), taskId, taskDurationMs: Math.max(0, Date.now() - startedAt) }); return;
     }
     if (latest.status === "completed") {
-      let urls = await resolveCompletedUrls(latest, wantedType);
+      let urls = await resolveCompletedUrls(latest, wantedType, observation);
+      if (!current()) return;
       for (let retry = 0; retry < 3 && urls.length === 0; retry += 1) {
-        await sleep(1000);
-        try {
-          const again = await api.getTask(taskId);
-          urls = await resolveCompletedUrls(again, wantedType);
-        } catch {
-          break;
-        }
+        if (!await waitCanvasObservation(1000, observation)) return;
+        try { latest = await api.getTask(taskId); } catch { if (!current()) return; break; }
+        if (!current() || latest.id !== taskId) return;
+        urls = await resolveCompletedUrls(latest, wantedType, observation); if (!current()) return;
       }
-      patchNode(nodeId, {
-        status: "completed",
-        assetUrls: urls,
-        errorMessage: undefined,
-        taskId,
-        taskDurationMs: resolveTaskDurationMs(data, latest),
-      });
-      return;
+      patchNode(nodeId, { status: "completed", assetUrls: urls, errorMessage: undefined, taskId, taskDurationMs: Math.max(0, Date.now() - startedAt) }); return;
     }
-  } catch {
-    // Fall through to resume polling.
+    if (softNotified) continue;
+    const nextStatus: GenerateNodeData["status"] = latest.status === "running" ? "running" : "pending";
+    if (nextStatus !== lastBusyStatus) { lastBusyStatus = nextStatus; patchNode(nodeId, { status: nextStatus, errorMessage: undefined, taskId }); }
   }
-
-  patchNode(nodeId, {
-    status: "pending",
-    errorMessage: undefined,
-    taskId,
-  });
-  await pollTaskUntilDone(taskId, nodeId, patchNode, wantedType);
 }
 
-export function resumeCanvasNodeTaskPolls(nodes: CanvasFlowNode[], patchNode: PatchNode) {
+export async function syncCanvasNodeTask(nodeId: string, data: GenerateNodeData, patchNode: PatchNode, scope: CanvasAsyncScope): Promise<void> {
+  if (typeof data.taskId !== "number") return;
+  const taskId=data.taskId, wantedType=data.nodeKind === "video" ? "video" : "image";
+  await scope.observeTask(nodeId, taskId, async observation => {
+    const patch=observedPatch(patchNode,observation);
+    try {
+      const latest=await api.getTask(taskId); if(!observation.current() || latest.id!==taskId)return;
+      if(latest.status === "failed") { patch(nodeId,{status:"failed",errorMessage:failureMessage(latest),taskId,taskDurationMs:resolveTaskDurationMs(data,latest)});return; }
+      if(latest.status === "completed") {
+        let urls=await resolveCompletedUrls(latest,wantedType,observation); if(!observation.current())return;
+        for(let retry=0;retry<3 && urls.length===0;retry++) {
+          if(!await waitCanvasObservation(1000,observation))return;
+          try { const again=await api.getTask(taskId);if(!observation.current() || again.id!==taskId)return;urls=await resolveCompletedUrls(again,wantedType,observation); }
+          catch { if(!observation.current())return;break; }
+        }
+        if(!observation.current())return;
+        patch(nodeId,{status:"completed",assetUrls:urls,errorMessage:undefined,taskId,taskDurationMs:resolveTaskDurationMs(data,latest)});return;
+      }
+    } catch { if(!observation.current())return; }
+    patch(nodeId,{status:"pending",errorMessage:undefined,taskId});
+    await scope.observeTask(nodeId,taskId,control=>pollTaskUntilDone(taskId,nodeId,patchNode,wantedType,control));
+  }, "sync");
+}
+
+export function resumeCanvasNodeTaskPolls(nodes: CanvasFlowNode[], patchNode: PatchNode, scope: CanvasAsyncScope) {
+  scope.reconcile();
   for (const node of nodes) {
-    if (!isGenerateNode(node)) continue;
-    const { taskId, nodeKind } = node.data;
-    if (!isResumableCanvasNodeTask(node.data) || typeof taskId !== "number") continue;
-    void pollTaskUntilDone(
-      taskId,
-      node.id,
-      patchNode,
-      nodeKind === "video" ? "video" : "image"
-    );
+    if (!isGenerateNode(node) || !isResumableCanvasNodeTask(node.data) || typeof node.data.taskId !== "number") continue;
+    const taskId=node.data.taskId;
+    void scope.observeTask(node.id,taskId,control=>pollTaskUntilDone(taskId,node.id,patchNode,node.data.nodeKind === "video" ? "video" : "image",control)).catch(()=>undefined);
   }
 }
 
@@ -307,7 +215,8 @@ export function useCanvasNodeGenerate(
   providers: Provider[],
   nodes: CanvasFlowNode[],
   edges: Edge[],
-  patchNode: PatchNode
+  patchNode: PatchNode,
+  scope: CanvasAsyncScope
 ) {
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
@@ -324,12 +233,62 @@ export function useCanvasNodeGenerate(
   }, [patchNode]);
 
   return useCallback(
-    async (nodeId: string, data: GenerateNodeData) => {
+    async (nodeId: string, data: GenerateNodeData, options: CanvasGenerateOptions = {}) => {
       if (data.nodeKind === "upload" || data.nodeKind === "annotate") return;
 
-      const currentNodes = nodesRef.current;
-      const currentEdges = edgesRef.current;
-      const patch = patchNodeRef.current;
+      const sourceNode = scope.node(nodeId);
+      if (!scope.active || !sourceNode || sourceNode.data.kind !== "generate") return;
+      if (((sourceNode.data as GenerateNodeData).taskId ?? null) !== (data.taskId ?? null)) return scope.runningNode(nodeId);
+      return scope.runNode(nodeId, async markAccepted => {
+      const currentNodes = scope.graphNodes();
+      const currentEdges = scope.graphEdges(edgesRef.current);
+      const sourcePatch = patchNodeRef.current;
+      if(!scope.active)return;
+      if(scope.recoveries().some(row=>row.kind === "task" && row.nodeId === nodeId)) {
+        sourcePatch(nodeId,{status:"failed",errorMessage:"已有提交结果待核对，请先在本画布恢复记录中核对任务，再明确处理原记录；不会自动补发。"},{isCurrent:()=>scope.active});return;
+      }
+      const live=scope.node(nodeId);
+      if(!live || live.data.kind!=="generate")return;
+      const liveData=live.data as GenerateNodeData;
+      if(!options.regenerate && typeof liveData.taskId === "number" && isResumableCanvasNodeTask(liveData)) {
+        const taskId=liveData.taskId;markAccepted();
+        await scope.observeTask(nodeId,taskId,control=>pollTaskUntilDone(taskId,nodeId,sourcePatch,liveData.nodeKind === "video" ? "video" : "image",control));return;
+      }
+      if(!options.regenerate && ["submitting","pending","running","awaiting_result"].includes(liveData.status) && typeof liveData.taskId !== "number") {
+        const message="原提交尚未确认，请先核对生成页任务，不会自动补发。";
+        const unknown=scope.begin("task",nodeId,()=>JSON.stringify([liveData.nodeKind,null]));
+        if(unknown){scope.complete(unknown,{error:message});scope.release(unknown);}
+        sourcePatch(nodeId,{status:"failed",errorMessage:message},{isCurrent:()=>scope.active});return;
+      }
+      let operation: CanvasAsyncOperation | null = null;
+      const input = () => { const node=scope.node(nodeId); return node?.data.kind === "generate" ? JSON.stringify([(node.data as GenerateNodeData).nodeKind,(node.data as GenerateNodeData).taskId ?? null]) : "missing"; };
+      const originalInput = input();
+      const current = () => scope.active && (operation ? scope.current(operation) : input() === originalInput);
+      const patch: PatchNode = (id, value, patchOptions) => {
+        const next=!operation && options.regenerate && value.status === "failed" && isResumableCanvasNodeTask(data)
+          ? {...value,status:"awaiting_result" as const} : value;
+        if(current())sourcePatch(id,next,{...patchOptions,isCurrent:operation ? scope.guard(operation) : current});
+      };
+      const accepted = async (task: Task, wantedType: "image" | "video", extra: Partial<GenerateNodeData> = {}) => {
+        if (!operation) return;
+        if(!Number.isSafeInteger(task?.id) || task.id<=0)throw new Error("任务受理身份不完整，提交结果尚未确认。");
+        const value: Partial<GenerateNodeData> = {status:"pending",taskId:task.id,...extra};
+        scope.complete(operation,{patch:value});
+        if (!current()) return;
+        patch(nodeId,value); scope.finish(operation); markAccepted();
+        await scope.observeTask(nodeId,task.id,control=>pollTaskUntilDone(task.id,nodeId,sourcePatch,wantedType,control));
+      };
+      const failed = (err: unknown) => {
+        const status=err && typeof err === "object" && "status" in err ? err.status : undefined;
+        const rejected=typeof status === "number" && [400,401,403,404,409,413,422,429].includes(status);
+        const detail=err instanceof Error ? err.message : "提交失败";
+        const message=rejected ? detail : `提交结果尚未确认，请核对生成页任务后处理原恢复记录；不会自动补发。${detail}`;
+        if(operation)scope.complete(operation,{error:message});
+        if(current()) {
+          patch(nodeId,{status:rejected && options.regenerate && isResumableCanvasNodeTask(data) ? "awaiting_result" : "failed",errorMessage:message});
+          if(operation) { if(rejected)scope.finish(operation);else scope.release(operation); }
+        }
+      };
 
       const upstream = collectUpstreamDeliverables(nodeId, currentNodes, currentEdges);
       const referenceImages = resolveCanvasInputReferenceImages(data.referenceImages, upstream.images);
@@ -362,6 +321,7 @@ export function useCanvasNodeGenerate(
         }
 
         const sourceImage = referenceImages[0]!;
+        operation = scope.begin("task",nodeId,input); if(!operation)return;
         patch(nodeId, {
           status: "submitting",
           errorMessage: undefined,
@@ -373,6 +333,7 @@ export function useCanvasNodeGenerate(
 
         try {
           const task = await api.createTask({
+            submission_key: operation.record.id,
             title: `${data.label || "高清放大"} / 高清放大`,
             workflow_key: IMAGE_UPSCALE_WORKFLOW_KEY,
             project_code: data.projectCode || defaultStudioForm.projectCode,
@@ -386,13 +347,9 @@ export function useCanvasNodeGenerate(
               upscale_x2: data.upscaleScale,
             },
           });
-          patch(nodeId, { status: "pending", taskId: task.id });
-          await pollTaskUntilDone(task.id, nodeId, patch, "image");
+          await accepted(task,"image");
         } catch (err) {
-          patch(nodeId, {
-            status: "failed",
-            errorMessage: err instanceof Error ? err.message : "提交失败",
-          });
+          failed(err);
         }
         return;
       }
@@ -430,6 +387,7 @@ export function useCanvasNodeGenerate(
         return;
       }
 
+      operation = scope.begin("task",nodeId,input); if(!operation)return;
       patch(nodeId, {
         status: "submitting",
         errorMessage: undefined,
@@ -447,21 +405,13 @@ export function useCanvasNodeGenerate(
           canvasNodeId: nodeId,
           promptPolished: Boolean(data.promptPolished),
         });
-        const task = await api.createTask(draft.payload);
-        patch(nodeId, { status: "pending", taskId: task.id, promptPolished: false });
-        await pollTaskUntilDone(
-          task.id,
-          nodeId,
-          patch,
-          data.nodeKind === "video" ? "video" : "image"
-        );
+        const task = await api.createTask({...draft.payload,submission_key:operation.record.id});
+        await accepted(task,data.nodeKind === "video" ? "video" : "image",{promptPolished:false});
       } catch (err) {
-        patch(nodeId, {
-          status: "failed",
-          errorMessage: err instanceof Error ? err.message : "提交失败",
-        });
+        failed(err);
       }
+      }, Boolean(options.regenerate));
     },
-    [providers]
+    [providers, scope]
   );
 }

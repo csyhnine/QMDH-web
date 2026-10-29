@@ -1,0 +1,37 @@
+{
+  "source_commit": "85c4650800c55e2b94c8ca26afcdfe8f80dacfb9",
+  "frontend_sha256": "0a2552e1fc32bdf64e319b172b02c29f93e785cd6cc1e37c57fb4afcf32663f1",
+  "status": "DEPLOYED_VERIFIED",
+  "frontend_image": "sha256:3b65e290098a8bb80dc4dd7d89da8361966b37d9382a8cc9603f9fc7ef4b35e5",
+  "backend_worker_unchanged": true,
+  "non_frontend_containers_unchanged": true,
+  "frontend_files_checked": 51,
+  "public_assets": [
+    {
+      "file": "index.html",
+      "sha256": "688623762104b1265eb52aa6cf31472968939d2cfe0ac9aef8a6e8a3d309ce5a"
+    },
+    {
+      "file": "assets/ManagementProjectsPage-BHR6-zOB.css",
+      "sha256": "3dadf65f7c9db628c65dde054453b14f1903ce743c7d16411316f3d5e29e0beb"
+    },
+    {
+      "file": "assets/ManagementProjectsPage-Byf3Wb1I.js",
+      "sha256": "8598e76485645698bdeb56f643b3fcbdcfefff3995376a0f7819808e445cef14"
+    },
+    {
+      "file": "assets/index-Dp8w2FwQ.js",
+      "sha256": "5599cdf1a4ab7248024cc002802ab382ca5e7cb20d0cb6aa07cd353b973b694d"
+    }
+  ],
+  "migration_executed": false,
+  "business_data_written": false,
+  "compose_files": [
+    "/www/wwwroot/qmdh-web/docker-compose.yml",
+    "/opt/qmdh-frp/compose.frp.yml",
+    "/opt/qmdh-frp/releases/management-navigation-20261026/compose.release.yml"
+  ],
+  "workflow_root_preserved": "/opt/qmdh-frp/releases/management-categories-20261026/workflows",
+  "disk_free_GiB": 8.53207778930664,
+  "paired_backup_sha256_matched_files": 23
+}

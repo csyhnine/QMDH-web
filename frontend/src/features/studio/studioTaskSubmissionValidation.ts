@@ -1,8 +1,8 @@
 import type { Provider } from "../../api";
+import { comfyReferenceCounts, comfyReferenceChoices } from "./comfyReferenceContract";
 import type { Dispatch, SetStateAction } from "react";
 
 import type { LoadState, StudioFormState } from "./studioTypes";
-import { clampReferenceImageCount } from "./studioUtils";
 import { getSelectedGrokSkuConfig, grokReferenceUploadError, isGrokHaodeyaProvider } from "./grokVideoUtils";
 import {
   getSelectedHappyHorseSkuConfig,
@@ -21,7 +21,7 @@ type ValidationOptions = {
   setState: Dispatch<SetStateAction<LoadState>>;
   uploadingReference: boolean;
   referenceUploads?: Array<{
-    avatarStatus?: "idle" | "registering" | "processing" | "active" | "failed";
+    avatarStatus?: "idle" | "registering" | "processing" | "verifying" | "active" | "failed";
     avatarError?: string;
     storagePath: string;
   }>;
@@ -76,10 +76,7 @@ export function validateStudioTaskSubmission({
       return { ok: false };
     }
 
-    const referenceImageCount =
-      isHappyHorseProvider(providerForSubmit) || isSeedance2Provider(providerForSubmit)
-        ? form.referenceImages.filter(Boolean).length
-        : clampReferenceImageCount(form.referenceImages.length);
+    const referenceImageCount = form.referenceImages.filter(Boolean).length;
     if (isHappyHorseProvider(providerForSubmit)) {
       const skuConfig = getSelectedHappyHorseSkuConfig(form, providerForSubmit);
       if (!skuConfig) {
@@ -140,6 +137,10 @@ export function validateStudioTaskSubmission({
       }
     }
 
+    if (referenceImageCount > 4 && !isHappyHorseProvider(providerForSubmit) && !isSeedance2Provider(providerForSubmit) && !isGrokHaodeyaProvider(providerForSubmit)) {
+      setState((current) => ({ ...current, error: "参考图最多只能上传 4 张。" }));
+      return { ok: false };
+    }
     return { ok: true, referenceImageCount };
   }
 
@@ -159,9 +160,9 @@ export function validateStudioTaskSubmission({
     return { ok: false };
   }
 
-  const referenceImageCount = clampReferenceImageCount(form.referenceImages.length);
-  if (providerForSubmit.adapter_kind === "comfyui" && form.creationMode === "edit" && form.referenceImages.filter(Boolean).length !== 2) {
-    setState((current) => ({ ...current, error: "本机 Qwen 编辑需要两张图片：先放目标图，再放参考图。" }));
+  const referenceImageCount = form.referenceImages.filter(Boolean).length;
+  if (providerForSubmit.adapter_kind === "comfyui" && form.creationMode === "edit" && !comfyReferenceCounts(providerForSubmit).includes(form.referenceImages.filter(Boolean).length)) {
+    setState((current) => ({ ...current, error: comfyReferenceCounts(providerForSubmit).length ? `当前本机 Qwen 编辑支持 ${comfyReferenceChoices(providerForSubmit)} 张图片，请按支持数量上传。` : "当前本机 Qwen 编辑模板不可用，请联系管理员检查工作流。" }));
     return { ok: false };
   }
   if (form.creationMode === "edit" && referenceImageCount < 1) {

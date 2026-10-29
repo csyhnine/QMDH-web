@@ -20,6 +20,7 @@ from app.services.cad.text_extractor import bucket_text_label
 
 def _build_sample_dxf_bytes() -> bytes:
     doc = ezdxf.new("R2010")
+    doc.header["$INSUNITS"] = 4  # This fixture uses millimetres.
     msp = doc.modelspace()
     msp.add_line((0, 0), (5000, 0), dxfattribs={"layer": "A-WALL"})
     msp.add_line((5000, 0), (5000, 4000), dxfattribs={"layer": "A-WALL"})
@@ -48,6 +49,7 @@ class CadExtractServiceTests(unittest.TestCase):
 
     def test_closed_rectangle_becomes_an_unassigned_room(self) -> None:
         doc = ezdxf.new("R2010")
+        doc.header["$INSUNITS"] = 4  # This fixture uses millimetres.
         doc.modelspace().add_lwpolyline([(0, 0), (4000, 0), (4000, 3000), (0, 3000)], close=True)
         stream = io.StringIO()
         doc.write(stream)
@@ -97,6 +99,7 @@ class CadExtractServiceTests(unittest.TestCase):
 
     def test_toilet_marks_dirty_side_and_stacked_cores_align(self) -> None:
         doc = ezdxf.new("R2010")
+        doc.header["$INSUNITS"] = 4  # This fixture uses millimetres.
         floor_a = doc.blocks.new("FLOOR_A")
         floor_a.add_lwpolyline([(0, 0), (10000, 0), (10000, 8000), (0, 8000)], close=True)
         floor_a.add_line((6000, 0), (6000, 8000))
@@ -127,6 +130,7 @@ class CadExtractServiceTests(unittest.TestCase):
 
     def test_door_gap_splits_rooms_and_marks_entrance(self) -> None:
         doc = ezdxf.new("R2010")
+        doc.header["$INSUNITS"] = 4  # This fixture uses millimetres.
         msp = doc.modelspace()
         msp.add_line((0, 0), (2000, 0))
         msp.add_line((2900, 0), (10000, 0))
@@ -147,6 +151,7 @@ class CadExtractServiceTests(unittest.TestCase):
 
     def test_stair_flight_is_not_parsed_as_a_room(self) -> None:
         doc = ezdxf.new("R2010")
+        doc.header["$INSUNITS"] = 4  # This fixture uses millimetres.
         msp = doc.modelspace()
         msp.add_lwpolyline([(0, 0), (15000, 0), (15000, 12000), (0, 12000)], close=True)
         msp.add_lwpolyline([(4000, 4000), (7600, 4000), (7600, 8200), (4000, 8200)], close=True)
@@ -163,6 +168,7 @@ class CadExtractServiceTests(unittest.TestCase):
 
     def test_window_recess_is_not_a_room(self) -> None:
         doc = ezdxf.new("R2010")
+        doc.header["$INSUNITS"] = 4  # This fixture uses millimetres.
         msp = doc.modelspace()
         msp.add_lwpolyline([(0, 0), (10000, 0), (10000, 8000), (0, 8000)], close=True)
         msp.add_lwpolyline([(2000, 8000), (6000, 8000), (6000, 8400), (2000, 8400)], close=True)
@@ -862,10 +868,10 @@ class RoomUndoTests(unittest.TestCase):
                     {"x": 0, "y": 1, "erase": False},
                 ],
             )
-            filled = Image.open(io.BytesIO(read_binary_asset(mask_file)))
+            filled = Image.open(io.BytesIO(read_binary_asset(painted["spaces"]["floors"][0]["mask_file"])))
             self.assertEqual(filled.getpixel((0, 0)), 1)
             undone = undo_floor_edit(painted, floor_index=1)
-            rolled = Image.open(io.BytesIO(read_binary_asset(mask_file)))
+            rolled = Image.open(io.BytesIO(read_binary_asset(undone["spaces"]["floors"][0]["mask_file"])))
             self.assertEqual(rolled.getpixel((2, 2)), 1)
             self.assertEqual(rolled.getpixel((0, 0)), 0)
             self.assertEqual(undone["spaces"]["floors"][0]["rooms"][0]["proposal"], "原来")
@@ -884,7 +890,7 @@ class RoomUndoTests(unittest.TestCase):
             )
             created_rooms = created["spaces"]["floors"][0]["rooms"]
             self.assertTrue(any(item["proposal"] == "新分区" for item in created_rooms))
-            created_mask = Image.open(io.BytesIO(read_binary_asset(mask_file)))
+            created_mask = Image.open(io.BytesIO(read_binary_asset(created["spaces"]["floors"][0]["mask_file"])))
             self.assertEqual(created_mask.getpixel((7, 1)), 2)
             self.assertEqual(created_mask.getpixel((0, 0)), 0)
             reviewed = save_program_review(

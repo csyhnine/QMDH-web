@@ -11,6 +11,8 @@ from ezdxf.entities import DXFEntity, Insert
 from PIL import Image, ImageDraw, ImageFilter
 
 from app.services.cad.polygons import attach_room_polygons
+from app.services.cad.unit_scale import resolve_unit_scale
+from copy import deepcopy
 
 _FUNCTION_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("卫生间", ("卫生间", "厕所", "盥洗", "wc")),
@@ -53,6 +55,20 @@ def _segments_of(entity: DXFEntity) -> list[tuple[float, float, float, float]]:
                 for index in range(len(points) - 1)
             ]
             if entity.closed and len(points) > 2:
+                segments.append((points[-1][0], points[-1][1], points[0][0], points[0][1]))
+            return segments
+        if dxftype == "POLYLINE":
+            fitted = entity.CURVE_FIT_VERTICES_ADDED | entity.SPLINE_FIT_VERTICES_ADDED
+            if not entity.is_2d_polyline or entity.has_arc or entity.dxf.flags & fitted:
+                return []
+            ocs = entity.ocs()
+            points = [ocs.to_wcs((v.dxf.location.x, v.dxf.location.y, entity.dxf.elevation.z)) for v in entity.vertices]
+            points = [(float(point.x), float(point.y)) for point in points]
+            segments = [
+                (points[index][0], points[index][1], points[index + 1][0], points[index + 1][1])
+                for index in range(len(points) - 1)
+            ]
+            if entity.is_closed and len(points) > 2:
                 segments.append((points[-1][0], points[-1][1], points[0][0], points[0][1]))
             return segments
         if dxftype == "CIRCLE":
@@ -296,24 +312,8 @@ def _kernel_size(width: int, height: int) -> int:
 
 
 def _meters_per_unit(msp, span: float) -> tuple[float, str]:
-    insunits = 0
-    try:
-        insunits = int(msp.doc.header.get("$INSUNITS", 0) or 0)
-    except Exception:
-        insunits = 0
-    named = {1: (0.0254, "图纸单位是英寸。"), 4: (0.001, "图纸单位是毫米。"), 5: (0.01, "图纸单位是厘米。"), 6: (1.0, "图纸单位是米。")}
-    if insunits in named:
-        scale, note = named[insunits]
-        implied = span * scale
-        if scale == 0.0254 and span > 800:
-            implied = 0
-        if 3 <= implied <= 80:
-            return scale, note
-    if span >= 2000:
-        return 0.001, "图纸没标单位，按毫米估算面积。"
-    if span >= 80:
-        return 0.1, "图纸没标单位，按 1 单位 = 100mm 估算面积。"
-    return 1.0, "图纸没标单位，按米估算面积。"
+    decision = resolve_unit_scale(msp, span)
+    return decision["meters_per_unit"], decision["note"]
 
 
 def _barrier_segments(
@@ -936,13 +936,11 @@ def build_space_layout(msp) -> tuple[dict[str, Any], list[bytes], list[bytes], l
 
     floors.sort(key=lambda plate: (plate["bbox"][0], -plate["bbox"][3]))
     span = max(max(plate["bbox"][2] - plate["bbox"][0], plate["bbox"][3] - plate["bbox"][1]) for plate in floors)
-    meters_per_unit, unit_note = _meters_per_unit(msp, span)
     sample: list[tuple[float, float, float, float]] = []
     for plate in floors:
         sample.extend(plate["segments"])
-    if _decimeter_door_gaps(sample):
-        meters_per_unit = 0.1
-        unit_note = "图纸单位不可靠，按 1 单位 = 100mm 估算面积。"
+    unit_info = resolve_unit_scale(msp, span, decimeter_hint=_decimeter_door_gaps(sample))
+    meters_per_unit, unit_note = unit_info["meters_per_unit"], unit_info["note"]
     payload_floors: list[dict[str, Any]] = []
     previews: list[bytes] = []
     masks: list[bytes] = []
@@ -1070,6 +1068,8 @@ def build_space_layout(msp) -> tuple[dict[str, Any], list[bytes], list[bytes], l
             "label": f"平面 {index}",
             "bbox": [round(value, 1) for value in box],
             "geometry": frame,
+            "unit_info": {**deepcopy(unit_info), "scope": "floor"},
+            "scale_note": unit_note,
             "anchors": [{key: value for key, value in anchor.items() if key != "room_slot"} for anchor in floor_anchors],
             "scheme_zh": _scheme_zh(public_rooms),
             "constraints": {
@@ -1105,6 +1105,7 @@ def build_space_layout(msp) -> tuple[dict[str, Any], list[bytes], list[bytes], l
         "relations_zh": _relations_zh(payload_floors),
         "principles": list(_PRINCIPLES),
         "unit_note": unit_note,
+        "unit_info": deepcopy(unit_info),
     }, previews, masks, line_layers
 
 

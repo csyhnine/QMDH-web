@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type AgentEditSessions, useAgentEditor } from "./useAgentEditSessions";
 
 import {
   api,
@@ -27,16 +28,18 @@ const emptyDraft: OverrideDraft = {
 
 type AgentPolicyOverridesPanelProps = {
   chatTools: AgentChatToolRecord[];
-  onSetError: (error: string) => void;
+  owner: AgentEditSessions;
 };
 
-export default function AgentPolicyOverridesPanel({ chatTools, onSetError }: AgentPolicyOverridesPanelProps) {
-  const [overrides, setOverrides] = useState<AgentPolicyOverrideRecord[]>([]);
-  const [users, setUsers] = useState<ManagedUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [draft, setDraft] = useState<OverrideDraft>(emptyDraft);
+export default function AgentPolicyOverridesPanel({ chatTools, owner }: AgentPolicyOverridesPanelProps) {
+  const editor = useAgentEditor(owner, emptyDraft);
+  const draft = editor.values, editingId = editor.id as number | null, setDraft = editor.setDraft;
+  const saving = owner.isBusy(editor.key("override"));
+  const onSetError = (message: string) => owner.report(message);
+  const [data, setData] = useState<{ scope: object | null; overrides: AgentPolicyOverrideRecord[]; users: ManagedUser[]; loading: boolean }>({ scope: null, overrides: [], users: [], loading: true });
+  const overrides = data.scope === owner.scope ? data.overrides : [];
+  const users = data.scope === owner.scope ? data.users : [];
+  const loading = data.scope !== owner.scope || data.loading;
 
   const groupOptions = useMemo(() => {
     const names = new Set<string>();
@@ -49,39 +52,35 @@ export default function AgentPolicyOverridesPanel({ chatTools, onSetError }: Age
     return Array.from(names).sort((a, b) => a.localeCompare(b, "zh-CN"));
   }, [users]);
 
-  async function refresh() {
-    setLoading(true);
+  async function refresh(intent = owner.scope.intent, afterWrite = false) {
+    if (!owner.isCurrent()) return;
+    const read = owner.read("overrides");
+    setData((current) => read.allowed() ? { ...current, scope: owner.scope, loading: true } : current);
     try {
       const [nextOverrides, nextUsers] = await Promise.all([api.agentPolicyOverrides(), api.users()]);
-      setOverrides(nextOverrides);
-      setUsers(nextUsers);
+      if (read.allowed()) setData((current) => read.allowed() ? { scope: owner.scope, overrides: nextOverrides, users: nextUsers, loading: false } : current);
     } catch (error) {
-      onSetError(error instanceof Error ? error.message : "加载策略 Override 失败");
+      owner.report(afterWrite ? "操作已完成，但 Override 列表刷新失败，请刷新列表查看。" : error instanceof Error ? error.message : "加载策略 Override 失败", intent, read.allowed);
     } finally {
-      setLoading(false);
+      if (read.allowed()) setData((current) => read.allowed() ? { ...current, loading: false } : current);
     }
   }
-
-  useEffect(() => {
-    void refresh();
-  }, []);
+  useEffect(() => { void refresh(); }, [owner.scope]);
 
   function resetDraft() {
-    setEditingId(null);
-    setDraft(emptyDraft);
+    editor.replace(emptyDraft);
     onSetError("");
   }
 
   function handleEdit(record: AgentPolicyOverrideRecord) {
-    setEditingId(record.id);
-    setDraft({
+    editor.replace({
       scope: record.scope,
       scope_key: record.scope_key,
       disabled_tool_keys: record.disabled_tool_keys,
       system_prompt_overlay: record.system_prompt_overlay,
       notes: record.notes,
       is_active: record.is_active,
-    });
+    }, record.id);
     onSetError("");
   }
 
@@ -97,15 +96,13 @@ export default function AgentPolicyOverridesPanel({ chatTools, onSetError }: Age
     });
   }
 
-  async function handleSave(event: FormEvent<HTMLFormElement>) {
+  function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft.scope_key.trim()) {
-      onSetError("请选择或填写作用范围");
-      return;
-    }
-
-    setSaving(true);
-    try {
+    const original = editor.current(), revision = original.revision;
+    return owner.run(editor.key("override", original), async (operation) => {
+      const draft = original.draft, editingId = original.id as number | null;
+      if (!draft.scope_key.trim()) { owner.report("请选择或填写作用范围", operation.intent); return; }
+      try {
       if (editingId === null) {
         await api.createAgentPolicyOverride({
           scope: draft.scope,
@@ -123,28 +120,21 @@ export default function AgentPolicyOverridesPanel({ chatTools, onSetError }: Age
           is_active: draft.is_active,
         });
       }
-      resetDraft();
-      await refresh();
-    } catch (error) {
-      onSetError(error instanceof Error ? error.message : "保存 Override 失败");
-    } finally {
-      setSaving(false);
-    }
+        editor.finish(original, revision, emptyDraft);
+        owner.report("", operation.intent); if (owner.isCurrent()) await refresh(operation.intent, true);
+      } catch (error) { owner.report(error instanceof Error ? error.message : "保存 Override 失败", operation.intent); }
+    });
   }
-
-  async function handleDelete(overrideId: number) {
-    if (!window.confirm("确定删除这条策略 Override？")) {
-      return;
-    }
-    try {
-      await api.deleteAgentPolicyOverride(overrideId);
-      if (editingId === overrideId) {
-        resetDraft();
-      }
-      await refresh();
-    } catch (error) {
-      onSetError(error instanceof Error ? error.message : "删除 Override 失败");
-    }
+  function handleDelete(overrideId: number) {
+    if (!window.confirm("确定删除这条策略 Override？")) return Promise.resolve();
+    const original = editor.current(), revision = original.revision;
+    return owner.run(`override:${overrideId}`, async (operation) => {
+      try {
+        await api.deleteAgentPolicyOverride(overrideId);
+        if (original.id === overrideId) editor.finish(original, revision, emptyDraft);
+        owner.report("", operation.intent); if (owner.isCurrent()) await refresh(operation.intent, true);
+      } catch (error) { owner.report(error instanceof Error ? error.message : "删除 Override 失败", operation.intent); }
+    });
   }
 
   return (
@@ -194,7 +184,7 @@ export default function AgentPolicyOverridesPanel({ chatTools, onSetError }: Age
                   <button type="button" onClick={() => handleEdit(item)}>
                     编辑
                   </button>
-                  <button type="button" onClick={() => void handleDelete(item.id)}>
+                  <button type="button" disabled={owner.isBusy(`override:${item.id}`)} onClick={() => void handleDelete(item.id)}>
                     删除
                   </button>
                 </span>
@@ -311,6 +301,7 @@ export default function AgentPolicyOverridesPanel({ chatTools, onSetError }: Age
             </div>
           </div>
 
+          {editor.notice ? <p role="status">{editor.notice}</p> : null}
           <div className="template-editor-actions">
             <button type="submit" className="submit-button" disabled={saving}>
               {saving ? "保存中..." : editingId === null ? "创建 Override" : "保存修改"}

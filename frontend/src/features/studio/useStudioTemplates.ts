@@ -95,7 +95,7 @@ export function useStudioTemplates({
     const { closeMenu = true, preserveResolution = false, bindTemplate = true } = options;
     if ((template.media_type ?? "image") !== mediaType) return;
     const nextTemplate = toTemplateFormValue(template);
-    clearFeedback();
+    clearTemplateEditState();
     setStudioForm((current) => {
       const next = applyTemplateToForm(nextTemplate, current);
       const merged = preserveResolution ? { ...next, resolution: current.resolution } : next;
@@ -104,7 +104,7 @@ export function useStudioTemplates({
     if (closeMenu) {
       setActiveComposerMenu(null);
     }
-  }, [clearFeedback, setActiveComposerMenu, setStudioForm, mediaType]);
+  }, [clearTemplateEditState, setActiveComposerMenu, setStudioForm, mediaType]);
 
   return {
     activeTemplate,

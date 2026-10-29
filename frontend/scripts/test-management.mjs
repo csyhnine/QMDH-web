@@ -10,12 +10,76 @@ function load(file, overrides = {}, globals = {}) {
   const exports = {};
   vm.runInNewContext(ts.transpileModule(readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
-  }).outputText, { exports, require: name => overrides[name] ?? (name.endsWith('.css') ? {} : require(name)), ...globals });
+  }).outputText, { exports, require: name => overrides[name] ?? (name.endsWith('.css') ? {} : name === './priorityVisual' ? load('pages/management/priorityVisual.ts') : require(name)), ...globals });
   return exports;
 }
 const planning = load('pages/management/planning.ts');
+const calendar = load('pages/management/scheduleCalendar.ts', {'./planning':planning});
+const viewport = load('pages/management/personnelViewport.ts', {'./planning':planning});
+const staffPlanning = load('pages/management/staffPlanning.ts', {'./planning':planning});
+const pillars=load('pages/management/pillarPlanning.ts',{'./planning':planning},{crypto:require('node:crypto').webcrypto});
+test('affiliation counts active internal and external people separately without guessing unknown identities', () => {
+  const staff = [{is_active:true,employment_type:'internal'},{is_active:true,employment_type:'external',employer:'Partner'}, {is_active:true}, {is_active:false,employment_type:'internal'}];
+  assert.equal(JSON.stringify(planning.staffCounts(staff)), JSON.stringify({active:3,internal:1,external:1,unknown:1}));
+  assert.equal(planning.staffAffiliation(staff[1]), '外包 · Partner');
+  assert.equal(planning.staffAffiliation(staff[2]), '归属待确认');
+});
 function makeProject(id, stages) { return { ...planning.newProject(id), id, name: `Project ${id}`, stages }; }
 const stage = (id, start, end, assignees = [1], allocation = 100) => ({ id, name: id, start, end, assignees, allocation, progress: 0 });
+const reporting = load('pages/management/reporting.ts', {'./planning': planning});
+const workbook = load('pages/management/reportWorkbook.ts', {'./planning': planning, './reporting': reporting});
+
+test('annual money retains exact decimals, includes archived, excludes trash and pairs rate denominators', () => {
+  const rows=[{...makeProject(1,[]),design_fee:'0.10',paid:'0.03',contract_status:'signed'},
+    {...makeProject(2,[]),archived:true,design_fee:'0.20',paid:'0.07',contract_status:'unsigned'},
+    {...makeProject(3,[]),design_fee:'999.00',paid:null}, {...makeProject(4,[]),deleted:true,design_fee:'999999',paid:'999999'}];
+  const result=reporting.financialSummary(rows);
+  assert.equal(result.totals.design_fee.amount,'999.30');assert.equal(result.totals.paid.amount,'0.10');
+  assert.equal(result.collectionRate,'33.3%');assert.equal(result.collectionKnown,2);assert.equal(result.collectionMissing,1);
+  assert.equal(result.signingRate,'50.0%');assert.equal(result.contractUnknown,1);assert.equal(result.archived,1);
+  assert.equal(reporting.financialSummary([{...makeProject(1,[]),design_fee:'0',paid:'0'}]).collectionRate,null);
+  const huge=reporting.financialSummary(Array(1000).fill({...makeProject(1,[]),investment:'999999999999.99'}));
+  assert.equal(huge.totals.investment.amount,'999999999999990.00');
+});
+
+test('classification preserves missing and custom grades while normalizing A/B/C/D labels', () => {
+  const rows=['a','A级项目','E级',''].map((grade,i)=>({...makeProject(i,[]),grade}));
+  const groups=reporting.classifiedSummary(rows,'grade');
+  assert.equal(groups.find(g=>g.label==='A级').total,2);assert.equal(groups.find(g=>g.label==='待填写').total,1);
+  assert.equal(groups.reduce((n,g)=>n+g.total,0),4);
+});
+
+test('weekly counts deduplicate stages and people, honor weekdays, cooperation and separate affiliation rankings', () => {
+  const staff=[{id:1,name:'内一',is_active:true,employment_type:'internal'},{id:2,name:'内二',is_active:true,employment_type:'internal'}, {id:3,name:'外包',is_active:true,employment_type:'external'}];
+  const a={...makeProject(1,[stage('a','2026-10-25','2026-10-27',[1,1,3]),stage('b','2026-10-28','2026-10-30',[1,3])]),grade:'A级项目'};
+  a.team.coordinator=[1];a.team.participants=[1];
+  const b={...makeProject(2,[stage('c','2026-10-26','2026-10-26',[2,3])]),grade:'B',collaboration_unit:'一分院'};
+  const weekend={...makeProject(3,[stage('d','2026-10-31','2026-11-01',[2])]),grade:'D'};
+  const data={unit:'二分院',staff,projects:[a,b,weekend,{...a,id:4,archived:true},{...a,id:5,deleted:true}]};
+  const report=reporting.weeklyWorkload(data,'2026-10-26',5), one=report.rows.find(r=>r.person.id===1), two=report.rows.find(r=>r.person.id===2), external=report.rows.find(r=>r.person.id===3);
+  assert.equal(one.projectCount,1);assert.equal(one.roles.participants,1);assert.equal(one.total,2);assert.equal(one.rank,1);
+  assert.equal(two.projectCount,1);assert.equal(two.cooperation,1);assert.equal(two.grades[1],0);assert.equal(two.rank,2);
+  assert.equal(external.projectCount,2);assert.equal(external.rank,1);
+  assert.equal(reporting.weeklyWorkload(data,'2026-10-26',7).rows.find(r=>r.person.id===2).projectCount,2);
+});
+
+test('schedule-derived next week changes with dates while manual narratives are retained', () => {
+  const p={...makeProject(1,[stage('next','2026-11-02','2026-11-04')]),next_week_work:'保留原文'};
+  assert.ok(planning.cell(p,'next_week_work',[],'2026-10-26').includes('next'));
+  assert.equal(planning.cell({...p,weekly_plan_mode:'manual'},'next_week_work',[],'2026-10-26'),'保留原文');
+  assert.equal(planning.cell({...p,stages:[]},'next_week_staff',[{id:1,name:'人员'}],'2026-10-26'),'');
+});
+
+test('XLSX has three real sheets, merged original team headers, frozen reference dates and safe string cells', () => {
+  const p={...makeProject(1,[stage('历史下周工作','2026-11-02','2026-11-03')]),name:'=HYPERLINK("test")<&',design_fee:'12.30'};
+  const data={unit:'二分院',year:2026,projects:[p],staff:[{id:1,name:'甲',is_active:true}],report:{compiler:'编制人',data_as_of:'2026-10-12'}};
+  const bytes=workbook.reportWorkbook(data,'2026-10-26',5),{unzipSync,strFromU8}=require('fflate');
+  const files=unzipSync(bytes),sheet=strFromU8(files['xl/worksheets/sheet1.xml']);
+  assert.ok(strFromU8(files['xl/workbook.xml']).includes('人员周工作量'));assert.ok(sheet.includes('ref="C3:H3"'));assert.ok(sheet.includes('历史下周工作'));
+  assert.ok(sheet.includes('&lt;&amp;'));assert.ok(sheet.includes('=HYPERLINK'));assert.ok(!sheet.includes('<f>'));
+  assert.ok(sheet.includes('<v>12.3</v>'));assert.equal(Object.keys(files).filter(f=>/^xl\/worksheets\/sheet/.test(f)).length,3);
+  if(process.env.REPORTING_XLSX_FIXTURE)require('node:fs').writeFileSync(process.env.REPORTING_XLSX_FIXTURE,bytes);
+});
 
 test('Gantt includes end date and clips cross-month stages and ignores out-of-range work', () => {
   const entries = planning.ganttEntries([makeProject(1, [stage('a','2026-09-29','2026-10-02'),stage('b','2026-10-30','2026-11-04'),stage('c','2026-11-01','2026-11-02')])], '2026-10-01', 31);
@@ -46,8 +110,11 @@ test('both navigation systems expose management only to company managers regardl
       '../../features/access/roleAccess':{defaultAdminHomePath:()=>'/admin/dashboard',canAccessAdminModule:()=>true},
       '../../lib/useAdminFeedbackPendingCount':{useAdminFeedbackPendingCount:()=>0},
       './Brand':{BrandIcon:()=>null},
-      '../../features/studio/studioNavigation':{OTHER_TOOLS_NAV:{key:'other',label:'其他',path:'/studio/other'}},
-      './studioNavigation':{OTHER_TOOLS_NAV:{label:'其他',path:'/studio/other'}},
+      '../../features/studio/studioNavigation':load('features/studio/studioNavigation.ts'),
+      './studioNavigation':load('features/studio/studioNavigation.ts'),
+      '../../features/studio/StudioSectionTabs':{default:()=>null},
+      '../../features/admin/AdminSectionTabs':{default:()=>null},
+      '../../features/admin/adminNavigation':load('features/admin/adminNavigation.ts',{'../access/roleAccess':load('features/access/roleAccess.ts')}),
       '../../lib/featureFlags':{isStudioCanvasEnabled:false},
     };
     for(const [file,props] of [['components/shared/AppShell.tsx',{kind:'studio',active:'management'}],['features/studio/StudioGlobalRailNav.tsx',{activeView:'studio',isAdminView:false,currentUser:user}]]) {
@@ -56,9 +123,10 @@ test('both navigation systems expose management only to company managers regardl
     }
   }
 });
-test('editor interactions create project, assign a stage and save; stale edit keeps input visible', async () => {
-  const slots=[];let cursor=0,effects=[],changed=false,tree,fail=false,saved;
+test('quick creation has minimal fields, untouched cancel is silent and failures preserve input', async () => {
+  const slots=[];let cursor=0,effects=[],changed=false,tree,fail=false,saved,confirms=0;
   const hooks={
+    useRef(initial){const i=cursor++;if(!(i in slots))slots[i]={current:initial};return slots[i];},
     useState(initial){const i=cursor++;if(!(i in slots))slots[i]=typeof initial==='function'?initial():initial;return[slots[i],v=>{slots[i]=typeof v==='function'?v(slots[i]):v;changed=true;}];},
     useMemo(fn){return fn();},
     useEffect(fn,deps){const i=cursor++;const old=slots[i];if(!old||deps.some((v,j)=>v!==old.deps[j])){slots[i]={deps};effects.push(()=>{old?.cleanup?.();slots[i].cleanup=fn();});}},
@@ -69,25 +137,31 @@ test('editor interactions create project, assign a stage and save; stale edit ke
     if(body){if(fail)throw Error('项目已被他人修改'); saved=body;return {...body,id:1};}
     return path==='/staff'?[{id:1,name:'设计师',is_active:true}]:path.startsWith('/reports')?report:[];
   };
-  const Page=load('pages/management/ManagementProjectsPage.tsx',{'react':hooks,'../../api':{managementRequest:request},'../../context/AuthContext':{useAuth:()=>({currentUser:user})},'./planning':planning,'./ManagementOverview':{default:()=>null},'./ProjectLedger':{default:()=>null},'./ProjectPlan':{default:()=>null},'./PeopleSchedule':{default:()=>null}},{structuredClone,crypto:{randomUUID:()=> 'stage-1'},window:{confirm:()=>true},Error}).default;
+  const Page=load('pages/management/ManagementProjectsPage.tsx',{'react':hooks,'../../api':{managementRequest:request},'../../context/AuthContext':{useAuth:()=>({currentUser:user})},'./planning':planning,'./scheduleCalendar':calendar,'./ManagementOverview':{default:()=>null},'./ManagementReporting':{default:()=>null},'./ProjectLedger':{default:()=>null},'./ProjectPlan':{default:()=>null},'./PeopleSchedule':{default:()=>null},'./PeoplePlanner':{default:()=>null},'./PlanningDate':{default:()=>null},'./PlanningDesk':{default:()=>null},'./confirmPlanning':{confirmPlanning:async()=>{confirms++;return true;}},'./usePlanningAutoSave':{default:()=>{}}},{structuredClone,crypto:{randomUUID:()=> 'stage-1'},window:{confirm:()=>{confirms++;return true;}},Error}).default;
   const render=()=>{do{cursor=0;effects=[];changed=false;tree=Page();effects.forEach(fn=>fn());}while(changed);};
   const nodes=n=>{if(!n||typeof n!=='object')return[];return[n,...[n.props?.children].flat(Infinity).flatMap(nodes)];};
   const text=n=>typeof n==='string'||typeof n==='number'?String(n):n&&typeof n==='object'?[n.props?.children].flat(Infinity).map(text).join(''):'';
   const find=(type,label)=>nodes(tree).find(n=>n.type===type&&text(n)===label);
   const button=label=>find('button',label);
   render();await new Promise(r=>setImmediate(r));render();
+  const editor=()=>nodes(tree).find(n=>n.type==='form'&&['编辑项目','快速立项'].includes(n.props['aria-label']));
+  button('＋ 新建项目').props.onClick();render();
+  button('取消').props.onClick();render();assert.equal(confirms,0);assert.equal(editor(),undefined);
+  button('＋ 新建项目').props.onClick();render();
+  nodes(find('label','项目名称')).find(n=>n.type==='input').props.onChange({target:{value:'   '}});render();
+  await editor().props.onSubmit({preventDefault(){}});render();assert.equal(saved,undefined);
+  nodes(find('label','项目名称')).find(n=>n.type==='input').props.onChange({target:{value:'只填名称'}});render();
+  await editor().props.onSubmit({preventDefault(){}});render();
+  assert.equal(saved.name,'只填名称');assert.equal(saved.stages.length,0);assert.equal(saved.design_fee,null);assert.equal(saved.deadline,null);assert.equal(saved.team.coordinator.length,0);
   button('＋ 新建项目').props.onClick();render();
   const projectName=nodes(find('label','项目名称')).find(n=>n.type==='input');
   projectName.props.onChange({target:{value:'真实安排'}});render();
-  button('＋ 添加阶段').props.onClick();render();
-  const stageName=nodes(tree).find(n=>n.type==='section'&&n.props.className==='mp-stage');
-  nodes(stageName).find(n=>n.type==='input').props.onChange({target:{value:'方案设计'}});render();
-  const editor=()=>nodes(tree).find(n=>n.type==='form'&&n.props['aria-label']==='编辑项目');
+  assert.equal(button('＋ 添加阶段'),undefined);
   fail=true;await editor().props.onSubmit({preventDefault(){}});render();
   assert.ok(renderToStaticMarkup(tree).includes('项目已被他人修改'));
   assert.equal(nodes(editor()).find(n=>n.type==='input'&&n.props.value==='真实安排').props.value,'真实安排');
   fail=false;await editor().props.onSubmit({preventDefault(){}});render();
-  assert.equal(saved.name,'真实安排'); assert.equal(saved.stages[0].name,'方案设计');assert.equal(saved.stages[0].id,'stage-1');
+  assert.equal(saved.name,'真实安排');assert.equal(saved.stages.length,0);
   assert.equal(editor(),undefined);
 });
 
@@ -112,15 +186,40 @@ test('chart adapter preserves inclusive dates, milestones, stable IDs and escape
   const milestone=planning.stageFromGantt({...p.stages[0],milestone:true},{start_date:new Date(2027,0,2),end_date:new Date(2027,0,3),progress:0});
   assert.equal(milestone.start,milestone.end);
 });
-test('community chart blocks parent/archived drags, edits through drawer and disables dependency writes', () => {
-  const listeners={},config={},templates={};let changed,edited;
+test('community chart blocks parent/archived drags and offers quick actions, details and dated delivery insertion', () => {
+  const listeners={},config={},templates={};let changed,edited,stageEdit,quick,delivery;
   const chart={config,templates,i18n:{setLocale(){}},attachEvent:(name,fn)=>{listeners[name]=fn;},init(){},
     getTask:id=>id==='parent'?{projectId:1,readonly:true}:{projectId:1,stageId:'stage',readonly:id==='archived',start_date:new Date(2026,9,16),end_date:new Date(2026,9,18),progress:0.3}};
-  const bridge=load('pages/management/ganttBridge.ts',{'./planning':planning});
-  bridge.initializePlanningGantt(chart,{}, {canDrag:()=>true,onChange:(...args)=>changed=args,onEdit:id=>edited=id});
+  const bridge=load('pages/management/ganttBridge.ts',{'./planning':planning,'./staffPlanning':staffPlanning});
+  bridge.initializePlanningGantt(chart,{}, {canDrag:()=>true,onChange:(...args)=>changed=args,onEdit:id=>edited=id,onStage:(...args)=>stageEdit=args,onQuick:(...args)=>quick=args,onDelivery:(...args)=>delivery=args});
   assert.equal(listeners.onBeforeTaskDrag('parent'),false);assert.equal(listeners.onBeforeTaskDrag('archived'),false);assert.equal(listeners.onBeforeTaskDrag('normal'),true);
   listeners.onAfterTaskDrag('normal');assert.equal(changed[0],1);assert.equal(changed[1],'stage');
-  assert.equal(listeners.onTaskDblClick('normal'),false);assert.equal(edited,1);assert.equal(config.drag_links,false);
+  assert.equal(listeners.onTaskDblClick('normal'),false);assert.equal(stageEdit.join(','),'1,stage');
+  listeners.onTaskDblClick('parent');assert.equal(edited,1);assert.equal(config.drag_links,false);
+  listeners.onTaskClick('normal',{target:{closest:()=>null},clientX:250,clientY:100});assert.equal(quick.join(','),'1,stage,250,100');
+  const row={getAttribute:()=> 'parent'};chart.isTaskExists=()=>true;chart.dateFromPos=x=>{assert.equal(x,300);return new Date(2026,9,28);};
+  const host={querySelector:()=>({getBoundingClientRect:()=>({left:100})})};
+  bridge.initializePlanningGantt(chart,host,{canDrag:()=>true,onChange(){},onEdit(){},onDelivery:(...args)=>delivery=args});
+  listeners.onEmptyClick({target:{closest:()=>row},clientX:400,clientY:250});assert.equal(delivery.join(','),'1,2026-10-28,400,250');
+});
+
+test('quick pause and partial resume preserve other people, surrounding dates, deliverables and deadlines',()=>{
+ const original={...stage('work','2026-10-26','2026-11-03',[1,2]),milestone:false,deliverable:'交付',pauses:[]};
+ const paused=pillars.adjustWorkPause(original,1,'2026-10-30','2026-11-02');
+ assert.equal(paused.pauses[0].until,'2026-11-03');assert.equal(planning.isPaused(paused,1,'2026-11-02'),true);assert.equal(planning.isPaused(paused,2,'2026-11-02'),false);
+ assert.equal(paused.end,original.end);assert.equal(original.pauses.length,0);assert.equal(paused.deliverable,'交付');
+ assert.throws(()=>pillars.adjustWorkPause(paused,1,'2026-11-02','2026-11-03'),/已有暂停/);
+ assert.throws(()=>pillars.adjustWorkPause(original,3,'2026-10-30','2026-11-02'),/参与人员/);
+ assert.throws(()=>pillars.adjustWorkPause(original,1,'2026-10-25','2026-10-30'),/有效时段/);
+ const group={...original,pauses:[{id:'group',start:'2026-10-26',until:null,people:[],reason:'全员暂停'}]};
+ const resumed=pillars.adjustWorkPause(group,1,'2026-10-28','2026-10-30',true);
+ for(const date of ['2026-10-26','2026-10-28','2026-10-30','2026-10-31'])assert.equal(planning.isPaused(resumed,2,date),true);
+ assert.equal(planning.isPaused(resumed,1,'2026-10-27'),true);assert.equal(planning.isPaused(resumed,1,'2026-10-28'),false);assert.equal(planning.isPaused(resumed,1,'2026-10-30'),false);assert.equal(planning.isPaused(resumed,1,'2026-10-31'),true);
+ assert.equal(resumed.pauses.find(p=>p.people.includes(2)).reason,'全员暂停');assert.equal(group.pauses[0].people.length,0);
+ const now=planning.today(),part={...original,start:now,end:now,pauses:[{id:'p',start:now,until:null,people:[1],reason:'支援'}]};
+ assert.equal(planning.ganttData([makeProject(1,[part])],[],now)[1].paused,false);
+ assert.equal(planning.ganttData([makeProject(1,[{...part,assignees:[1]}])],[],now)[1].paused,true);
+ assert.throws(()=>pillars.adjustWorkPause(original,1,'2026-10-28','2026-10-30',true),/没有暂停/);
 });
 
 test('saving several changed projects acknowledges only committed writes and preserves failed/unattempted work', async () => {
@@ -129,4 +228,112 @@ test('saving several changed projects acknowledges only committed writes and pre
   assert.deepEqual(attempted,[1,2]);assert.equal(failure.message,'conflict');assert.deepEqual(Object.keys(queue),['2','3']);
   const result=await planning.savePlanQueue(Object.values(queue),async p=>({...p,version:2}),id=>delete queue[id]);
   assert.equal(result,null);assert.deepEqual(Object.keys(queue),[]);
+});
+
+
+
+test('individual pauses release only selected people and resume dates restore load without shifting deadlines',()=>{
+ const work={...stage('p','2026-10-26','2026-10-30',[1,2]),pauses:[{id:'pause',start:'2026-10-27',until:'2026-10-29',people:[1],reason:'紧急支援'}]};
+ const p=makeProject(1,[work]);const entries=planning.ganttEntries([p],'2026-10-26',5);
+ assert.equal(JSON.stringify(planning.staffLoads(entries,1,5)),JSON.stringify([100,0,0,100,100]));
+ assert.equal(JSON.stringify(planning.staffLoads(entries,2,5)),JSON.stringify([100,100,100,100,100]));
+ assert.equal(work.end,'2026-10-30');
+ const paused={...p,stages:[{...work,pauses:[{start:'2026-10-26',until:null,people:[],reason:'暂停'}]}]};
+ assert.equal(planning.scheduledWeek(paused,'2026-10-26',5).people.length,0);
+ const node={...work,milestone:true,start:'2026-10-26',end:'2026-10-26'};
+ assert.equal(planning.staffLoads(planning.ganttEntries([makeProject(1,[node])],'2026-10-26',1),1,1)[0],0);
+});
+
+
+test('calendar periods use real week/month/quarter/year boundaries including leap years and year rollover',()=>{
+ assert.equal(JSON.stringify(calendar.scheduleRange('2026-11-01','week')),JSON.stringify({start:'2026-10-26',end:'2026-11-01',days:7}));
+ assert.equal(JSON.stringify(calendar.scheduleRange('2028-02-20','month')),JSON.stringify({start:'2028-02-01',end:'2028-02-29',days:29}));
+ assert.equal(JSON.stringify(calendar.scheduleRange('2026-11-15','quarter')),JSON.stringify({start:'2026-10-01',end:'2026-12-31',days:92}));
+ assert.equal(calendar.scheduleRange('2028-06-30','year').days,366);
+ assert.equal(calendar.moveSchedulePeriod('2026-01-31','month',1),'2026-02-01');
+ assert.equal(calendar.moveSchedulePeriod('2026-11-30','quarter',1),'2027-01-01');
+ assert.equal(calendar.moveSchedulePeriod('2026-02-28','year',-1),'2025-01-01');
+ assert.equal(calendar.moveSchedulePeriod('2026-12-30','week',1),'2027-01-04');
+});
+
+test('personnel calendar renders names as column headers, dates as rows, hidden project load and personal pauses',()=>{
+ const Schedule=load('pages/management/PeopleSchedule.tsx',{'./planning':planning,'./pillarPlanning':pillars,'./personnelViewport':viewport,'./usePillarResize':{default:()=>({preview:null,landed:'',bind:()=>({})})},react:{...require('react'),useMemo:fn=>fn(),useLayoutEffect:()=>{},useRef:()=>({current:null}),useState:x=>[x,()=>{}]}}).default;
+ const a={...stage('work','2026-10-26','2026-10-27',[1,2],60),pauses:[{id:'p',start:'2026-10-26',until:null,people:[1],reason:'抽调'}]};
+ const p=makeProject(1,[a]),hidden=makeProject(2,[stage('hidden','2026-10-26','2026-10-26',[2],60)]);
+ const html=renderToStaticMarkup(Schedule({projects:[p],workloadProjects:[p,hidden],staff:[{id:1,name:'甲',is_active:true},{id:2,name:'乙',is_active:true}],start:'2026-10-26',days:7,period:'week'}));
+ assert.ok(html.includes('scope="col"'));assert.ok(html.includes('<strong>甲</strong>'));assert.equal((html.match(/scope="row"/g)||[]).length,7);
+ assert.ok(!html.includes('120%'));assert.ok(html.includes('mp-pillar-pause'));assert.ok(html.includes('mp-work-pillar'));assert.ok(html.includes('甲 2026-10-26 添加工作'));
+ assert.ok(!html.includes('选人面板'));assert.ok(!html.includes('安排工作'));
+});
+
+test('ten parallel lanes fit a fixed personnel column without overlap and retain blank margins',()=>{
+ for(const width of [60,90,240]) {
+  const lanes=Array.from({length:10},(_,i)=>viewport.personnelLane(width,10,i));
+  assert.ok(lanes[0].left>=6);assert.ok(lanes.at(-1).left+lanes.at(-1).width<=width-6);
+  assert.ok(lanes.every(l=>l.width>0&&l.width<=20));
+  for(let i=1;i<lanes.length;i++)assert.ok(lanes[i-1].left+lanes[i-1].width<lanes[i].left);
+ }
+ assert.equal(viewport.personnelLane(60,1,0).width,20);
+});
+
+test('content zoom widens crowded lanes without overlaps or changing date geometry',()=>{
+ for(const count of [1,6,10,20]) {
+  const compact=viewport.personnelLane(60,count,0);
+  const lanes=Array.from({length:count},(_,i)=>viewport.personnelLane(480,count,i,8));
+  assert.ok(lanes.every(l=>l.width>=20&&l.width>compact.width));
+  assert.ok(lanes[0].left>=6);
+  assert.ok(lanes.at(-1).left+lanes.at(-1).width<=474);
+  for(let i=1;i<count;i++)assert.ok(lanes[i-1].left+lanes[i-1].width<lanes[i].left);
+ }
+});
+
+test('personnel endpoint resizing fixes the opposite inclusive date and preserves people, pauses and other work',()=>{
+ const s={...stage('resize','2026-12-29','2027-01-03',[1,2]),deliverable:'保留交付物',pauses:[{id:'p',start:'2026-12-30',until:'2026-12-31',people:[1]}]};
+ const p=makeProject(1,[s,stage('untouched','2027-01-05','2027-01-07')]);
+ const a=staffPlanning.changePeoplePlan(p,[],{kind:'resize',stageId:s.id,edge:'start',offset:2});
+ assert.equal(a.stages[0].start,'2026-12-31');assert.equal(a.stages[0].end,s.end);assert.equal(a.stages[0].assignees,s.assignees);assert.equal(a.stages[0].pauses,s.pauses);assert.equal(a.stages[1],p.stages[1]);
+ const b=staffPlanning.changePeoplePlan(p,[],{kind:'resize',stageId:s.id,edge:'end',offset:-2});
+ assert.equal(b.stages[0].start,s.start);assert.equal(b.stages[0].end,'2027-01-01');assert.equal(b.stages[0].deliverable,s.deliverable);assert.equal(p.stages[0],s);
+ for(const edge of ['start','end']){const n=staffPlanning.resizeWorkEndpoint(s,edge,edge==='start'?99999:-99999);assert.equal(n.start,n.end);}
+ assert.equal(planning.dayNumber(staffPlanning.resizeWorkEndpoint(s,'end',99999).end)-planning.dayNumber(s.start),3660);
+ assert.throws(()=>staffPlanning.resizeWorkEndpoint({...s,milestone:true},'end',1));assert.throws(()=>staffPlanning.resizeWorkEndpoint(s,'start',0.5));
+});
+
+test('short intentional endpoint drags respond in both orientations, while clicks stay unchanged',()=>{
+ for(const step of [18,44,80,140]) {
+  assert.equal(staffPlanning.dragDateOffset(6,step),0);assert.equal(staffPlanning.dragDateOffset(-6,step),0);
+  assert.equal(staffPlanning.dragDateOffset(12,step),1);assert.equal(staffPlanning.dragDateOffset(-12,step),-1);
+  assert.equal(staffPlanning.dragDateOffset(step,step),1);assert.equal(staffPlanning.dragDateOffset(step*2,step),2);
+ }
+ assert.equal(staffPlanning.dragDateOffset(100,0),0);
+});
+
+test('personnel zoom changes visible days across year boundaries while anchoring pointer dates and limiting density',()=>{
+ const out=viewport.zoomPersonnelWindow('2026-12-28',7,80,597,236,0,1);
+ assert.equal(out.days,9);
+ assert.equal(planning.addDays(out.start,Math.floor(200/(560/9))),'2026-12-30');
+ const scrolled=viewport.zoomPersonnelWindow('2026-12-01',31,44,597,256,440,1);
+ assert.equal(planning.addDays(scrolled.start,Math.floor(220/(560/scrolled.days))),planning.addDays('2026-12-01',15));
+ assert.equal(viewport.zoomPersonnelWindow('2026-12-30',3,560/3,597,100,0,-1).days,3);
+ assert.equal(viewport.zoomPersonnelWindow('2026-12-30',31,18,597,100,0,1).days,31);
+});
+
+
+test('pause masks distinguish one person away from nobody responsible and summarize only actual progress',()=>{
+ const work={...stage('w','2026-10-26','2026-10-30',[1,2]),pauses:[{id:'p',start:'2026-10-27',until:'2026-10-29',people:[1],reason:'支援'}],updates:[{id:'u',date:'2026-10-23',note:'实际完成底图'}]};
+ assert.equal(pillars.unattended(work,'2026-10-27'),false);
+ const all={...work,pauses:[{...work.pauses[0],people:[]}]},p=makeProject(1,[all]);
+ assert.equal(pillars.unattended(all,'2026-10-27'),true);assert.equal(pillars.unattended(all,'2026-10-29'),false);
+ assert.equal(JSON.stringify(pillars.pauseWarnings([p]).map(w=>[w.start,w.end])),JSON.stringify([['2026-10-27','2026-10-28']]));
+ assert.equal(pillars.pauseWarnings([makeProject(1,[work])]).length,0);
+ assert.equal(pillars.pauseSlices(work,1,'2026-10-26',5)[0].width,2);
+ assert.equal(pillars.summarizeWeek(p,'2026-10-26','previous'),'2026-10-23 · w：实际完成底图');
+ assert.equal(pillars.summarizeWeek(makeProject(1,[{...work,updates:[]}]),'2026-10-26','previous'),'');
+ assert.equal(pillars.dayAtPointer(100,260,80,'2026-10-26',7),'2026-10-28');
+});
+
+test('priority badges keep grade separate from urgency and reject unknown markup',()=>{
+ const visual=load('pages/management/priorityVisual.ts');
+ assert.equal(visual.projectGrade('A级'),'A');assert.equal(visual.projectGrade('D'),'D');assert.equal(visual.projectGrade('<img>'),'');
+ assert.ok(visual.priorityBadge('B','特急').includes('⚠'));assert.equal(visual.priorityClass('常规'),'');assert.equal(visual.priorityBadge('<img>','<script>'),'');
 });

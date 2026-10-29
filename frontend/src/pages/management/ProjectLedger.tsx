@@ -152,11 +152,11 @@ function Group({
           {visible.map(([key]) => (
             <td key={key} className={key === "name" ? "mp-project-name-cell" : ""}>
               {key === "name" ? (
-                <button className="mp-project-name" onClick={() => onEdit(p)}>
+                <button className="mp-project-name" title="点击编辑项目详情" onClick={() => onEdit(p)}>
                   <span className="mp-project-symbol" aria-hidden="true" style={{color:projectTint(p)}}>
                     ▤
                   </span>
-                  <strong>{p.name}</strong>
+                  <strong>{p.name}</strong><span className="mp-project-edit-hint">编辑 ✎</span>
                 </button>
               ) : key === "urgency" ? (
                 <span className={p.urgency === "紧急" || p.urgency === "特急" ? "mp-badge danger" : "mp-badge muted"}>

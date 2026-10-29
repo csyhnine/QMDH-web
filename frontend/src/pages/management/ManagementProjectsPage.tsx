@@ -108,6 +108,7 @@ export default function ManagementProjectsPage() {
   const counts = staffCounts(staff);
   const [report, setReport] = useState<Report | null>(null);
   const [view, setView] = useState<"ledger" | "gantt" | "people" | "staff">("people");
+  const previousMainView = useRef<"ledger" | "gantt" | "people">("people");
   const [archive, setArchive] = useState(false);
   const [trash, setTrash] = useState(false);
   const [search, setSearch] = useState("");
@@ -216,7 +217,10 @@ export default function ManagementProjectsPage() {
     }
   };
   const changeView = (next: typeof view) => {
-    if (next !== view) safeChange(() => setView(next));
+    if (next !== view) safeChange(() => {
+      if (view !== "staff") previousMainView.current = view;
+      setView(next);
+    });
   };
   const editProject = (p: PlanningProject) => {
     setProjectAutoFailed(false);
@@ -493,7 +497,7 @@ export default function ManagementProjectsPage() {
               </select>
             </label>
             <span>{currentUser?.company_position}</span>
-            <button disabled={loading} onClick={() => changeView("staff")}>
+            <button disabled={loading || busy} aria-pressed={view === "staff"} onClick={() => changeView(view === "staff" ? previousMainView.current : "staff")}>
               分院人员池
             </button>
             <button

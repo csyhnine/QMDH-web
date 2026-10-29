@@ -193,12 +193,12 @@ export default function PeopleSchedule({
             <input type="range" min="1" max={maximumPeople} step="1" value={displayedPeople} disabled={disabled || Boolean(resize.preview)} aria-label="显示人数" aria-valuetext={`${displayedPeople} 人`} onChange={event => changeContentZoom(Number(event.target.value))} />
             <output>{displayedPeople} 人</output>
             <button disabled={disabled || Boolean(resize.preview) || displayedPeople === maximumPeople} aria-label="增加显示人数" onClick={() => changeContentZoom(displayedPeople + 1)}>＋</button>
-            {displayedPeople < maximumPeople && <button disabled={disabled || Boolean(resize.preview)} onClick={() => changeContentZoom(0)}>显示更多人员</button>}
+            <button disabled={disabled || Boolean(resize.preview) || displayedPeople === maximumPeople} onClick={() => changeContentZoom(0)}>显示更多人员</button>
           </div>
           <span>{over ? `⚠ ${over} 人的安排需要协调 · ` : ""}Ctrl + 滚轮缩放 · {fitDates ? `当前 ${days} 天` : "双击空白新增"}</span>
           <button disabled={disabled} aria-label="缩小日期视图" title="显示更多日期" onClick={() => zoom(1)}>−</button>
           <button disabled={disabled} aria-label="放大日期视图" title="显示更少日期" onClick={() => zoom(-1)}>＋</button>
-          {fitDates && <button disabled={disabled} onClick={onResetZoom}>重置缩放</button>}
+          <button disabled={disabled || !fitDates} onClick={onResetZoom}>重置缩放</button>
         </div>
       </div>
       <div

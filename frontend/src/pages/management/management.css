@@ -763,13 +763,14 @@
   align-items: center;
   gap: 10px;
   border: 0;
-  background: none;
-  padding: 0;
+  background: #edf4ff;
+  padding: 6px 10px;
+  border-radius: 7px;
   text-align: left;
-  color: #304969;
+  color: #2458b5;
 }
 .mp-project-name strong {
-  font-weight: 500;
+  font-weight: 650;
   line-height: 1.7;
 }
 .mp-project-symbol {
@@ -2192,3 +2193,7 @@
   .mp-quick-panel,.mp-quick-layer,.mp-calendar[popover]:popover-open,
   .mp-confirm-dialog[open],.mp-confirm-dialog[open]::backdrop {animation:none !important;}
 }
+
+.mp-project-edit-hint {font-size:11px;white-space:nowrap;color:#466ca8;}
+.management-page .mp-project-name:hover {background:#dfeaff;color:#164599;}
+.management-page .mp-project-name:focus-visible {outline:2px solid #4169df;outline-offset:2px;}

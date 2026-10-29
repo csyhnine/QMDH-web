@@ -16,4 +16,4 @@
 
 新目录 `/opt/qmdh-frp/releases/personnel-content-20261029`，标签 `qmdh-personnel-content-frontend:20261029`；配对备份服务器 `/www/backup/qmdh-release-20261029-personnel-content` ↔ 本机 `E:/backups/QMDH-web/release-20261029-personnel-content`。采用实际运行的动效前端镜像作 overlay 父镜像，保留旧资源，只替换 frontend。
 
-DB/媒体继承 motion → timeline-consistency → 既有纯前端链 → unit-access 独立快照及本机基础媒体包，非本轮新数据快照。回滚只恢复镜像与配置，不覆盖新业务数据。不清理服务器，不触迁移或冻结审查；既有 checks/plan/review WIP 不提交，草稿 PR #5 不合并。发布实际结果随后补记。
+DB/媒体继承 motion → timeline-consistency → 既有纯前端链 → unit-access 独立快照及本机基础媒体包，非本轮新数据快照。回滚只恢复镜像与配置，不覆盖新业务数据。不清理服务器，不触迁移或冻结审查；既有 checks/plan/review WIP 不提交，草稿 PR #5 不合并。已发布验证：源码 `199265b55792c7d9ce91af2650829812df8dbcb8`，镜像 `1d0c68d349b8`，状态 `DEPLOYED_VERIFIED`。52 候选文件与运行内容一致，12 个不同公网资源、26 地址、健康/管理未登录鉴权/Qwen 输入能力通过。8 工作流、环境、挂载、网络及旧 hash 资源保持，backend/3 worker/其他容器均未重启。27 文件新配对备份两端 SHA256 一致，原 motion 配对 27 文件与 35 服务器恢复归档重新校验，本机 14 基础/早期归档沿用同会话已通过 SHA256 的未变更文件连续性验证。切换前重新核空任务、派发、Redis、GPU 锁和上游队列；上游忙时等待自然结束。盘余约 8.191 GiB 为发布后时点。无迁移、清理或生产测试写入。

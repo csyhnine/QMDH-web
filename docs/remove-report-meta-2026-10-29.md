@@ -4,4 +4,4 @@
 
 26 管理定向测试、2 目标类型文件零新增诊断、890 模块构建通过；最终包三主视图/人员池返回及名称键盘编辑4场通过，补查无台账信息入口/底部信息及独立 reports 请求，pageerror=[]。导出结构由既有工作簿测试覆盖，不代表整套 CI 或独立验收。候选与私有证据在忽略目录 `local/remove-report-meta-20261029/`，未触发生产测试写入、真实 GPU 或付费生成。
 
-新发布目录 `/opt/qmdh-frp/releases/remove-report-meta-20261029`，镜像标签 `qmdh-remove-report-meta-frontend:20261029`；配对备份 `/www/backup/qmdh-release-20261029-remove-report-meta` ↔ `E:/backups/QMDH-web/release-20261029-remove-report-meta`。纯前端 overlay，保留旧 hash 资源；DB/媒体继承旧恢复链、unit-access独立快照及本机基础包，非新快照，回滚不覆盖新业务数据。无清理、迁移、后端修改。既有WIP保留，原分支，PR #5不合并。实际发布结果随后补记。
+新发布目录 `/opt/qmdh-frp/releases/remove-report-meta-20261029`，镜像标签 `qmdh-remove-report-meta-frontend:20261029`；配对备份 `/www/backup/qmdh-release-20261029-remove-report-meta` ↔ `E:/backups/QMDH-web/release-20261029-remove-report-meta`。纯前端 overlay，保留旧 hash 资源；DB/媒体继承旧恢复链、unit-access独立快照及本机基础包，非新快照，回滚不覆盖新业务数据。无清理、迁移、后端修改。既有WIP保留，原分支，PR #5不合并。已上线源码 `d8e74d6f02ecfd850b5904d33623144ea159694e`，镜像 `f612ab67ad00`，状态DEPLOYED_VERIFIED。52文件、12不同公网资源、26地址与健康/鉴权/Qwen能力通过，环境/挂载/网络/8工作流和旧资源保持，其他容器未重启。27文件配对备份两端SHA256一致；原恢复基线27文件及35服务器归档已重核。切换前任务/派发/Redis/GPU锁/上游队列为空。盘余约8.198GiB为发布后时点。

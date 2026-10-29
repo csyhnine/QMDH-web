@@ -2085,6 +2085,10 @@
 .mp-pillar-selection {position:absolute;left:0;right:0;background:#ffffff80;outline:2px solid #345dd9;outline-offset:-2px;pointer-events:none;}
 .mp-compact .mp-pillar-board {max-height:none;}
 .mp-personnel-zoom {display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.mp-content-zoom {display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding-right:10px;border-right:1px solid #dce4ef;}
+.management-page .mp-content-zoom input[type=range] {width:90px;min-width:0;padding:0;accent-color:#4169df;}
+.mp-content-zoom output {min-width:36px;text-align:center;font-variant-numeric:tabular-nums;}
+.mp-pillar-readable .mp-pillar-caption {writing-mode:horizontal-tb;letter-spacing:0;white-space:normal;overflow-wrap:anywhere;font-size:12px;line-height:17px;padding:12px 4px;box-sizing:border-box;}
 .management-page .mp-personnel-zoom button {padding:2px 7px;font-size:11px;line-height:18px;}
 .management-page .mp-pillar-add:focus-visible {outline:2px solid #4169df;outline-offset:-3px;}
 .management-page .mp-dense-dates .mp-pillar-grid tbody th {padding:0;vertical-align:middle;}
@@ -2093,6 +2097,7 @@
 .mp-pillar-wrap .mp-work-pillar {min-width:0;padding-left:0;padding-right:0;}
 .mp-pillar-narrow .mp-pillar-caption,.mp-pillar-narrow .mp-pillar-pause>span {display:none;}
 .mp-pillar-short .mp-pillar-caption {display:none;}
+.mp-pillar-readable.mp-pillar-short .mp-pillar-caption {display:block;padding:0 3px;white-space:nowrap;line-height:14px;text-overflow:ellipsis;}
 .mp-pause-warnings {padding:8px 10px;margin-top:8px;border:1px solid #ead8b8;border-radius:7px;background:#fffaf0;font-size:12px;color:#946326;}
 .mp-pause-warnings>button {display:block;text-align:left;margin-top:5px;font-size:11px;}
 .mp-week-writing {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px;}
@@ -2145,7 +2150,7 @@
 .mp-quick-work-footer>div {display:flex;gap:8px;margin-left:auto;}
 .mp-quick-panel .mp-quick-delete {color:#a52b32;border-color:#e5b5ba;}
 /* Endpoints resize independently; the separate grip explicitly moves the whole work. */
-.mp-pillar-wrap {transition:top 100ms ease-out,height 100ms ease-out,left 100ms ease-out;}
+.mp-pillar-wrap {transition:top 100ms ease-out,height 100ms ease-out;}
 .management-page .mp-pillar-resize {position:absolute;left:0;width:100%;height:min(14px,calc((100% - 4px)/2));min-width:0;min-height:0;padding:0;border:0;border-radius:3px;background:#ffffff65;pointer-events:auto;touch-action:none;cursor:ns-resize;z-index:2;box-shadow:none;}
 .mp-pillar-resize-start {top:0;}.mp-pillar-resize-end {bottom:0;}
 .mp-pillar-resize>span {display:block;height:2px;background:#fff;margin:0 2px;border-radius:1px;}

@@ -1,9 +1,9 @@
 import { addDays } from "./planning";
 
-/** Keep personnel columns fixed; parallel lanes share the usable width. */
-export function personnelLane(columnWidth: number, count: number, lane: number) {
+/** Parallel lanes share the column; content zoom also expands each pillar. */
+export function personnelLane(columnWidth: number, count: number, lane: number, zoom = 1) {
   const lanes = Math.max(1, count),
-    pitch = Math.min(22, (columnWidth - 12) / lanes),
+    pitch = Math.min(22 * zoom, (columnWidth - 12) / lanes),
     gap = Math.min(2, pitch * 0.18);
   return { left: (columnWidth - lanes * pitch) / 2 + lane * pitch, width: pitch - gap };
 }

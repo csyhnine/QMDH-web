@@ -86,6 +86,7 @@ export default function PeopleSchedule({
     body = useRef<HTMLTableSectionElement>(null);
   const [height, setHeight] = useState(600),
     [boardWidth, setBoardWidth] = useState(0),
+    [contentZoom, setContentZoom] = useState(0),
     [selection, setSelection] = useState<{
       project: number;
       stage: string;
@@ -107,10 +108,25 @@ export default function PeopleSchedule({
   const displayDays = days + (resize.preview?.edge === "end" ? Math.min(366, Math.max(7, resize.preview.offset + 7)) : 0),
     dates = Array.from({ length: displayDays }, (_, i) => addDays(start, i));
   const [moving, setMoving] = useState(""), [dropTarget, setDropTarget] = useState("");
+  const zoomSteps = [1, 1.5, 2, 3, 4, 6, 8], scale = zoomSteps[contentZoom];
   const extra = Math.max(0, boardWidth - 72 - people.reduce((n, p) => n + p.width, 0)) / Math.max(1, people.length);
+  const horizontalAnchor = useRef<number | null>(null);
   const widths = [72, ...people.map((p) => p.width + extra)],
-    grid = widths.map((w) => `${w}px`).join(" "),
-    total = widths.reduce((n, w) => n + w, 0);
+    scaledWidths = widths.map((w, i) => i === 0 ? w : w * scale),
+    grid = scaledWidths.map((w) => `${w}px`).join(" "),
+    total = scaledWidths.reduce((n, w) => n + w, 0);
+  function changeContentZoom(next: number) {
+    const element = board.current;
+    if (!element || disabled || resize.preview || pointer.current) return;
+    horizontalAnchor.current = (element.scrollLeft + element.clientWidth / 2 - 72) / scale;
+    setContentZoom(Math.max(0, Math.min(zoomSteps.length - 1, next)));
+  }
+  useLayoutEffect(() => {
+    if (horizontalAnchor.current !== null && board.current) {
+      board.current.scrollLeft = horizontalAnchor.current * scale + 72 - board.current.clientWidth / 2;
+      horizontalAnchor.current = null;
+    }
+  }, [scale]);
   useLayoutEffect(() => {
     const resize = () => {
       if (board.current) {
@@ -167,6 +183,15 @@ export default function PeopleSchedule({
           {start}—{addDays(start, days - 1)} · {people.length} 人
         </span>
         <div className="mp-personnel-zoom">
+          <div className="mp-content-zoom" role="group" aria-label="工作内容缩放">
+            <span>内容</span>
+            <button disabled={disabled || Boolean(resize.preview) || contentZoom === 0} aria-label="缩小工作内容" onClick={() => changeContentZoom(contentZoom - 1)}>−</button>
+            <input type="range" min="0" max={zoomSteps.length - 1} step="1" value={contentZoom} disabled={disabled || Boolean(resize.preview)} aria-label="工作内容缩放比例" aria-valuetext={`${scale * 100}%`} onChange={event => changeContentZoom(Number(event.target.value))} />
+            <output>{scale * 100}%</output>
+            <button disabled={disabled || Boolean(resize.preview) || contentZoom === zoomSteps.length - 1} aria-label="放大工作内容" onClick={() => changeContentZoom(contentZoom + 1)}>＋</button>
+            <button disabled={disabled || Boolean(resize.preview)} onClick={() => changeContentZoom(zoomSteps.findIndex((step, index) => index === zoomSteps.length - 1 || people.every(p => Math.min(22 * step, ((p.width + extra) * step - 12) / Math.max(1, p.lanes)) >= 28)))}>看清内容</button>
+            {contentZoom > 0 && <button disabled={disabled || Boolean(resize.preview)} onClick={() => changeContentZoom(0)}>重置宽度</button>}
+          </div>
           <span>{over ? `⚠ ${over} 人的安排需要协调 · ` : ""}Ctrl + 滚轮缩放 · {fitDates ? `当前 ${days} 天` : "双击空白新增"}</span>
           <button disabled={disabled} aria-label="缩小日期视图" title="显示更多日期" onClick={() => zoom(1)}>−</button>
           <button disabled={disabled} aria-label="放大日期视图" title="显示更少日期" onClick={() => zoom(-1)}>＋</button>
@@ -184,7 +209,7 @@ export default function PeopleSchedule({
         <div className="mp-column-calendar" style={{ width: Math.max(total, 0), minWidth: "100%" }}>
           <table className="mp-person-calendar mp-pillar-grid" style={{ width: total, minWidth: "100%" }}>
             <colgroup>
-              {widths.map((w, i) => (
+              {scaledWidths.map((w, i) => (
                 <col key={i} style={{ width: w }} />
               ))}
             </colgroup>
@@ -254,7 +279,7 @@ export default function PeopleSchedule({
             {people.map(({ person, items, width, lanes }) => (
               <div className="mp-person-pillar-track" key={person.id}>
                 {items.map((e) => {
-                  const lane = personnelLane(width + extra, lanes, e.lane),
+                  const lane = personnelLane((width + extra) * scale, lanes, e.lane, scale),
                     key = `${e.project.id}:${e.stage.id}`,
                     active = resize.preview?.projectId === e.project.id && resize.preview.stageId === e.stage.id,
                     shown = active ? resize.preview!.stage : e.stage,
@@ -266,7 +291,7 @@ export default function PeopleSchedule({
                   return (
                   <div
                     key={`${e.project.id}:${e.stage.id}`}
-                    className={`mp-pillar-wrap${lane.width < 12 ? " mp-pillar-narrow" : ""}${widthDays * rowHeight < 36 ? " mp-pillar-short" : ""}${active ? " mp-pillar-resizing" : ""}${resize.landed === key ? " mp-pillar-landed" : ""}${moving === key ? " mp-pillar-moving" : ""}${moveEnabled ? " mp-pillar-move-enabled" : ""}`}
+                    className={`mp-pillar-wrap${lane.width < 12 ? " mp-pillar-narrow" : ""}${lane.width >= 48 ? " mp-pillar-readable" : ""}${widthDays * rowHeight < 36 ? " mp-pillar-short" : ""}${active ? " mp-pillar-resizing" : ""}${resize.landed === key ? " mp-pillar-landed" : ""}${moving === key ? " mp-pillar-moving" : ""}${moveEnabled ? " mp-pillar-move-enabled" : ""}`}
                     style={{
                       top: left * rowHeight + 2,
                       height: widthDays * rowHeight - 4,
@@ -407,6 +432,7 @@ export default function PeopleSchedule({
         <span>{resize.preview.stage.start} — {resize.preview.stage.end}</span><small>{resize.preview.stage.start < start || resize.preview.stage.end > addDays(start, days - 1) ? "含视图外日期 · " : ""}松开应用 · Esc 取消</small>
       </div>, document.body)}
       <p className="mp-help">
+        并行工作太密时可放大内容或点击“看清内容”，左右滚动查看其他人员。
         上下端分别调整真实起止，另一端固定，可跨当前日期范围；整项移动在快捷卡片中选择。柱体划选暂停/支援，双击空白新增。未安排人员的工作{" "}
         {entries.filter((e) => !e.stage.assignees.length).length} 项。
       </p>

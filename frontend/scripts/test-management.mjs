@@ -276,6 +276,17 @@ test('ten parallel lanes fit a fixed personnel column without overlap and retain
  assert.equal(viewport.personnelLane(60,1,0).width,20);
 });
 
+test('content zoom widens crowded lanes without overlaps or changing date geometry',()=>{
+ for(const count of [1,6,10,20]) {
+  const compact=viewport.personnelLane(60,count,0);
+  const lanes=Array.from({length:count},(_,i)=>viewport.personnelLane(480,count,i,8));
+  assert.ok(lanes.every(l=>l.width>=20&&l.width>compact.width));
+  assert.ok(lanes[0].left>=6);
+  assert.ok(lanes.at(-1).left+lanes.at(-1).width<=474);
+  for(let i=1;i<count;i++)assert.ok(lanes[i-1].left+lanes[i-1].width<lanes[i].left);
+ }
+});
+
 test('personnel endpoint resizing fixes the opposite inclusive date and preserves people, pauses and other work',()=>{
  const s={...stage('resize','2026-12-29','2027-01-03',[1,2]),deliverable:'保留交付物',pauses:[{id:'p',start:'2026-12-30',until:'2026-12-31',people:[1]}]};
  const p=makeProject(1,[s,stage('untouched','2027-01-05','2027-01-07')]);

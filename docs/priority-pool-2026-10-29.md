@@ -10,6 +10,10 @@
 
 26 管理定向测试、17 后端分院/人员归属测试通过；5 目标 TypeScript 文件零新增诊断，Vite 890 模块构建通过（保留原大块提示）。实际最终包 9 场排期交互回归、1 场等级/边框/里程碑/安全文本专项通过；另有 8 场人员池/滑杆/等级保存专项通过；切院作用域沿用既有 scopedRequest，浏览器 fixture 仅二分院，跨院权限由后端定向验证覆盖，未声称浏览器跨院通过。证据记录在私有 `local/priority-pool-20261029/`。验证 API 仅本机合成，不进行生产测试写入、GPU 或付费生成；不扩大冻结审查，不声称整套 CI 或独立验收通过。
 
-发布仅 overlay 前端，新目录 `/opt/qmdh-frp/releases/priority-pool-20261029`、标签 `qmdh-priority-pool-frontend:20261029`，新配对备份 `/www/backup/qmdh-release-20261029-priority-pool` ↔ `E:/backups/QMDH-web/release-20261029-priority-pool`。DB/媒体继承此前纯前端链、unit-access 独立快照及本机基础包，非本轮新快照。回滚只恢复前端镜像与配置，不覆盖新业务数据；无服务器清理。实际上线结果随后补记。
+发布仅 overlay 前端，新目录 `/opt/qmdh-frp/releases/priority-pool-20261029`、标签 `qmdh-priority-pool-frontend:20261029`，新配对备份 `/www/backup/qmdh-release-20261029-priority-pool` ↔ `E:/backups/QMDH-web/release-20261029-priority-pool`。DB/媒体继承此前纯前端链、unit-access 独立快照及本机基础包，非本轮新快照。回滚只恢复前端镜像与配置，不覆盖新业务数据；无服务器清理。已上线源码 `6a4937e92c8ccf7956722ceb83b53c81f7575d74`，镜像 `71fc60e537c6`，状态 `DEPLOYED_VERIFIED`。52 文件逐字节、12 不同公网资源、26 地址、健康/管理未登录鉴权/Qwen 能力通过。环境、网络、挂载、8 工作流及旧 hash 资源保持，后端/三 worker/其他容器 ID 与启动时间未改变。28 文件新配对备份两端 SHA256 一致，发布后盘余约 8.195 GiB。
+
+上游忙时未切换；一次有界等待在远端已因门槛未通过退出，SSH 输出读取超时后重新核对无残留发布进程、无 switch.log、旧前端仍运行，再在队列核空后成功发布。部署工具改为合并读取 stdout/stderr，避免串行读取在异常输出时卡住。本轮无迁移、服务器清理、真实生成或生产测试写入。
 
 沿用 `bugfix/migration-bootstrap-001`，草稿 PR #5 不合并。checks/plan/review 及无关未跟踪 WIP 保留且不提交。
+
+补充手机人数滑杆及一人视窗验证通过，本轮浏览器合计 19 场；切院 UI 作用域未单独浏览器覆盖，保留上述验证口径。

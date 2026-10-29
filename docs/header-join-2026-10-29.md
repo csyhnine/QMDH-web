@@ -1,0 +1,7 @@
+# 管理页头背景衔接（2026-10-29）
+
+页头背景原先受管理内容区20px/手机10px内边距限制，导航旁出现背景断层。共用内边距变量，页头通过负外边距铺到内容容器边缘、内部补同等padding，标题/页签/按钮原位置、页头高度及sticky保持。仅改management.css，不改业务。
+
+890模块构建通过；实际最终包1900/1100/390px × 人员排期/项目计划/项目详情9场检查通过：页头左右边缘与内容容器齐平、文字原内边距保持、滚动后吸顶及高度不变，无页面横向溢出，pageerror=[]。已检查桌面截图；证据在忽略目录local/header-join-20261029。未跑无关测试或整套CI，无生产测试写入、GPU或付费生成。
+
+新目录/标签 `/opt/qmdh-frp/releases/header-join-20261029` / `qmdh-header-join-frontend:20261029`，备份 `/www/backup/qmdh-release-20261029-header-join` ↔ `E:/backups/QMDH-web/release-20261029-header-join`。实际运行镜像overlay，仅切frontend、保留旧资源，无服务器清理或迁移。DB/媒体继承此前纯前端恢复链、unit-access独立快照及本机基础包，非新数据快照；回滚不覆盖新业务数据。保留既有WIP、原分支及草稿PR #5，不合并。上线结果随后补记。

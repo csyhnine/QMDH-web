@@ -2086,7 +2086,7 @@
 .mp-compact .mp-pillar-board {max-height:none;}
 .mp-personnel-zoom {display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
 .mp-content-zoom {display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding-right:10px;border-right:1px solid #dce4ef;}
-.management-page .mp-content-zoom input[type=range] {width:90px;min-width:0;padding:0;accent-color:#4169df;}
+.management-page .mp-content-zoom input[type=range] {width:180px;min-width:0;padding:0;accent-color:#4169df;}
 .mp-content-zoom output {min-width:36px;text-align:center;font-variant-numeric:tabular-nums;}
 .mp-pillar-readable .mp-pillar-caption {writing-mode:horizontal-tb;letter-spacing:0;white-space:normal;overflow-wrap:anywhere;font-size:12px;line-height:17px;padding:12px 4px;box-sizing:border-box;}
 .management-page .mp-personnel-zoom button {padding:2px 7px;font-size:11px;line-height:18px;}

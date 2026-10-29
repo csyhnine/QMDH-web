@@ -1,3 +1,4 @@
+import { priorityBadge, priorityClass } from "./priorityVisual";
 import type { GanttStatic } from "dhtmlx-gantt";
 import { addDays, dateInput, ganttData, type PlanningProject, type Staff } from "./planning";
 import { dragDateOffset } from "./staffPlanning";
@@ -70,7 +71,7 @@ export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, c
     keyboard_navigation: true,
     fit_tasks: false,
     columns: [
-      { name: "text", label: "项目 / 设计阶段", tree: true, width: 245, resize: true },
+      { name: "text", label: "项目 / 设计阶段", tree: true, template: (task: any) => priorityBadge(task.projectGrade, task.projectUrgency) + task.text, width: 245, resize: true },
       { name: "people", label: "参与人员", width: 140, template: (task: any) => task.people || "未安排" },
       { name: "dates", label: "起止日期（含结束日）", width: 170, template: (task: any) => task.dates || "待排期" },
       { name: "actions", label: "操作", width: 130, template: (task: any) => task.stageId
@@ -84,9 +85,9 @@ export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, c
       },
     ],
   });
-  gantt.templates.task_text = (_start, _end, task) => task.text;
+  gantt.templates.task_text = (_start, _end, task) => priorityBadge(task.projectGrade, task.projectUrgency) + task.text;
   gantt.templates.rightside_text = (_start, _end, task) => task.type === "milestone"
-    ? `${task.text}${task.deliverable ? ` · ${task.deliverable}` : ""}` : `${task.paused ? "⚠ 工作暂停 · " : ""}${task.people || ""}`;
+    ? `${priorityBadge(task.projectGrade, task.projectUrgency)}${task.text}${task.deliverable ? ` · ${task.deliverable}` : ""}` : `${task.paused ? "⚠ 工作暂停 · " : ""}${task.people || ""}`;
   const insertAtPointer = (e: Event) => {
     const row = (e.target as HTMLElement | null)?.closest(".gantt_task_row");
     if (!row || !callbacks.canDrag()) return false;
@@ -116,7 +117,7 @@ export function initializePlanningGantt(gantt: GanttStatic, host: HTMLElement, c
         ? "mp-chart-project"
         : task.progress === 1
           ? "mp-chart-done"
-          : "mp-chart-stage") + (String(task.id) === landedId ? " mp-gantt-landed" : "");
+          : "mp-chart-stage") + " " + priorityClass(task.projectUrgency) + (String(task.id) === landedId ? " mp-gantt-landed" : "");
   gantt.templates.grid_date_format = (date) => dateInput(date);
   gantt.attachEvent("onBeforeTaskDrag", (id, _mode, event) => {
     const task = gantt.getTask(id);
@@ -207,8 +208,11 @@ export function renderPlanningGantt(
           { unit: "month", step: 1, format: "%Y 年 %F" },
           { unit: "week", step: 1, format: "第 %W 周" },
         ];
+  const projectById = new Map(projects.map(project => [project.id, project]));
   const data = ganttData(projects, staff, start).map((task) => ({
     ...task,
+    projectGrade: projectById.get(task.projectId)?.grade,
+    projectUrgency: projectById.get(task.projectId)?.urgency,
     open: opened.get(String(task.id)) ?? true,
   }));
   gantt.batchUpdate(() => {

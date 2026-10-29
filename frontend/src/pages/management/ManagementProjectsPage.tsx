@@ -342,6 +342,19 @@ export default function ManagementProjectsPage() {
       setBusy(false);
     }
   }
+  async function togglePoolStaff(person: Staff) {
+    if (busy || loading) return;
+    setBusy(true);
+    try {
+      if (!await confirmPlanning(person.is_active ? `将${person.name}移出${unitName(unit)}人员池？历史安排保留，之后不可新增排期；已有未来安排仍需人工调整。` : `将${person.name}重新加入${unitName(unit)}人员池？`)) return;
+      const { id, ...body } = person;
+      await scopedRequest(`/staff/${id}`, { ...body, is_active: !person.is_active }, "PUT");
+      setNotice(person.is_active ? "已移出人员池，历史安排保留" : "已重新加入人员池");
+      await reload();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "人员池更新失败");
+    } finally { setBusy(false); }
+  }
   async function saveReport(e: FormEvent) {
     e.preventDefault();
     if (!reportDraft || busy) return;
@@ -401,7 +414,7 @@ export default function ManagementProjectsPage() {
     const url = URL.createObjectURL(new Blob([ledgerCsv(filtered, staff)], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${report?.unit || unit}-${year}年度项目台账.csv`;
+    a.download = `${report?.unit || unit}-${year}年度项目详情.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -460,7 +473,7 @@ export default function ManagementProjectsPage() {
             <small className="mp-unit-boundary">各分院独立管理本院项目、人员和进展。</small>
           </div>
           <div className="mp-header-actions">
-            <label className="mp-inline" title="适用于已有项目资料、项目计划和人员排期；新项目首次仍需创建，人员名册与台账信息单独保存。"><input type="checkbox" checked={autoSave} onChange={e => {
+            <label className="mp-inline" title="适用于已有项目资料、项目计划和人员排期；新项目首次仍需创建，分院人员池与台账信息单独保存。"><input type="checkbox" checked={autoSave} onChange={e => {
               setAutoSave(e.target.checked);
               try { window.localStorage?.setItem(`qmdh:planning:auto:${currentUser?.name}`, e.target.checked ? "on" : "off"); } catch { /* Preference remains usable without storage. */ }
             }} />自动保存</label>
@@ -481,7 +494,7 @@ export default function ManagementProjectsPage() {
             </label>
             <span>{currentUser?.company_position}</span>
             <button disabled={loading} onClick={() => changeView("staff")}>
-              人员名册
+              分院人员池
             </button>
             <button
               disabled={loading}
@@ -496,7 +509,7 @@ export default function ManagementProjectsPage() {
             [
               ["people", "人员排期", "♧"],
               ["gantt", "项目计划", "▥"],
-              ["ledger", "项目台账", "▤"],
+              ["ledger", "项目详情", "▤"],
             ] as const
           ).map(([v, l, icon]) => (
             <button
@@ -512,10 +525,10 @@ export default function ManagementProjectsPage() {
         </nav>
       </div>
       <p className="mp-view-purpose">
-        {view === "ledger" ? "项目台账：维护项目资料、责任分工、合同与费用，按分类查询和导出。"
+        {view === "ledger" ? "项目详情：维护项目资料、责任分工、合同与费用，按分类查询和导出。"
           : view === "gantt" ? "项目计划：以项目为主线，安排阶段、里程碑、起止日期与进度。"
           : view === "people" ? "人员排期：以本院人员为主线，查看跨项目占用，拖拽分配工作并处理冲突。"
-          : "人员名册：维护本院可安排的员工，名册职务与网站登录权限分别管理。"}
+          : "分院人员池：维护本院可安排的员工，名册职务与网站登录权限分别管理。"}
       </p>
       {error && !(draft || staffDraft || reportDraft) ? (
         <p className="mp-error" role="alert">
@@ -819,7 +832,8 @@ export default function ManagementProjectsPage() {
                         </span>
                       </td>
                       <td>
-                        <button onClick={() => setStaffDraft({ ...s })}>编辑</button>
+                        <button disabled={busy || loading} onClick={() => setStaffDraft({ ...s })}>编辑</button>
+                        <button disabled={busy || loading} onClick={() => togglePoolStaff(s)}>{s.is_active ? "移出人员池" : "重新加入"}</button>
                       </td>
                     </tr>
                   ))}
@@ -923,7 +937,7 @@ export default function ManagementProjectsPage() {
                     onChange={(ids) => change("team", { ...draft.team, coordinator: ids })}
                   />
                   {!staff.some((s) => s.is_active) && (
-                    <small className="mp-help">可以先保存项目，稍后在人员名册添加成员。</small>
+                    <small className="mp-help">可以先保存项目，稍后在分院人员池添加成员。</small>
                   )}
                 </div>
                 <label>
@@ -950,7 +964,10 @@ export default function ManagementProjectsPage() {
                       onChange={(e) => change("sequence", Number(e.target.value))}
                     />
                   </label>
-                  {textField("grade", "项目等级")}
+                  <label><span>项目等级</span><select value={/^[ABCD](级)?$/.test(draft.grade) ? draft.grade[0] : draft.grade} onChange={e => change("grade", e.target.value)}>
+                    <option value="">未设置</option>{!["", "A", "B", "C", "D", "A级", "B级", "C级", "D级"].includes(draft.grade) && <option value={draft.grade}>原值：{draft.grade}（请选择等级）</option>}
+                    {["A", "B", "C", "D"].map(value => <option key={value} value={value}>{value}级</option>)}
+                  </select></label>
                   <label>
                     <span>紧急程度</span>
                     <select value={draft.urgency} onChange={(e) => change("urgency", e.target.value)}>
@@ -974,7 +991,7 @@ export default function ManagementProjectsPage() {
               </summary>
               <fieldset id="mp-editor-team" disabled={busy}>
                 <legend>项目组成员</legend>
-                <p className="mp-help">点击选择，可搜索并勾选多人；人员在“人员名册”中维护。</p>
+                <p className="mp-help">点击选择，可搜索并勾选多人；人员在“分院人员池”中维护。</p>
                 <div className="mp-fields">
                   {TEAM_ROLES.filter(([k]) => k !== "coordinator").map(([k, l]) => (
                     <div className="mp-field" key={k}>
@@ -1203,7 +1220,7 @@ export default function ManagementProjectsPage() {
       {staffDraft ? (
         <div className="mp-modal">
           <form className="mp-small-editor" onSubmit={saveStaff} role="dialog" aria-modal="true" aria-label="编辑人员">
-            <h2>人员信息</h2>
+            <h2>{unitName(unit)} · 人员信息</h2>
             <p className="mp-help">只填姓名即可添加，职务可以稍后补充；添加人员不会开通网站账号。</p>
             {error ? (
               <p role="alert" className="mp-error">

@@ -10,7 +10,7 @@ function load(file, overrides = {}, globals = {}) {
   const exports = {};
   vm.runInNewContext(ts.transpileModule(readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
-  }).outputText, { exports, require: name => overrides[name] ?? (name.endsWith('.css') ? {} : require(name)), ...globals });
+  }).outputText, { exports, require: name => overrides[name] ?? (name.endsWith('.css') ? {} : name === './priorityVisual' ? load('pages/management/priorityVisual.ts') : require(name)), ...globals });
   return exports;
 }
 const planning = load('pages/management/planning.ts');
@@ -330,4 +330,10 @@ test('pause masks distinguish one person away from nobody responsible and summar
  assert.equal(pillars.summarizeWeek(p,'2026-10-26','previous'),'2026-10-23 · w：实际完成底图');
  assert.equal(pillars.summarizeWeek(makeProject(1,[{...work,updates:[]}]),'2026-10-26','previous'),'');
  assert.equal(pillars.dayAtPointer(100,260,80,'2026-10-26',7),'2026-10-28');
+});
+
+test('priority badges keep grade separate from urgency and reject unknown markup',()=>{
+ const visual=load('pages/management/priorityVisual.ts');
+ assert.equal(visual.projectGrade('A级'),'A');assert.equal(visual.projectGrade('D'),'D');assert.equal(visual.projectGrade('<img>'),'');
+ assert.ok(visual.priorityBadge('B','特急').includes('⚠'));assert.equal(visual.priorityClass('常规'),'');assert.equal(visual.priorityBadge('<img>','<script>'),'');
 });

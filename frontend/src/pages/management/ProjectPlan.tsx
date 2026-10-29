@@ -1,3 +1,4 @@
+import "./priorityVisual.css";
 import { confirmPlanning } from "./confirmPlanning";
 import { useEffect, useRef, useState } from "react";
 import type { GanttStatic } from "dhtmlx-gantt";
@@ -187,6 +188,7 @@ export default function ProjectPlan({
   usePlanningAutoSave(Object.keys(pending).length ? JSON.stringify(pending) : null, autoSave, saving || archived || dragging || Boolean(editor || delivery) || Boolean(error), save);
   return (
     <div className="mp-project-plan">
+      <div className="mp-priority-legend" aria-label="项目等级与紧急程度图例"><span>等级 <b className="mp-grade-badge">A</b> / B / C / D</span><span className="mp-priority-label mp-priority-important">重要 · 实线</span><span className="mp-priority-label mp-priority-urgent">紧急 · 虚线</span><span className="mp-priority-label mp-priority-critical">⚠ 特急 · 条纹</span><span>◆ 里程碑</span></div>
       <div className="mp-plan-tip">
         <span>点击工作条快捷暂停 / 支援 · 拖动改期 · 拖边缘改工期 · 点击时间轴空白处插入交付节点</span>
         {archived && <small>已归档项目为只读预览</small>}
